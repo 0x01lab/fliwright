@@ -1,5 +1,6 @@
 import type { Locator } from './Locator.js';
 import type { WidgetInfo } from './types.js';
+import type { FailureCollector } from './FailureCollector.js';
 
 const DEFAULT_TIMEOUT = 5000;
 const DEFAULT_INTERVAL = 100;
@@ -29,15 +30,17 @@ export class AssertionError extends Error {
 export class Assertion {
   private readonly locator: Locator;
   private readonly negated: boolean;
+  private readonly failureCollector: FailureCollector | null;
 
-  constructor(locator: Locator, negated = false) {
+  constructor(locator: Locator, negated = false, failureCollector?: FailureCollector) {
     this.locator = locator;
     this.negated = negated;
+    this.failureCollector = failureCollector ?? null;
   }
 
   /** Negates the next assertion. */
   get not(): Assertion {
-    return new Assertion(this.locator, true);
+    return new Assertion(this.locator, true, this.failureCollector ?? undefined);
   }
 
   /** Asserts that the element is visible. */
@@ -158,8 +161,8 @@ export class Assertion {
 /**
  * Creates an Assertion for the given Locator (Playwright-style `expect`).
  */
-export function createExpect(locator: Locator): Assertion {
-  return new Assertion(locator);
+export function createExpect(locator: Locator, failureCollector?: FailureCollector): Assertion {
+  return new Assertion(locator, false, failureCollector);
 }
 
 /**

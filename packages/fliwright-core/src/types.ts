@@ -67,3 +67,20 @@ export interface ProtocolMessage {
   result?: unknown;
   error?: { code: number; message: string; data?: unknown };
 }
+
+export interface FailureContext {
+  assertion: {
+    matcher: string;
+    expected: string;
+    actual: string;
+    timeout: number;
+  };
+  screenshot: Buffer | null;
+  widgetTree: object;
+  source: {
+    file: string;
+    line: number;
+    snippet: string;
+  };
+  timestamp: string;
+}
