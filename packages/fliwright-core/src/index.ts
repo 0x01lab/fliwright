@@ -9,3 +9,5 @@ export type {
   VMServiceEvent,
   ProtocolMessage,
 } from './types.js';
+
+export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';
