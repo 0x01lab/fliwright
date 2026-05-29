@@ -6,13 +6,18 @@ export 'extension_registry.dart';
 class FliwrightBridge {
   static final ExtensionRegistry _registry = ExtensionRegistry();
   static ExtensionRegistry get registry => _registry;
+  static bool _initialized = false;
 
-  /// Resets the registry. Intended for testing only.
+  /// Resets the registry and initialization state. Intended for testing only.
   static void reset() {
     _registry.reset();
+    _initialized = false;
   }
 
   static Future<void> init() async {
+    if (_initialized) return;
+    _initialized = true;
+
     _registry.register('ext.fliwright.ping', (params) async {
       return {'status': 'ok', 'timestamp': DateTime.now().toIso8601String()};
     });

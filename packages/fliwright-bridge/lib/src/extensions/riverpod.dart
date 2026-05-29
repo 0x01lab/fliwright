@@ -1,7 +1,17 @@
 import '../bridge.dart';
 
 class RiverpodExtension {
-  static dynamic providerContainer;
+  static Object? _providerContainer;
+
+  /// Set the ProviderContainer for Riverpod state access.
+  /// Must be called after ProviderScope is initialized.
+  static void setProviderContainer(Object container) {
+    _providerContainer = container;
+  }
+
+  static void clearProviderContainer() {
+    _providerContainer = null;
+  }
 
   static void register(ExtensionRegistry registry) {
     registry.register('ext.fliwright.riverpod.list', _listProviders);
@@ -11,7 +21,7 @@ class RiverpodExtension {
     registry.register('ext.fliwright.riverpod.unwatch', _unwatchProvider);
   }
 
-  static final Map<String, dynamic> _activeSubscriptions = {};
+  static final Set<String> _activeSubscriptions = {};
 
   static Future<Map<String, dynamic>> _listProviders(Map<String, String> params) async {
     final container = _getContainer();
@@ -43,7 +53,7 @@ class RiverpodExtension {
     final providerName = params['provider'];
     if (providerName == null) return {'error': 'Missing parameter: provider'};
     if (container == null) return {'error': 'ProviderContainer not found'};
-    _activeSubscriptions[providerName] = true;
+    _activeSubscriptions.add(providerName);
     return {'watching': true, 'provider': providerName};
   }
 
@@ -54,5 +64,5 @@ class RiverpodExtension {
     return {'watching': false, 'provider': providerName};
   }
 
-  static dynamic _getContainer() => providerContainer;
+  static Object? _getContainer() => _providerContainer;
 }
