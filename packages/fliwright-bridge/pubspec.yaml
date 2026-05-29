@@ -1,0 +1,15 @@
+name: fliwright_bridge
+description: Dart bridge for Fliwright — registers VM Service extensions for remote Flutter app control.
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: ^1.25.0
