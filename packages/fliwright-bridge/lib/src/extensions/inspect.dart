@@ -17,10 +17,21 @@ class InspectExtension {
     final parsed = _parseSelector(selector);
     final matchedWidgets = <Map<String, dynamic>>[];
 
+    // Parse ancestor selector if provided.
+    final ancestorSelectorStr = params['ancestorSelector'] ?? '';
+    _ParsedSelector? ancestorParsed;
+    if (ancestorSelectorStr.isNotEmpty) {
+      ancestorParsed = _parseSelector(ancestorSelectorStr);
+    }
+
     _walkTree(root, (Element element) {
       final info = _extractWidgetInfo(element);
       if (info == null) return;
       if (_matches(info, parsed)) {
+        // If ancestor selector is specified, also check ancestor match.
+        if (ancestorParsed != null) {
+          if (!_hasAncestor(element, ancestorParsed)) return;
+        }
         matchedWidgets.add(info);
       }
     });
@@ -102,6 +113,19 @@ class InspectExtension {
       return value.contains(selector.value);
     }
     return value.toString().contains(selector.value);
+  }
+
+  static bool _hasAncestor(Element element, _ParsedSelector ancestorSelector) {
+    bool found = false;
+    element.visitAncestorElements((Element ancestor) {
+      final info = _extractWidgetInfo(ancestor);
+      if (info != null && _matches(info, ancestorSelector)) {
+        found = true;
+        return false; // Stop visiting.
+      }
+      return true; // Continue visiting.
+    });
+    return found;
   }
 }
 
