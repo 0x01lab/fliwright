@@ -21,6 +21,12 @@ function createMockSendRequest(responses: Record<string, unknown>) {
     if (method === 'ext.fliwright.type') {
       return responses['type'] ?? { success: true };
     }
+    if (method === 'ext.fliwright.scrollIntoView') {
+      return responses['scrollIntoView'] ?? { success: true, scrolled: true };
+    }
+    if (method === 'ext.fliwright.gesture') {
+      return responses['gesture'] ?? { success: true };
+    }
     return responses[method] ?? {};
   });
 }
@@ -223,6 +229,189 @@ describe('Locator', () => {
         ancestorSelector: 'byType=Form',
         text: 'test',
       });
+    });
+  });
+
+  describe('scrollIntoView()', () => {
+    it('sends ext.fliwright.scrollIntoView with default options', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        scrollIntoView: { success: true, scrolled: true },
+      });
+
+      const locator = new Locator({ text: 'Increment' }, sendRequest);
+      await locator.scrollIntoView();
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.scrollIntoView', {
+        selector: 'text=Increment',
+        alignment: 0.5,
+        duration: 300,
+      });
+    });
+
+    it('sends scrollIntoView with custom alignment and duration', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        scrollIntoView: { success: true, scrolled: true },
+      });
+
+      const locator = new Locator({ key: 'increment_button' }, sendRequest);
+      await locator.scrollIntoView({ alignment: 0.0, duration: 500 });
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.scrollIntoView', {
+        selector: 'key=increment_button',
+        alignment: 0.0,
+        duration: 500,
+      });
+    });
+
+    it('throws when no widget found', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [], count: 0 },
+      });
+
+      const locator = new Locator({ text: 'Missing' }, sendRequest);
+      await expect(locator.scrollIntoView()).rejects.toThrow(
+        'No widget found matching selector: text=Missing',
+      );
+    });
+  });
+
+  describe('longPress()', () => {
+    it('sends ext.fliwright.gesture with longPress type', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        gesture: { success: true, gesture: 'longPress' },
+      });
+
+      const locator = new Locator('text=Increment', sendRequest);
+      await locator.longPress();
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.gesture', {
+        gesture: 'longPress',
+        selector: 'text=Increment',
+      });
+    });
+
+    it('sends longPress with custom duration', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        gesture: { success: true, gesture: 'longPress' },
+      });
+
+      const locator = new Locator('text=Increment', sendRequest);
+      await locator.longPress({ duration: 1000 });
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.gesture', {
+        gesture: 'longPress',
+        selector: 'text=Increment',
+        duration: 1000,
+      });
+    });
+
+    it('throws when no widget found', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [], count: 0 },
+      });
+
+      const locator = new Locator('text=Missing', sendRequest);
+      await expect(locator.longPress()).rejects.toThrow(
+        'No widget found matching selector: text=Missing',
+      );
+    });
+  });
+
+  describe('drag()', () => {
+    it('sends ext.fliwright.gesture with drag type and deltas', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        gesture: { success: true, gesture: 'drag' },
+      });
+
+      const locator = new Locator('text=Increment', sendRequest);
+      await locator.drag(100, -50);
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.gesture', {
+        gesture: 'drag',
+        selector: 'text=Increment',
+        deltaX: 100,
+        deltaY: -50,
+      });
+    });
+
+    it('sends drag with custom steps', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        gesture: { success: true, gesture: 'drag' },
+      });
+
+      const locator = new Locator('text=Increment', sendRequest);
+      await locator.drag(200, 0, { steps: 20 });
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.gesture', {
+        gesture: 'drag',
+        selector: 'text=Increment',
+        deltaX: 200,
+        deltaY: 0,
+        steps: 20,
+      });
+    });
+
+    it('throws when no widget found', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [], count: 0 },
+      });
+
+      const locator = new Locator('text=Missing', sendRequest);
+      await expect(locator.drag(100, 50)).rejects.toThrow(
+        'No widget found matching selector: text=Missing',
+      );
+    });
+  });
+
+  describe('pinch()', () => {
+    it('sends ext.fliwright.gesture with pinch type and scale', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        gesture: { success: true, gesture: 'pinch' },
+      });
+
+      const locator = new Locator('text=Increment', sendRequest);
+      await locator.pinch(0.5);
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.gesture', {
+        gesture: 'pinch',
+        selector: 'text=Increment',
+        scale: 0.5,
+      });
+    });
+
+    it('sends pinch with custom steps', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        gesture: { success: true, gesture: 'pinch' },
+      });
+
+      const locator = new Locator('text=Increment', sendRequest);
+      await locator.pinch(2.0, { steps: 15 });
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.gesture', {
+        gesture: 'pinch',
+        selector: 'text=Increment',
+        scale: 2.0,
+        steps: 15,
+      });
+    });
+
+    it('throws when no widget found', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [], count: 0 },
+      });
+
+      const locator = new Locator('text=Missing', sendRequest);
+      await expect(locator.pinch(0.5)).rejects.toThrow(
+        'No widget found matching selector: text=Missing',
+      );
     });
   });
 });

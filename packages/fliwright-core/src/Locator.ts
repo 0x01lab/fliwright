@@ -31,6 +31,54 @@ export class Locator {
     await this.sendRequest('ext.fliwright.click', { x, y });
   }
 
+  async longPress(options?: { duration?: number }): Promise<void> {
+    const widgets = await this._resolve();
+    if (widgets.length === 0) {
+      throw new Error(`No widget found matching selector: ${this.selectorString}`);
+    }
+    const params: Record<string, unknown> = {
+      gesture: 'longPress',
+      selector: this.selector.toWireFormat(),
+    };
+    if (options?.duration != null) {
+      params.duration = options.duration;
+    }
+    await this.sendRequest('ext.fliwright.gesture', params);
+  }
+
+  async drag(deltaX: number, deltaY: number, options?: { steps?: number }): Promise<void> {
+    const widgets = await this._resolve();
+    if (widgets.length === 0) {
+      throw new Error(`No widget found matching selector: ${this.selectorString}`);
+    }
+    const params: Record<string, unknown> = {
+      gesture: 'drag',
+      selector: this.selector.toWireFormat(),
+      deltaX,
+      deltaY,
+    };
+    if (options?.steps != null) {
+      params.steps = options.steps;
+    }
+    await this.sendRequest('ext.fliwright.gesture', params);
+  }
+
+  async pinch(scale: number, options?: { steps?: number }): Promise<void> {
+    const widgets = await this._resolve();
+    if (widgets.length === 0) {
+      throw new Error(`No widget found matching selector: ${this.selectorString}`);
+    }
+    const params: Record<string, unknown> = {
+      gesture: 'pinch',
+      selector: this.selector.toWireFormat(),
+      scale,
+    };
+    if (options?.steps != null) {
+      params.steps = options.steps;
+    }
+    await this.sendRequest('ext.fliwright.gesture', params);
+  }
+
   async type(text: string, options?: { delay?: number }): Promise<void> {
     const widgets = await this._resolve();
     if (widgets.length === 0) {
@@ -44,6 +92,18 @@ export class Locator {
       params.delay = options.delay;
     }
     await this.sendRequest('ext.fliwright.type', params);
+  }
+
+  async scrollIntoView(options?: { alignment?: number; duration?: number }): Promise<void> {
+    const widgets = await this._resolve();
+    if (widgets.length === 0) {
+      throw new Error(`No widget found matching selector: ${this.selector.toWireFormat()}`);
+    }
+    await this.sendRequest('ext.fliwright.scrollIntoView', {
+      selector: this.selector.toWireFormat(),
+      alignment: options?.alignment ?? 0.5,
+      duration: options?.duration ?? 300,
+    });
   }
 
   async count(): Promise<number> {

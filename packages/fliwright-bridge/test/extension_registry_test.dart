@@ -87,6 +87,57 @@ void main() {
       final result = await FliwrightBridge.registry.invoke('ext.fliwright.click', {});
       expect(result, contains('error'));
     });
+
+    test('registers gesture extension', () async {
+      await FliwrightBridge.init();
+      final methods = FliwrightBridge.registry.registeredMethods;
+      expect(methods, contains('ext.fliwright.gesture'));
+    });
+
+    test('gesture returns error when gesture type is missing', () async {
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
+        'selector': 'text=Hello',
+      });
+      expect(result, contains('error'));
+      expect(result['error'], contains('gesture'));
+    });
+
+    test('gesture returns error for unknown gesture type', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      await FliwrightBridge.init();
+      // Override inspect to return a widget so the gesture type check is reached
+      FliwrightBridge.registry.reset();
+      FliwrightBridge.registry.register('ext.fliwright.inspect', (params) async {
+        return {
+          'widgets': [
+            {
+              'id': '1',
+              'type': 'Text',
+              'rect': {'x': 0, 'y': 0, 'width': 100, 'height': 50},
+              'properties': {},
+            },
+          ],
+        };
+      });
+      GestureExtension.register(FliwrightBridge.registry);
+
+      final result = await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
+        'gesture': 'swipe',
+        'selector': 'text=Hello',
+      });
+      expect(result, contains('error'));
+      expect(result['error'], contains('Unknown gesture type'));
+    });
+
+    test('gesture returns error when selector is missing', () async {
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
+        'gesture': 'longPress',
+      });
+      expect(result, contains('error'));
+      expect(result['error'], contains('selector'));
+    });
   });
 
   group('InspectExtension', () {
@@ -96,6 +147,50 @@ void main() {
       await FliwrightBridge.init();
       final methods = FliwrightBridge.registry.registeredMethods;
       expect(methods, contains('ext.fliwright.inspect'));
+    });
+
+    test('inspect supports ancestorSelector for composite matching', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.inspect',
+        {'selector': 'byType=Text', 'ancestorSelector': 'byType=LoginForm'},
+      );
+      // Should return without error even though no LoginForm exists in the
+      // test tree — the point is that ancestorSelector is accepted and
+      // processed without throwing.
+      expect(result, contains('widgets'));
+    });
+  });
+
+  group('ScrollExtension', () {
+    setUp(() { FliwrightBridge.reset(); });
+
+    test('registers scrollIntoView extension on init', () async {
+      await FliwrightBridge.init();
+      final methods = FliwrightBridge.registry.registeredMethods;
+      expect(methods, contains('ext.fliwright.scrollIntoView'));
+    });
+
+    test('scrollIntoView returns error when selector is missing', () async {
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.scrollIntoView',
+        {},
+      );
+      expect(result, contains('error'));
+      expect(result['success'], isFalse);
+    });
+
+    test('scrollIntoView returns error when no widget found', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.scrollIntoView',
+        {'selector': 'text=NonExistent'},
+      );
+      expect(result, contains('error'));
+      expect(result['success'], isFalse);
     });
   });
 
