@@ -10,12 +10,12 @@ class TypeExtension {
   static Future<Map<String, dynamic>> _type(Map<String, String> params) async {
     final selector = params['selector'] ?? '';
     if (selector.isEmpty) {
-      return {'error': 'Missing parameter: selector'};
+      return {'error': 'Missing parameter: selector', 'success': false};
     }
 
     final text = params['text'] ?? '';
     if (text.isEmpty) {
-      return {'error': 'Missing parameter: text'};
+      return {'error': 'Missing parameter: text', 'success': false};
     }
 
     final replaceAll = (params['replaceAll'] ?? 'false') == 'true';
@@ -83,18 +83,18 @@ class TypeExtension {
       };
     }
 
-    // Step 3: Allow focus to settle, then type.
-    if (charDelayMs > 0) {
-      await Future<void>.delayed(Duration(milliseconds: charDelayMs));
-    }
-
-    // Find the focused EditableText and type into its controller.
+    // Step 3: Find the focused EditableText.
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
       return {
         'error': 'No widget tree available',
         'success': false,
       };
+    }
+
+    // Allow focus to settle.
+    if (charDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: charDelayMs));
     }
 
     EditableText? focusedEditable;
@@ -122,8 +122,8 @@ class TypeExtension {
     } else {
       // Type character by character to simulate realistic input.
       final buffer = StringBuffer(currentText);
-      for (final codeUnit in text.runes) {
-        final char = String.fromCharCode(codeUnit);
+      for (final rune in text.runes) {
+        final char = String.fromCharCode(rune);
         buffer.write(char);
         controller.text = buffer.toString();
         controller.selection = TextSelection.collapsed(
