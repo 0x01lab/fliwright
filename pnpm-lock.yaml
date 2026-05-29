@@ -31,6 +31,19 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@25.9.1)
 
+  packages/fliwright-plugin-riverpod:
+    dependencies:
+      '@fliwright/core':
+        specifier: workspace:*
+        version: link:../fliwright-core
+    devDependencies:
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@25.9.1)
+
 packages:
 
   '@esbuild/aix-ppc64@0.21.5':
