@@ -26,3 +26,4 @@ export type { DriverOptions } from './Driver.js';
 export { Page } from './Page.js';
 export { Locator } from './Locator.js';
 export { Selector } from './Selector.js';
+export { Assertion, AssertionError, createExpect } from './Assertion.js';
