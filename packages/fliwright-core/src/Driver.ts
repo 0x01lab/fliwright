@@ -1,5 +1,6 @@
 import { PluginRegistry } from './PluginRegistry.js';
 import { VMServiceConnector } from './VMServiceConnector.js';
+import type { MockWebSocket } from './VMServiceConnector.js';
 import type { FliwrightPlugin } from './interfaces/Plugin.js';
 import type { StateAdapter } from './interfaces/StateAdapter.js';
 import type { MockAdapter } from './interfaces/MockAdapter.js';
@@ -19,12 +20,18 @@ export class FliwrightDriver {
 
   async connect(vmServiceUrl: string): Promise<void> {
     await this.connector.connect(vmServiceUrl);
-    await this.registry.initAll((method, params) => this.connector.sendRequest(method, params));
+    await this.registry.initAll(
+      (method, params) => this.connector.sendRequest(method, params),
+      this.connector,
+    );
   }
 
-  async attachMockConnector(mockWS: { on: (event: string, fn: Function) => void; send: (data: string) => void; close: () => void }): Promise<void> {
+  async attachMockConnector(mockWS: MockWebSocket): Promise<void> {
     this.connector.attachMock(mockWS);
-    await this.registry.initAll((method, params) => this.connector.sendRequest(method, params));
+    await this.registry.initAll(
+      (method, params) => this.connector.sendRequest(method, params),
+      this.connector,
+    );
   }
 
   sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> { return this.connector.sendRequest(method, params); }

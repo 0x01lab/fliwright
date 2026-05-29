@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VMServiceConnector } from '../src/VMServiceConnector.js';
 
 function createMockWS() {
-  const listeners: Record<string, Function[]> = {};
+  const listeners: Record<string, Array<(...args: any[]) => void>> = {};
   const sent: string[] = [];
   return {
-    on(event: string, fn: Function) { (listeners[event] ??= []).push(fn); },
+    on(event: string, fn: (...args: any[]) => void) { (listeners[event] ??= []).push(fn); },
     send(data: string) { sent.push(data); },
     close: vi.fn(),
     emit(event: string, ...args: unknown[]) { (listeners[event] ?? []).forEach((fn) => fn(...args)); },
@@ -20,7 +20,7 @@ describe('VMServiceConnector', () => {
   beforeEach(() => {
     connector = new VMServiceConnector();
     mockWS = createMockWS();
-    connector.attachMock(mockWS as any);
+    connector.attachMock(mockWS);
   });
 
   it('resolves a pending request when response arrives', async () => {

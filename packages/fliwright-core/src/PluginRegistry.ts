@@ -52,14 +52,20 @@ export class PluginRegistry {
     return strategy;
   }
 
-  async initAll(sendRequest: (method: string, params?: Record<string, unknown>) => Promise<unknown>): Promise<void> {
+  async initAll(
+    sendRequest: (method: string, params?: Record<string, unknown>) => Promise<unknown>,
+    eventSource?: { onEvent: (cb: (event: import('./types.js').VMServiceEvent) => void) => (() => void) },
+  ): Promise<void> {
     if (this.initialized) return;
     const context: PluginContext = {
       sendRequest,
-      registerStateAdapter: (name, adapter) => { this.stateAdapters.set(name, adapter as StateAdapter); },
-      registerMockAdapter: (name, adapter) => { this.mockAdapters.set(name, adapter as MockAdapter); },
-      registerFinderStrategy: (name, strategy) => { this.finderStrategies.set(name, strategy as FinderStrategy); },
-      registerHealingStrategy: (name, strategy) => { this.healingStrategies.set(name, strategy as HealingStrategy); },
+      registerStateAdapter: (name, adapter) => { this.stateAdapters.set(name, adapter); },
+      registerMockAdapter: (name, adapter) => { this.mockAdapters.set(name, adapter); },
+      registerFinderStrategy: (name, strategy) => { this.finderStrategies.set(name, strategy); },
+      registerHealingStrategy: (name, strategy) => { this.healingStrategies.set(name, strategy); },
+      onEvent: eventSource
+        ? (callback) => eventSource.onEvent(callback)
+        : () => () => {},
     };
     for (const plugin of this.plugins.values()) {
       if (plugin.onInit) await plugin.onInit(context);
@@ -83,5 +89,6 @@ export class PluginRegistry {
     for (const plugin of this.plugins.values()) {
       if (plugin.onDispose) await plugin.onDispose();
     }
+    this.initialized = false;
   }
 }

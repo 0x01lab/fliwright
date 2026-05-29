@@ -4,9 +4,9 @@ import type { FliwrightPlugin, PluginContext } from '../src/interfaces/Plugin.js
 import type { StateAdapter } from '../src/interfaces/StateAdapter.js';
 
 function createMockWSForDriver() {
-  const listeners: Record<string, Function[]> = {};
+  const listeners: Record<string, Array<(...args: any[]) => void>> = {};
   return {
-    on(event: string, fn: Function) { (listeners[event] ??= []).push(fn); },
+    on(event: string, fn: (...args: any[]) => void) { (listeners[event] ??= []).push(fn); },
     send(data: string) {},
     close() {},
     emit(event: string, ...args: unknown[]) { (listeners[event] ?? []).forEach((fn) => fn(...args)); },

@@ -7,10 +7,9 @@ export class Protocol {
 
   createRequest(method: string, params?: Record<string, unknown>): ProtocolMessage & { id: string } {
     const id = String(++this.nextId);
-    const resolvedParams = params ?? {};
-    if (method === 'ext.fliwright.handshake') {
-      resolvedParams.protocolVersion = PROTOCOL_VERSION;
-    }
+    const resolvedParams = method === 'ext.fliwright.handshake'
+      ? { ...(params ?? {}), protocolVersion: PROTOCOL_VERSION }
+      : { ...params };
     return { jsonrpc: '2.0', id, method, params: resolvedParams };
   }
 
