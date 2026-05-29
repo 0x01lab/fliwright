@@ -9,6 +9,7 @@ export type {
   VMServiceEvent,
   ProtocolMessage,
   SelectorInput,
+  FailureContext,
 } from './types.js';
 
 export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';
@@ -27,3 +28,4 @@ export { Page } from './Page.js';
 export { Locator } from './Locator.js';
 export { Selector } from './Selector.js';
 export { Assertion, AssertionError, createExpect } from './Assertion.js';
+export { FailureCollector } from './FailureCollector.js';
