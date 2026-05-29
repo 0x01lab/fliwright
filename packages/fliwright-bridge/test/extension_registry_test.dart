@@ -72,4 +72,30 @@ void main() {
       expect(result, contains('error'));
     });
   });
+
+  group('GestureExtension', () {
+    setUp(() { FliwrightBridge.reset(); });
+
+    test('registers click extension on init', () async {
+      await FliwrightBridge.init();
+      final methods = FliwrightBridge.registry.registeredMethods;
+      expect(methods, contains('ext.fliwright.click'));
+    });
+
+    test('click returns error when x or y is missing', () async {
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke('ext.fliwright.click', {});
+      expect(result, contains('error'));
+    });
+  });
+
+  group('InspectExtension', () {
+    setUp(() { FliwrightBridge.reset(); });
+
+    test('registers inspect extension on init', () async {
+      await FliwrightBridge.init();
+      final methods = FliwrightBridge.registry.registeredMethods;
+      expect(methods, contains('ext.fliwright.inspect'));
+    });
+  });
 }

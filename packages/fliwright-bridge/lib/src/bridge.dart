@@ -1,4 +1,6 @@
 import 'extension_registry.dart';
+import 'extensions/gesture.dart';
+import 'extensions/inspect.dart';
 import 'extensions/riverpod.dart';
 
 export 'extension_registry.dart';
@@ -31,6 +33,9 @@ class FliwrightBridge {
         'compatible': clientVersion <= 1,
       };
     });
+
+    GestureExtension.register(_registry);
+    InspectExtension.register(_registry);
 
     RiverpodExtension.register(_registry);
   }

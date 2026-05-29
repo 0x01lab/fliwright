@@ -1,0 +1,16 @@
+{
+  "name": "@fliwright/e2e-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "echo 'E2E tests require a running Flutter device. Run: FLIWRIGHT_VM_SERVICE_URL=... pnpm test:smoke'",
+    "test:smoke": "vitest run smoke_test.ts"
+  },
+  "dependencies": {
+    "@fliwright/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

@@ -1,3 +1,4 @@
+import { Page } from './Page.js';
 import { PluginRegistry } from './PluginRegistry.js';
 import { VMServiceConnector } from './VMServiceConnector.js';
 import type { MockWebSocket } from './VMServiceConnector.js';
@@ -13,9 +14,17 @@ export interface DriverOptions { plugins?: FliwrightPlugin[]; }
 export class FliwrightDriver {
   private registry = new PluginRegistry();
   private connector = new VMServiceConnector();
+  private _page: Page | null = null;
 
   constructor(options: DriverOptions = {}) {
     for (const plugin of options.plugins ?? []) { this.registry.register(plugin); }
+  }
+
+  get page(): Page {
+    if (!this._page) {
+      this._page = new Page((method, params) => this.connector.sendRequest(method, params));
+    }
+    return this._page;
   }
 
   async connect(vmServiceUrl: string): Promise<void> {

@@ -21,3 +21,6 @@ export { Protocol } from './Protocol.js';
 export { VMServiceConnector } from './VMServiceConnector.js';
 export { FliwrightDriver } from './Driver.js';
 export type { DriverOptions } from './Driver.js';
+
+export { Page } from './Page.js';
+export { Locator } from './Locator.js';
