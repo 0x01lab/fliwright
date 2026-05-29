@@ -98,4 +98,42 @@ void main() {
       expect(methods, contains('ext.fliwright.inspect'));
     });
   });
+
+  group('TypeExtension', () {
+    setUp(() { FliwrightBridge.reset(); });
+
+    test('registers type extension on init', () async {
+      await FliwrightBridge.init();
+      final methods = FliwrightBridge.registry.registeredMethods;
+      expect(methods, contains('ext.fliwright.type'));
+    });
+
+    test('type returns error when selector is missing', () async {
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke('ext.fliwright.type', {});
+      expect(result, contains('error'));
+      expect(result['error'], contains('selector'));
+    });
+
+    test('type returns error when text is missing', () async {
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.type',
+        {'selector': 'text=Hello'},
+      );
+      expect(result, contains('error'));
+      expect(result['error'], contains('text'));
+    });
+
+    test('type returns error when no widget found', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.type',
+        {'selector': 'text=NonExistent', 'text': 'hello'},
+      );
+      expect(result, contains('error'));
+      expect(result['success'], isFalse);
+    });
+  });
 }

@@ -2,6 +2,7 @@ import 'extension_registry.dart';
 import 'extensions/gesture.dart';
 import 'extensions/inspect.dart';
 import 'extensions/riverpod.dart';
+import 'extensions/type_extension.dart';
 
 export 'extension_registry.dart';
 
@@ -36,6 +37,7 @@ class FliwrightBridge {
 
     GestureExtension.register(_registry);
     InspectExtension.register(_registry);
+    TypeExtension.register(_registry);
 
     RiverpodExtension.register(_registry);
   }
