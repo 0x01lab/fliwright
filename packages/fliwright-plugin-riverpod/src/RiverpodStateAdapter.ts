@@ -4,9 +4,10 @@ import type { ProviderInfo } from '@fliwright/core';
 type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
 export class RiverpodStateAdapter implements StateAdapter {
+  private eventListeners = new Map<string, Set<(oldVal: unknown, newVal: unknown) => void>>();
+
   constructor(
     private sendRequest: SendRequest,
-    private eventListeners: Map<string, Set<(oldVal: unknown, newVal: unknown) => void>> = new Map(),
   ) {}
 
   async read(key: string): Promise<unknown> {
@@ -15,7 +16,7 @@ export class RiverpodStateAdapter implements StateAdapter {
   }
 
   async write(key: string, value: unknown): Promise<void> {
-    await this.sendRequest('ext.fliwright.riverpod.override', { provider: key, value: String(value) });
+    await this.sendRequest('ext.fliwright.riverpod.override', { provider: key, value: JSON.stringify(value) });
   }
 
   async watch(key: string, callback: (oldValue: unknown, newValue: unknown) => void): Promise<() => void> {
@@ -23,11 +24,11 @@ export class RiverpodStateAdapter implements StateAdapter {
     listeners.add(callback);
     this.eventListeners.set(key, listeners);
     await this.sendRequest('ext.fliwright.riverpod.watch', { provider: key });
-    return async () => {
+    return () => {
       listeners.delete(callback);
       if (listeners.size === 0) {
         this.eventListeners.delete(key);
-        await this.sendRequest('ext.fliwright.riverpod.unwatch', { provider: key });
+        this.sendRequest('ext.fliwright.riverpod.unwatch', { provider: key }).catch(() => {});
       }
     };
   }
