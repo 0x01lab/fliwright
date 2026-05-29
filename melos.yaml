@@ -1,0 +1,11 @@
+name: fliwright
+packages:
+  - packages/**
+command:
+  bootstrap:
+    runPubGetInParallel: true
+scripts:
+  analyze:
+    run: dart analyze .
+  test:
+    run: dart test

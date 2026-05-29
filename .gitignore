@@ -1,0 +1,10 @@
+node_modules/
+.dart_tool/
+build/
+*.iml
+.pub-cache/
+.pub/
+.packages
+dist/
+coverage/
+*.log
