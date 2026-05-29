@@ -11,3 +11,4 @@ export type {
 } from './types.js';
 
 export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';
+export type { StateAdapter } from './interfaces/StateAdapter.js';
