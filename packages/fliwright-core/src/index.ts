@@ -8,6 +8,7 @@ export type {
   TestResult,
   VMServiceEvent,
   ProtocolMessage,
+  SelectorInput,
 } from './types.js';
 
 export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';
@@ -24,3 +25,4 @@ export type { DriverOptions } from './Driver.js';
 
 export { Page } from './Page.js';
 export { Locator } from './Locator.js';
+export { Selector } from './Selector.js';

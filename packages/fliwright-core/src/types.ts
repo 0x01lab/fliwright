@@ -1,3 +1,9 @@
+export type SelectorInput =
+  | string
+  | { text: string; ancestor?: SelectorInput }
+  | { key: string; ancestor?: SelectorInput }
+  | { type: string; ancestor?: SelectorInput };
+
 export interface ProviderInfo {
   name: string;
   type: string;

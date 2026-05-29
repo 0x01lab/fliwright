@@ -18,6 +18,9 @@ function createMockSendRequest(responses: Record<string, unknown>) {
     if (method === 'ext.fliwright.click') {
       return responses['click'] ?? { success: true };
     }
+    if (method === 'ext.fliwright.type') {
+      return responses['type'] ?? { success: true };
+    }
     return responses[method] ?? {};
   });
 }
@@ -91,5 +94,135 @@ describe('Locator', () => {
 
     const locator = new Locator('text=Nothing', sendRequest);
     await expect(locator.isVisible()).resolves.toBe(false);
+  });
+
+  describe('object selector support', () => {
+    it('accepts { text: "X" } object selector', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+      });
+
+      const locator = new Locator({ text: 'Increment' }, sendRequest);
+      await locator.click();
+
+      expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.inspect', {
+        selector: 'text=Increment',
+      });
+    });
+
+    it('accepts { key: "X" } object selector', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+      });
+
+      const locator = new Locator({ key: 'increment_button' }, sendRequest);
+      await locator.click();
+
+      expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.inspect', {
+        selector: 'key=increment_button',
+      });
+    });
+
+    it('accepts { type: "X" } object selector', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+      });
+
+      const locator = new Locator({ type: 'ElevatedButton' }, sendRequest);
+      await locator.click();
+
+      expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.inspect', {
+        selector: 'byType=ElevatedButton',
+      });
+    });
+
+    it('passes ancestorSelector when ancestor is provided', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+      });
+
+      const locator = new Locator({ text: 'Increment', ancestor: { type: 'ListView' } }, sendRequest);
+      await locator.count();
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.inspect', {
+        selector: 'text=Increment',
+        ancestorSelector: 'byType=ListView',
+      });
+    });
+  });
+
+  describe('selectorString getter', () => {
+    it('returns wire format for string input', () => {
+      const locator = new Locator('text=Login', createMockSendRequest({}));
+      expect(locator.selectorString).toBe('text=Login');
+    });
+
+    it('returns wire format for object input', () => {
+      const locator = new Locator({ text: 'Login' }, createMockSendRequest({}));
+      expect(locator.selectorString).toBe('text=Login');
+    });
+  });
+
+  describe('type()', () => {
+    it('sends ext.fliwright.type with correct params', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        type: { success: true },
+      });
+
+      const locator = new Locator({ text: 'Input' }, sendRequest);
+      await locator.type('hello world');
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.type', {
+        selector: 'text=Input',
+        text: 'hello world',
+      });
+    });
+
+    it('sends type with delay option', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        type: { success: true },
+      });
+
+      const locator = new Locator({ key: 'email_field' }, sendRequest);
+      await locator.type('user@example.com', { delay: 50 });
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.type', {
+        selector: 'key=email_field',
+        text: 'user@example.com',
+        delay: 50,
+      });
+    });
+
+    it('throws when no widget found', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [], count: 0 },
+      });
+
+      const locator = new Locator({ text: 'Missing' }, sendRequest);
+      await expect(locator.type('hello')).rejects.toThrow(
+        'No widget found matching selector: text=Missing',
+      );
+    });
+
+    it('sends type with ancestorSelector when ancestor present', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        type: { success: true },
+      });
+
+      const locator = new Locator(
+        { text: 'Input', ancestor: { type: 'Form' } },
+        sendRequest,
+      );
+      await locator.type('test');
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.type', {
+        selector: 'text=Input',
+        ancestorSelector: 'byType=Form',
+        text: 'test',
+      });
+    });
   });
 });

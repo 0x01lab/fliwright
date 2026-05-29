@@ -1,15 +1,18 @@
 import { Locator } from './Locator.js';
+import type { SelectorInput } from './types.js';
+import { Selector } from './Selector.js';
 
 type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
 export class Page {
   constructor(private sendRequest: SendRequest) {}
 
-  locator(selector: string): Locator {
+  locator(selector: SelectorInput): Locator {
     return new Locator(selector, this.sendRequest);
   }
 
-  async waitFor(selector: string, timeoutMs = 5000): Promise<Locator> {
+  async waitFor(selector: SelectorInput, timeoutMs = 5000): Promise<Locator> {
+    const selectorObj = new Selector(selector);
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const loc = this.locator(selector);
@@ -17,6 +20,6 @@ export class Page {
       if (count > 0) return loc;
       await new Promise((r) => setTimeout(r, 100));
     }
-    throw new Error(`Timeout waiting for selector: ${selector}`);
+    throw new Error(`Timeout waiting for selector: ${selectorObj.toWireFormat()}`);
   }
 }
