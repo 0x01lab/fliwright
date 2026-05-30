@@ -184,7 +184,7 @@ Each dimension scores independently in `[0, 1]`. Final score = weighted sum.
 |-----------|--------|-----------|---------|
 | Position similarity | 0.20 | `1 - euclidean(center_a, center_b) / max_distance` | Normalized by screen diagonal; closer = higher |
 | Context similarity | 0.30 | `0.5 * parent_type_match + 0.3 * jaccard(adjacent_texts) + 0.2 * type_match` | Parent type exact match, adjacent text Jaccard, widget type exact match |
-| Code binding | 0.15 | Exact match 1.0 / fuzzy match 0.6 / no match 0.0 | Callback function name comparison (Levenshtein for fuzzy) |
+| Code binding | 0.15 | Exact match 1.0 / fuzzy match 0.6 / no match 0.0 | Callback function name comparison (Levenshtein distance <= 3 = fuzzy) |
 | Semantic vector | 0.35 | `cosine_similarity(desc_embedding_a, desc_embedding_b)` | Widget description embedding cosine similarity |
 
 ### 4.2 Threshold
@@ -286,17 +286,17 @@ class FliwrightDriver {
 In `Assertion.ts`, after `pollUntil` returns `false` (timeout), before throwing `AssertionError`:
 
 ```typescript
-// After pollUntil fails:
+// After pollUntil fails — this pattern applies to ALL matchers (toBeVisible, toHaveText, etc.)
 if (this.healingEngine && this.healingEngine.enabled) {
   const result = await this.healingEngine.tryHeal(
     this.locator, this.testName, failureContext
   );
   if (result.healed && result.report) {
-    // Re-run assertion with suggested selector
+    // Re-run assertion with suggested selector (e.g. "text=去结算" if text changed)
     const newLocator = page.locator(result.report.suggestedSelector);
     const healedAssertion = new Assertion(newLocator, this.negated, this.failureCollector);
-    // Re-run the same matcher
-    await healedAssertion.toBeVisible(options);
+    // Re-run the same matcher that failed (caller-specific, not hardcoded to toBeVisible)
+    await healedAssertion[matcherName](matcherArgs);
     this._reportHealing(result.report);
     return;  // healed pass
   }
@@ -351,7 +351,14 @@ interface HealingReport {
 }
 ```
 
-### 7.2 Storage
+### 7.2 Suggested Selector Construction
+
+When a healing match succeeds, `suggestedSelector` is constructed from the matched widget's most distinctive feature:
+1. If widget has unique text → `text={matchedText}` (most common case)
+2. If widget has a Key → `key={key}`
+3. Otherwise → `type={widgetType}`
+
+### 7.3 Storage
 
 - Path: `.fliwright/healing-reports/{timestamp}_{sanitized_test_name}.json`
 - Queryable via `driver.healing.getReports(testName?)`
