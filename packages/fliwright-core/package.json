@@ -9,6 +9,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@faker-js/faker": "^10.4.0",
+    "randexp": "^0.5.3",
     "ws": "^8.17.0"
   },
   "devDependencies": {
