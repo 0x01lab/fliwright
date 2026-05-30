@@ -25,6 +25,8 @@ export interface WidgetSnapshot {
   adjacentText: string[];
   rect: { x: number; y: number; width: number; height: number };
   callbackNames: string[];
+  description?: string;
+  firstSeen?: string;
 }
 
 export interface HealingResult {
@@ -32,6 +34,23 @@ export interface HealingResult {
   suggestedSelector: string;
   confidence: number;
   matchedWidget: WidgetInfo;
+}
+
+export interface HealingReport {
+  testName: string;
+  originalSelector: string;
+  suggestedSelector: string;
+  confidence: number;
+  scores: {
+    position: number;
+    context: number;
+    codeBinding: number;
+    text: number;
+    weighted: number;
+  };
+  originalSnapshot: WidgetSnapshot;
+  matchedWidget: WidgetInfo;
+  timestamp: string;
 }
 
 export interface MockResponse {
