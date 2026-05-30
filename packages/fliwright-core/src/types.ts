@@ -41,6 +41,28 @@ export interface MockResponse {
   delay?: number;
 }
 
+export interface MockRouteResponse {
+  status?: number;
+  headers?: Record<string, string>;
+  body?: unknown;
+  delay?: number;
+}
+
+export interface MockRouteConfig {
+  id?: string;
+  method?: string;
+  path: string;
+  response: MockRouteResponse;
+}
+
+export interface MockCall {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body: string;
+  timestamp: string;
+}
+
 export interface WidgetMatch {
   widget: WidgetInfo;
   score: number;

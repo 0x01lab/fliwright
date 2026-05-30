@@ -4,6 +4,9 @@ export type {
   WidgetSnapshot,
   HealingResult,
   MockResponse,
+  MockRouteResponse,
+  MockRouteConfig,
+  MockCall,
   WidgetMatch,
   TestResult,
   VMServiceEvent,
@@ -29,3 +32,4 @@ export { Locator } from './Locator.js';
 export { Selector } from './Selector.js';
 export { Assertion, AssertionError, createExpect } from './Assertion.js';
 export { FailureCollector } from './FailureCollector.js';
+export { MockManager } from './MockManager.js';
