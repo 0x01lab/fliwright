@@ -168,9 +168,31 @@ class EventAggregator {
 
 ## 4. Widget Reverse Lookup & Selector Strategy
 
-### 4.1 Reverse Lookup
+### 4.1 Reverse Lookup — `ext.fliwright.hitTest`
 
-For each aggregated operation, call `ext.fliwright.inspect` with the operation's coordinates to find the Widget at that position. Extract: `text`, `key`, `type` from the returned `WidgetInfo`.
+The existing `ext.fliwright.inspect` extension finds widgets by selector (text/key/type). For coordinate-based reverse lookup, add a new extension `ext.fliwright.hitTest` that takes `{ x, y }` coordinates, performs a Flutter hit test, and returns the `WidgetInfo` at that position.
+
+**Protocol**:
+```json
+// Request
+{ "x": 150.0, "y": 300.0 }
+
+// Response
+{
+  "widget": {
+    "id": "widget_42",
+    "type": "ElevatedButton",
+    "text": "登录",
+    "key": null,
+    "rect": { "x": 100, "y": 280, "width": 200, "height": 48 },
+    "properties": {}
+  }
+}
+```
+
+**Implementation**: Use `RendererBinding.instance.renderView.hitTest()` to find the RenderObject at coordinates, then walk up to find the corresponding Element and extract WidgetInfo (reusing the same extraction logic as the inspect extension).
+
+This extension is registered alongside the recording extension in `recording.dart`.
 
 ### 4.2 Selector Priority
 
@@ -256,7 +278,8 @@ class CodeGenerator {
 | `packages/fliwright-bridge/lib/src/bridge.dart` | Register recording extension |
 | `packages/fliwright-bridge/lib/fliwright_bridge.dart` | Export recording extension |
 | `packages/fliwright-core/src/Driver.ts` | Add `recorder` getter |
-| `packages/fliwright-core/src/index.ts` | Export new classes |
+| `packages/fliwright-core/src/types.ts` | Add `RecordedOperation`, `RawInputEvent` types |
+| `packages/fliwright-core/src/index.ts` | Export new classes and types |
 
 ---
 
