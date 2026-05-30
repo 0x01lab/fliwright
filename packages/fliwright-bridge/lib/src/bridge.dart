@@ -1,6 +1,8 @@
 import 'extension_registry.dart';
 import 'extensions/gesture.dart';
+import 'extensions/http_overrides.dart';
 import 'extensions/inspect.dart';
+import 'extensions/mock_server.dart';
 import 'extensions/riverpod.dart';
 import 'extensions/scroll_extension.dart';
 import 'extensions/type_extension.dart';
@@ -12,10 +14,10 @@ class FliwrightBridge {
   static ExtensionRegistry get registry => _registry;
   static bool _initialized = false;
 
-  /// Resets the registry and initialization state. Intended for testing only.
-  static void reset() {
+  static Future<void> reset() async {
     _registry.reset();
     _initialized = false;
+    await MockServerExtension.reset();
   }
 
   static Future<void> init() async {
@@ -42,5 +44,12 @@ class FliwrightBridge {
     ScrollExtension.register(_registry);
 
     RiverpodExtension.register(_registry);
+
+    MockServerExtension.register(_registry);
+    await MockServerExtension.startServer();
+    final port = MockServerExtension.serverPort;
+    if (port != null) {
+      FliwrightHttpOverrides.install(port: port);
+    }
   }
 }

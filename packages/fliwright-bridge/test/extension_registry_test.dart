@@ -37,7 +37,7 @@ void main() {
   });
 
   group('FliwrightBridge', () {
-    setUp(() { FliwrightBridge.reset(); });
+    setUp(() async { await FliwrightBridge.reset(); });
 
     test('init registers core extensions', () async {
       await FliwrightBridge.init();
@@ -48,7 +48,7 @@ void main() {
   });
 
   group('RiverpodExtension', () {
-    setUp(() { FliwrightBridge.reset(); });
+    setUp(() async { await FliwrightBridge.reset(); });
 
     test('registers riverpod extensions on init', () async {
       await FliwrightBridge.init();
@@ -74,7 +74,7 @@ void main() {
   });
 
   group('GestureExtension', () {
-    setUp(() { FliwrightBridge.reset(); });
+    setUp(() async { await FliwrightBridge.reset(); });
 
     test('registers click extension on init', () async {
       await FliwrightBridge.init();
@@ -141,7 +141,7 @@ void main() {
   });
 
   group('InspectExtension', () {
-    setUp(() { FliwrightBridge.reset(); });
+    setUp(() async { await FliwrightBridge.reset(); });
 
     test('registers inspect extension on init', () async {
       await FliwrightBridge.init();
@@ -164,7 +164,7 @@ void main() {
   });
 
   group('ScrollExtension', () {
-    setUp(() { FliwrightBridge.reset(); });
+    setUp(() async { await FliwrightBridge.reset(); });
 
     test('registers scrollIntoView extension on init', () async {
       await FliwrightBridge.init();
@@ -195,7 +195,7 @@ void main() {
   });
 
   group('TypeExtension', () {
-    setUp(() { FliwrightBridge.reset(); });
+    setUp(() async { await FliwrightBridge.reset(); });
 
     test('registers type extension on init', () async {
       await FliwrightBridge.init();
