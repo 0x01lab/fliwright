@@ -33,7 +33,11 @@ export class CodeGenerator {
           lines.push(`  await ${locator}.drag(${op.delta!.x}, ${op.delta!.y});`);
           break;
         case 'type':
-          lines.push(`  await ${locator}.type('${escapeString(op.text ?? '')}');`);
+          if (op.action === 'replace') {
+            lines.push(`  await ${locator}.fill('${escapeString(op.text ?? '')}');`);
+          } else {
+            lines.push(`  await ${locator}.type('${escapeString(op.text ?? '')}');`);
+          }
           break;
       }
     }

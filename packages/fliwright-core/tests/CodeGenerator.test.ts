@@ -85,6 +85,17 @@ describe('CodeGenerator', () => {
     expect(code).toContain("page.locator({ type: 'Widget' })");
   });
 
+  it('generates fill() for type operations with action:replace', () => {
+    const gen = new CodeGenerator();
+    const ops: RecordedOperation[] = [
+      { kind: 'type', position: { x: 100, y: 200 }, text: 'ab', action: 'replace', timestamp: 1000 },
+    ];
+    const selectors = new Map<number, string>([[0, "{ text: 'Field' }"]]);
+    const code = gen.generate(ops, selectors);
+    expect(code).toContain("page.locator({ text: 'Field' }).fill('ab')");
+    expect(code).not.toContain('.type(');
+  });
+
   it('generates multiple operations in sequence', () => {
     const gen = new CodeGenerator();
     const ops: RecordedOperation[] = [

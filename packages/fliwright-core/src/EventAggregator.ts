@@ -63,9 +63,19 @@ export class EventAggregator {
     for (const textEvent of textEvents) {
       if (!textEvent.text) continue;
       const opIndex = findEditableOperationForTextInput(operations, textEvent);
-      if (opIndex < 0) continue;
+      if (opIndex < 0) {
+        // Standalone text input with no preceding tap — emit as-is.
+        operations.push({
+          kind: 'type',
+          position: { x: 0, y: 0 },
+          text: textEvent.text,
+          action: textEvent.action,
+          timestamp: textEvent.timestamp,
+        });
+        continue;
+      }
       const op = operations[opIndex];
-      if (op.kind === 'type') {
+      if (op.kind === 'type' && !textEvent.action) {
         operations[opIndex] = {
           ...op,
           text: `${op.text ?? ''}${textEvent.text}`,
@@ -75,6 +85,7 @@ export class EventAggregator {
           kind: 'type',
           position: op.position,
           text: textEvent.text,
+          action: textEvent.action,
           timestamp: op.timestamp,
         };
       }

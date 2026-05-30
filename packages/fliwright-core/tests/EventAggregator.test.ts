@@ -118,6 +118,33 @@ describe('EventAggregator', () => {
     ]);
   });
 
+  it('handles standalone text input without preceding tap', () => {
+    const agg = new EventAggregator();
+    const events: RawInputEvent[] = [
+      { type: 'textInput', text: 'hello', timestamp: 5000 },
+    ];
+    const ops = agg.aggregate(events);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].kind).toBe('type');
+    expect(ops[0].text).toBe('hello');
+    expect(ops[0].position).toEqual({ x: 0, y: 0 });
+  });
+
+  it('passes through action:replace for text deletion', () => {
+    const agg = new EventAggregator();
+    const events: RawInputEvent[] = [
+      { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1000, buttons: 1 },
+      { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1100, buttons: 0 },
+      { type: 'textInput', text: 'abc', timestamp: 1500 },
+      { type: 'textInput', text: 'ab', action: 'replace', timestamp: 2000 },
+    ];
+    const ops = agg.aggregate(events);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].kind).toBe('type');
+    expect(ops[0].text).toBe('ab');
+    expect(ops[0].action).toBe('replace');
+  });
+
   it('ignores move events without displacement', () => {
     const agg = new EventAggregator();
     const events: RawInputEvent[] = [

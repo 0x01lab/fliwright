@@ -40,7 +40,7 @@ class RecordingExtension {
         'kind': kind,
         'pointer': event.pointer,
         'position': {'x': event.position.dx, 'y': event.position.dy},
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'timestamp': event.timeStamp.inMicroseconds,
         'buttons': event.buttons,
       });
     };
@@ -111,7 +111,7 @@ class RecordingExtension {
     final widget = editable.widget;
     if (widget is! EditableText) return;
 
-    final id = editable.hashCode;
+    final id = widget.controller.hashCode;
     final text = widget.controller.text;
     final previous = _lastTextByElement[id];
     if (previous == null) {
@@ -120,16 +120,18 @@ class RecordingExtension {
     }
     if (text == previous) return;
 
-    final recordedText =
-        text.startsWith(previous) ? text.substring(previous.length) : text;
+    final isReplacement = !text.startsWith(previous);
+    final recordedText = isReplacement ? text : text.substring(previous.length);
     _lastTextByElement[id] = text;
     if (recordedText.isEmpty) return;
 
-    postEvent('FliwrightRecording', {
+    final event = <String, dynamic>{
       'type': 'textInput',
       'text': recordedText,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-    });
+      'timestamp': DateTime.now().microsecondsSinceEpoch,
+    };
+    if (isReplacement) event['action'] = 'replace';
+    postEvent('FliwrightRecording', event);
   }
 
   static Element? _findFocusedEditableText() {

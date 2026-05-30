@@ -134,6 +134,7 @@ export interface RawInputEvent {
   timestamp: number;
   buttons?: number;
   text?: string;
+  action?: 'replace';
 }
 
 export interface RecordedOperation {
@@ -141,6 +142,7 @@ export interface RecordedOperation {
   position: { x: number; y: number };
   delta?: { x: number; y: number };
   text?: string;
+  action?: 'replace';
   duration?: number;
   timestamp: number;
 }
