@@ -18,8 +18,8 @@ Four iterations, each delivering a demoable end-to-end capability:
 
 | Iteration | Scope | User Gets |
 |-----------|-------|-----------|
-| 4-A | Dart snapshot extension + SnapshotStore + EmbeddingEngine | "Trigger snapshot → store to disk → embedding ready" end-to-end |
-| 4-B | MultiDimensionalHealingStrategy (4-dimension weighted scoring) | "Given original + candidates → return match scores" end-to-end |
+| 4-A | Dart snapshot extension + SnapshotStore | "Trigger snapshot → store to disk" end-to-end |
+| 4-B | MultiDimensionalHealingStrategy (4-dimension weighted scoring with n-gram) | "Given original + candidates → return match scores" end-to-end |
 | 4-C | SelfHealingEngine + Assertion integration + Healing report | "Assertion fails → self-heal → pass with report" end-to-end |
 | 4-D | Integration test | Simulate UI changes, verify healing accuracy |
 
@@ -133,44 +133,65 @@ class SnapshotStore {
 
 ---
 
-## 3. Embedding Engine — ONNX Runtime Integration
+## 3. Text Similarity — Character N-Gram Cosine Similarity
 
-### 3.1 Model
+### 3.1 Approach
 
-- **Model**: `all-MiniLM-L6-v2` (22MB, 384-dimensional embeddings)
-- **Runtime**: `onnxruntime-node`
-- **Location**: Shipped with `@fliwright/core` or downloaded on first use to `.fliwright/models/`
+Replace ONNX embedding with a zero-dependency character n-gram cosine similarity. This computes text similarity by:
+
+1. Split each text into character bigrams (n=2)
+2. Build a frequency vector per text
+3. Compute cosine similarity between vectors
+
+**Why not embedding model**: ONNX Runtime + model adds ~30MB dependency and initialization overhead. N-gram similarity is <1ms per comparison with zero dependencies, and effective for the typical UI change patterns (typos, partial text changes, wording variations).
 
 ### 3.2 Widget Description Text
 
-Construct a natural language description from structured features for embedding:
+Construct a description string from structured features for comparison:
 
 ```
-${type} with text '${text}', parent ${parentType}, adjacent [${adjacentTexts.join(', ')}]
+${type} ${text} ${parentType} ${adjacentTexts.join(' ')}
 ```
 
-Example: `"ElevatedButton with text '确认支付', parent Column, adjacent [总金额: ¥99, 取消]"`
+Example: `"ElevatedButton 确认支付 Column 总金额: ¥99 取消"`
 
-When text changes from "确认支付" to "去结算", the context (parent, adjacent) stays the same and embeddings remain semantically close.
+For major semantic rewrites where text changes completely (e.g. "确认支付" → "去结算"), the other three dimensions (position, context, code binding) compensate — the match is still found because parent type, adjacent text, and position remain stable.
 
-### 3.3 API
+### 3.3 Algorithm
 
 ```typescript
-class EmbeddingEngine {
-  private session: InferenceSession | null;
-  
-  async init(): Promise<void>;                    // Load model (lazy, once)
-  async embed(text: string): Promise<number[]>;   // Return 384-dim vector
-  async embedBatch(texts: string[]): Promise<number[][]>;  // Batch for efficiency
-  async dispose(): Promise<void>;
+function ngramSimilarity(textA: string, textB: string, n = 2): number {
+  const gramsA = buildNgramFreq(textA, n);
+  const gramsB = buildNgramFreq(textB, n);
+  return cosineSimilarity(gramsA, gramsB);
+}
+
+function buildNgramFreq(text: string, n: number): Map<string, number> {
+  const freq = new Map<string, number>();
+  for (let i = 0; i <= text.length - n; i++) {
+    const gram = text.substring(i, i + n);
+    freq.set(gram, (freq.get(gram) ?? 0) + 1);
+  }
+  return freq;
+}
+
+function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
+  let dotProduct = 0, normA = 0, normB = 0;
+  for (const [key, val] of a) {
+    dotProduct += val * (b.get(key) ?? 0);
+    normA += val * val;
+  }
+  for (const val of b.values()) normB += val * val;
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  return denominator === 0 ? 0 : dotProduct / denominator;
 }
 ```
 
-### 3.4 Initialization
+### 3.4 Integration
 
-Model is loaded during `Driver.connect()` to avoid cold-start latency during test execution.
+N-gram similarity is computed inline within `MultiDimensionalHealingStrategy.score()`. No separate engine class needed — no initialization, no async, no model loading.
 
-**Estimate**: 1 day
+**Estimate**: 0.5 days (down from 1 day — no ONNX integration)
 
 ---
 
@@ -185,7 +206,7 @@ Each dimension scores independently in `[0, 1]`. Final score = weighted sum.
 | Position similarity | 0.20 | `1 - euclidean(center_a, center_b) / max_distance` | Normalized by screen diagonal; closer = higher |
 | Context similarity | 0.30 | `0.5 * parent_type_match + 0.3 * jaccard(adjacent_texts) + 0.2 * type_match` | Parent type exact match, adjacent text Jaccard, widget type exact match |
 | Code binding | 0.15 | Exact match 1.0 / fuzzy match 0.6 / no match 0.0 | Callback function name comparison (Levenshtein distance <= 3 = fuzzy) |
-| Semantic vector | 0.35 | `cosine_similarity(desc_embedding_a, desc_embedding_b)` | Widget description embedding cosine similarity |
+| Text similarity | 0.35 | `ngram_cosine_similarity(desc_a, desc_b)` | Character bigram cosine similarity on widget description text |
 
 ### 4.2 Threshold
 
@@ -198,17 +219,16 @@ Each dimension scores independently in `[0, 1]`. Final score = weighted sum.
 ```typescript
 class MultiDimensionalHealingStrategy implements HealingStrategy {
   readonly strategyName = 'multidimensional';
-  private embeddingEngine: EmbeddingEngine;
-  private weights: { position: number; context: number; codeBinding: number; semantic: number };
-  
-  constructor(embeddingEngine: EmbeddingEngine, weights?: Partial<Weights>);
-  
+  private weights: { position: number; context: number; codeBinding: number; text: number };
+
+  constructor(weights?: Partial<Weights>);
+
   score(original: WidgetSnapshot, candidate: WidgetSnapshot): number;
   heal(original: WidgetSnapshot, candidates: WidgetSnapshot[], threshold?: number): HealingResult | null;
 }
 ```
 
-**Estimate**: 2 days (matching algorithm 1.5d + scoring integration 0.5d)
+**Estimate**: 2 days
 
 ---
 
@@ -237,12 +257,11 @@ Assertion fails (AssertionError)
 class SelfHealingEngine {
   private store: SnapshotStore;
   private strategy: HealingStrategy;
-  private embeddingEngine: EmbeddingEngine;
   private enabled: boolean;
   private reports: HealingReport[];
 
   setEnabled(enabled: boolean): void;
-  
+
   // Called on first success (from Locator/Assertion)
   async recordSuccess(locator: Locator, testName: string): Promise<void>;
 
@@ -261,13 +280,12 @@ class SelfHealingEngine {
 ```typescript
 class FliwrightDriver {
   private _healing: SelfHealingEngine | null;
-  
+
   get healing(): SelfHealingEngine {
     if (!this._healing) {
       this._healing = new SelfHealingEngine(
         new SnapshotStore(),
-        new MultiDimensionalHealingStrategy(this._embeddingEngine),
-        this._embeddingEngine,
+        new MultiDimensionalHealingStrategy(),
       );
     }
     return this._healing;
@@ -342,7 +360,7 @@ interface HealingReport {
     position: number;
     context: number;
     codeBinding: number;
-    semantic: number;
+    text: number;
     weighted: number;
   };
   originalWidget: WidgetSnapshot;
@@ -377,12 +395,10 @@ When a healing match succeeds, `suggestedSelector` is constructed from the match
 | `packages/fliwright-bridge/lib/src/extensions/snapshot.dart` | Widget metadata snapshot extension |
 | `packages/fliwright-core/src/SelfHealingEngine.ts` | Self-healing engine main class |
 | `packages/fliwright-core/src/SnapshotStore.ts` | Local file storage for snapshots |
-| `packages/fliwright-core/src/EmbeddingEngine.ts` | ONNX Runtime embedding wrapper |
-| `packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts` | Four-dimension weighted scoring |
+| `packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts` | Four-dimension weighted scoring (includes n-gram similarity) |
 | `packages/fliwright-core/tests/SelfHealingEngine.test.ts` | Engine unit tests |
 | `packages/fliwright-core/tests/SnapshotStore.test.ts` | Storage tests |
-| `packages/fliwright-core/tests/EmbeddingEngine.test.ts` | Embedding tests |
-| `packages/fliwright-core/tests/MultiDimensionalHealingStrategy.test.ts` | Strategy tests |
+| `packages/fliwright-core/tests/MultiDimensionalHealingStrategy.test.ts` | Strategy tests (includes n-gram tests) |
 
 ### Modified Files
 
@@ -403,13 +419,12 @@ When a healing match succeeds, `suggestedSelector` is constructed from the match
 |------|-------------|------|-----------|
 | 4.1 | Dart: Snapshot extension | 2d | 4-A |
 | 4.2 | TS: SnapshotStore | 1d | 4-A |
-| 4.3 | TS: EmbeddingEngine (ONNX) | 1d | 4-A |
-| 4.4 | TS: MultiDimensionalHealingStrategy | 2d | 4-B |
-| 4.5 | TS: SelfHealingEngine | 1d | 4-C |
-| 4.6 | TS: Assertion-healing integration | 1d | 4-C |
-| 4.7 | TS: Healing report | 1d | 4-C |
-| 4.8 | Integration test | 2d | 4-D |
-| **Total** | | **11d** | |
+| 4.3 | TS: MultiDimensionalHealingStrategy (with n-gram similarity) | 2d | 4-B |
+| 4.4 | TS: SelfHealingEngine | 1d | 4-C |
+| 4.5 | TS: Assertion-healing integration | 1d | 4-C |
+| 4.6 | TS: Healing report | 1d | 4-C |
+| 4.7 | Integration test | 2d | 4-D |
+| **Total** | | **10d** | |
 
 ---
 
@@ -422,8 +437,7 @@ When a healing match succeeds, `suggestedSelector` is constructed from the match
 
 ### New NPM Dependencies
 
-- `onnxruntime-node`: ONNX model inference runtime
-- `all-MiniLM-L6-v2` model file (22MB, vendored or downloaded)
+None. All similarity computation is pure TypeScript with no external dependencies.
 
 ---
 
