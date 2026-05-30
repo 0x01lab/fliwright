@@ -1,0 +1,48 @@
+import type { RecordedOperation, CodegenOptions } from './types.js';
+
+const DEFAULT_IMPORT = "@fliwright/vitest";
+const DEFAULT_TEST_NAME = 'recorded test';
+
+export class CodeGenerator {
+  generate(
+    operations: RecordedOperation[],
+    selectors: Map<number, string>,
+    options?: CodegenOptions,
+  ): string {
+    const importSource = options?.imports ?? DEFAULT_IMPORT;
+    const testName = options?.testName ?? DEFAULT_TEST_NAME;
+
+    const lines: string[] = [];
+    lines.push(`import { test, expect } from '${importSource}';`);
+    lines.push('');
+    lines.push(`test('${testName}', async ({ page }) => {`);
+
+    for (let i = 0; i < operations.length; i++) {
+      const op = operations[i];
+      const selector = selectors.get(i) ?? "{ type: 'Widget' }";
+      const locator = `page.locator(${selector})`;
+
+      switch (op.kind) {
+        case 'tap':
+          lines.push(`  await ${locator}.click();`);
+          break;
+        case 'longPress':
+          lines.push(`  await ${locator}.longPress({ duration: ${op.duration} });`);
+          break;
+        case 'drag':
+          lines.push(`  await ${locator}.drag(${op.delta!.x}, ${op.delta!.y});`);
+          break;
+        case 'type':
+          lines.push(`  await ${locator}.type('${escapeString(op.text ?? '')}');`);
+          break;
+      }
+    }
+
+    lines.push('});');
+    return lines.join('\n');
+  }
+}
+
+function escapeString(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
