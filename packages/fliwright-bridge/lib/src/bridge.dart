@@ -3,6 +3,7 @@ import 'extensions/gesture.dart';
 import 'extensions/http_overrides.dart';
 import 'extensions/inspect.dart';
 import 'extensions/mock_server.dart';
+import 'extensions/recording.dart';
 import 'extensions/riverpod.dart';
 import 'extensions/scroll_extension.dart';
 import 'extensions/snapshot.dart';
@@ -44,6 +45,7 @@ class FliwrightBridge {
     TypeExtension.register(_registry);
     ScrollExtension.register(_registry);
     SnapshotExtension.register(_registry);
+    RecordingExtension.register(_registry);
 
     RiverpodExtension.register(_registry);
 

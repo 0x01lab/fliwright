@@ -19,13 +19,13 @@ class InspectExtension {
 
     // Parse ancestor selector if provided.
     final ancestorSelectorStr = params['ancestorSelector'] ?? '';
-    _ParsedSelector? ancestorParsed;
+    ParsedSelector? ancestorParsed;
     if (ancestorSelectorStr.isNotEmpty) {
       ancestorParsed = _parseSelector(ancestorSelectorStr);
     }
 
-    _walkTree(root, (Element element) {
-      final info = _extractWidgetInfo(element);
+    walkTree(root, (Element element) {
+      final info = extractWidgetInfo(element);
       if (info == null) return;
       if (_matches(info, parsed)) {
         // If ancestor selector is specified, also check ancestor match.
@@ -39,27 +39,27 @@ class InspectExtension {
     return {'widgets': matchedWidgets, 'count': matchedWidgets.length};
   }
 
-  static _ParsedSelector _parseSelector(String selector) {
+  static ParsedSelector _parseSelector(String selector) {
     if (selector.startsWith('text=')) {
-      return _ParsedSelector(field: 'text', value: selector.substring(5));
+      return ParsedSelector(field: 'text', value: selector.substring(5));
     }
     if (selector.startsWith('key=')) {
-      return _ParsedSelector(field: 'key', value: selector.substring(4));
+      return ParsedSelector(field: 'key', value: selector.substring(4));
     }
     if (selector.startsWith('byType=')) {
-      return _ParsedSelector(field: 'type', value: selector.substring(7));
+      return ParsedSelector(field: 'type', value: selector.substring(7));
     }
-    return _ParsedSelector(field: 'text', value: selector);
+    return ParsedSelector(field: 'text', value: selector);
   }
 
-  static void _walkTree(Element root, void Function(Element) visitor) {
+  static void walkTree(Element root, void Function(Element) visitor) {
     visitor(root);
     root.debugVisitOnstageChildren((Element child) {
-      _walkTree(child, visitor);
+      walkTree(child, visitor);
     });
   }
 
-  static Map<String, dynamic>? _extractWidgetInfo(Element element) {
+  static Map<String, dynamic>? extractWidgetInfo(Element element) {
     final widget = element.widget;
     final renderObject = element.findRenderObject();
 
@@ -105,7 +105,7 @@ class InspectExtension {
 
   static bool _matches(
     Map<String, dynamic> info,
-    _ParsedSelector selector,
+    ParsedSelector selector,
   ) {
     final value = info[selector.field];
     if (value == null) return false;
@@ -115,10 +115,10 @@ class InspectExtension {
     return value.toString().contains(selector.value);
   }
 
-  static bool _hasAncestor(Element element, _ParsedSelector ancestorSelector) {
+  static bool _hasAncestor(Element element, ParsedSelector ancestorSelector) {
     bool found = false;
     element.visitAncestorElements((Element ancestor) {
-      final info = _extractWidgetInfo(ancestor);
+      final info = extractWidgetInfo(ancestor);
       if (info != null && _matches(info, ancestorSelector)) {
         found = true;
         return false; // Stop visiting.
@@ -129,8 +129,8 @@ class InspectExtension {
   }
 }
 
-class _ParsedSelector {
+class ParsedSelector {
   final String field;
   final String value;
-  _ParsedSelector({required this.field, required this.value});
+  ParsedSelector({required this.field, required this.value});
 }
