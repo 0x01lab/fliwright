@@ -1,14 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 
 import '../bridge.dart';
 
 const _interactiveTypes = {
-  'ElevatedButton', 'TextButton', 'OutlinedButton', 'IconButton',
-  'FloatingActionButton', 'TextField', 'TextFormField',
-  'Checkbox', 'Switch', 'Radio', 'Slider',
-  'DropdownButton', 'PopupMenuButton', 'ListTile',
-  'InkWell', 'GestureDetector', 'DropdownButtonFormField',
+  'ElevatedButton',
+  'TextButton',
+  'OutlinedButton',
+  'IconButton',
+  'FloatingActionButton',
+  'TextField',
+  'TextFormField',
+  'Checkbox',
+  'Switch',
+  'Radio',
+  'Slider',
+  'DropdownButton',
+  'PopupMenuButton',
+  'ListTile',
+  'InkWell',
+  'GestureDetector',
+  'DropdownButtonFormField',
 };
 
 class SnapshotExtension {
@@ -46,20 +57,27 @@ class SnapshotExtension {
 
       final text = _extractText(element);
       final key = _extractKey(widget);
-      final parentType = parent != null
-          ? parent.widget.runtimeType.toString()
-          : null;
+      final parentType =
+          parent != null ? parent.widget.runtimeType.toString() : null;
       final parentText = parent != null ? _extractText(parent) : null;
       final adjacentText = _extractAdjacentTexts(element);
       final callbackNames = _extractCallbackNames(widget);
       final properties = _extractProperties(widget);
 
-      final descBuffer = StringBuffer()
-        ..write(typeName);
-      if (text != null) descBuffer..write(" with text '")..write(text)..write("'");
-      descBuffer..write(', parent ')..write(parentType ?? 'null');
+      final descBuffer = StringBuffer()..write(typeName);
+      if (text != null)
+        descBuffer
+          ..write(" with text '")
+          ..write(text)
+          ..write("'");
+      descBuffer
+        ..write(', parent ')
+        ..write(parentType ?? 'null');
       if (adjacentText.isNotEmpty) {
-        descBuffer..write(', adjacent [')..write(adjacentText.join(', '))..write(']');
+        descBuffer
+          ..write(', adjacent [')
+          ..write(adjacentText.join(', '))
+          ..write(']');
       }
 
       widgets.add({
@@ -131,7 +149,9 @@ class SnapshotExtension {
     for (final match in regex.allMatches(str)) {
       final name = match.group(1);
       if (name != null &&
-          (name.startsWith('on') || name == 'onPressed' || name == 'onChanged')) {
+          (name.startsWith('on') ||
+              name == 'onPressed' ||
+              name == 'onChanged')) {
         names.add(name);
       }
     }

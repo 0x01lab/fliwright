@@ -18,26 +18,30 @@ void main() {
 
     test('registers hitTest extension on init', () async {
       await FliwrightBridge.init();
-      expect(FliwrightBridge.registry.registeredMethods, contains('ext.fliwright.hitTest'));
+      expect(FliwrightBridge.registry.registeredMethods,
+          contains('ext.fliwright.hitTest'));
     });
 
     test('startRecording returns recording=true', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.startRecording', {});
+      final result = await FliwrightBridge.registry
+          .invoke('ext.fliwright.startRecording', {});
       expect(result['recording'], isTrue);
     });
 
     test('stopRecording returns recording=false after start', () async {
       await FliwrightBridge.init();
       await FliwrightBridge.registry.invoke('ext.fliwright.startRecording', {});
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.stopRecording', {});
+      final result = await FliwrightBridge.registry
+          .invoke('ext.fliwright.stopRecording', {});
       expect(result['recording'], isFalse);
     });
 
     test('hitTest returns widget map', () async {
       TestWidgetsFlutterBinding.ensureInitialized();
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.hitTest', {'x': '100', 'y': '200'});
+      final result = await FliwrightBridge.registry
+          .invoke('ext.fliwright.hitTest', {'x': '100', 'y': '200'});
       expect(result, contains('widget'));
     });
   });

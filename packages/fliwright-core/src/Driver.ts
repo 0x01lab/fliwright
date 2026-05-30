@@ -8,6 +8,7 @@ import type { MockAdapter } from './interfaces/MockAdapter.js';
 import type { FinderStrategy } from './interfaces/FinderStrategy.js';
 import type { HealingStrategy } from './interfaces/HealingStrategy.js';
 import { MockManager } from './MockManager.js';
+import { RecorderController } from './RecorderController.js';
 import { SelfHealingEngine } from './SelfHealingEngine.js';
 import { SnapshotStore } from './SnapshotStore.js';
 import { MultiDimensionalHealingStrategy } from './strategies/MultiDimensionalHealingStrategy.js';
@@ -21,6 +22,7 @@ export class FliwrightDriver {
   private _page: Page | null = null;
   private _mock: MockManager | null = null;
   private _healing: SelfHealingEngine | null = null;
+  private _recorder: RecorderController | null = null;
 
   get mock(): MockManager {
     if (!this._mock) {
@@ -37,6 +39,16 @@ export class FliwrightDriver {
       );
     }
     return this._healing;
+  }
+
+  get recorder(): RecorderController {
+    if (!this._recorder) {
+      this._recorder = new RecorderController(
+        (method, params) => this.connector.sendRequest(method, params),
+        (callback) => this.connector.onEvent(callback),
+      );
+    }
+    return this._recorder;
   }
 
   get state(): StateAdapter {

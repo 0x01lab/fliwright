@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FliwrightDriver } from '../src/Driver.js';
 import { MockManager } from '../src/MockManager.js';
+import { RecorderController } from '../src/RecorderController.js';
 import type { FliwrightPlugin, PluginContext } from '../src/interfaces/Plugin.js';
 import type { StateAdapter } from '../src/interfaces/StateAdapter.js';
 
@@ -92,5 +93,12 @@ describe('FliwrightDriver', () => {
     const healing = driver.healing;
     expect(healing).toBeDefined();
     expect(healing.enabled).toBe(true);
+  });
+
+  it('provides recorder via convenience getter', async () => {
+    const driver = new FliwrightDriver();
+    await driver.attachMockConnector(createMockWSForDriver());
+    expect(driver.recorder).toBeInstanceOf(RecorderController);
+    expect(driver.recorder).toBe(driver.recorder);
   });
 });

@@ -62,6 +62,19 @@ describe('CodeGenerator', () => {
     expect(code).toContain("test('login flow'");
   });
 
+  it('escapes string literals in generated code', () => {
+    const gen = new CodeGenerator();
+    const ops: RecordedOperation[] = [typeOp(100, 200, "line 1\nline '2'", 1000)];
+    const selectors = new Map<number, string>([[0, "{ text: 'Notes' }"]]);
+    const code = gen.generate(ops, selectors, {
+      testName: "user's notes",
+      imports: "@scope/fliwright\\vitest",
+    });
+    expect(code).toContain("import { test, expect } from '@scope/fliwright\\\\vitest'");
+    expect(code).toContain("test('user\\'s notes'");
+    expect(code).toContain("type('line 1\\nline \\'2\\'')");
+  });
+
   it('falls back to type selector when no selector provided', () => {
     const gen = new CodeGenerator();
     const ops: RecordedOperation[] = [

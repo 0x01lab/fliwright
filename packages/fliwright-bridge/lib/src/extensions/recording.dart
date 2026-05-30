@@ -1,4 +1,5 @@
 import 'dart:developer';
+import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -8,6 +9,8 @@ import 'inspect.dart';
 class RecordingExtension {
   static bool _recording = false;
   static PointerRoute? _pointerRoute;
+  static Timer? _textPollingTimer;
+  static final Map<int, String> _lastTextByElement = <int, String>{};
 
   static void register(ExtensionRegistry registry) {
     registry.register('ext.fliwright.startRecording', _startRecording);
@@ -15,9 +18,11 @@ class RecordingExtension {
     registry.register('ext.fliwright.hitTest', _hitTest);
   }
 
-  static Future<Map<String, dynamic>> _startRecording(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _startRecording(
+      Map<String, String> params) async {
     if (_recording) return {'recording': true};
     _recording = true;
+    _lastTextByElement.clear();
     _pointerRoute = (PointerEvent event) {
       if (!_recording) return;
       String kind;
@@ -35,24 +40,36 @@ class RecordingExtension {
         'kind': kind,
         'pointer': event.pointer,
         'position': {'x': event.position.dx, 'y': event.position.dy},
-        'timestamp': event.timeStamp.inMicroseconds,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
         'buttons': event.buttons,
       });
     };
     GestureBinding.instance.pointerRouter.addGlobalRoute(_pointerRoute!);
+    _textPollingTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      _pollFocusedTextInput();
+    });
     return {'recording': true};
   }
 
-  static Future<Map<String, dynamic>> _stopRecording(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _stopRecording(
+      Map<String, String> params) async {
+    _textPollingTimer?.cancel();
+    _textPollingTimer = null;
     if (_pointerRoute != null) {
       GestureBinding.instance.pointerRouter.removeGlobalRoute(_pointerRoute!);
       _pointerRoute = null;
     }
     _recording = false;
+    _lastTextByElement.clear();
     return {'recording': false};
   }
 
-  static Future<Map<String, dynamic>> _hitTest(Map<String, String> params) async {
+  static Future<void> reset() async {
+    await _stopRecording(<String, String>{});
+  }
+
+  static Future<Map<String, dynamic>> _hitTest(
+      Map<String, String> params) async {
     final x = double.tryParse(params['x'] ?? '') ?? 0.0;
     final y = double.tryParse(params['y'] ?? '') ?? 0.0;
     final root = WidgetsBinding.instance.rootElement;
@@ -65,11 +82,15 @@ class RecordingExtension {
       if (renderObject is RenderBox && renderObject.hasSize) {
         final topLeft = renderObject.localToGlobal(Offset.zero);
         final size = renderObject.size;
-        final rect = Rect.fromLTWH(topLeft.dx, topLeft.dy, size.width, size.height);
+        final rect =
+            Rect.fromLTWH(topLeft.dx, topLeft.dy, size.width, size.height);
         if (rect.contains(Offset(x, y))) {
           final widget = element.widget;
           // Skip pure text/render widgets, prefer interactive ones.
-          if (widget is! RichText && widget is! Text && widget is! Semantics && widget is! RepaintBoundary) {
+          if (widget is! RichText &&
+              widget is! Text &&
+              widget is! Semantics &&
+              widget is! RepaintBoundary) {
             best = element;
           }
         }
@@ -79,5 +100,49 @@ class RecordingExtension {
     if (best == null) return {'widget': <String, dynamic>{}};
     final info = InspectExtension.extractWidgetInfo(best!);
     return {'widget': info};
+  }
+
+  static void _pollFocusedTextInput() {
+    if (!_recording) return;
+
+    final editable = _findFocusedEditableText();
+    if (editable == null) return;
+
+    final widget = editable.widget;
+    if (widget is! EditableText) return;
+
+    final id = editable.hashCode;
+    final text = widget.controller.text;
+    final previous = _lastTextByElement[id];
+    if (previous == null) {
+      _lastTextByElement[id] = text;
+      return;
+    }
+    if (text == previous) return;
+
+    final recordedText =
+        text.startsWith(previous) ? text.substring(previous.length) : text;
+    _lastTextByElement[id] = text;
+    if (recordedText.isEmpty) return;
+
+    postEvent('FliwrightRecording', {
+      'type': 'textInput',
+      'text': recordedText,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  static Element? _findFocusedEditableText() {
+    final root = WidgetsBinding.instance.rootElement;
+    if (root == null) return null;
+
+    Element? focused;
+    InspectExtension.walkTree(root, (Element element) {
+      final widget = element.widget;
+      if (widget is EditableText && widget.focusNode.hasFocus) {
+        focused = element;
+      }
+    });
+    return focused;
   }
 }

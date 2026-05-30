@@ -14,6 +14,9 @@ export type {
   SelectorInput,
   FailureContext,
   HealingReport,
+  RawInputEvent,
+  RecordedOperation,
+  CodegenOptions,
 } from './types.js';
 
 export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';
@@ -33,7 +36,10 @@ export { Locator } from './Locator.js';
 export { Selector } from './Selector.js';
 export { Assertion, AssertionError, createExpect } from './Assertion.js';
 export { FailureCollector } from './FailureCollector.js';
+export { EventAggregator } from './EventAggregator.js';
+export { CodeGenerator } from './CodeGenerator.js';
 export { MockManager } from './MockManager.js';
+export { RecorderController } from './RecorderController.js';
 export { SnapshotStore } from './SnapshotStore.js';
 export { SelfHealingEngine } from './SelfHealingEngine.js';
 export { MultiDimensionalHealingStrategy, ngramSimilarity } from './strategies/MultiDimensionalHealingStrategy.js';

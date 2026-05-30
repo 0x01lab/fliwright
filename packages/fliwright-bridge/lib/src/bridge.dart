@@ -19,6 +19,7 @@ class FliwrightBridge {
   static Future<void> reset() async {
     _registry.reset();
     _initialized = false;
+    await RecordingExtension.reset();
     await MockServerExtension.reset();
   }
 

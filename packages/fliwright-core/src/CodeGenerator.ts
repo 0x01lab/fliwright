@@ -13,9 +13,9 @@ export class CodeGenerator {
     const testName = options?.testName ?? DEFAULT_TEST_NAME;
 
     const lines: string[] = [];
-    lines.push(`import { test, expect } from '${importSource}';`);
+    lines.push(`import { test, expect } from '${escapeString(importSource)}';`);
     lines.push('');
-    lines.push(`test('${testName}', async ({ page }) => {`);
+    lines.push(`test('${escapeString(testName)}', async ({ page }) => {`);
 
     for (let i = 0; i < operations.length; i++) {
       const op = operations[i];
@@ -44,5 +44,9 @@ export class CodeGenerator {
 }
 
 function escapeString(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n');
 }

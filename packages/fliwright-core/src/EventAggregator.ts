@@ -6,27 +6,32 @@ const TYPE_INPUT_WINDOW = 1000;
 
 export class EventAggregator {
   aggregate(events: RawInputEvent[]): RecordedOperation[] {
-    const pointerEvents = events.filter((e) => e.type === 'pointerEvent');
-    const textEvents = events.filter((e) => e.type === 'textInput');
+    const pointerEvents = events
+      .filter((e) => e.type === 'pointerEvent')
+      .sort((a, b) => a.timestamp - b.timestamp);
+    const textEvents = events
+      .filter((e) => e.type === 'textInput')
+      .sort((a, b) => a.timestamp - b.timestamp);
 
-    const groups = new Map<number, RawInputEvent[]>();
-    for (const event of pointerEvents) {
-      const id = event.pointer ?? 0;
-      if (!groups.has(id)) groups.set(id, []);
-      groups.get(id)!.push(event);
-    }
-
+    const activePointers = new Map<number, RawInputEvent>();
     const operations: RecordedOperation[] = [];
 
-    for (const [, group] of groups) {
-      const down = group.find((e) => e.kind === 'down');
-      const up = group.find((e) => e.kind === 'up');
-      if (!down || !up || !down.position || !up.position) continue;
+    for (const event of pointerEvents) {
+      const id = event.pointer ?? 0;
+      if (event.kind === 'down') {
+        activePointers.set(id, event);
+        continue;
+      }
+      if (event.kind !== 'up') continue;
 
-      const duration = up.timestamp - down.timestamp;
+      const down = activePointers.get(id);
+      activePointers.delete(id);
+      if (!down?.position || !event.position) continue;
+
+      const duration = event.timestamp - down.timestamp;
       const displacement = Math.sqrt(
-        (up.position.x - down.position.x) ** 2 +
-        (up.position.y - down.position.y) ** 2,
+        (event.position.x - down.position.x) ** 2 +
+        (event.position.y - down.position.y) ** 2,
       );
 
       if (displacement > TAP_MAX_DISPLACEMENT) {
@@ -34,8 +39,8 @@ export class EventAggregator {
           kind: 'drag',
           position: { x: down.position.x, y: down.position.y },
           delta: {
-            x: Math.round(up.position.x - down.position.x),
-            y: Math.round(up.position.y - down.position.y),
+            x: Math.round(event.position.x - down.position.x),
+            y: Math.round(event.position.y - down.position.y),
           },
           timestamp: down.timestamp,
         });
@@ -47,29 +52,46 @@ export class EventAggregator {
           timestamp: down.timestamp,
         });
       } else {
-        const pos = { x: down.position.x, y: down.position.y };
-        const textEvent = textEvents.find(
-          (te) => te.timestamp >= down.timestamp && te.timestamp <= down.timestamp + TYPE_INPUT_WINDOW,
-        );
+        operations.push({
+          kind: 'tap',
+          position: { x: down.position.x, y: down.position.y },
+          timestamp: down.timestamp,
+        });
+      }
+    }
 
-        if (textEvent && textEvent.text) {
-          operations.push({
-            kind: 'type',
-            position: pos,
-            text: textEvent.text,
-            timestamp: down.timestamp,
-          });
-        } else {
-          operations.push({
-            kind: 'tap',
-            position: pos,
-            timestamp: down.timestamp,
-          });
-        }
+    for (const textEvent of textEvents) {
+      if (!textEvent.text) continue;
+      const opIndex = findEditableOperationForTextInput(operations, textEvent);
+      if (opIndex < 0) continue;
+      const op = operations[opIndex];
+      if (op.kind === 'type') {
+        operations[opIndex] = {
+          ...op,
+          text: `${op.text ?? ''}${textEvent.text}`,
+        };
+      } else {
+        operations[opIndex] = {
+          kind: 'type',
+          position: op.position,
+          text: textEvent.text,
+          timestamp: op.timestamp,
+        };
       }
     }
 
     operations.sort((a, b) => a.timestamp - b.timestamp);
     return operations;
   }
+}
+
+function findEditableOperationForTextInput(operations: RecordedOperation[], textEvent: RawInputEvent): number {
+  for (let i = operations.length - 1; i >= 0; i--) {
+    const op = operations[i];
+    if (op.kind !== 'tap' && op.kind !== 'type') continue;
+    if (textEvent.timestamp < op.timestamp) continue;
+    if (textEvent.timestamp > op.timestamp + TYPE_INPUT_WINDOW) continue;
+    return i;
+  }
+  return -1;
 }

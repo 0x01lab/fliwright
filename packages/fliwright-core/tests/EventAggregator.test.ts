@@ -75,6 +75,49 @@ describe('EventAggregator', () => {
     expect(ops[1].position).toEqual({ x: 300, y: 400 });
   });
 
+  it('recognizes repeated gestures on the same pointer id', () => {
+    const agg = new EventAggregator();
+    const events: RawInputEvent[] = [
+      { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1000, buttons: 1 },
+      { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1100, buttons: 0 },
+      { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 300, y: 400 }, timestamp: 2000, buttons: 1 },
+      { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 300, y: 400 }, timestamp: 2100, buttons: 0 },
+    ];
+    const ops = agg.aggregate(events);
+    expect(ops).toHaveLength(2);
+    expect(ops[0].position).toEqual({ x: 100, y: 200 });
+    expect(ops[1].position).toEqual({ x: 300, y: 400 });
+  });
+
+  it('associates text input with only the nearest preceding tap', () => {
+    const agg = new EventAggregator();
+    const events: RawInputEvent[] = [
+      { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1000, buttons: 1 },
+      { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1100, buttons: 0 },
+      { type: 'pointerEvent', kind: 'down', pointer: 1, position: { x: 300, y: 400 }, timestamp: 1300, buttons: 1 },
+      { type: 'pointerEvent', kind: 'up', pointer: 1, position: { x: 300, y: 400 }, timestamp: 1400, buttons: 0 },
+      { type: 'textInput', text: 'hello', timestamp: 1500 },
+    ];
+    const ops = agg.aggregate(events);
+    expect(ops).toHaveLength(2);
+    expect(ops[0].kind).toBe('tap');
+    expect(ops[1]).toMatchObject({ kind: 'type', text: 'hello', position: { x: 300, y: 400 } });
+  });
+
+  it('coalesces multiple text input chunks after one tap', () => {
+    const agg = new EventAggregator();
+    const events: RawInputEvent[] = [
+      { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1000, buttons: 1 },
+      { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1100, buttons: 0 },
+      { type: 'textInput', text: 'he', timestamp: 1200 },
+      { type: 'textInput', text: 'llo', timestamp: 1300 },
+    ];
+    const ops = agg.aggregate(events);
+    expect(ops).toEqual([
+      { kind: 'type', position: { x: 100, y: 200 }, text: 'hello', timestamp: 1000 },
+    ]);
+  });
+
   it('ignores move events without displacement', () => {
     const agg = new EventAggregator();
     const events: RawInputEvent[] = [

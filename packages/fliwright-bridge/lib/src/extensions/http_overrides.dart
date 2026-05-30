@@ -1,9 +1,9 @@
 import 'dart:io';
 
 class FliwrightHttpOverrides extends HttpOverrides {
-  final int _mockPort;
+  final int mockPort;
 
-  FliwrightHttpOverrides._(this._mockPort);
+  FliwrightHttpOverrides._(this.mockPort);
 
   static void install({required int port}) {
     HttpOverrides.global = FliwrightHttpOverrides._(port);
