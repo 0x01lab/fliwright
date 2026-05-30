@@ -13,6 +13,7 @@ export type {
   ProtocolMessage,
   SelectorInput,
   FailureContext,
+  HealingReport,
 } from './types.js';
 
 export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';
@@ -33,3 +34,6 @@ export { Selector } from './Selector.js';
 export { Assertion, AssertionError, createExpect } from './Assertion.js';
 export { FailureCollector } from './FailureCollector.js';
 export { MockManager } from './MockManager.js';
+export { SnapshotStore } from './SnapshotStore.js';
+export { SelfHealingEngine } from './SelfHealingEngine.js';
+export { MultiDimensionalHealingStrategy, ngramSimilarity } from './strategies/MultiDimensionalHealingStrategy.js';

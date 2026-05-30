@@ -8,6 +8,9 @@ import type { MockAdapter } from './interfaces/MockAdapter.js';
 import type { FinderStrategy } from './interfaces/FinderStrategy.js';
 import type { HealingStrategy } from './interfaces/HealingStrategy.js';
 import { MockManager } from './MockManager.js';
+import { SelfHealingEngine } from './SelfHealingEngine.js';
+import { SnapshotStore } from './SnapshotStore.js';
+import { MultiDimensionalHealingStrategy } from './strategies/MultiDimensionalHealingStrategy.js';
 import type { TestResult } from './types.js';
 
 export interface DriverOptions { plugins?: FliwrightPlugin[]; }
@@ -17,12 +20,23 @@ export class FliwrightDriver {
   private connector = new VMServiceConnector();
   private _page: Page | null = null;
   private _mock: MockManager | null = null;
+  private _healing: SelfHealingEngine | null = null;
 
   get mock(): MockManager {
     if (!this._mock) {
       this._mock = new MockManager((method, params) => this.connector.sendRequest(method, params));
     }
     return this._mock;
+  }
+
+  get healing(): SelfHealingEngine {
+    if (!this._healing) {
+      this._healing = new SelfHealingEngine(
+        new SnapshotStore(),
+        new MultiDimensionalHealingStrategy(),
+      );
+    }
+    return this._healing;
   }
 
   get state(): StateAdapter {

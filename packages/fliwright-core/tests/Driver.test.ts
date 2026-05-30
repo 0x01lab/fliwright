@@ -85,4 +85,12 @@ describe('FliwrightDriver', () => {
     const state = driver.state;
     expect(state).toBe(fakeAdapter);
   });
+
+  it('provides healing engine via convenience getter', async () => {
+    const driver = new FliwrightDriver();
+    await driver.attachMockConnector(createMockWSForDriver());
+    const healing = driver.healing;
+    expect(healing).toBeDefined();
+    expect(healing.enabled).toBe(true);
+  });
 });
