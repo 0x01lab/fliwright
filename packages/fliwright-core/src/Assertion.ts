@@ -88,7 +88,7 @@ export class Assertion {
       if (result.healed && result.report) {
         const { Locator } = await import('./Locator.js');
         const newLocator = new Locator(result.report.suggestedSelector, this.sendRequest!);
-        const healedAssertion = new Assertion(newLocator, false);
+        const healedAssertion = new Assertion(newLocator, false, this.failureCollector ?? undefined);
         await healedAssertion.toBeVisible(options);
         return true;
       }

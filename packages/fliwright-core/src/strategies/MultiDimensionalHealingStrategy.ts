@@ -140,6 +140,23 @@ export class MultiDimensionalHealingStrategy implements HealingStrategy {
     );
   }
 
+  scoreDimensions(original: WidgetSnapshot, candidate: WidgetSnapshot): {
+    position: number; context: number; codeBinding: number; text: number; weighted: number;
+  } {
+    const position = positionScore(original, candidate);
+    const context = contextScore(original, candidate);
+    const codeBinding = codeBindingScore(original, candidate);
+    const text = textScore(original, candidate);
+    return {
+      position,
+      context,
+      codeBinding,
+      text,
+      weighted: this.weights.position * position + this.weights.context * context +
+        this.weights.codeBinding * codeBinding + this.weights.text * text,
+    };
+  }
+
   heal(
     original: WidgetSnapshot,
     candidates: WidgetSnapshot[],

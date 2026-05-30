@@ -50,9 +50,17 @@ class SnapshotExtension {
           ? parent.widget.runtimeType.toString()
           : null;
       final parentText = parent != null ? _extractText(parent) : null;
-      final adjacentTexts = _extractAdjacentTexts(element);
+      final adjacentText = _extractAdjacentTexts(element);
       final callbackNames = _extractCallbackNames(widget);
       final properties = _extractProperties(widget);
+
+      final descBuffer = StringBuffer()
+        ..write(typeName);
+      if (text != null) descBuffer..write(" with text '")..write(text)..write("'");
+      descBuffer..write(', parent ')..write(parentType ?? 'null');
+      if (adjacentText.isNotEmpty) {
+        descBuffer..write(', adjacent [')..write(adjacentText.join(', '))..write(']');
+      }
 
       widgets.add({
         'id': '${element.hashCode}',
@@ -62,9 +70,10 @@ class SnapshotExtension {
         'rect': rect,
         if (parentType != null) 'parentType': parentType,
         if (parentText != null) 'parentText': parentText,
-        'adjacentTexts': adjacentTexts,
+        'adjacentText': adjacentText,
         'callbackNames': callbackNames,
         'properties': properties,
+        'description': descBuffer.toString(),
       });
     });
 
