@@ -125,3 +125,27 @@ export interface FailureContext {
   };
   timestamp: string;
 }
+
+export interface RawInputEvent {
+  type: 'pointerEvent' | 'textInput';
+  kind?: 'down' | 'move' | 'up';
+  pointer?: number;
+  position?: { x: number; y: number };
+  timestamp: number;
+  buttons?: number;
+  text?: string;
+}
+
+export interface RecordedOperation {
+  kind: 'tap' | 'longPress' | 'drag' | 'type';
+  position: { x: number; y: number };
+  delta?: { x: number; y: number };
+  text?: string;
+  duration?: number;
+  timestamp: number;
+}
+
+export interface CodegenOptions {
+  testName?: string;
+  imports?: string;
+}
