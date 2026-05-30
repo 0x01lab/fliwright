@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
@@ -139,6 +140,103 @@ void main() {
         {'enabled': 'false'},
       );
       expect(result['passthrough'], isFalse);
+    });
+  });
+
+  group('MockServerExtension HTTP', () {
+    setUp(() async {
+      await FliwrightBridge.reset();
+      await FliwrightBridge.init();
+    });
+
+    test('mock server responds to matching route', () async {
+      final port = MockServerExtension.serverPort;
+      expect(port, isNotNull);
+
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'hello-route',
+            'method': 'GET',
+            'path': '/api/hello',
+            'response': {
+              'status': 200,
+              'body': {'message': 'mocked'},
+            },
+          }),
+        },
+      );
+
+      final client = HttpClient();
+      try {
+        final request = await client.get('127.0.0.1', port!, '/api/hello');
+        final response = await request.close();
+        expect(response.statusCode, 200);
+        final body = await utf8.decoder.bind(response).join();
+        final decoded = jsonDecode(body) as Map<String, dynamic>;
+        expect(decoded, contains('message'));
+        expect(decoded['message'], 'mocked');
+      } finally {
+        client.close();
+      }
+    });
+
+    test('mock server returns 404 for unmatched route', () async {
+      final port = MockServerExtension.serverPort;
+      expect(port, isNotNull);
+
+      final client = HttpClient();
+      try {
+        final request =
+            await client.get('127.0.0.1', port!, '/api/nonexistent');
+        final response = await request.close();
+        expect(response.statusCode, 404);
+        final body = await utf8.decoder.bind(response).join();
+        final decoded = jsonDecode(body) as Map<String, dynamic>;
+        expect(decoded, contains('error'));
+        expect(decoded['path'], '/api/nonexistent');
+      } finally {
+        client.close();
+      }
+    });
+
+    test('mock server records calls', () async {
+      final port = MockServerExtension.serverPort;
+      expect(port, isNotNull);
+
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'ping-route',
+            'method': 'GET',
+            'path': '/api/ping',
+            'response': {
+              'status': 200,
+              'body': {'pong': true},
+            },
+          }),
+        },
+      );
+
+      final client = HttpClient();
+      try {
+        final request = await client.get('127.0.0.1', port!, '/api/ping');
+        await request.close();
+      } finally {
+        client.close();
+      }
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.getCalls',
+        {},
+      );
+      final calls = result['calls'] as List<dynamic>;
+      expect(calls, isNotEmpty);
+      final lastCall = calls.last as Map<String, dynamic>;
+      expect(lastCall['path'], '/api/ping');
+      expect(lastCall['method'], 'GET');
     });
   });
 }
