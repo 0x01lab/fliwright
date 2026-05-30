@@ -1,4 +1,5 @@
 import 'extension_registry.dart';
+import 'extensions/form_extract.dart';
 import 'extensions/gesture.dart';
 import 'extensions/http_overrides.dart';
 import 'extensions/inspect.dart';
@@ -47,6 +48,7 @@ class FliwrightBridge {
     ScrollExtension.register(_registry);
     SnapshotExtension.register(_registry);
     RecordingExtension.register(_registry);
+    FormExtractExtension.register(_registry);
 
     RiverpodExtension.register(_registry);
 
