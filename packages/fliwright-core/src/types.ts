@@ -151,3 +151,72 @@ export interface CodegenOptions {
   testName?: string;
   imports?: string;
 }
+
+export interface FormFieldMeta {
+  id: string;
+  type: string;
+  rect: { x: number; y: number; width: number; height: number };
+  hintText?: string;
+  label?: string;
+  keyboardType?: string;
+  maxLength?: number;
+  obscureText: boolean;
+  enabled: boolean;
+  selector: string;
+}
+
+export type SemanticType =
+  | 'phone' | 'email' | 'idCard' | 'fullName' | 'address'
+  | 'password' | 'captcha' | 'number' | 'text' | 'url' | 'date';
+
+export interface FormFillResult {
+  filled: number;
+  skipped: number;
+  errors: Array<{ fieldId: string; error: string }>;
+  fields: Array<{
+    id: string;
+    semanticType: SemanticType;
+    generatedValue: string;
+    selector: string;
+    status: 'filled' | 'skipped' | 'error';
+  }>;
+}
+
+export interface FormAnalyzeResult {
+  fields: Array<{
+    id: string;
+    semanticType: SemanticType;
+    generatedValue: string;
+    selector: string;
+    hintText?: string;
+    label?: string;
+  }>;
+}
+
+export interface FormHelperOptions {
+  rulesFile?: string;
+  rulesDir?: string;
+  locale?: string;
+  skipObscureFields?: boolean;
+  scope?: string;
+}
+
+export interface FormSkill {
+  name: string;
+  type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
+  match: (field: FormFieldMeta) => boolean;
+  generate: (field: FormFieldMeta, locale: string) => string;
+}
+
+export interface FormRule {
+  match: Record<string, string>;
+  type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
+  data?: string[];
+  pattern?: string;
+}
+
+export interface FormRulesFile {
+  version: number;
+  locale?: string;
+  rules: FormRule[];
+}
