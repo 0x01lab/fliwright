@@ -1,6 +1,7 @@
 import type { Locator } from './Locator.js';
-import type { WidgetInfo } from './types.js';
+import type { WidgetInfo, WidgetSnapshot } from './types.js';
 import type { FailureCollector } from './FailureCollector.js';
+import type { SelfHealingEngine } from './SelfHealingEngine.js';
 
 const DEFAULT_TIMEOUT = 5000;
 const DEFAULT_INTERVAL = 100;
@@ -31,16 +32,70 @@ export class Assertion {
   private readonly locator: Locator;
   private readonly negated: boolean;
   private readonly failureCollector: FailureCollector | null;
+  private readonly healingEngine: SelfHealingEngine | null;
+  private readonly testName: string | null;
+  private readonly sendRequest: ((method: string, params?: Record<string, unknown>) => Promise<unknown>) | null;
 
-  constructor(locator: Locator, negated = false, failureCollector?: FailureCollector) {
+  constructor(
+    locator: Locator,
+    negated = false,
+    failureCollector?: FailureCollector,
+    healingEngine?: SelfHealingEngine,
+    testName?: string,
+    sendRequest?: (method: string, params?: Record<string, unknown>) => Promise<unknown>,
+  ) {
     this.locator = locator;
     this.negated = negated;
     this.failureCollector = failureCollector ?? null;
+    this.healingEngine = healingEngine ?? null;
+    this.testName = testName ?? null;
+    this.sendRequest = sendRequest ?? null;
   }
 
   /** Negates the next assertion. */
   get not(): Assertion {
-    return new Assertion(this.locator, true, this.failureCollector ?? undefined);
+    return new Assertion(
+      this.locator,
+      true,
+      this.failureCollector ?? undefined,
+      this.healingEngine ?? undefined,
+      this.testName ?? undefined,
+      this.sendRequest ?? undefined,
+    );
+  }
+
+  private async attemptHealing(matcher: string, options?: { timeout?: number }): Promise<boolean> {
+    if (!this.healingEngine || !this.testName || !this.sendRequest || this.negated) {
+      return false;
+    }
+    try {
+      const result = await this.healingEngine.tryHeal(
+        this.locator,
+        this.testName,
+        {
+          assertion: { matcher, expected: '', actual: '', timeout: options?.timeout ?? 5000 },
+          screenshot: null,
+          widgetTree: {},
+          source: { file: '', line: 0, snippet: '' },
+          timestamp: new Date().toISOString(),
+        },
+        async () => {
+          const resp = await this.sendRequest!('ext.fliwright.snapshot', {}) as { widgets: WidgetSnapshot[] };
+          return resp.widgets ?? [];
+        },
+      );
+
+      if (result.healed && result.report) {
+        const { Locator } = await import('./Locator.js');
+        const newLocator = new Locator(result.report.suggestedSelector, this.sendRequest!);
+        const healedAssertion = new Assertion(newLocator, false);
+        await healedAssertion.toBeVisible(options);
+        return true;
+      }
+    } catch {
+      // Healing failed — will throw original error.
+    }
+    return false;
   }
 
   /** Asserts that the element is visible. */
@@ -55,6 +110,12 @@ export class Assertion {
     );
 
     if (!passed) {
+      // Try self-healing before throwing (only for non-negated assertions).
+      if (!this.negated) {
+        const healed = await this.attemptHealing('toBeVisible', options);
+        if (healed) return;
+      }
+
       const lastValue = await this.locator.isVisible();
       if (this.negated) {
         throw new AssertionError('toBeVisible', 'not visible', `visible=${lastValue}`, selector);
