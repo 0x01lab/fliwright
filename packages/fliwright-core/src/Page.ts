@@ -1,6 +1,7 @@
 import { Locator } from './Locator.js';
 import type { SelectorInput } from './types.js';
 import { Selector } from './Selector.js';
+import { FormHelper } from './FormHelper.js';
 
 type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
@@ -21,5 +22,14 @@ export class Page {
       await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error(`Timeout waiting for selector: ${selectorObj.toWireFormat()}`);
+  }
+
+  private _formHelper: FormHelper | null = null;
+
+  get formHelper(): FormHelper {
+    if (!this._formHelper) {
+      this._formHelper = new FormHelper(this.sendRequest);
+    }
+    return this._formHelper;
   }
 }

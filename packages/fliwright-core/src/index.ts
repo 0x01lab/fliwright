@@ -17,6 +17,14 @@ export type {
   RawInputEvent,
   RecordedOperation,
   CodegenOptions,
+  FormFieldMeta,
+  SemanticType,
+  FormFillResult,
+  FormAnalyzeResult,
+  FormHelperOptions,
+  FormSkill,
+  FormRule,
+  FormRulesFile,
 } from './types.js';
 
 export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';
@@ -43,3 +51,8 @@ export { RecorderController } from './RecorderController.js';
 export { SnapshotStore } from './SnapshotStore.js';
 export { SelfHealingEngine } from './SelfHealingEngine.js';
 export { MultiDimensionalHealingStrategy, ngramSimilarity } from './strategies/MultiDimensionalHealingStrategy.js';
+export { FormHelper } from './FormHelper.js';
+export { SemanticInferrer } from './SemanticInferrer.js';
+export { FakerGenerator } from './FakerGenerator.js';
+export { SkillRegistry } from './SkillRegistry.js';
+export { JsonRuleLoader } from './JsonRuleLoader.js';
