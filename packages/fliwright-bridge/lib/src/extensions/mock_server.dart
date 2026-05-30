@@ -102,20 +102,21 @@ class MockServerExtension {
     }
     try {
       final decoded = jsonDecode(routeJson) as Map<String, dynamic>;
+      final response = decoded['response'] as Map<String, dynamic>? ?? {};
       final route = MockRoute(
         id: decoded['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
         method: decoded['method'] as String?,
-        pathPattern: decoded['pathPattern'] as String? ?? decoded['path'] as String? ?? '/',
-        status: decoded['status'] as int? ?? 200,
-        headers: (decoded['headers'] as Map<String, dynamic>?)?.map(
+        pathPattern: decoded['path'] as String? ?? decoded['pathPattern'] as String? ?? '/',
+        status: response['status'] as int? ?? 200,
+        headers: (response['headers'] as Map<String, dynamic>?)?.map(
               (k, v) => MapEntry(k, v.toString()),
             ) ??
-            {},
-        body: decoded['body'],
-        delayMs: decoded['delayMs'] as int? ?? 0,
+            {'Content-Type': 'application/json'},
+        body: response['body'],
+        delayMs: response['delay'] as int? ?? 0,
       );
       _routes.add(route);
-      return {'added': true, 'id': route.id};
+      return {'success': true, 'id': route.id};
     } catch (e) {
       return {'error': 'Invalid route JSON: $e'};
     }

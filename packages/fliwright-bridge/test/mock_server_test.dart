@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 
@@ -24,10 +26,15 @@ void main() {
       final result = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.addRoute',
         {
-          'route': '{"id":"r1","method":"GET","pathPattern":"/api/users","status":200,"body":{"users":[]}}',
+          'route': jsonEncode({
+            'id': 'r1',
+            'method': 'GET',
+            'path': '/api/users',
+            'response': {'status': 200, 'body': {'users': []}},
+          }),
         },
       );
-      expect(result['added'], isTrue);
+      expect(result['success'], isTrue);
       expect(result['id'], 'r1');
     });
 
@@ -44,11 +51,25 @@ void main() {
       await FliwrightBridge.init();
       await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.addRoute',
-        {'route': '{"id":"r1","method":"GET","pathPattern":"/api/users"}'},
+        {
+          'route': jsonEncode({
+            'id': 'r1',
+            'method': 'GET',
+            'path': '/api/users',
+            'response': {},
+          }),
+        },
       );
       await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.addRoute',
-        {'route': '{"id":"r2","method":"POST","pathPattern":"/api/items"}'},
+        {
+          'route': jsonEncode({
+            'id': 'r2',
+            'method': 'POST',
+            'path': '/api/items',
+            'response': {},
+          }),
+        },
       );
       final result = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.listRoutes',
@@ -64,11 +85,11 @@ void main() {
       await FliwrightBridge.init();
       await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.addRoute',
-        {'route': '{"id":"r1","pathPattern":"/a"}'},
+        {'route': jsonEncode({'id': 'r1', 'path': '/a', 'response': {}})},
       );
       await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.addRoute',
-        {'route': '{"id":"r2","pathPattern":"/b"}'},
+        {'route': jsonEncode({'id': 'r2', 'path': '/b', 'response': {}})},
       );
       final result = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.clearRoutes',
@@ -86,11 +107,11 @@ void main() {
       await FliwrightBridge.init();
       await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.addRoute',
-        {'route': '{"id":"r1","pathPattern":"/a"}'},
+        {'route': jsonEncode({'id': 'r1', 'path': '/a', 'response': {}})},
       );
       await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.addRoute',
-        {'route': '{"id":"r2","pathPattern":"/b"}'},
+        {'route': jsonEncode({'id': 'r2', 'path': '/b', 'response': {}})},
       );
       final result = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.removeRoute',
