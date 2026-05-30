@@ -7,6 +7,7 @@ import type { StateAdapter } from './interfaces/StateAdapter.js';
 import type { MockAdapter } from './interfaces/MockAdapter.js';
 import type { FinderStrategy } from './interfaces/FinderStrategy.js';
 import type { HealingStrategy } from './interfaces/HealingStrategy.js';
+import { MockManager } from './MockManager.js';
 import type { TestResult } from './types.js';
 
 export interface DriverOptions { plugins?: FliwrightPlugin[]; }
@@ -15,6 +16,18 @@ export class FliwrightDriver {
   private registry = new PluginRegistry();
   private connector = new VMServiceConnector();
   private _page: Page | null = null;
+  private _mock: MockManager | null = null;
+
+  get mock(): MockManager {
+    if (!this._mock) {
+      this._mock = new MockManager((method, params) => this.connector.sendRequest(method, params));
+    }
+    return this._mock;
+  }
+
+  get state(): StateAdapter {
+    return this.registry.getStateAdapter('riverpod');
+  }
 
   constructor(options: DriverOptions = {}) {
     for (const plugin of options.plugins ?? []) { this.registry.register(plugin); }

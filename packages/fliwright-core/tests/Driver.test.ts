@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FliwrightDriver } from '../src/Driver.js';
+import { MockManager } from '../src/MockManager.js';
 import type { FliwrightPlugin, PluginContext } from '../src/interfaces/Plugin.js';
 import type { StateAdapter } from '../src/interfaces/StateAdapter.js';
 
@@ -56,5 +57,32 @@ describe('FliwrightDriver', () => {
     await driver.attachMockConnector(createMockWSForDriver());
     await driver.dispose();
     expect(onDispose).toHaveBeenCalledOnce();
+  });
+
+  it('provides mock manager', async () => {
+    const driver = new FliwrightDriver();
+    await driver.attachMockConnector(createMockWSForDriver());
+    const mock = driver.mock;
+    expect(mock).toBeInstanceOf(MockManager);
+  });
+
+  it('provides state adapter via convenience getter', async () => {
+    const fakeAdapter: StateAdapter = {
+      read: vi.fn().mockResolvedValue(null),
+      write: vi.fn(),
+      watch: vi.fn().mockReturnValue(() => {}),
+      listProviders: vi.fn().mockResolvedValue([]),
+      override: vi.fn(),
+    };
+    const plugin: FliwrightPlugin = {
+      name: 'riverpod',
+      async onInit(ctx: PluginContext) {
+        ctx.registerStateAdapter('riverpod', fakeAdapter);
+      },
+    };
+    const driver = new FliwrightDriver({ plugins: [plugin] });
+    await driver.attachMockConnector(createMockWSForDriver());
+    const state = driver.state;
+    expect(state).toBe(fakeAdapter);
   });
 });
