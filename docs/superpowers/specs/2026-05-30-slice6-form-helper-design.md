@@ -261,7 +261,7 @@ const result = await page.formHelper.fill({
 // Analyze only (preview)
 const analysis = await page.formHelper.analyze();
 
-// Fill specific fields only
+// Fill specific fields only (matched by hintText or label substring)
 await page.formHelper.fillFields(['手机号', '邮箱']);
 ```
 
@@ -312,12 +312,23 @@ interface FormFillResult {
   }>;
 }
 
+interface FormAnalyzeResult {
+  fields: Array<{
+    id: string;
+    semanticType: SemanticType;
+    generatedValue: string;
+    selector: string;
+    hintText?: string;
+    label?: string;
+  }>;
+}
+
 class FormHelper {
   constructor(sendRequest: SendRequest);
 
   fill(options?: FormHelperOptions): Promise<FormFillResult>;
-  analyze(options?: FormHelperOptions): Promise<FormFillResult>;
-  fillFields(fieldSelectors: string[], options?: FormHelperOptions): Promise<FormFillResult>;
+  analyze(options?: FormHelperOptions): Promise<FormAnalyzeResult>;
+  fillFields(fieldHints: string[], options?: FormHelperOptions): Promise<FormFillResult>;
 }
 ```
 
@@ -351,6 +362,7 @@ Add to `types.ts`:
 - `FormFieldMeta`
 - `SemanticType`
 - `FormFillResult`
+- `FormAnalyzeResult`
 - `FormHelperOptions`
 - `FormSkill`
 - `FormRule` (JSON rule schema)
