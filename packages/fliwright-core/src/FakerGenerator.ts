@@ -6,7 +6,7 @@ export interface FakerGeneratorOptions {
 }
 
 export class FakerGenerator {
-  private readonly fakerInstance: ReturnType<typeof faker>;
+  private readonly fakerInstance: typeof faker;
 
   constructor(options?: FakerGeneratorOptions) {
     this.fakerInstance = faker;
