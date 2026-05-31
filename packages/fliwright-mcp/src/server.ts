@@ -3,6 +3,7 @@ import { createServerState } from './state.js';
 import { registerRunTestTool } from './tools/runTest.js';
 import { registerGetFailureTool } from './tools/getFailure.js';
 import { registerGenerateTestTool } from './tools/generateTest.js';
+import { registerRecordTool } from './tools/record.js';
 import { registerTestReportResource } from './resources/testReport.js';
 
 export function createFliwrightServer() {
@@ -16,6 +17,7 @@ export function createFliwrightServer() {
   registerRunTestTool(server, state);
   registerGetFailureTool(server, state);
   registerGenerateTestTool(server, state);
+  registerRecordTool(server, state);
   registerTestReportResource(server, state);
 
   return { server, state };
