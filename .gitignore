@@ -5,6 +5,8 @@ build/
 .pub-cache/
 .pub/
 .packages
+.flutter-plugins-dependencies
 dist/
 coverage/
 *.log
+/packages/fliwright-bridge/pubspec.lock
