@@ -57,8 +57,7 @@ async function checkFlutterSdk(): Promise<CheckResult> {
 
 async function checkPackageInstalled(pkg: string): Promise<CheckResult> {
   try {
-    const resolved = import.meta.resolve(`${pkg}/package.json`);
-    const url = typeof resolved === 'string' ? resolved : resolved.href;
+    const url = import.meta.resolve(`${pkg}/package.json`);
     const { default: mod } = await import(url, { assert: { type: 'json' } });
     const version = (mod as { version?: string })?.version ?? 'unknown';
     return {
