@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { runCommand } from './commands/run.js';
 import { initCommand } from './commands/init.js';
 import { doctorCommand } from './commands/doctor.js';
+import { recordCommand } from './commands/record.js';
 
 async function main() {
   const program = new Command();
@@ -44,6 +45,27 @@ async function main() {
     .description('Check your Fliwright environment')
     .action(async () => {
       await doctorCommand(process.cwd());
+    });
+
+  program
+    .command('record')
+    .description('Record user interactions and generate test code')
+    .option('--vm-url <url>', 'Dart VM Service WebSocket URL')
+    .option('--output <file>', 'Output file path')
+    .option('--lang <lang>', 'Output language: ts, dart', 'ts')
+    .option('--name <name>', 'Test name', 'recorded test')
+    .action(async (opts) => {
+      try {
+        await recordCommand({
+          vmUrl: opts.vmUrl,
+          output: opts.output,
+          lang: opts.lang as 'ts' | 'dart',
+          testName: opts.name,
+        });
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
     });
 
   program.parse();
