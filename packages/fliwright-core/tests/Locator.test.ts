@@ -197,7 +197,7 @@ describe('Locator', () => {
       expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.type', {
         selector: 'key=email_field',
         text: 'user@example.com',
-        delay: 50,
+        charDelay: '50',
       });
     });
 
@@ -228,6 +228,41 @@ describe('Locator', () => {
         selector: 'text=Input',
         ancestorSelector: 'byType=Form',
         text: 'test',
+      });
+    });
+  });
+
+  describe('fill()', () => {
+    it('sends ext.fliwright.type with replaceAll enabled', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        type: { success: true },
+      });
+
+      const locator = new Locator({ text: 'Input' }, sendRequest);
+      await locator.fill('replacement');
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.type', {
+        selector: 'text=Input',
+        text: 'replacement',
+        replaceAll: 'true',
+      });
+    });
+
+    it('supports charDelay option', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        type: { success: true },
+      });
+
+      const locator = new Locator({ key: 'email_field' }, sendRequest);
+      await locator.fill('user@example.com', { charDelay: 25 });
+
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.type', {
+        selector: 'key=email_field',
+        text: 'user@example.com',
+        charDelay: '25',
+        replaceAll: 'true',
       });
     });
   });

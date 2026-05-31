@@ -11,7 +11,7 @@ export function handleReadTestReport(state: ServerState): string {
 
 export function registerTestReportResource(server: McpServer, state: ServerState): void {
   server.resource(
-    'Latest Test Report',
+    'test_report',
     'fliwright://test-report/latest',
     { description: 'Results from the most recent test run', mimeType: 'application/json' },
     async (uri) => ({

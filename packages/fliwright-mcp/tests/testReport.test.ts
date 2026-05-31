@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { handleReadTestReport } from '../src/resources/testReport.js';
+import { handleReadTestReport, registerTestReportResource } from '../src/resources/testReport.js';
 import { createServerState } from '../src/state.js';
 
 describe('handleReadTestReport', () => {
@@ -49,5 +49,22 @@ describe('handleReadTestReport', () => {
     const parsed = JSON.parse(report);
     expect(parsed.passed).toBe(false);
     expect(parsed.results[0].error).toBe('Expected visible, got not found');
+  });
+});
+
+describe('registerTestReportResource', () => {
+  it('registers the planned test_report resource name and URI', () => {
+    const calls: unknown[][] = [];
+    const server = {
+      resource: (...args: unknown[]) => {
+        calls.push(args);
+      },
+    };
+
+    registerTestReportResource(server as never, createServerState());
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toBe('test_report');
+    expect(calls[0][1]).toBe('fliwright://test-report/latest');
   });
 });

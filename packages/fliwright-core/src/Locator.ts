@@ -79,7 +79,18 @@ export class Locator {
     await this.sendRequest('ext.fliwright.gesture', params);
   }
 
-  async type(text: string, options?: { delay?: number }): Promise<void> {
+  async type(text: string, options?: { delay?: number; charDelay?: number }): Promise<void> {
+    await this.sendType(text, options);
+  }
+
+  async fill(text: string, options?: { delay?: number; charDelay?: number }): Promise<void> {
+    await this.sendType(text, { ...options, replaceAll: true });
+  }
+
+  private async sendType(
+    text: string,
+    options?: { delay?: number; charDelay?: number; replaceAll?: boolean },
+  ): Promise<void> {
     const widgets = await this._resolve();
     if (widgets.length === 0) {
       throw new Error(`No widget found matching selector: ${this.selectorString}`);
@@ -88,8 +99,12 @@ export class Locator {
       ...this.selector.toWireParams(),
       text,
     };
-    if (options?.delay != null) {
-      params.delay = options.delay;
+    const charDelay = options?.charDelay ?? options?.delay;
+    if (charDelay != null) {
+      params.charDelay = String(charDelay);
+    }
+    if (options?.replaceAll === true) {
+      params.replaceAll = 'true';
     }
     await this.sendRequest('ext.fliwright.type', params);
   }
