@@ -1,5 +1,6 @@
 import { resolveVmUrl } from '../vm-discovery.js';
 import { writeFile } from 'node:fs/promises';
+import { AssertionSuggester } from '@fliwright/core';
 import type { CodegenOptions, RecordedOperation } from '@fliwright/core';
 
 export interface RecordOptions {
@@ -70,16 +71,27 @@ export async function recordCommand(
   const codegenOptions: CodegenOptions = { lang, testName };
   const code = await recorder.stop(codegenOptions);
 
+  const suggester = new AssertionSuggester();
+  const suggestions = suggester.suggest(recorder.getOperations());
+
+  let finalCode = code;
+  if (suggestions.length > 0) {
+    const suggestionComments = suggestions.map((s) =>
+      `  // Suggested assertion (${s.reason})\n  // ${s.template}`
+    );
+    finalCode = code + '\n\n// Assertion Suggestions:\n' + suggestionComments.join('\n');
+  }
+
   if (options.output) {
-    await writeFile(options.output, code, 'utf8');
+    await writeFile(options.output, finalCode, 'utf8');
     console.log(`\n✅ Test written to ${options.output}`);
   } else {
     console.log('\n--- Generated Test Code ---\n');
-    console.log(code);
+    console.log(finalCode);
   }
 
   return {
-    code,
+    code: finalCode,
     operations: recorder.getOperations(),
   };
 }

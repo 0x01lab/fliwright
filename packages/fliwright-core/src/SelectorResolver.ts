@@ -5,7 +5,7 @@ const ROLE_MAP: Record<string, string> = {
   TextButton: 'button',
   OutlinedButton: 'button',
   IconButton: 'button',
-  FloatingActionbutton: 'button',
+  FloatingActionButton: 'button',
   TextField: 'textbox',
   TextFormField: 'textbox',
   CupertinoTextField: 'textbox',

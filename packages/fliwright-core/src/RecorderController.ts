@@ -1,5 +1,6 @@
 import { CodeGenerator } from './CodeGenerator.js';
 import { EventAggregator } from './EventAggregator.js';
+import { resolveSelector } from './SelectorResolver.js';
 import type { CodegenOptions, RawInputEvent, RecordedOperation, WidgetInfo } from './types.js';
 
 type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -84,15 +85,9 @@ export class RecorderController {
 
       const widget = result.widget;
       if (!widget?.type) return "{ type: 'Widget' }";
-      if (widget.text) return `{ text: '${escapeSelectorValue(widget.text)}' }`;
-      if (widget.key) return `{ key: '${escapeSelectorValue(widget.key)}' }`;
-      return `{ type: '${escapeSelectorValue(widget.type)}' }`;
+      return resolveSelector(widget);
     } catch {
       return "{ type: 'Widget' }";
     }
   }
-}
-
-function escapeSelectorValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }

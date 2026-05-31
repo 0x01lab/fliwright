@@ -51,19 +51,31 @@ export class DartCodeGenerator {
 }
 
 function dartFinder(selector: string): string {
-  if (selector.includes('text:')) {
-    const match = selector.match(/text:\s*'([^']*)'/);
-    if (match) return `find.text('${match[1]}')`;
-  }
-  if (selector.includes('key:')) {
-    const match = selector.match(/key:\s*'([^']*)'/);
-    if (match) return `find.byKey(const Key('${match[1]}'))`;
-  }
-  if (selector.includes('type:')) {
-    const match = selector.match(/type:\s*'([^']*)'/);
-    if (match) return `find.byType(${match[1]})`;
-  }
+  // Extract the first key-value pair from selector like { text: 'value' }
+  const textMatch = extractSelectorValue(selector, 'text');
+  if (textMatch !== null) return `find.text('${textMatch}')`;
+
+  const keyMatch = extractSelectorValue(selector, 'key');
+  if (keyMatch !== null) return `find.byKey(const Key('${keyMatch}'))`;
+
+  const roleMatch = extractSelectorValue(selector, 'role');
+  if (roleMatch !== null) return `find.bySemanticsLabel('${roleMatch}')`;
+
+  const typeMatch = extractSelectorValue(selector, 'type');
+  if (typeMatch !== null) return `find.byType(${typeMatch})`;
+
   return 'find.byType(Widget)';
+}
+
+function extractSelectorValue(selector: string, key: string): string | null {
+  // Match key: 'value' where value can contain escaped quotes (\' or \\)
+  const regex = new RegExp(`${key}:\\s*'((?:[^'\\\\]|\\\\.)*)'`);
+  const match = selector.match(regex);
+  if (!match) return null;
+  // Unescape the value for Dart output
+  return match[1]
+    .replace(/\\'/g, "'")
+    .replace(/\\\\/g, '\\');
 }
 
 function escapeString(s: string): string {
