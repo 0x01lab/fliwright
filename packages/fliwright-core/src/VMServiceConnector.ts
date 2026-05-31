@@ -15,6 +15,7 @@ export class VMServiceConnector {
   private ws: WebSocket | MockWebSocket | null = null;
   private pendingRequests = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   private eventListeners: EventCallback[] = [];
+  private mainIsolateId: string | null = null;
 
   constructor(protocol?: Protocol) {
     this.protocol = protocol ?? new Protocol();
@@ -30,12 +31,34 @@ export class VMServiceConnector {
     });
   }
 
-  sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
+  async sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
+    const resolvedParams = method.startsWith('ext.')
+      ? { ...(params ?? {}), isolateId: await this.getMainIsolateId() }
+      : params;
+    return this.sendProtocolRequest(method, resolvedParams);
+  }
+
+  private sendProtocolRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
     if (!this.ws) throw new Error('Not connected. Call connect() first.');
     const msg = this.protocol.createRequest(method, params);
     const promise = new Promise<unknown>((resolve, reject) => { this.pendingRequests.set(msg.id, { resolve, reject }); });
     this.ws.send(JSON.stringify(msg));
     return promise;
+  }
+
+  private async getMainIsolateId(): Promise<string> {
+    if (this.mainIsolateId) return this.mainIsolateId;
+
+    const vm = await this.sendProtocolRequest('getVM') as {
+      isolates?: Array<{ id?: string; isSystemIsolate?: boolean }>;
+    };
+    const isolate = (vm.isolates ?? []).find((entry) => entry.id && !entry.isSystemIsolate)
+      ?? (vm.isolates ?? []).find((entry) => entry.id);
+    if (!isolate?.id) {
+      throw new Error('No runnable Dart isolate found in VM Service response.');
+    }
+    this.mainIsolateId = isolate.id;
+    return this.mainIsolateId;
   }
 
   onEvent(callback: EventCallback): () => void {
@@ -51,11 +74,13 @@ export class VMServiceConnector {
       this.ws.close();
       this.ws = null;
     }
+    this.mainIsolateId = null;
     this.eventListeners.length = 0;
   }
 
   attachMock(mockWS: MockWebSocket): void {
     this.ws = mockWS;
+    this.mainIsolateId = null;
     mockWS.on('message', (data: string) => this.handleMessage(data));
     mockWS.on('close', () => this.rejectAllPending(new Error('WebSocket connection closed')));
   }
