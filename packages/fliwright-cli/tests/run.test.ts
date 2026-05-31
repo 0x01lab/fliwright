@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runCommand, type RunOptions } from '../src/commands/run.js';
+import { runCommand, parseVitestOutput, type RunOptions } from '../src/commands/run.js';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -40,5 +40,75 @@ describe('runCommand', () => {
     expect(result.totalTests).toBe(1);
 
     await rm(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe('parseVitestOutput', () => {
+  it('returns empty result for empty string', () => {
+    const result = parseVitestOutput('');
+    expect(result.passed).toBe(false);
+    expect(result.totalTests).toBe(0);
+    expect(result.results).toEqual([]);
+  });
+
+  it('returns empty result for string without braces', () => {
+    const result = parseVitestOutput('no json here');
+    expect(result.passed).toBe(false);
+    expect(result.totalTests).toBe(0);
+  });
+
+  it('returns empty result for malformed JSON', () => {
+    const result = parseVitestOutput('{not valid json}');
+    expect(result.passed).toBe(false);
+    expect(result.totalTests).toBe(0);
+  });
+
+  it('handles missing testResults gracefully', () => {
+    const result = parseVitestOutput('{"success":true,"numTotalTests":0}');
+    expect(result.passed).toBe(true);
+    expect(result.totalTests).toBe(0);
+    expect(result.results).toEqual([]);
+  });
+
+  it('parses a complete vitest JSON report', () => {
+    const json = JSON.stringify({
+      success: true,
+      numTotalTests: 2,
+      numPassedTests: 2,
+      numFailedTests: 0,
+      startTime: Date.now() - 100,
+      testResults: [{
+        assertionResults: [
+          { fullName: 'test a', status: 'passed', duration: 10 },
+          { fullName: 'test b', status: 'passed', duration: 20 },
+        ],
+      }],
+    });
+    const result = parseVitestOutput(json);
+    expect(result.passed).toBe(true);
+    expect(result.totalTests).toBe(2);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].name).toBe('test a');
+  });
+
+  it('captures failure messages for failed tests', () => {
+    const json = JSON.stringify({
+      success: false,
+      numTotalTests: 1,
+      numPassedTests: 0,
+      numFailedTests: 1,
+      startTime: Date.now(),
+      testResults: [{
+        assertionResults: [{
+          fullName: 'failing test',
+          status: 'failed',
+          duration: 50,
+          failureMessages: ['expected 1 to be 2'],
+        }],
+      }],
+    });
+    const result = parseVitestOutput(json);
+    expect(result.passed).toBe(false);
+    expect(result.results[0].error).toBe('expected 1 to be 2');
   });
 });

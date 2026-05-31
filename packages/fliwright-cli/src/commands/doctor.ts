@@ -15,6 +15,7 @@ export async function doctorCommand(projectDir: string): Promise<CheckResult[]> 
   checks.push(await checkNodeVersion());
   checks.push(await checkFlutterSdk());
   checks.push(await checkPackageInstalled('@fliwright/core'));
+  checks.push(await checkPackageInstalled('@fliwright/vitest'));
   checks.push(await checkConfigFile(projectDir));
   checks.push(await checkVmService());
 
@@ -69,7 +70,7 @@ async function checkPackageInstalled(pkg: string): Promise<CheckResult> {
     return {
       name: pkg,
       passed: false,
-      message: 'not installed (run: pnpm add -D @fliwright/core)',
+      message: `not installed (run: pnpm add -D ${pkg})`,
     };
   }
 }

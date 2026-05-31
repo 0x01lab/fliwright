@@ -115,7 +115,7 @@ interface VitestJsonReport {
   }>;
 }
 
-function parseVitestOutput(raw: string): CliRunResult {
+export function parseVitestOutput(raw: string): CliRunResult {
   const trimmed = raw.trim();
   const start = trimmed.indexOf('{');
   const end = trimmed.lastIndexOf('}');

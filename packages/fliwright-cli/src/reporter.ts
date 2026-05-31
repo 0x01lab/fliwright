@@ -58,8 +58,10 @@ export function formatJunit(result: CliRunResult): string {
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<testsuite tests="${result.totalTests}" failures="${result.failedTests}" time="${(result.duration / 1000).toFixed(3)}">`,
+    '<testsuites>',
+    `<testsuite name="fliwright" tests="${result.totalTests}" failures="${result.failedTests}" time="${(result.duration / 1000).toFixed(3)}">`,
     testCases,
     '</testsuite>',
+    '</testsuites>',
   ].join('\n');
 }
