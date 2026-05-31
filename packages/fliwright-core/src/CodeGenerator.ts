@@ -1,4 +1,5 @@
 import type { RecordedOperation, CodegenOptions } from './types.js';
+import { DartCodeGenerator } from './DartCodeGenerator.js';
 
 const DEFAULT_IMPORT = "@fliwright/vitest";
 const DEFAULT_TEST_NAME = 'recorded test';
@@ -9,6 +10,10 @@ export class CodeGenerator {
     selectors: Map<number, string>,
     options?: CodegenOptions,
   ): string {
+    if (options?.lang === 'dart') {
+      return new DartCodeGenerator().generate(operations, selectors, options);
+    }
+
     const importSource = options?.imports ?? DEFAULT_IMPORT;
     const testName = options?.testName ?? DEFAULT_TEST_NAME;
 

@@ -5,6 +5,10 @@ import type { CodegenOptions, RawInputEvent, RecordedOperation, WidgetInfo } fro
 type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 type OnEvent = (callback: (event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) => () => void;
 
+export interface RecorderStartOptions {
+  onOperation?: (operation: RecordedOperation, index: number) => void;
+}
+
 export class RecorderController {
   private rawEvents: RawInputEvent[] = [];
   private operations: RecordedOperation[] = [];
@@ -15,14 +19,19 @@ export class RecorderController {
     private readonly onEvent: OnEvent,
   ) {}
 
-  async start(): Promise<void> {
+  async start(options?: RecorderStartOptions): Promise<void> {
     this.rawEvents = [];
     this.operations = [];
 
     await this.ensureExtensionStream();
     this.unsubscribe = this.onEvent((event) => {
       if (event.kind === 'FliwrightRecording') {
+        const prevCount = this.operations.length;
         this.rawEvents.push(event.data as unknown as RawInputEvent);
+        this.operations = new EventAggregator().aggregate(this.rawEvents);
+        for (let i = prevCount; i < this.operations.length; i++) {
+          options?.onOperation?.(this.operations[i], i);
+        }
       }
     });
 

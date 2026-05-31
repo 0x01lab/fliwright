@@ -150,6 +150,7 @@ export interface RecordedOperation {
 export interface CodegenOptions {
   testName?: string;
   imports?: string;
+  lang?: 'ts' | 'dart';
 }
 
 export interface FormFieldMeta {
