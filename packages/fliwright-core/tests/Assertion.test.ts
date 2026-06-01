@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Assertion, AssertionError, createExpect } from '../src/Assertion.js';
+import { SelfHealingEngine } from '../src/SelfHealingEngine.js';
+import { SnapshotStore } from '../src/SnapshotStore.js';
+import { MultiDimensionalHealingStrategy } from '../src/strategies/MultiDimensionalHealingStrategy.js';
 import type { Locator } from '../src/Locator.js';
-import type { WidgetInfo } from '../src/types.js';
+import type { WidgetInfo, WidgetSnapshot } from '../src/types.js';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 const testWidget: WidgetInfo = {
   id: '42',
@@ -75,6 +81,90 @@ describe('toBeVisible', () => {
       expect(ae.matcher).toBe('toBeVisible');
       expect(ae.expected).toBe('visible');
       expect(ae.selector).toBe('text=Test');
+    }
+  });
+});
+
+describe('self-healing integration', () => {
+  const originalSnapshot: WidgetSnapshot = {
+    type: 'ElevatedButton',
+    text: 'Confirm',
+    parentType: 'Column',
+    adjacentText: ['Cart'],
+    rect: { x: 100, y: 400, width: 200, height: 48 },
+    callbackNames: ['onPressed'],
+    description: "ElevatedButton with text 'Confirm', parent Column, adjacent [Cart]",
+  };
+
+  const healedSnapshot: WidgetSnapshot = {
+    type: 'ElevatedButton',
+    text: 'Checkout',
+    parentType: 'Column',
+    adjacentText: ['Cart'],
+    rect: { x: 102, y: 401, width: 198, height: 47 },
+    callbackNames: ['onPressed'],
+    description: "ElevatedButton with text 'Checkout', parent Column, adjacent [Cart]",
+  };
+
+  it('records a baseline on passing visibility assertion and heals a later selector miss', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fliwright-assertion-healing-'));
+    try {
+      const healing = new SelfHealingEngine(
+        new SnapshotStore(tmpDir),
+        new MultiDimensionalHealingStrategy(),
+      );
+      const sendRequest = vi.fn()
+        .mockResolvedValueOnce({ widgets: [originalSnapshot] })
+        .mockResolvedValueOnce({ widgets: [healedSnapshot] })
+        .mockResolvedValueOnce({ widgets: [{ ...testWidget, text: 'Checkout' }] });
+
+      await new Assertion(
+        createMockLocator(true),
+        false,
+        undefined,
+        healing,
+        'checkout flow',
+        sendRequest,
+      ).toBeVisible({ timeout: 200 });
+
+      const missingLocator = createMockLocator(false);
+      await expect(new Assertion(
+        missingLocator,
+        false,
+        undefined,
+        healing,
+        'checkout flow',
+        sendRequest,
+      ).toBeVisible({ timeout: 200 })).resolves.toBeUndefined();
+
+      const reports = healing.getReports('checkout flow');
+      expect(reports).toHaveLength(1);
+      expect(reports[0].originalSelector).toBe('text=Test');
+      expect(reports[0].suggestedSelector).toBe('text=Checkout');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not fail a passing assertion when snapshot capture fails', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fliwright-assertion-healing-'));
+    try {
+      const healing = new SelfHealingEngine(
+        new SnapshotStore(tmpDir),
+        new MultiDimensionalHealingStrategy(),
+      );
+      const sendRequest = vi.fn().mockRejectedValue(new Error('snapshot unavailable'));
+
+      await expect(new Assertion(
+        createMockLocator(true),
+        false,
+        undefined,
+        healing,
+        'flaky snapshot',
+        sendRequest,
+      ).toBeVisible({ timeout: 200 })).resolves.toBeUndefined();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });

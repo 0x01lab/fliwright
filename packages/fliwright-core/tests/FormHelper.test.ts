@@ -128,6 +128,12 @@ describe('FormHelper', () => {
       expect(result.skipped).toBe(2);
       const phoneField = result.fields.find(f => f.id === 'w1');
       expect(phoneField?.status).toBe('filled');
+
+      const clickCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.click');
+      const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+      expect(clickCalls).toHaveLength(1);
+      expect(typeCalls).toHaveLength(1);
+      expect(typeCalls[0][1]).toMatchObject({ selector: 'text=请输入手机号' });
     });
 
     it('matches by hintText substring', async () => {
@@ -135,6 +141,10 @@ describe('FormHelper', () => {
       expect(result.filled).toBe(1);
       const emailField = result.fields.find(f => f.id === 'w3');
       expect(emailField?.status).toBe('filled');
+
+      const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+      expect(typeCalls).toHaveLength(1);
+      expect(typeCalls[0][1]).toMatchObject({ selector: 'text=邮箱地址' });
     });
   });
 

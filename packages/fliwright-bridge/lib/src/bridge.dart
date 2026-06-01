@@ -6,6 +6,7 @@ import 'extensions/inspect.dart';
 import 'extensions/mock_server.dart';
 import 'extensions/recording.dart';
 import 'extensions/riverpod.dart';
+import 'extensions/router_navigate.dart';
 import 'extensions/screenshot.dart';
 import 'extensions/scroll_extension.dart';
 import 'extensions/snapshot.dart';
@@ -18,15 +19,29 @@ class FliwrightBridge {
   static ExtensionRegistry get registry => _registry;
   static bool _initialized = false;
 
+  /// Router instance injected by the app (e.g. GoRouter).
+  /// Accessed by [RouterNavigateExtension] to perform navigation.
+  /// Uses `dynamic` to avoid a hard dependency on go_router.
+  static dynamic _router;
+  static dynamic get router => _router;
+
   static Future<void> reset() async {
     _registry.reset();
     _initialized = false;
+    _router = null;
     await RecordingExtension.reset();
     await MockServerExtension.reset();
     FliwrightHttpOverrides.uninstall();
   }
 
-  static Future<void> init() async {
+  /// Initialize the Fliwright bridge and register all VM Service extensions.
+  ///
+  /// [router] is an optional router instance (e.g. `GoRouter`) that enables
+  /// programmatic navigation via `ext.fliwright.navigate`. The bridge calls
+  /// `router.go(path)` via `dynamic` dispatch — no hard dependency on
+  /// go_router is required.
+  static Future<void> init({dynamic router}) async {
+    _router = router;
     if (_initialized) return;
     _initialized = true;
 
@@ -54,6 +69,7 @@ class FliwrightBridge {
     FormExtractExtension.register(_registry);
 
     RiverpodExtension.register(_registry);
+    RouterNavigateExtension.register(_registry);
 
     MockServerExtension.register(_registry);
     await MockServerExtension.startServer();

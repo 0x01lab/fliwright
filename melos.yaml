@@ -1,6 +1,7 @@
 name: fliwright
 packages:
   - packages/**
+  - examples/**
 command:
   bootstrap:
     runPubGetInParallel: true

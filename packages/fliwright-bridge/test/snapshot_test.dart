@@ -7,11 +7,23 @@ void main() {
       await FliwrightBridge.reset();
     });
 
+    tearDown(() async {
+      await FliwrightBridge.reset();
+    });
+
     test('registers ext.fliwright.snapshot on init', () async {
       await FliwrightBridge.init();
       expect(
         FliwrightBridge.registry.registeredMethods,
         contains('ext.fliwright.snapshot'),
+      );
+    });
+
+    test('registers ext.fliwright.screenshot on init', () async {
+      await FliwrightBridge.init();
+      expect(
+        FliwrightBridge.registry.registeredMethods,
+        contains('ext.fliwright.screenshot'),
       );
     });
 
@@ -24,6 +36,18 @@ void main() {
       );
       expect(result, contains('widgets'));
       expect(result['widgets'], isA<List>());
+    });
+
+    test('returns a structured error when screenshot has no widget tree',
+        () async {
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.screenshot',
+        {},
+      );
+
+      expect(result['success'], isFalse);
+      expect(result, contains('error'));
     });
   });
 }

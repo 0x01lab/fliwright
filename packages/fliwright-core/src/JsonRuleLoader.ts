@@ -50,6 +50,20 @@ export class JsonRuleLoader {
     const matchEntries = Object.entries(rule.match);
     const name = 'rule:' + matchEntries.map(([k, v]) => `${k}=${v}`).join(',');
 
+    if (rule.type === 'PRESET_SKILL' && rule.data && rule.data.length > 0) {
+      let index = 0;
+      return {
+        name,
+        type: 'PRESET_SKILL',
+        match: (field: FormFieldMeta) => this.matchesRule(field, rule),
+        generate: () => {
+          const value = rule.data![index % rule.data!.length];
+          index++;
+          return value;
+        },
+      };
+    }
+
     if (rule.type === 'LLM_GENERATE' && rule.data) {
       let index = 0;
       return {

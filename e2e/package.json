@@ -4,7 +4,12 @@
   "type": "module",
   "scripts": {
     "test": "echo 'E2E tests require a running Flutter device. Run: FLIWRIGHT_VM_SERVICE_URL=... pnpm test:smoke'",
-    "test:smoke": "vitest run smoke_test.ts"
+    "test:smoke": "vitest run smoke_test.ts",
+    "test:form": "vitest run form-fill-e2e.test.ts",
+    "test:mock": "vitest run mock-api-demo.test.ts",
+    "test:mock-e2e": "vitest run mock-api-e2e.test.ts",
+    "test:form-mock": "vitest run form-mock-e2e.test.ts",
+    "test:go-router": "vitest run go-router-navigation-e2e.test.ts"
   },
   "dependencies": {
     "@fliwright/core": "workspace:*"

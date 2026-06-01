@@ -127,7 +127,7 @@ export class FormHelper {
     registry: SkillRegistry,
     options?: FormHelperOptions,
   ): Promise<void> {
-    if (!field.enabled) {
+    if (field.enabled === false) {
       result.fields.push({
         id: field.id,
         semanticType: semanticTypes.get(field.id) ?? 'text',

@@ -75,6 +75,7 @@ class MockServerExtension {
     registry.register('ext.fliwright.mock.setPassthrough', _setPassthrough);
     registry.register('ext.fliwright.mock.getCalls', _getCalls);
     registry.register('ext.fliwright.mock.clearCalls', _clearCalls);
+    registry.register('ext.fliwright.mock.testRequest', _testRequest);
   }
 
   static Future<void> startServer({int port = 0}) async {
@@ -183,9 +184,12 @@ class MockServerExtension {
         : request.uri;
 
     // Read body once — HttpRequest is a single-subscription stream.
+    // contentLength is -1 when chunked transfer encoding is used (e.g. via
+    // HTTP proxy), so we must check != 0 rather than > 0.
     String? requestBody;
-    if (request.contentLength > 0) {
+    if (request.contentLength != 0) {
       requestBody = await utf8.decodeStream(request);
+      if (requestBody!.isEmpty) requestBody = null;
     }
 
     final callHeaders = <String, String>{};
@@ -225,12 +229,15 @@ class MockServerExtension {
     }
     final response = request.response;
     response.statusCode = route.status;
-    // Set default Content-Type first, so route headers can override it.
+    // Set default Content-Type with UTF-8 charset first, so route headers can override it.
     response.headers.contentType = ContentType.json;
+    response.headers.set('Content-Type', 'application/json; charset=utf-8');
     route.headers.forEach((key, value) {
       response.headers.set(key, value);
     });
-    response.write(jsonEncode(route.body));
+    // Use utf8.encode + add() instead of write() to support non-ASCII (e.g. Chinese).
+    // response.write() uses Latin1Codec which rejects characters > U+00FF.
+    response.add(utf8.encode(jsonEncode(route.body)));
     await response.close();
   }
 
@@ -280,9 +287,44 @@ class MockServerExtension {
       }
     }, _NoProxyHttpOverrides());
   }
-}
 
-/// A concrete [HttpOverrides] that never uses a proxy.
+  /// Test-only extension: makes an HTTP request through the app's normal
+  /// HttpClient (subject to HttpOverrides) and returns the response.
+  /// This lets E2E tests verify that the mock proxy is intercepting traffic
+  /// without depending on the UI layer or third-party HTTP clients like Dio.
+  static Future<Map<String, dynamic>> _testRequest(Map<String, String> params) async {
+    final url = params['url'] ?? 'http://test.local/ping';
+    final method = (params['method'] ?? 'GET').toUpperCase();
+    try {
+      final client = HttpClient();
+      try {
+        late HttpClientRequest request;
+        final uri = Uri.parse(url);
+        switch (method) {
+          case 'POST':
+            request = await client.openUrl('POST', uri);
+            if (params.containsKey('body')) {
+              request.headers.contentType = ContentType.json;
+              request.write(params['body']);
+            }
+            break;
+          default:
+            request = await client.openUrl('GET', uri);
+        }
+        final response = await request.close();
+        final body = await utf8.decoder.bind(response).join();
+        return {
+          'status': response.statusCode,
+          'body': body,
+        };
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+}
 /// Used by [_passthroughRequest] to bypass the global [FliwrightHttpOverrides]
 /// and connect directly to the real upstream server.
 class _NoProxyHttpOverrides extends HttpOverrides {

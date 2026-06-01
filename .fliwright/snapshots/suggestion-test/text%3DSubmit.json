@@ -1,0 +1,22 @@
+{
+  "testName": "suggestion-test",
+  "selector": "text=Submit",
+  "snapshot": {
+    "type": "ElevatedButton",
+    "text": "Submit",
+    "parentType": "Scaffold",
+    "adjacentText": [],
+    "rect": {
+      "x": 10,
+      "y": 20,
+      "width": 100,
+      "height": 40
+    },
+    "callbackNames": [
+      "onPressed"
+    ],
+    "description": "text='Submit'"
+  },
+  "firstSeen": "2026-06-01T04:42:08.494Z",
+  "lastUpdated": "2026-06-01T08:11:35.451Z"
+}

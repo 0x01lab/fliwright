@@ -1,0 +1,19 @@
+name: form_demo
+description: Demo Flutter app for E2E testing Fliwright form filling.
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  dio: ^5.4.0
+  fliwright_bridge:
+    path: ../../packages/fliwright-bridge
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter

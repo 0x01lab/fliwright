@@ -1,0 +1,23 @@
+{
+  "testName": "heal-test",
+  "selector": "text=Submit",
+  "snapshot": {
+    "type": "ElevatedButton",
+    "text": "Submit Form",
+    "parentType": "Scaffold",
+    "adjacentText": [
+      "Title"
+    ],
+    "rect": {
+      "x": 10,
+      "y": 20,
+      "width": 100,
+      "height": 40
+    },
+    "callbackNames": [
+      "onPressed"
+    ]
+  },
+  "firstSeen": "2026-05-31T15:35:08.916Z",
+  "lastUpdated": "2026-05-31T15:35:08.918Z"
+}

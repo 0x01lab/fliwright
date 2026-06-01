@@ -1,0 +1,1244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fliwright VS Code Extension Preview</title>
+  <style>
+    :root {
+      --activity: #333333;
+      --side: #252526;
+      --side-2: #2d2d30;
+      --editor: #1e1e1e;
+      --panel: #202020;
+      --border: #3c3c3c;
+      --border-soft: #303030;
+      --text: #d4d4d4;
+      --muted: #969696;
+      --muted-2: #777777;
+      --blue: #3794ff;
+      --green: #89d185;
+      --red: #f48771;
+      --yellow: #cca700;
+      --purple: #c586c0;
+      --button: #0e639c;
+      --button-hover: #1177bb;
+      --button-secondary: #3a3d41;
+      --status: #007acc;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--text);
+      background: var(--editor);
+      font-family: var(--font);
+      font-size: 13px;
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      color: #fff;
+      background: var(--button);
+      padding: 5px 10px;
+      min-height: 28px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: var(--button-hover);
+    }
+
+    button.secondary {
+      color: var(--text);
+      background: var(--button-secondary);
+    }
+
+    button.secondary:hover {
+      background: #45494e;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 48px minmax(260px, 320px) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) 22px;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .activity {
+      grid-row: 1 / 3;
+      background: var(--activity);
+      border-right: 1px solid #2a2a2a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 8px;
+      gap: 8px;
+    }
+
+    .activity-btn {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      color: #c5c5c5;
+      border-left: 2px solid transparent;
+      font-size: 21px;
+    }
+
+    .activity-btn.active {
+      color: #fff;
+      border-left-color: #fff;
+    }
+
+    .activity-btn .badge {
+      position: absolute;
+      top: 6px;
+      right: 7px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: #fff;
+      background: #c72e0f;
+      font-size: 10px;
+      line-height: 16px;
+    }
+
+    .sidebar {
+      grid-column: 2;
+      grid-row: 1;
+      background: var(--side);
+      border-right: 1px solid var(--border);
+      overflow: auto;
+    }
+
+    .side-title {
+      height: 35px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      color: #bbbbbb;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .view {
+      border-top: 1px solid var(--border);
+    }
+
+    .view-header {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px 0 12px;
+      background: var(--side-2);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .tools {
+      display: flex;
+      gap: 2px;
+      color: #c7c7c7;
+      font-size: 13px;
+    }
+
+    .tool {
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .tool:hover {
+      background: #3c3c3c;
+    }
+
+    .tree {
+      padding: 6px 0 10px;
+    }
+
+    .tree-row {
+      min-height: 22px;
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 10px 2px 16px;
+      cursor: default;
+    }
+
+    .tree-row:hover {
+      background: #2a2d2e;
+    }
+
+    .tree-row.indent-1 {
+      padding-left: 28px;
+    }
+
+    .tree-row.indent-2 {
+      padding-left: 42px;
+    }
+
+    .tree-row.selected {
+      background: #37373d;
+    }
+
+    .icon {
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .icon.ok {
+      color: var(--green);
+    }
+
+    .icon.bad {
+      color: var(--red);
+    }
+
+    .icon.warn {
+      color: var(--yellow);
+    }
+
+    .icon.heal {
+      color: var(--purple);
+    }
+
+    .label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .description {
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 1px 6px;
+      font-size: 11px;
+      line-height: 16px;
+    }
+
+    .pill.failed {
+      border-color: rgba(244, 135, 113, .45);
+      color: var(--red);
+    }
+
+    .pill.ok {
+      border-color: rgba(137, 209, 133, .45);
+      color: var(--green);
+    }
+
+    .editor {
+      grid-column: 3;
+      grid-row: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--editor);
+      overflow: hidden;
+    }
+
+    .tabs {
+      height: 35px;
+      display: flex;
+      align-items: stretch;
+      background: #181818;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+
+    .tab {
+      min-width: 132px;
+      max-width: 220px;
+      border-right: 1px solid var(--border);
+      color: #c5c5c5;
+      background: #2d2d2d;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .tab.active {
+      background: var(--editor);
+      color: #fff;
+      border-top: 1px solid var(--blue);
+    }
+
+    .content {
+      min-height: 0;
+      flex: 1;
+      overflow: auto;
+    }
+
+    .panel {
+      display: none;
+      min-height: 100%;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .webview-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--editor);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .title-group {
+      min-width: 0;
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 24px;
+      min-width: 0;
+    }
+
+    .title span:first-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .actions {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .section {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 18px;
+    }
+
+    .section-title {
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #eeeeee;
+    }
+
+    .failure-grid {
+      display: grid;
+      grid-template-columns: minmax(280px, 1.25fr) minmax(260px, .75fr);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .failure-grid > .section {
+      border-bottom: 0;
+    }
+
+    .failure-grid > .section + .section {
+      border-left: 1px solid var(--border);
+    }
+
+    .screenshot {
+      min-height: 300px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      background:
+        linear-gradient(180deg, rgba(55, 148, 255, .12), transparent 35%),
+        #111;
+    }
+
+    .phone {
+      width: min(260px, 72%);
+      aspect-ratio: 9 / 16;
+      border: 8px solid #0c0c0c;
+      background: #f4f4f4;
+      color: #1f1f1f;
+      box-shadow: 0 18px 50px rgba(0,0,0,.4);
+      overflow: hidden;
+    }
+
+    .phone-top {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      background: #2a7cc7;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .phone-body {
+      padding: 16px;
+    }
+
+    .phone-row {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #ddd;
+      color: #444;
+    }
+
+    .phone-button {
+      margin-top: 20px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      background: #d7d7d7;
+      color: #444;
+      font-weight: 600;
+      outline: 3px solid #e05a47;
+    }
+
+    .repair-box {
+      border: 1px solid var(--border);
+      padding: 12px;
+      background: var(--panel);
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: minmax(92px, 120px) minmax(0, 1fr);
+      gap: 6px 10px;
+      align-items: baseline;
+      margin-top: 8px;
+    }
+
+    .key {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .value {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    code,
+    pre {
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    code {
+      color: #dcdcaa;
+    }
+
+    pre {
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      color: #d4d4d4;
+      background: #151515;
+      border: 1px solid var(--border);
+      line-height: 1.45;
+    }
+
+    .bar {
+      height: 7px;
+      background: #333;
+      overflow: hidden;
+      margin: 8px 0 12px;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      width: 92%;
+      background: var(--green);
+    }
+
+    .recording-hero {
+      display: grid;
+      grid-template-columns: minmax(240px, .8fr) minmax(280px, 1.2fr);
+      min-height: calc(100vh - 57px);
+    }
+
+    .recording-status {
+      border-right: 1px solid var(--border);
+      padding: 22px;
+      background: var(--panel);
+    }
+
+    .timer {
+      margin: 14px 0 20px;
+      font-family: var(--mono);
+      font-size: 38px;
+      color: #fff;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+
+    .metric {
+      border: 1px solid var(--border);
+      padding: 12px;
+      background: #1a1a1a;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 22px;
+      color: #fff;
+    }
+
+    .code-preview {
+      padding: 22px;
+    }
+
+    .op-list {
+      margin-top: 14px;
+      border: 1px solid var(--border);
+    }
+
+    .op {
+      display: grid;
+      grid-template-columns: 28px 90px minmax(0, 1fr);
+      gap: 8px;
+      min-height: 30px;
+      align-items: center;
+      padding: 0 10px;
+      border-top: 1px solid var(--border-soft);
+    }
+
+    .op:first-child {
+      border-top: 0;
+    }
+
+    .trace-layout {
+      display: grid;
+      grid-template-columns: minmax(230px, 320px) minmax(0, 1fr);
+      min-height: calc(100vh - 57px);
+    }
+
+    .timeline {
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+      padding: 12px 0;
+    }
+
+    .timeline-row {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 34px;
+      padding: 4px 14px;
+      border-left: 2px solid transparent;
+    }
+
+    .timeline-row.active {
+      background: #2a2d2e;
+      border-left-color: var(--blue);
+    }
+
+    .trace-detail {
+      padding: 18px;
+    }
+
+    .sandbox-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(260px, 1fr));
+      gap: 0;
+    }
+
+    .route-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--border);
+    }
+
+    .route-table th,
+    .route-table td {
+      padding: 8px 10px;
+      border-top: 1px solid var(--border-soft);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .route-table th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      background: #1a1a1a;
+    }
+
+    .statusbar {
+      grid-column: 2 / 4;
+      grid-row: 2;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      color: #fff;
+      background: var(--status);
+      font-size: 12px;
+      overflow: hidden;
+    }
+
+    .statusbar div {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .green {
+      color: var(--green);
+    }
+
+    .red {
+      color: var(--red);
+    }
+
+    .yellow {
+      color: var(--yellow);
+    }
+
+    .purple {
+      color: var(--purple);
+    }
+
+    .inline-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    @media (max-width: 960px) {
+      .shell {
+        grid-template-columns: 44px minmax(220px, 280px) minmax(0, 1fr);
+      }
+
+      .failure-grid,
+      .recording-hero,
+      .trace-layout,
+      .sandbox-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .failure-grid > .section + .section,
+      .recording-status,
+      .timeline {
+        border-left: 0;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .webview-header {
+        flex-direction: column;
+      }
+
+      .actions {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .shell {
+        grid-template-columns: 44px minmax(0, 1fr);
+        grid-template-rows: 42vh minmax(0, 1fr) 22px;
+      }
+
+      .activity {
+        grid-row: 1 / 4;
+      }
+
+      .sidebar {
+        grid-column: 2;
+        grid-row: 1;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .editor {
+        grid-column: 2;
+        grid-row: 2;
+      }
+
+      .statusbar {
+        grid-column: 2;
+        grid-row: 3;
+      }
+
+      .tab {
+        min-width: 116px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <aside class="activity" aria-label="Activity Bar">
+      <div class="activity-btn active" title="Fliwright">▣<span class="badge">1</span></div>
+      <div class="activity-btn" title="Explorer">☰</div>
+      <div class="activity-btn" title="Search">⌕</div>
+      <div class="activity-btn" title="Source Control">⑂</div>
+      <div class="activity-btn" title="Run">▷</div>
+    </aside>
+
+    <aside class="sidebar" aria-label="Fliwright Sidebar">
+      <div class="side-title">Fliwright</div>
+
+      <section class="view">
+        <div class="view-header">
+          <span>Devices</span>
+          <div class="tools" aria-label="Device actions">
+            <span class="tool" title="Connect">⦿</span>
+            <span class="tool" title="Disconnect">⏏</span>
+            <span class="tool" title="Discover">↻</span>
+            <span class="tool" title="Settings">⚙</span>
+          </div>
+        </div>
+        <div class="tree">
+          <div class="tree-row">
+            <span class="icon ok">●</span>
+            <span class="label">Connected</span>
+            <span class="pill ok">ready</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon">◆</span>
+            <span class="label">riverpod_demo</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon">↔</span>
+            <span class="label">ws://127.0.0.1:8181/ws</span>
+          </div>
+          <div class="tree-row">
+            <span class="icon">▾</span>
+            <span class="label">Capabilities</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon ok">✓</span>
+            <span class="label">gestures</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon ok">✓</span>
+            <span class="label">recording</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon ok">✓</span>
+            <span class="label">snapshot</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon warn">!</span>
+            <span class="label">hardware mocks</span>
+            <span class="description">later</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="view">
+        <div class="view-header">
+          <span>Tests</span>
+          <div class="tools" aria-label="Test actions">
+            <span class="tool" title="Run all">▶</span>
+            <span class="tool" title="Refresh">↻</span>
+            <span class="tool" title="Filter">≡</span>
+          </div>
+        </div>
+        <div class="tree">
+          <div class="tree-row">
+            <span class="icon">▾</span>
+            <span class="label">tests/login.test.ts</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon ok">✓</span>
+            <span class="label">shows login form</span>
+            <span class="description">120ms</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon ok">✓</span>
+            <span class="label">rejects invalid credentials</span>
+            <span class="description">340ms</span>
+          </div>
+          <div class="tree-row">
+            <span class="icon">▾</span>
+            <span class="label">tests/cart.test.ts</span>
+          </div>
+          <div class="tree-row indent-1 selected">
+            <span class="icon bad">✕</span>
+            <span class="label">updates quantity</span>
+            <span class="description">450ms</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon heal">✦</span>
+            <span class="label">confirms payment</span>
+            <span class="description">healed</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="view">
+        <div class="view-header">
+          <span>Runs</span>
+          <div class="tools" aria-label="Run actions">
+            <span class="tool" title="Clear">⌫</span>
+            <span class="tool" title="Output">▤</span>
+            <span class="tool" title="Copy JSON">{}</span>
+          </div>
+        </div>
+        <div class="tree">
+          <div class="tree-row">
+            <span class="icon bad">✕</span>
+            <span class="label">Latest Run</span>
+            <span class="description">1.7s</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon ok">✓</span>
+            <span class="label">4 passed</span>
+          </div>
+          <div class="tree-row indent-1 selected">
+            <span class="icon bad">✕</span>
+            <span class="label">1 failed</span>
+          </div>
+          <div class="tree-row indent-2">
+            <span class="icon">↳</span>
+            <span class="label">toBeVisible</span>
+            <span class="description">cart:42</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon heal">✦</span>
+            <span class="label">1 healed</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="view">
+        <div class="view-header">
+          <span>Sandbox</span>
+          <div class="tools" aria-label="Sandbox actions">
+            <span class="tool" title="Apply">▶</span>
+            <span class="tool" title="Clear">■</span>
+            <span class="tool" title="Open config">✎</span>
+          </div>
+        </div>
+        <div class="tree">
+          <div class="tree-row">
+            <span class="icon ok">●</span>
+            <span class="label">Active</span>
+            <span class="description">3 routes</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon ok">✓</span>
+            <span class="label">GET /api/me</span>
+            <span class="description">200</span>
+          </div>
+          <div class="tree-row indent-1">
+            <span class="icon ok">✓</span>
+            <span class="label">POST /api/login</span>
+            <span class="description">200</span>
+          </div>
+          <div class="tree-row">
+            <span class="icon">◆</span>
+            <span class="label">Fill Current Form</span>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="editor" aria-label="Editor Preview">
+      <nav class="tabs" aria-label="Preview tabs">
+        <div class="tab active" data-panel="failure"><span class="red">✕</span> Failure Context</div>
+        <div class="tab" data-panel="recording"><span class="green">●</span> Recording</div>
+        <div class="tab" data-panel="trace"><span>▥</span> Trace Viewer</div>
+        <div class="tab" data-panel="sandbox"><span class="green">●</span> Sandbox</div>
+      </nav>
+
+      <div class="content">
+        <article id="failure" class="panel active" aria-label="Failure Context">
+          <header class="webview-header">
+            <div class="title-group">
+              <div class="title">
+                <span>cart updates quantity</span>
+                <span class="pill failed">Failed</span>
+                <span class="muted">450ms</span>
+              </div>
+              <div class="subtitle">tests/cart.test.ts:42 · Assertion context from latest run</div>
+            </div>
+            <div class="actions">
+              <button>Open Source</button>
+              <button class="secondary">Copy JSON</button>
+            </div>
+          </header>
+
+          <section class="section">
+            <div class="section-title">Assertion</div>
+            <div class="kv">
+              <div class="key">Matcher</div>
+              <div class="value"><code>toBeVisible</code></div>
+              <div class="key">Expected</div>
+              <div class="value">visible within 5000ms</div>
+              <div class="key">Actual</div>
+              <div class="value">selector <code>{ text: 'Qty: 2' }</code> was not found</div>
+            </div>
+          </section>
+
+          <div class="failure-grid">
+            <section class="section">
+              <div class="section-title">Screenshot</div>
+              <div class="screenshot">
+                <div class="phone" aria-label="Device screenshot mock">
+                  <div class="phone-top">Cart</div>
+                  <div class="phone-body">
+                    <div class="phone-row"><span>Espresso Beans</span><strong>$18</strong></div>
+                    <div class="phone-row"><span>Quantity</span><strong>1</strong></div>
+                    <div class="phone-row"><span>Subtotal</span><strong>$18</strong></div>
+                    <div class="phone-button">Update Quantity</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="section">
+              <div class="section-title">Repair</div>
+              <div class="repair-box">
+                <div class="kv">
+                  <div class="key">Original</div>
+                  <div class="value"><code>text=Qty: 2</code></div>
+                  <div class="key">Suggested</div>
+                  <div class="value"><code>text=Update Quantity</code></div>
+                  <div class="key">Confidence</div>
+                  <div class="value">0.92</div>
+                </div>
+                <div class="bar" aria-label="Confidence 92 percent"><span></span></div>
+                <div class="kv">
+                  <div class="key">position</div>
+                  <div class="value">0.95</div>
+                  <div class="key">context</div>
+                  <div class="value">0.88</div>
+                  <div class="key">text</div>
+                  <div class="value">0.93</div>
+                </div>
+                <div class="inline-actions">
+                  <button>Copy Selector</button>
+                  <button class="secondary">Preview Diff</button>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="section">
+            <div class="section-title">Source</div>
+            <pre>await expect(page.locator({ text: 'Qty: 2' })).toBeVisible();</pre>
+          </section>
+
+          <section class="section">
+            <div class="section-title">Widget Tree</div>
+            <pre>{
+  "type": "Scaffold",
+  "route": "/cart",
+  "children": [
+    { "type": "AppBar", "text": "Cart" },
+    {
+      "type": "ElevatedButton",
+      "text": "Update Quantity",
+      "rect": { "x": 32, "y": 420, "width": 296, "height": 48 }
+    }
+  ]
+}</pre>
+          </section>
+        </article>
+
+        <article id="recording" class="panel" aria-label="Recording Preview">
+          <header class="webview-header">
+            <div class="title-group">
+              <div class="title">
+                <span>Recording Preview</span>
+                <span class="pill ok">6 operations</span>
+              </div>
+              <div class="subtitle">Connected to ws://127.0.0.1:8181/ws</div>
+            </div>
+            <div class="actions">
+              <button>Insert in Active Editor</button>
+              <button class="secondary">Create Test File</button>
+              <button class="secondary">Record Again</button>
+            </div>
+          </header>
+
+          <div class="recording-hero">
+            <section class="recording-status">
+              <div class="section-title">Recording State</div>
+              <div class="timer">00:12</div>
+              <div><span class="green">●</span> Listening to device input</div>
+              <div class="metric-grid">
+                <div class="metric">
+                  <span class="muted">Raw events</span>
+                  <strong>18</strong>
+                </div>
+                <div class="metric">
+                  <span class="muted">Operations</span>
+                  <strong>6</strong>
+                </div>
+              </div>
+              <div class="kv">
+                <div class="key">Last operation</div>
+                <div class="value"><code>tap text=Login</code></div>
+                <div class="key">Target</div>
+                <div class="value">tests/login.test.ts</div>
+              </div>
+              <div class="inline-actions">
+                <button>Stop Recording</button>
+                <button class="secondary">Open Output</button>
+              </div>
+            </section>
+
+            <section class="code-preview">
+              <div class="section-title">Generated Test</div>
+              <pre>import { test, expect } from '@fliwright/vitest';
+
+test('recorded login flow', async ({ page }) => {
+  await page.locator({ text: 'Email' }).type('alice@test.com');
+  await page.locator({ text: 'Password' }).type('correct-horse');
+  await page.locator({ text: 'Login' }).tap();
+
+  await expect(page.locator({ text: 'Welcome' })).toBeVisible();
+});</pre>
+
+              <div class="section-title" style="margin-top:16px;">Operations</div>
+              <div class="op-list">
+                <div class="op"><span class="muted">1</span><span>tap</span><code>text=Email</code></div>
+                <div class="op"><span class="muted">2</span><span>type</span><code>alice@test.com</code></div>
+                <div class="op"><span class="muted">3</span><span>tap</span><code>text=Password</code></div>
+                <div class="op"><span class="muted">4</span><span>type</span><code>correct-horse</code></div>
+                <div class="op"><span class="muted">5</span><span>tap</span><code>text=Login</code></div>
+                <div class="op"><span class="muted">6</span><span>assert</span><code>text=Welcome</code></div>
+              </div>
+            </section>
+          </div>
+        </article>
+
+        <article id="trace" class="panel" aria-label="Trace Viewer">
+          <header class="webview-header">
+            <div class="title-group">
+              <div class="title">
+                <span>Trace: Latest Run</span>
+                <span class="pill failed">1 failed</span>
+              </div>
+              <div class="subtitle">5 tests · 4 passed · 1 healed · 1.7s</div>
+            </div>
+            <div class="actions">
+              <button>Open Failure Context</button>
+              <button class="secondary">Copy Run JSON</button>
+            </div>
+          </header>
+
+          <div class="trace-layout">
+            <section class="timeline" aria-label="Trace timeline">
+              <div class="timeline-row">
+                <span class="icon ok">✓</span>
+                <span class="label">login shows form</span>
+                <span class="description">120ms</span>
+              </div>
+              <div class="timeline-row">
+                <span class="icon ok">✓</span>
+                <span class="label">login rejects invalid credentials</span>
+                <span class="description">340ms</span>
+              </div>
+              <div class="timeline-row active">
+                <span class="icon bad">✕</span>
+                <span class="label">cart updates quantity</span>
+                <span class="description">450ms</span>
+              </div>
+              <div class="timeline-row">
+                <span class="icon heal">✦</span>
+                <span class="label">payment confirm button</span>
+                <span class="description">healed</span>
+              </div>
+              <div class="timeline-row">
+                <span class="icon ok">✓</span>
+                <span class="label">cart removes item</span>
+                <span class="description">210ms</span>
+              </div>
+            </section>
+
+            <section class="trace-detail">
+              <div class="section-title">Selected Step</div>
+              <div class="kv">
+                <div class="key">Test</div>
+                <div class="value">cart updates quantity</div>
+                <div class="key">Status</div>
+                <div class="value"><span class="red">Failed</span></div>
+                <div class="key">Source</div>
+                <div class="value">tests/cart.test.ts:42</div>
+                <div class="key">Assertion</div>
+                <div class="value"><code>toBeVisible</code> expected visible, got not found</div>
+              </div>
+
+              <div class="section-title" style="margin-top:18px;">Failure JSON</div>
+              <pre>{
+  "testName": "cart updates quantity",
+  "assertion": {
+    "matcher": "toBeVisible",
+    "expected": "visible",
+    "actual": "not found"
+  },
+  "source": {
+    "file": "tests/cart.test.ts",
+    "line": 42
+  }
+}</pre>
+            </section>
+          </div>
+        </article>
+
+        <article id="sandbox" class="panel" aria-label="Sandbox Preview">
+          <header class="webview-header">
+            <div class="title-group">
+              <div class="title">
+                <span>Sandbox</span>
+                <span class="pill ok">Active</span>
+              </div>
+              <div class="subtitle">fliwright.mock.json · 3 routes applied</div>
+            </div>
+            <div class="actions">
+              <button>Apply Sandbox</button>
+              <button class="secondary">Clear Sandbox</button>
+              <button class="secondary">Open Config</button>
+            </div>
+          </header>
+
+          <div class="sandbox-grid">
+            <section class="section">
+              <div class="section-title">Network Routes</div>
+              <table class="route-table">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>URL</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>GET</code></td>
+                    <td>/api/me</td>
+                    <td><span class="green">200</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td>/api/login</td>
+                    <td><span class="green">200</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>GET</code></td>
+                    <td>/api/cart</td>
+                    <td><span class="green">200</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="section">
+              <div class="section-title">Form Helper Preview</div>
+              <div class="repair-box">
+                <div class="kv">
+                  <div class="key">email</div>
+                  <div class="value">alice.chen@example.com</div>
+                  <div class="key">phone</div>
+                  <div class="value">+886912345678</div>
+                  <div class="key">password</div>
+                  <div class="value">************</div>
+                </div>
+                <div class="inline-actions">
+                  <button>Fill Form</button>
+                  <button class="secondary">Regenerate</button>
+                </div>
+              </div>
+
+              <div class="section-title" style="margin-top:18px;">State Adapters</div>
+              <div class="kv">
+                <div class="key">Riverpod</div>
+                <div class="value"><span class="green">available</span></div>
+                <div class="key">Bloc</div>
+                <div class="value"><span class="muted">not configured</span></div>
+                <div class="key">Hardware mocks</div>
+                <div class="value"><span class="yellow">future scope</span></div>
+              </div>
+            </section>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <footer class="statusbar">
+      <div>Fliwright: 1 failed · 1 healed · Connected</div>
+      <div>ws://127.0.0.1:8181/ws</div>
+    </footer>
+  </main>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab');
+    const panels = document.querySelectorAll('.panel');
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.panel;
+        tabs.forEach((item) => item.classList.toggle('active', item === tab));
+        panels.forEach((panel) => panel.classList.toggle('active', panel.id === target));
+      });
+    });
+  </script>
+</body>
+</html>

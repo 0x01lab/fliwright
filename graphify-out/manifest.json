@@ -1,0 +1,672 @@
+{
+  "/Volumes/HIKSEMI/project/fliwright/package.json": {
+    "mtime": 1780019016.6925564,
+    "ast_hash": "a4db681906690f8356a4368c2a93e8a2",
+    "semantic_hash": "a4db681906690f8356a4368c2a93e8a2"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/.claude/settings.json": {
+    "mtime": 1779976021.0839627,
+    "ast_hash": "4aa0ffb8aac50037e483aa8960985a90",
+    "semantic_hash": "4aa0ffb8aac50037e483aa8960985a90"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/.claude/settings.local.json": {
+    "mtime": 1780214871.355056,
+    "ast_hash": "155d23e3a9628e4f355c45e1feaf7c23",
+    "semantic_hash": "155d23e3a9628e4f355c45e1feaf7c23"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/examples/riverpod_demo/test_driver/fliwright_app.dart": {
+    "mtime": 1780025838.928703,
+    "ast_hash": "46e163169836fce32b9bd1db61019427",
+    "semantic_hash": "46e163169836fce32b9bd1db61019427"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/examples/riverpod_demo/test/e2e_smoke_test.dart": {
+    "mtime": 1780028200.6418638,
+    "ast_hash": "0e79fae956e0dfc5417f25453873f953",
+    "semantic_hash": "0e79fae956e0dfc5417f25453873f953"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/examples/riverpod_demo/lib/main.dart": {
+    "mtime": 1780025836.2411833,
+    "ast_hash": "168ff4aa921e65db9886131a13e14501",
+    "semantic_hash": "168ff4aa921e65db9886131a13e14501"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-plugin-riverpod/package.json": {
+    "mtime": 1780208785.184187,
+    "ast_hash": "de32bdbb763dbf1fb6fedacdffda7837",
+    "semantic_hash": "de32bdbb763dbf1fb6fedacdffda7837"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-plugin-riverpod/tsconfig.json": {
+    "mtime": 1780023618.315456,
+    "ast_hash": "22a6ef827e3fb706af3a958c21d91530",
+    "semantic_hash": "22a6ef827e3fb706af3a958c21d91530"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-plugin-riverpod/vitest.config.ts": {
+    "mtime": 1780023619.372252,
+    "ast_hash": "12a3f8e0d1fc71671ec08026fe5376ee",
+    "semantic_hash": "12a3f8e0d1fc71671ec08026fe5376ee"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-plugin-riverpod/tests/plugin.test.ts": {
+    "mtime": 1780033351.1379857,
+    "ast_hash": "2496ef0750694eebf9de7efac86069fc",
+    "semantic_hash": "2496ef0750694eebf9de7efac86069fc"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-plugin-riverpod/tests/RiverpodStateAdapter.test.ts": {
+    "mtime": 1780023646.5404022,
+    "ast_hash": "68ae61ab7689066ed064beb03b5054a8",
+    "semantic_hash": "68ae61ab7689066ed064beb03b5054a8"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-plugin-riverpod/src/RiverpodStateAdapter.ts": {
+    "mtime": 1780033247.7091343,
+    "ast_hash": "905cd5f1514f1b13cce52cfd12fc1760",
+    "semantic_hash": "905cd5f1514f1b13cce52cfd12fc1760"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-plugin-riverpod/src/plugin.ts": {
+    "mtime": 1780033256.8179824,
+    "ast_hash": "f0f0c1f283eb787fb21f896577812e0a",
+    "semantic_hash": "f0f0c1f283eb787fb21f896577812e0a"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-plugin-riverpod/src/index.ts": {
+    "mtime": 1780025648.0474222,
+    "ast_hash": "25427183cde5ef62347579e8be141469",
+    "semantic_hash": "25427183cde5ef62347579e8be141469"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/package.json": {
+    "mtime": 1780166286.913274,
+    "ast_hash": "4088cfb8dfd61db1e3586ee4bf3f4adb",
+    "semantic_hash": "4088cfb8dfd61db1e3586ee4bf3f4adb"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tsconfig.json": {
+    "mtime": 1780019049.667919,
+    "ast_hash": "02f7377808252db4fada1fb7d6130d1f",
+    "semantic_hash": "02f7377808252db4fada1fb7d6130d1f"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/vitest.config.ts": {
+    "mtime": 1780019050.7456417,
+    "ast_hash": "e11a1bebd334214ba07ff68242dee05c",
+    "semantic_hash": "e11a1bebd334214ba07ff68242dee05c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/Protocol.test.ts": {
+    "mtime": 1780021598.1057184,
+    "ast_hash": "8028922a90194eb3d16e581ff128433b",
+    "semantic_hash": "8028922a90194eb3d16e581ff128433b"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/JsonRuleLoader.test.ts": {
+    "mtime": 1780153655.5966806,
+    "ast_hash": "5ab382287cc0011b2ecb7f6368dddbf6",
+    "semantic_hash": "5ab382287cc0011b2ecb7f6368dddbf6"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/CodeGenerator.test.ts": {
+    "mtime": 1780151049.8760645,
+    "ast_hash": "5c5d6fb07d978ec5dfced54dc1ebbc26",
+    "semantic_hash": "5c5d6fb07d978ec5dfced54dc1ebbc26"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/MockManager.test.ts": {
+    "mtime": 1780121744.1047409,
+    "ast_hash": "c69313ef6f24f5460bc82f0d68d89d95",
+    "semantic_hash": "c69313ef6f24f5460bc82f0d68d89d95"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/SkillRegistry.test.ts": {
+    "mtime": 1780153533.4659877,
+    "ast_hash": "7bc1379463ddb2b2ae2971b1250ae4c6",
+    "semantic_hash": "7bc1379463ddb2b2ae2971b1250ae4c6"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/FailureCollector.test.ts": {
+    "mtime": 1780047701.6352422,
+    "ast_hash": "36c76b5bfa6f986f699157e70d8cfe6a",
+    "semantic_hash": "36c76b5bfa6f986f699157e70d8cfe6a"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/EventAggregator.test.ts": {
+    "mtime": 1780151037.2118363,
+    "ast_hash": "ab3239e938f3e308db90540ed1b6f0e8",
+    "semantic_hash": "ab3239e938f3e308db90540ed1b6f0e8"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/FormHelper.test.ts": {
+    "mtime": 1780153916.5299447,
+    "ast_hash": "41bf4d39692de762cec747ca0a608a26",
+    "semantic_hash": "41bf4d39692de762cec747ca0a608a26"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/SelfHealingEngine.test.ts": {
+    "mtime": 1780130743.5704377,
+    "ast_hash": "357051751cefc17cf882ba86f7c37f40",
+    "semantic_hash": "357051751cefc17cf882ba86f7c37f40"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/SemanticInferrer.test.ts": {
+    "mtime": 1780153209.598938,
+    "ast_hash": "2f3832546e01fb78275407e95c38a0d2",
+    "semantic_hash": "2f3832546e01fb78275407e95c38a0d2"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/VMServiceConnector.test.ts": {
+    "mtime": 1780211683.0818176,
+    "ast_hash": "43d613c1f7a81ed64565acf017c5688c",
+    "semantic_hash": "43d613c1f7a81ed64565acf017c5688c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/PluginRegistry.test.ts": {
+    "mtime": 1780021590.9444273,
+    "ast_hash": "1078c9134d964a0ade689d69daf87d1c",
+    "semantic_hash": "1078c9134d964a0ade689d69daf87d1c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/SnapshotStore.test.ts": {
+    "mtime": 1780129270.5661778,
+    "ast_hash": "3106f61c0501b342f101c27a0be1ebfb",
+    "semantic_hash": "3106f61c0501b342f101c27a0be1ebfb"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/MultiDimensionalHealingStrategy.test.ts": {
+    "mtime": 1780129616.4791696,
+    "ast_hash": "da253dec91b04f3763e6bacb1fe59d91",
+    "semantic_hash": "da253dec91b04f3763e6bacb1fe59d91"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/Page.test.ts": {
+    "mtime": 1780041117.5376787,
+    "ast_hash": "ac782323a01dde4d81d3b63f21dc4de0",
+    "semantic_hash": "ac782323a01dde4d81d3b63f21dc4de0"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/Assertion.test.ts": {
+    "mtime": 1780046639.5229452,
+    "ast_hash": "0452dd87987d7d37509b6e6608667eb8",
+    "semantic_hash": "0452dd87987d7d37509b6e6608667eb8"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/RecorderController.test.ts": {
+    "mtime": 1780149748.3220108,
+    "ast_hash": "5a6132811236d065b5dc6edc6fb10e89",
+    "semantic_hash": "5a6132811236d065b5dc6edc6fb10e89"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/Locator.test.ts": {
+    "mtime": 1780207292.5712705,
+    "ast_hash": "004f2f1a353520d044771eb583a33030",
+    "semantic_hash": "004f2f1a353520d044771eb583a33030"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/Selector.test.ts": {
+    "mtime": 1780046289.117422,
+    "ast_hash": "7f1d7bd2f8c718c4cc20501a62106471",
+    "semantic_hash": "7f1d7bd2f8c718c4cc20501a62106471"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/Driver.test.ts": {
+    "mtime": 1780149440.5166228,
+    "ast_hash": "0df01fc64f88024679051f9d0574370a",
+    "semantic_hash": "0df01fc64f88024679051f9d0574370a"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/tests/FakerGenerator.test.ts": {
+    "mtime": 1780153393.9336262,
+    "ast_hash": "e4b25cb56e6eec082127c06ee32f7564",
+    "semantic_hash": "e4b25cb56e6eec082127c06ee32f7564"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/VMServiceConnector.ts": {
+    "mtime": 1780211660.0178738,
+    "ast_hash": "4e0e9e8284d498d56637e69e291ab4e7",
+    "semantic_hash": "4e0e9e8284d498d56637e69e291ab4e7"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/RecorderController.ts": {
+    "mtime": 1780150422.570398,
+    "ast_hash": "25c8fd6d2a959968c029c85caa188876",
+    "semantic_hash": "25c8fd6d2a959968c029c85caa188876"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/Driver.ts": {
+    "mtime": 1780149329.5956054,
+    "ast_hash": "d1b078f224114f929cc598c4a63cacfb",
+    "semantic_hash": "d1b078f224114f929cc598c4a63cacfb"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/FailureCollector.ts": {
+    "mtime": 1780047647.2402015,
+    "ast_hash": "9931d864d6f56a7ae35c60c372d7bb40",
+    "semantic_hash": "9931d864d6f56a7ae35c60c372d7bb40"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/FormHelper.ts": {
+    "mtime": 1780153939.29403,
+    "ast_hash": "5a4920ee4ebf4d617a280a415af5b101",
+    "semantic_hash": "5a4920ee4ebf4d617a280a415af5b101"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/SelfHealingEngine.ts": {
+    "mtime": 1780130704.2091622,
+    "ast_hash": "707a1463e3948063fd2ce2d18b34429b",
+    "semantic_hash": "707a1463e3948063fd2ce2d18b34429b"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/FakerGenerator.ts": {
+    "mtime": 1780156035.0557895,
+    "ast_hash": "fdccf1fbcb9a7b7fa1fb723a6883fd30",
+    "semantic_hash": "fdccf1fbcb9a7b7fa1fb723a6883fd30"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/Assertion.ts": {
+    "mtime": 1780130609.8063233,
+    "ast_hash": "818acb98443a1e59c83b5d1162b27bab",
+    "semantic_hash": "818acb98443a1e59c83b5d1162b27bab"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/Locator.ts": {
+    "mtime": 1780207282.7376652,
+    "ast_hash": "0e0c88c968474116784490466a79fc01",
+    "semantic_hash": "0e0c88c968474116784490466a79fc01"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/types.ts": {
+    "mtime": 1780153081.9345927,
+    "ast_hash": "a97799e3ea5f6431c4699cf8c303c8f1",
+    "semantic_hash": "a97799e3ea5f6431c4699cf8c303c8f1"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/Page.ts": {
+    "mtime": 1780154067.3169124,
+    "ast_hash": "e1261264bbe4b2dc869782c5b6df6941",
+    "semantic_hash": "e1261264bbe4b2dc869782c5b6df6941"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/Selector.ts": {
+    "mtime": 1780046219.870662,
+    "ast_hash": "64f222cd72d713e93b43e6213acecf18",
+    "semantic_hash": "64f222cd72d713e93b43e6213acecf18"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/Protocol.ts": {
+    "mtime": 1780033168.9320385,
+    "ast_hash": "1e2ca0ae19408ee5af33705cbe9f8526",
+    "semantic_hash": "1e2ca0ae19408ee5af33705cbe9f8526"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/PluginRegistry.ts": {
+    "mtime": 1780033199.7767878,
+    "ast_hash": "78d5e7b20d3e0e855aeba85c5124d515",
+    "semantic_hash": "78d5e7b20d3e0e855aeba85c5124d515"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/EventAggregator.ts": {
+    "mtime": 1780151004.8605244,
+    "ast_hash": "8a5ae454ecb7b69e86d6e191d18e2b3c",
+    "semantic_hash": "8a5ae454ecb7b69e86d6e191d18e2b3c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/MockManager.ts": {
+    "mtime": 1780121731.969956,
+    "ast_hash": "fccafa8c693e228dd1bd7da60584631c",
+    "semantic_hash": "fccafa8c693e228dd1bd7da60584631c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/CodeGenerator.ts": {
+    "mtime": 1780151018.5675955,
+    "ast_hash": "025134f5c7269d55f7ba9a3dfaf02463",
+    "semantic_hash": "025134f5c7269d55f7ba9a3dfaf02463"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/index.ts": {
+    "mtime": 1780154080.8827589,
+    "ast_hash": "a742b3807154dc76b86868428d90ac48",
+    "semantic_hash": "a742b3807154dc76b86868428d90ac48"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/JsonRuleLoader.ts": {
+    "mtime": 1780153678.2660234,
+    "ast_hash": "9f4c3bc04048e39c2f2b6760c804146d",
+    "semantic_hash": "9f4c3bc04048e39c2f2b6760c804146d"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/SemanticInferrer.ts": {
+    "mtime": 1780153236.8177853,
+    "ast_hash": "6a6b1d8db96d674d04cd67bf720cc950",
+    "semantic_hash": "6a6b1d8db96d674d04cd67bf720cc950"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/SnapshotStore.ts": {
+    "mtime": 1780129304.7099552,
+    "ast_hash": "0d0aa7d57df55a9e7c60c0b4e224777d",
+    "semantic_hash": "0d0aa7d57df55a9e7c60c0b4e224777d"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/SkillRegistry.ts": {
+    "mtime": 1780153540.398201,
+    "ast_hash": "88c4d43fd0b3539238fe7230997684d2",
+    "semantic_hash": "88c4d43fd0b3539238fe7230997684d2"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts": {
+    "mtime": 1780130636.259535,
+    "ast_hash": "f2e3e1e40e04d70aa8333146d7c78695",
+    "semantic_hash": "f2e3e1e40e04d70aa8333146d7c78695"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/interfaces/MockAdapter.ts": {
+    "mtime": 1780020964.029277,
+    "ast_hash": "1d71cfe6400bccb1a233185dbadf0e2d",
+    "semantic_hash": "1d71cfe6400bccb1a233185dbadf0e2d"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/interfaces/Plugin.ts": {
+    "mtime": 1780033178.371804,
+    "ast_hash": "51ebfab494a8c136661a38b1714e02a8",
+    "semantic_hash": "51ebfab494a8c136661a38b1714e02a8"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/interfaces/FinderStrategy.ts": {
+    "mtime": 1780020965.3852408,
+    "ast_hash": "834534fbc681d77923d941350ef266dc",
+    "semantic_hash": "834534fbc681d77923d941350ef266dc"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/interfaces/HealingStrategy.ts": {
+    "mtime": 1780020966.996436,
+    "ast_hash": "e8079676389775406fed4c31bb722bcc",
+    "semantic_hash": "e8079676389775406fed4c31bb722bcc"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/interfaces/index.ts": {
+    "mtime": 1780020981.1834605,
+    "ast_hash": "91667a9ffb54a79437782537bf35293c",
+    "semantic_hash": "91667a9ffb54a79437782537bf35293c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-core/src/interfaces/StateAdapter.ts": {
+    "mtime": 1780020901.481283,
+    "ast_hash": "2c374aadcccbed38846df72c4cca1454",
+    "semantic_hash": "2c374aadcccbed38846df72c4cca1454"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/test/form_extract_test.dart": {
+    "mtime": 1780159072.0858488,
+    "ast_hash": "00dc63f6bae44cbc80326cf2680d477c",
+    "semantic_hash": "00dc63f6bae44cbc80326cf2680d477c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/test/extension_registry_test.dart": {
+    "mtime": 1780121415.9999392,
+    "ast_hash": "7fc481695d95da483f0d3b4425c911c5",
+    "semantic_hash": "7fc481695d95da483f0d3b4425c911c5"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/test/mock_server_test.dart": {
+    "mtime": 1780121705.7902923,
+    "ast_hash": "61e6b75e5170204d903a33c6e5341cce",
+    "semantic_hash": "61e6b75e5170204d903a33c6e5341cce"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/test/recording_test.dart": {
+    "mtime": 1780149475.0654159,
+    "ast_hash": "339f069d17aca990899f0e0ae3c15190",
+    "semantic_hash": "339f069d17aca990899f0e0ae3c15190"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/test/snapshot_test.dart": {
+    "mtime": 1780128934.098402,
+    "ast_hash": "131e55c6180e44a42d36d63da7db17a3",
+    "semantic_hash": "131e55c6180e44a42d36d63da7db17a3"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/fliwright_bridge.dart": {
+    "mtime": 1780144283.042357,
+    "ast_hash": "ca67eea75bee0eee0b2e01ba25e90891",
+    "semantic_hash": "ca67eea75bee0eee0b2e01ba25e90891"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extension_registry.dart": {
+    "mtime": 1780023401.440486,
+    "ast_hash": "5b6ee7c270c37927a6e49645caf561ea",
+    "semantic_hash": "5b6ee7c270c37927a6e49645caf561ea"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/bridge.dart": {
+    "mtime": 1780160258.162922,
+    "ast_hash": "a40e671f8d5a7dcad0145bbd5fa5b535",
+    "semantic_hash": "a40e671f8d5a7dcad0145bbd5fa5b535"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/inspect.dart": {
+    "mtime": 1780144234.28249,
+    "ast_hash": "778af64ce0df4587389495517b95f90b",
+    "semantic_hash": "778af64ce0df4587389495517b95f90b"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/form_extract.dart": {
+    "mtime": 1780163244.9491665,
+    "ast_hash": "064b298ebbbda6064bbc9f47c90d1998",
+    "semantic_hash": "064b298ebbbda6064bbc9f47c90d1998"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/gesture.dart": {
+    "mtime": 1780047238.8576694,
+    "ast_hash": "b2394e86f552d56bef43258b61b071e8",
+    "semantic_hash": "b2394e86f552d56bef43258b61b071e8"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/scroll_extension.dart": {
+    "mtime": 1780046884.5650728,
+    "ast_hash": "77c679dab3335259fb30978df0350d29",
+    "semantic_hash": "77c679dab3335259fb30978df0350d29"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/riverpod.dart": {
+    "mtime": 1780033197.3844423,
+    "ast_hash": "d9a35c00dae7905e5c47ab0c53c850c6",
+    "semantic_hash": "d9a35c00dae7905e5c47ab0c53c850c6"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/recording.dart": {
+    "mtime": 1780150990.4160872,
+    "ast_hash": "d9a0c3340774c0dc048436bd65ce50c2",
+    "semantic_hash": "d9a0c3340774c0dc048436bd65ce50c2"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/type_extension.dart": {
+    "mtime": 1780045885.9431686,
+    "ast_hash": "663c21db348bc8268344248cf2ffa743",
+    "semantic_hash": "663c21db348bc8268344248cf2ffa743"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/http_overrides.dart": {
+    "mtime": 1780150041.1565158,
+    "ast_hash": "eb43687eb110033326d15e7bcaec6f0d",
+    "semantic_hash": "eb43687eb110033326d15e7bcaec6f0d"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/snapshot.dart": {
+    "mtime": 1780150083.7542632,
+    "ast_hash": "1ebf1d481f3f80335daa6c586de3adc0",
+    "semantic_hash": "1ebf1d481f3f80335daa6c586de3adc0"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/lib/src/extensions/mock_server.dart": {
+    "mtime": 1780121503.7231114,
+    "ast_hash": "92704cb8203c29798124e63b1d495fdc",
+    "semantic_hash": "92704cb8203c29798124e63b1d495fdc"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vitest/package.json": {
+    "mtime": 1780206354.3338163,
+    "ast_hash": "1cf0d18f4b2ffcb0c447f0a72797787e",
+    "semantic_hash": "1cf0d18f4b2ffcb0c447f0a72797787e"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vitest/tsconfig.json": {
+    "mtime": 1780047824.1051836,
+    "ast_hash": "02f7377808252db4fada1fb7d6130d1f",
+    "semantic_hash": "02f7377808252db4fada1fb7d6130d1f"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vitest/vitest.config.ts": {
+    "mtime": 1780047825.505217,
+    "ast_hash": "ff46f176fff96647a5d8678c316d52f4",
+    "semantic_hash": "ff46f176fff96647a5d8678c316d52f4"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vitest/tests/integration.test.ts": {
+    "mtime": 1780207870.5256245,
+    "ast_hash": "148a0e04d74706b356f507f453afa799",
+    "semantic_hash": "148a0e04d74706b356f507f453afa799"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vitest/src/setup.ts": {
+    "mtime": 1780047836.6446433,
+    "ast_hash": "8708f1d8d938f9d9a9c742040ee5d652",
+    "semantic_hash": "8708f1d8d938f9d9a9c742040ee5d652"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vitest/src/reporter.ts": {
+    "mtime": 1780047965.67341,
+    "ast_hash": "26c9e13cc6ad84f4718d10fccf2e0657",
+    "semantic_hash": "26c9e13cc6ad84f4718d10fccf2e0657"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vitest/src/index.ts": {
+    "mtime": 1780207855.7875857,
+    "ast_hash": "4d9424f7fbe018ffcc7d4aa95f554f32",
+    "semantic_hash": "4d9424f7fbe018ffcc7d4aa95f554f32"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/package.json": {
+    "mtime": 1780202363.2633681,
+    "ast_hash": "73b0e1b28e9be748e7468888efe58d09",
+    "semantic_hash": "73b0e1b28e9be748e7468888efe58d09"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/tsconfig.json": {
+    "mtime": 1780199725.094271,
+    "ast_hash": "db233ce1766dddd5122871ffe72c441e",
+    "semantic_hash": "db233ce1766dddd5122871ffe72c441e"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/vitest.config.ts": {
+    "mtime": 1780207976.5393398,
+    "ast_hash": "e11a1bebd334214ba07ff68242dee05c",
+    "semantic_hash": "e11a1bebd334214ba07ff68242dee05c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/tests/generateTest.test.ts": {
+    "mtime": 1780200532.0903034,
+    "ast_hash": "2f0c804c6a05cb13d0e1262eefc02a97",
+    "semantic_hash": "2f0c804c6a05cb13d0e1262eefc02a97"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/tests/testReport.test.ts": {
+    "mtime": 1780203569.7876444,
+    "ast_hash": "f00c4056ac0c634cd4b0adf9190366f1",
+    "semantic_hash": "f00c4056ac0c634cd4b0adf9190366f1"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/tests/runTest.test.ts": {
+    "mtime": 1780207479.4091258,
+    "ast_hash": "e5ed3acacd2dea7f52c924e1e9b94d1f",
+    "semantic_hash": "e5ed3acacd2dea7f52c924e1e9b94d1f"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/tests/state.test.ts": {
+    "mtime": 1780199831.2280226,
+    "ast_hash": "83ee8d80a81974c8c1651b553294b64a",
+    "semantic_hash": "83ee8d80a81974c8c1651b553294b64a"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/tests/server.test.ts": {
+    "mtime": 1780199948.339982,
+    "ast_hash": "17b2f76020ac867601f4121bc5ff2921",
+    "semantic_hash": "17b2f76020ac867601f4121bc5ff2921"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/tests/getFailure.test.ts": {
+    "mtime": 1780200354.1325424,
+    "ast_hash": "4cdc41aab160dd880d8227241a56a430",
+    "semantic_hash": "4cdc41aab160dd880d8227241a56a430"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/src/state.ts": {
+    "mtime": 1780199845.825139,
+    "ast_hash": "28f1da902ca19defeb346901cf848c76",
+    "semantic_hash": "28f1da902ca19defeb346901cf848c76"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/src/types.ts": {
+    "mtime": 1780199734.2279508,
+    "ast_hash": "eeacc75f269799054f5de918acf7ef35",
+    "semantic_hash": "eeacc75f269799054f5de918acf7ef35"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/src/index.ts": {
+    "mtime": 1780200739.3981578,
+    "ast_hash": "872cbd43f37f127bab2ac0746c9e2ff0",
+    "semantic_hash": "872cbd43f37f127bab2ac0746c9e2ff0"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/src/server.ts": {
+    "mtime": 1780199947.1716232,
+    "ast_hash": "7cf66b37de847e84872f980534c491c2",
+    "semantic_hash": "7cf66b37de847e84872f980534c491c2"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/src/tools/getFailure.ts": {
+    "mtime": 1780200399.3467066,
+    "ast_hash": "8e1909d5c56ee1c3cb52ab8b08abbbf7",
+    "semantic_hash": "8e1909d5c56ee1c3cb52ab8b08abbbf7"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/src/tools/generateTest.ts": {
+    "mtime": 1780200576.8847895,
+    "ast_hash": "a5ef5022d5fb181d55fc7500890967d6",
+    "semantic_hash": "a5ef5022d5fb181d55fc7500890967d6"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/src/tools/runTest.ts": {
+    "mtime": 1780207463.5811791,
+    "ast_hash": "4c7ac6632eba7df5f5ab720550808f34",
+    "semantic_hash": "4c7ac6632eba7df5f5ab720550808f34"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-mcp/src/resources/testReport.ts": {
+    "mtime": 1780203569.4858146,
+    "ast_hash": "8028c6210fbb528a00410985ec62b4c9",
+    "semantic_hash": "8028c6210fbb528a00410985ec62b4c9"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/e2e/package.json": {
+    "mtime": 1780041383.014893,
+    "ast_hash": "3ebcbc569e00e189e269e4b857bc5a5a",
+    "semantic_hash": "3ebcbc569e00e189e269e4b857bc5a5a"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/e2e/tsconfig.json": {
+    "mtime": 1780041196.813849,
+    "ast_hash": "88e68184d7d1095ec2f0c3c7c5027a4f",
+    "semantic_hash": "88e68184d7d1095ec2f0c3c7c5027a4f"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/e2e/vitest.config.ts": {
+    "mtime": 1780041212.1667633,
+    "ast_hash": "c39dd7926f9778c99053f59fd9004b6c",
+    "semantic_hash": "c39dd7926f9778c99053f59fd9004b6c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/e2e/smoke_test.ts": {
+    "mtime": 1780041234.2099974,
+    "ast_hash": "798accaad30672ac5f66338e3948b2fa",
+    "semantic_hash": "798accaad30672ac5f66338e3948b2fa"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/melos.yaml": {
+    "mtime": 1780019018.369933,
+    "ast_hash": "aba4e7b2fe8fb09fae082ab184ff3917",
+    "semantic_hash": "aba4e7b2fe8fb09fae082ab184ff3917"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/AGENTS.md": {
+    "mtime": 1780212634.8025413,
+    "ast_hash": "d9c649e3ccbc695849b63cdfa8a8dee9",
+    "semantic_hash": "d9c649e3ccbc695849b63cdfa8a8dee9"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/CLAUDE.md": {
+    "mtime": 1780212995.020231,
+    "ast_hash": "d17981706e16fed07c79d9ab5fa505e0",
+    "semantic_hash": "d17981706e16fed07c79d9ab5fa505e0"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/pnpm-workspace.yaml": {
+    "mtime": 1780041265.3176305,
+    "ast_hash": "b75424c076a2d93346527d436cdb9dcd",
+    "semantic_hash": "b75424c076a2d93346527d436cdb9dcd"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/PRD.md": {
+    "mtime": 1779975467.3272464,
+    "ast_hash": "d1b2127badffec0e68b93c92bbcf7792",
+    "semantic_hash": "d1b2127badffec0e68b93c92bbcf7792"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/plans/2026-05-29-slice3-mock-loop.md": {
+    "mtime": 1780062090.3204596,
+    "ast_hash": "4dc8cfa15086f085f9449f67e67a8632",
+    "semantic_hash": "4dc8cfa15086f085f9449f67e67a8632"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/plans/2026-05-30-slice4-self-healing.md": {
+    "mtime": 1780125151.2435224,
+    "ast_hash": "dff5bf1f687ef4734603ba26505b95c7",
+    "semantic_hash": "dff5bf1f687ef4734603ba26505b95c7"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/plans/2026-05-29-slice0-extensible-architecture.md": {
+    "mtime": 1780018648.1384678,
+    "ast_hash": "c4297c4a658201d4b5b5c89687eb0bf4",
+    "semantic_hash": "c4297c4a658201d4b5b5c89687eb0bf4"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/plans/2026-05-30-slice5-recording-codegen.md": {
+    "mtime": 1780142925.829947,
+    "ast_hash": "61a654c4e6b4b8762ea8277f649ce1e6",
+    "semantic_hash": "61a654c4e6b4b8762ea8277f649ce1e6"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/plans/2026-05-29-slice2-assertion-loop.md": {
+    "mtime": 1780045066.138519,
+    "ast_hash": "50b6310b48c95cc6219b79997379ed8d",
+    "semantic_hash": "50b6310b48c95cc6219b79997379ed8d"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/plans/2026-05-30-slice6-form-helper.md": {
+    "mtime": 1780152738.6083164,
+    "ast_hash": "bf0fee7f7e25e98e4f8efe179406a7bb",
+    "semantic_hash": "bf0fee7f7e25e98e4f8efe179406a7bb"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/plans/2026-05-31-slice7-mcp-loop.md": {
+    "mtime": 1780198357.4608054,
+    "ast_hash": "92d858e791760b66a970c7e5f078c549",
+    "semantic_hash": "92d858e791760b66a970c7e5f078c549"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/specs/2026-05-30-slice5-recording-codegen-design.md": {
+    "mtime": 1780132088.3242564,
+    "ast_hash": "3a283f421ebb6ce38613ec749ecd651d",
+    "semantic_hash": "3a283f421ebb6ce38613ec749ecd651d"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/specs/2026-05-31-slice7-mcp-loop-design.md": {
+    "mtime": 1780197237.7590237,
+    "ast_hash": "7bfb59c5c37990d38a1118c0c814ec7e",
+    "semantic_hash": "7bfb59c5c37990d38a1118c0c814ec7e"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/specs/2026-05-29-slice2-assertion-loop-design.md": {
+    "mtime": 1780044165.7805328,
+    "ast_hash": "9115b78dd75c7c7e4dcca480ad6137e6",
+    "semantic_hash": "9115b78dd75c7c7e4dcca480ad6137e6"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/specs/2026-05-30-slice6-form-helper-design.md": {
+    "mtime": 1780152288.3350177,
+    "ast_hash": "663bd96654aede4884f517d95475fb8e",
+    "semantic_hash": "663bd96654aede4884f517d95475fb8e"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/specs/2026-05-30-slice4-self-healing-design.md": {
+    "mtime": 1780124536.3542886,
+    "ast_hash": "0a502eef92afb1a764336ee3ee15d3f9",
+    "semantic_hash": "0a502eef92afb1a764336ee3ee15d3f9"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/specs/2026-05-28-fliwright-mvp-v1-design.md": {
+    "mtime": 1779978225.3613367,
+    "ast_hash": "f856e455504d9a54b8e07626772e2f3a",
+    "semantic_hash": "f856e455504d9a54b8e07626772e2f3a"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/docs/superpowers/specs/2026-05-29-slice3-mock-loop-design.md": {
+    "mtime": 1780060799.3719327,
+    "ast_hash": "2f93e5d2f1698d86ca589e726460ba8c",
+    "semantic_hash": "2f93e5d2f1698d86ca589e726460ba8c"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/examples/riverpod_demo/pubspec.yaml": {
+    "mtime": 1780025829.6915915,
+    "ast_hash": "d225af19c5c879748957f528a4645084",
+    "semantic_hash": "d225af19c5c879748957f528a4645084"
+  },
+  "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-bridge/pubspec.yaml": {
+    "mtime": 1780022282.1095085,
+    "ast_hash": "ec28338ba6a8f2ac4fdafee6de197b7b",
+    "semantic_hash": "ec28338ba6a8f2ac4fdafee6de197b7b"
+  }
+}

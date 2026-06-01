@@ -17,10 +17,26 @@ class FormExtractExtension {
       return {'fields': <dynamic>[], 'count': 0};
     }
 
+    final scope = params['scope'];
     final fields = <Map<String, dynamic>>[];
     final seenEditableKeys = <String>{};
 
     InspectExtension.walkTree(root, (Element element) {
+      // Scope filtering: only extract fields inside the specified widget type.
+      // e.g. scope='RegisterPage' only extracts fields under a RegisterPage widget.
+      if (scope != null && scope.isNotEmpty) {
+        bool inScope = false;
+        element.visitAncestorElements((ancestor) {
+          if (ancestor.widget.runtimeType.toString() == scope) {
+            inScope = true;
+            return false;
+          }
+          // Stop at logical boundaries to avoid matching across pages.
+          if (ancestor.widget is Scaffold) return false;
+          return true;
+        });
+        if (!inScope) return;
+      }
       final widget = element.widget;
 
       // Extract from Material TextField widgets.
@@ -136,7 +152,7 @@ class FormExtractExtension {
       if (kbType != null) 'keyboardType': kbType,
       if (effectiveMaxLength != null) 'maxLength': effectiveMaxLength,
       'obscureText': obscureText,
-      if (enabled != null) 'enabled': enabled,
+      'enabled': enabled ?? true,
       'selector': selector,
     });
   }

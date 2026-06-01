@@ -30,4 +30,54 @@ export class Page {
     }
     return this._formHelper;
   }
+
+  // ── Navigation ──────────────────────────────────────────────
+
+  /**
+   * Navigate to a route path.
+   *
+   * Requires the Flutter app to have injected a router (e.g. GoRouter)
+   * via `FliwrightBridge.init(router: myRouter)`.
+   *
+   * @param path - Route path, e.g. '/register'
+   * @param options.extra - Optional extra data forwarded to the router
+   */
+  async navigate(path: string, options?: { extra?: Record<string, unknown> }): Promise<void> {
+    const params: Record<string, unknown> = { path };
+    if (options?.extra) {
+      params.extra = JSON.stringify(options.extra);
+    }
+    const result = (await this.sendRequest('ext.fliwright.navigate', params)) as {
+      success: boolean;
+      error?: string;
+    };
+    if (!result.success) {
+      throw new Error(`Navigate to '${path}' failed: ${result.error ?? 'unknown error'}`);
+    }
+  }
+
+  /**
+   * Get the current route path.
+   *
+   * @returns The current route path string, or empty string if unknown.
+   */
+  async currentRoute(): Promise<string> {
+    const result = (await this.sendRequest('ext.fliwright.currentRoute', {})) as {
+      path?: string;
+    };
+    return result.path ?? '';
+  }
+
+  /**
+   * Go back / pop the current route.
+   */
+  async goBack(): Promise<void> {
+    const result = (await this.sendRequest('ext.fliwright.goBack', {})) as {
+      success: boolean;
+      error?: string;
+    };
+    if (!result.success) {
+      throw new Error(`Go back failed: ${result.error ?? 'unknown error'}`);
+    }
+  }
 }

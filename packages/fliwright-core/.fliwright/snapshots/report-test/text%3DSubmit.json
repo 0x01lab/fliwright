@@ -1,0 +1,23 @@
+{
+  "testName": "report-test",
+  "selector": "text=Submit",
+  "snapshot": {
+    "type": "ElevatedButton",
+    "text": "Submit",
+    "parentType": "Scaffold",
+    "adjacentText": [
+      "Title"
+    ],
+    "rect": {
+      "x": 10,
+      "y": 20,
+      "width": 100,
+      "height": 40
+    },
+    "callbackNames": [
+      "onPressed"
+    ]
+  },
+  "firstSeen": "2026-05-31T15:35:09.127Z",
+  "lastUpdated": "2026-05-31T15:35:09.127Z"
+}
