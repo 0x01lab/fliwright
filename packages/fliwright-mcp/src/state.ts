@@ -1,4 +1,5 @@
 import type { RunResult, FailureEntry } from './types.js';
+import { MockRuleStore } from '@fliwright/core';
 
 export interface ServerState {
   getLastRunResult(): RunResult | null;
@@ -8,12 +9,14 @@ export interface ServerState {
   getFailuresByTestName(testName?: string): FailureEntry[];
   getVmServiceUrl(): string | null;
   setVmServiceUrl(url: string): void;
+  getRuleStore(): MockRuleStore;
 }
 
 export function createServerState(): ServerState {
   let lastRunResult: RunResult | null = null;
   let lastFailures: FailureEntry[] = [];
   let vmServiceUrl: string | null = null;
+  const ruleStore = new MockRuleStore();
 
   return {
     getLastRunResult() { return lastRunResult; },
@@ -26,5 +29,6 @@ export function createServerState(): ServerState {
     },
     getVmServiceUrl() { return vmServiceUrl; },
     setVmServiceUrl(url: string) { vmServiceUrl = url; },
+    getRuleStore(): MockRuleStore { return ruleStore; },
   };
 }
