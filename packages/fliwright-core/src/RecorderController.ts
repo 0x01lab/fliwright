@@ -1,9 +1,8 @@
 import { CodeGenerator } from './CodeGenerator.js';
 import { EventAggregator } from './EventAggregator.js';
 import { resolveSelector } from './SelectorResolver.js';
-import type { CodegenOptions, RawInputEvent, RecordedOperation, WidgetInfo } from './types.js';
+import type { CodegenOptions, RawInputEvent, RecordedOperation, WidgetInfo, SendRequest } from './types.js';
 
-type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 type OnEvent = (callback: (event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) => () => void;
 
 export interface RecorderStartOptions {

@@ -6,6 +6,7 @@ import 'extensions/inspect.dart';
 import 'extensions/mock_server.dart';
 import 'extensions/recording.dart';
 import 'extensions/riverpod.dart';
+import 'extensions/screenshot.dart';
 import 'extensions/scroll_extension.dart';
 import 'extensions/snapshot.dart';
 import 'extensions/type_extension.dart';
@@ -22,6 +23,7 @@ class FliwrightBridge {
     _initialized = false;
     await RecordingExtension.reset();
     await MockServerExtension.reset();
+    FliwrightHttpOverrides.uninstall();
   }
 
   static Future<void> init() async {
@@ -47,6 +49,7 @@ class FliwrightBridge {
     TypeExtension.register(_registry);
     ScrollExtension.register(_registry);
     SnapshotExtension.register(_registry);
+    ScreenshotExtension.register(_registry);
     RecordingExtension.register(_registry);
     FormExtractExtension.register(_registry);
 

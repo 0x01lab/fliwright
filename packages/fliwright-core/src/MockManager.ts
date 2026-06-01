@@ -1,9 +1,13 @@
-import type { MockRouteResponse, MockCall } from './types.js';
+import type { MockRouteResponse, MockCall, SendRequest } from './types.js';
+import type { MockAdapter } from './interfaces/MockAdapter.js';
 
-type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
-
-export class MockManager {
+export class MockManager implements MockAdapter {
   constructor(private sendRequest: SendRequest) {}
+
+  /** Alias for MockAdapter compatibility. */
+  async addRoute(pattern: string, response: MockRouteResponse): Promise<void> {
+    await this.route(pattern, response);
+  }
 
   async route(path: string, response: MockRouteResponse & { method?: string }): Promise<void> {
     const config = {
@@ -41,5 +45,16 @@ export class MockManager {
       calls: MockCall[];
     };
     return result.calls ?? [];
+  }
+
+  async listRoutes(): Promise<Array<{ id: string; method?: string; path: string }>> {
+    const result = (await this.sendRequest('ext.fliwright.mock.listRoutes', {})) as {
+      routes: Array<{ id: string; method?: string; path: string }>;
+    };
+    return result.routes ?? [];
+  }
+
+  async clearCalls(): Promise<void> {
+    await this.sendRequest('ext.fliwright.mock.clearCalls', {});
   }
 }

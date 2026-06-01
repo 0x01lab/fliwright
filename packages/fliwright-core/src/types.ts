@@ -1,3 +1,6 @@
+/** Function signature for sending VM Service JSON-RPC requests. */
+export type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+
 export type SelectorInput =
   | string
   | { text: string; ancestor?: SelectorInput }
@@ -21,6 +24,8 @@ export interface WidgetInfo {
 
 export interface WidgetSnapshot {
   type: string;
+  text?: string;
+  key?: string;
   parentType: string;
   adjacentText: string[];
   rect: { x: number; y: number; width: number; height: number };

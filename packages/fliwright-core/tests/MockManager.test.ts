@@ -112,4 +112,32 @@ describe('MockManager', () => {
 
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.getCalls', {});
   });
+
+  it('listRoutes() retrieves registered routes from Dart', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.listRoutes': {
+        routes: [
+          { id: 'r1', method: 'GET', path: '/api/users' },
+          { id: 'r2', method: 'POST', path: '/api/items' },
+        ],
+      },
+    });
+    const mock = new MockManager(sendRequest);
+    const routes = await mock.listRoutes();
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.listRoutes', {});
+    expect(routes).toHaveLength(2);
+    expect(routes[0].id).toBe('r1');
+    expect(routes[1].path).toBe('/api/items');
+  });
+
+  it('clearCalls() sends clearCalls to Dart', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.clearCalls': { cleared: 5 },
+    });
+    const mock = new MockManager(sendRequest);
+    await mock.clearCalls();
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.clearCalls', {});
+  });
 });

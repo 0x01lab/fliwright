@@ -1,7 +1,5 @@
-import type { FailureContext } from './types.js';
+import type { FailureContext, SendRequest } from './types.js';
 import type { AssertionError } from './Assertion.js';
-
-type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
 export class FailureCollector {
   constructor(private sendRequest: SendRequest) {}
@@ -22,8 +20,14 @@ export class FailureCollector {
   }
 
   private async _takeScreenshot(): Promise<Buffer | null> {
+    const fliwrightScreenshot = await this._requestScreenshot('ext.fliwright.screenshot');
+    if (fliwrightScreenshot) return fliwrightScreenshot;
+    return this._requestScreenshot('ext.flutter.driver.screenshot');
+  }
+
+  private async _requestScreenshot(method: string): Promise<Buffer | null> {
     try {
-      const result = await this.sendRequest('ext.flutter.driver.screenshot', {});
+      const result = await this.sendRequest(method, {});
       if (result && typeof result === 'object' && 'screenshot' in result) {
         const data = (result as { screenshot?: string }).screenshot;
         if (data) return Buffer.from(data, 'base64');
@@ -34,8 +38,14 @@ export class FailureCollector {
 
   private async _collectWidgetTree(): Promise<object> {
     try {
-      return (await this.sendRequest('ext.fliwright.inspect', { selector: '' })) as object;
-    } catch { return { error: 'Failed to collect widget tree' }; }
+      return (await this.sendRequest('ext.fliwright.snapshot', {})) as object;
+    } catch {
+      try {
+        return (await this.sendRequest('ext.fliwright.inspect', { selector: '' })) as object;
+      } catch {
+        return { error: 'Failed to collect widget tree' };
+      }
+    }
   }
 
   private _extractSource(error: AssertionError): { file: string; line: number; snippet: string } {

@@ -79,10 +79,7 @@ export class Assertion {
           source: { file: '', line: 0, snippet: '' },
           timestamp: new Date().toISOString(),
         },
-        async () => {
-          const resp = await this.sendRequest!('ext.fliwright.snapshot', {}) as { widgets: WidgetSnapshot[] };
-          return resp.widgets ?? [];
-        },
+        () => this.fetchSnapshotWidgets(),
       );
 
       if (result.healed && result.report) {
@@ -98,6 +95,34 @@ export class Assertion {
     return false;
   }
 
+  /** Tracks which (testName, selector) pairs have already been snapshotted to avoid redundant RPCs. */
+  private static readonly _snapshotCache = new Set<string>();
+
+  private async recordSuccessSnapshot(): Promise<void> {
+    if (!this.healingEngine || !this.testName || !this.sendRequest || this.negated) {
+      return;
+    }
+    const cacheKey = `${this.testName}::${this.locator.selectorString}`;
+    if (Assertion._snapshotCache.has(cacheKey)) {
+      return;
+    }
+    try {
+      await this.healingEngine.recordSuccess(
+        this.locator,
+        this.testName,
+        () => this.fetchSnapshotWidgets(),
+      );
+      Assertion._snapshotCache.add(cacheKey);
+    } catch {
+      // Snapshot capture is best-effort and must never fail a passing assertion.
+    }
+  }
+
+  private async fetchSnapshotWidgets(): Promise<WidgetSnapshot[]> {
+    const resp = await this.sendRequest!('ext.fliwright.snapshot', {}) as { widgets?: WidgetSnapshot[] };
+    return resp.widgets ?? [];
+  }
+
   /** Asserts that the element is visible. */
   async toBeVisible(options?: { timeout?: number }): Promise<void> {
     const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
@@ -109,19 +134,22 @@ export class Assertion {
       timeout,
     );
 
-    if (!passed) {
-      // Try self-healing before throwing (only for non-negated assertions).
-      if (!this.negated) {
-        const healed = await this.attemptHealing('toBeVisible', options);
-        if (healed) return;
-      }
+    if (passed) {
+      await this.recordSuccessSnapshot();
+      return;
+    }
 
-      const lastValue = await this.locator.isVisible();
-      if (this.negated) {
-        throw new AssertionError('toBeVisible', 'not visible', `visible=${lastValue}`, selector);
-      } else {
-        throw new AssertionError('toBeVisible', 'visible', `visible=${lastValue}`, selector);
-      }
+    // Try self-healing before throwing (only for non-negated assertions).
+    if (!this.negated) {
+      const healed = await this.attemptHealing('toBeVisible', options);
+      if (healed) return;
+    }
+
+    const lastValue = await this.locator.isVisible();
+    if (this.negated) {
+      throw new AssertionError('toBeVisible', 'not visible', `visible=${lastValue}`, selector);
+    } else {
+      throw new AssertionError('toBeVisible', 'visible', `visible=${lastValue}`, selector);
     }
   }
 
@@ -214,7 +242,14 @@ export class Assertion {
 
   /** Asserts that the element is disabled. */
   async toBeDisabled(options?: { timeout?: number }): Promise<void> {
-    const negatedAssertion = new Assertion(this.locator, !this.negated);
+    const negatedAssertion = new Assertion(
+      this.locator,
+      !this.negated,
+      this.failureCollector ?? undefined,
+      this.healingEngine ?? undefined,
+      this.testName ?? undefined,
+      this.sendRequest ?? undefined,
+    );
     await negatedAssertion.toBeEnabled(options);
   }
 }

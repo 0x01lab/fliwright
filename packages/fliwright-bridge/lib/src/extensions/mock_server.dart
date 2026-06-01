@@ -27,8 +27,9 @@ class MockRoute {
       return false;
     }
     if (pathPattern.endsWith('/*')) {
-      final prefix = pathPattern.substring(0, pathPattern.length - 1);
-      return path.startsWith(prefix);
+      // '/api/*' → prefix '/api', matches '/api', '/api/users', but NOT '/apiFoo'
+      final prefix = pathPattern.substring(0, pathPattern.length - 2);
+      return path == prefix || path.startsWith('$prefix/');
     }
     return path == pathPattern;
   }
@@ -181,6 +182,7 @@ class MockServerExtension {
         ? Uri.parse(originalUrl)
         : request.uri;
 
+    // Read body once — HttpRequest is a single-subscription stream.
     String? requestBody;
     if (request.contentLength > 0) {
       requestBody = await utf8.decodeStream(request);
@@ -207,7 +209,7 @@ class MockServerExtension {
     if (route != null) {
       await _respondWithRoute(request, route);
     } else if (_passthrough) {
-      await _passthroughRequest(request, uri);
+      await _passthroughRequest(request, uri, requestBody);
     } else {
       request.response
         ..statusCode = 404
@@ -223,44 +225,59 @@ class MockServerExtension {
     }
     final response = request.response;
     response.statusCode = route.status;
+    // Set default Content-Type first, so route headers can override it.
+    response.headers.contentType = ContentType.json;
     route.headers.forEach((key, value) {
       response.headers.set(key, value);
     });
-    response.headers.contentType = ContentType.json;
     response.write(jsonEncode(route.body));
     await response.close();
   }
 
-  static Future<void> _passthroughRequest(HttpRequest request, Uri originalUri) async {
-    final client = HttpClient();
-    try {
-      final outgoing = await client.openUrl(request.method, originalUri);
-      request.headers.forEach((name, values) {
-        for (final value in values) {
-          outgoing.headers.set(name, value);
+  static Future<void> _passthroughRequest(
+    HttpRequest request,
+    Uri originalUri,
+    String? requestBody,
+  ) async {
+    // Run in a zone with no HttpOverrides so the passthrough HttpClient
+    // bypasses the global FliwrightHttpOverrides proxy and talks directly
+    // to the real upstream server.  Without this, the proxy config in
+    // FliwrightHttpOverrides.findProxyFromEnvironment routes the request
+    // right back to the mock server, causing an infinite loop.
+    await HttpOverrides.runWithHttpOverrides(() async {
+      final client = HttpClient();
+      try {
+        final outgoing = await client.openUrl(request.method, originalUri);
+        // Copy headers but strip internal proxy headers.
+        const internalHeaders = {'x-original-url'};
+        request.headers.forEach((name, values) {
+          if (internalHeaders.contains(name.toLowerCase())) return;
+          for (final value in values) {
+            outgoing.headers.set(name, value);
+          }
+        });
+        // Forward the already-decoded body (HttpRequest is single-subscription).
+        if (requestBody != null && requestBody.isNotEmpty) {
+          outgoing.write(requestBody);
         }
-      });
-      if (request.contentLength > 0) {
-        final body = await utf8.decodeStream(request);
-        outgoing.write(body);
+        final incoming = await outgoing.close();
+        final proxyResponse = request.response;
+        proxyResponse.statusCode = incoming.statusCode;
+        incoming.headers.forEach((name, values) {
+          for (final value in values) {
+            proxyResponse.headers.set(name, value);
+          }
+        });
+        await incoming.pipe(proxyResponse);
+      } catch (e) {
+        request.response
+          ..statusCode = 502
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({'error': 'Passthrough failed: $e'}));
+        await request.response.close();
+      } finally {
+        client.close();
       }
-      final incoming = await outgoing.close();
-      final proxyResponse = request.response;
-      proxyResponse.statusCode = incoming.statusCode;
-      incoming.headers.forEach((name, values) {
-        for (final value in values) {
-          proxyResponse.headers.set(name, value);
-        }
-      });
-      await incoming.pipe(proxyResponse);
-    } catch (e) {
-      request.response
-        ..statusCode = 502
-        ..headers.contentType = ContentType.json
-        ..write(jsonEncode({'error': 'Passthrough failed: $e'}));
-      await request.response.close();
-    } finally {
-      client.close();
-    }
+    }, HttpOverrides());
   }
 }

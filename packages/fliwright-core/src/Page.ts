@@ -1,9 +1,7 @@
 import { Locator } from './Locator.js';
-import type { SelectorInput } from './types.js';
+import type { SelectorInput, SendRequest } from './types.js';
 import { Selector } from './Selector.js';
 import { FormHelper } from './FormHelper.js';
-
-type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
 export class Page {
   constructor(private sendRequest: SendRequest) {}

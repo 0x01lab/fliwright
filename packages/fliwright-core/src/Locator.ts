@@ -1,7 +1,5 @@
-import type { WidgetInfo, SelectorInput } from './types.js';
+import type { WidgetInfo, SelectorInput, SendRequest } from './types.js';
 import { Selector } from './Selector.js';
-
-type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
 export class Locator {
   private readonly selector: Selector;
