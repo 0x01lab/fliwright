@@ -25,6 +25,10 @@ export type {
   FormSkill,
   FormRule,
   FormRulesFile,
+  MockRule,
+  MockEndpointConfig,
+  MockIndex,
+  MockRuleEntry,
 } from './types.js';
 
 export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';

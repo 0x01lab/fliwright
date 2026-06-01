@@ -226,3 +226,37 @@ export interface FormRulesFile {
   locale?: string;
   rules: FormRule[];
 }
+
+/** A named mock rule definition within an endpoint config file. */
+export interface MockRule {
+  name: string;
+  status: number;
+  delay?: number;
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+
+/** Parsed structure of a .fliwright/mocks/api/*.json endpoint config file. */
+export interface MockEndpointConfig {
+  version: number;
+  name: string;
+  description?: string;
+  method: string;
+  endpoint: string;
+  rules: MockRule[];
+}
+
+/** Parsed structure of a .fliwright/mocks/mock-index.json file. */
+export interface MockIndex {
+  version: number;
+  defaultRule: string;
+  files: string[];
+}
+
+/** In-memory entry tracking one endpoint's rules and active selection. */
+export interface MockRuleEntry {
+  endpoint: string;
+  method: string;
+  rules: Map<string, MockRule>;
+  activeRule: string;
+}
