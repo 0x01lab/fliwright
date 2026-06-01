@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "name": "Get Token List",
+  "description": "获取支持的所有代币列表，包含链详情、提现费率、抵押品权重等信息",
+  "method": "GET",
+  "endpoint": "/v1/public/token",
+  "rules": [
+    {
+      "name": "success",
+      "status": 200,
+      "delay": 0,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "success": true,
+        "data": {
+          "rows": [
+            {
+              "token": "ETH",
+              "token_hash": "0xaaaebeba3810b1e6b70781f14b2d72c1cb89c0b2b320c43bb67ff79f562f5ff4",
+              "decimals": 8,
+              "minimum_withdraw_amount": 0.00000001,
+              "base_weight": 0.8,
+              "discount_factor": 0.000007,
+              "haircut": 0.035,
+              "user_max_qty": 100,
+              "is_collateral": true,
+              "on_chain_swap": true,
+              "chain_details": [
+                {
+                  "chain_id": "11155111",
+                  "contract_address": "",
+                  "decimals": 18,
+                  "withdrawal_fee": 0.0005,
+                  "cross_chain_withdrawal_fee": 0.005,
+                  "display_name": "ETH",
+                  "exclusive_deposit_supported": false
+                }
+              ]
+            },
+            {
+              "token": "USDT",
+              "token_hash": "0x8b1a1d9c2b109e527c9134b25b1a1833b16b6594f92daa9f6d9b7a6024bce9d0",
+              "decimals": 6,
+              "minimum_withdraw_amount": 0.000001,
+              "base_weight": 0.95,
+              "discount_factor": 0.0000015,
+              "haircut": 0.00025,
+              "user_max_qty": 500000,
+              "is_collateral": true,
+              "on_chain_swap": true,
+              "chain_details": [
+                {
+                  "chain_id": "11155111",
+                  "contract_address": "0x01a6810727db185bbf7f30ec158c3ac8b8112627",
+                  "decimals": 6,
+                  "withdrawal_fee": 2,
+                  "cross_chain_withdrawal_fee": 10,
+                  "display_name": "USDT",
+                  "exclusive_deposit_supported": false
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1768892322920
+      }
+    },
+    {
+      "name": "empty",
+      "status": 200,
+      "delay": 0,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "success": true,
+        "data": {
+          "rows": []
+        },
+        "timestamp": 1768892322920
+      }
+    },
+    {
+      "name": "server_error",
+      "status": 500,
+      "delay": 0,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "success": false,
+        "error": {
+          "code": "TOKEN_SERVICE_UNAVAILABLE",
+          "message": "Token service unavailable"
+        },
+        "timestamp": 1768892322920
+      }
+    }
+  ]
+}
+

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "defaultRule": "success",
+  "files": [
+    "api/get-token.example.json"
+  ]
+}
+

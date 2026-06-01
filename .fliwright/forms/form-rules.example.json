@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "locale": "zh-CN",
+  "rules": [
+    {
+      "match": {
+        "label": "手机号"
+      },
+      "type": "REGEXP_MOCK",
+      "pattern": "1[3-9][0-9]{9}"
+    },
+    {
+      "match": {
+        "label": "邮箱"
+      },
+      "type": "PRESET_SKILL",
+      "data": [
+        "test.user@example.com",
+        "qa.user@example.com"
+      ]
+    },
+    {
+      "match": {
+        "hintText": "请输入验证码"
+      },
+      "type": "REGEXP_MOCK",
+      "pattern": "[0-9]{6}"
+    }
+  ]
+}
+
