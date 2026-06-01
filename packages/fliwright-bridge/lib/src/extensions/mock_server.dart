@@ -239,10 +239,10 @@ class MockServerExtension {
     Uri originalUri,
     String? requestBody,
   ) async {
-    // Run in a zone with no HttpOverrides so the passthrough HttpClient
-    // bypasses the global FliwrightHttpOverrides proxy and talks directly
-    // to the real upstream server.  Without this, the proxy config in
-    // FliwrightHttpOverrides.findProxyFromEnvironment routes the request
+    // Run in a zone with a no-proxy HttpOverrides so the passthrough
+    // HttpClient bypasses the global FliwrightHttpOverrides proxy and talks
+    // directly to the real upstream server.  Without this, the proxy config
+    // in FliwrightHttpOverrides.findProxyFromEnvironment routes the request
     // right back to the mock server, causing an infinite loop.
     await HttpOverrides.runWithHttpOverrides(() async {
       final client = HttpClient();
@@ -278,6 +278,16 @@ class MockServerExtension {
       } finally {
         client.close();
       }
-    }, HttpOverrides());
+    }, _NoProxyHttpOverrides());
+  }
+}
+
+/// A concrete [HttpOverrides] that never uses a proxy.
+/// Used by [_passthroughRequest] to bypass the global [FliwrightHttpOverrides]
+/// and connect directly to the real upstream server.
+class _NoProxyHttpOverrides extends HttpOverrides {
+  @override
+  String findProxyFromEnvironment(Uri url, Map<String, String>? environment) {
+    return 'DIRECT';
   }
 }
