@@ -140,4 +140,88 @@ describe('MockManager', () => {
 
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.clearCalls', {});
   });
+
+  it('loadRules() loads rules and applies them via route()', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': { success: true, id: 'route_1' },
+    });
+    const mock = new MockManager(sendRequest);
+
+    const { MockRuleStore } = await import('../src/MockRuleStore.js');
+    const store = new MockRuleStore();
+    vi.spyOn(store, 'loadFromDirectory').mockResolvedValue(undefined);
+    vi.spyOn(store, 'listEndpoints').mockReturnValue([
+      { endpoint: '/api/test', method: 'GET', rules: ['success'], activeRule: 'success' },
+    ]);
+    vi.spyOn(store, 'getActiveResponse').mockReturnValue({ status: 200, body: { ok: true } });
+
+    mock['_ruleStore'] = store;
+
+    await mock.loadRules('/mocks');
+
+    expect(store.loadFromDirectory).toHaveBeenCalledWith('/mocks');
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.addRoute', {
+      route: expect.any(String),
+    });
+    const call = sendRequest.mock.calls[0][1] as { route: string };
+    const parsed = JSON.parse(call.route);
+    expect(parsed.path).toBe('/api/test');
+    expect(parsed.method).toBe('GET');
+    expect(parsed.response.status).toBe(200);
+    expect(parsed.response.body).toEqual({ ok: true });
+  });
+
+  it('listRules() returns endpoints from ruleStore', async () => {
+    const sendRequest = createMockSendRequest({});
+    const mock = new MockManager(sendRequest);
+
+    const { MockRuleStore } = await import('../src/MockRuleStore.js');
+    const store = new MockRuleStore();
+    vi.spyOn(store, 'listEndpoints').mockReturnValue([
+      { endpoint: '/api/a', method: 'GET', rules: ['success', 'error'], activeRule: 'success' },
+      { endpoint: '/api/b', method: 'POST', rules: ['ok'], activeRule: 'ok' },
+    ]);
+
+    mock['_ruleStore'] = store;
+
+    const rules = mock.listRules();
+    expect(rules).toHaveLength(2);
+    expect(rules[0].endpoint).toBe('/api/a');
+    expect(rules[0].rules).toEqual(['success', 'error']);
+    expect(rules[1].activeRule).toBe('ok');
+  });
+
+  it('switchRule() switches rule and applies via route()', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': { success: true, id: 'route_1' },
+    });
+    const mock = new MockManager(sendRequest);
+
+    const { MockRuleStore } = await import('../src/MockRuleStore.js');
+    const store = new MockRuleStore();
+    vi.spyOn(store, 'switchRule').mockReturnValue({ status: 500, body: { error: 'fail' } });
+    vi.spyOn(store, 'getActiveResponse').mockReturnValue({ status: 500, body: { error: 'fail' } });
+    vi.spyOn(store, 'listEndpoints').mockReturnValue([
+      { endpoint: '/api/test', method: 'GET', rules: ['success', 'error'], activeRule: 'error' },
+    ]);
+
+    mock['_ruleStore'] = store;
+
+    await mock.switchRule('/api/test', 'error');
+
+    expect(store.switchRule).toHaveBeenCalledWith('/api/test', 'error');
+    const call = sendRequest.mock.calls[0][1] as { route: string };
+    const parsed = JSON.parse(call.route);
+    expect(parsed.path).toBe('/api/test');
+    expect(parsed.response.status).toBe(500);
+    expect(parsed.response.body).toEqual({ error: 'fail' });
+  });
+
+  it('listRules() returns empty array when no rules loaded', () => {
+    const sendRequest = createMockSendRequest({});
+    const mock = new MockManager(sendRequest);
+
+    const rules = mock.listRules();
+    expect(rules).toEqual([]);
+  });
 });
