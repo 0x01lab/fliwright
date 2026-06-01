@@ -1,15 +1,26 @@
 import * as vscode from 'vscode';
-import { getWorkspaceRoot, loadConfig } from './config.js';
+import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
+import { FailureContextStore } from './failure/FailureContextStore.js';
 import { formRulesFileName, FormHelperService } from './form/FormHelperService.js';
 import { FormRuleService } from './form/FormRuleService.js';
+import { RecorderService } from './recording/RecorderService.js';
+import { TestDiscoveryService } from './runner/TestDiscoveryService.js';
+import { VitestRunner } from './runner/VitestRunner.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceUrl } from './session/VmServiceDiscovery.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
 import { SandboxService } from './sandbox/SandboxService.js';
-import type { FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry } from './types.js';
+import { StateInjectionService } from './state/StateInjectionService.js';
+import { StatusBarService } from './status/StatusBarService.js';
+import type { FailureTreeEntry, FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunEntry, StateProviderEntry, TestFileEntry } from './types.js';
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
 import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
+import { RunsTreeProvider } from './views/RunsTreeProvider.js';
+import { StateTreeProvider } from './views/StateTreeProvider.js';
+import { TestsTreeProvider } from './views/TestsTreeProvider.js';
+import { FailurePanel } from './webview/FailurePanel.js';
+import { RecordingPanel } from './webview/RecordingPanel.js';
 
 let output: vscode.OutputChannel;
 
@@ -22,17 +33,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const session = new FliwrightSession();
   const sandboxService = new SandboxService();
   const formHelperService = new FormHelperService();
+  const testDiscoveryService = new TestDiscoveryService();
+  const runner = new VitestRunner();
+  const failureStore = new FailureContextStore();
+  const recorderService = new RecorderService();
+  const stateService = new StateInjectionService();
   const devicesTree = new DevicesTreeProvider();
   const mockTree = new MockApiTreeProvider(mockService);
   const formTree = new FormDataTreeProvider(formService);
+  const testsTree = new TestsTreeProvider(testDiscoveryService);
+  const runsTree = new RunsTreeProvider();
+  const stateTree = new StateTreeProvider();
+  const statusBar = new StatusBarService();
+  const failurePanel = new FailurePanel(context.extensionUri);
+  const recordingPanel = new RecordingPanel();
 
   context.subscriptions.push(session);
-  context.subscriptions.push(session.onDidChangeState((state) => devicesTree.setState(state)));
+  context.subscriptions.push(statusBar);
+  context.subscriptions.push(session.onDidChangeState((state) => {
+    devicesTree.setState(state);
+    statusBar.setConnectionState(state);
+  }));
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('fliwright.devices', devicesTree),
     vscode.window.registerTreeDataProvider('fliwright.mockApis', mockTree),
     vscode.window.registerTreeDataProvider('fliwright.formData', formTree),
+    vscode.window.registerTreeDataProvider('fliwright.tests', testsTree),
+    vscode.window.registerTreeDataProvider('fliwright.runs', runsTree),
+    vscode.window.registerTreeDataProvider('fliwright.state', stateTree),
   );
 
   context.subscriptions.push(
@@ -170,6 +199,78 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.fillFormWithRules', async (node?: FormRulesEntry) => {
       await fillFormWithRules(formRulesNode(node));
     }),
+    vscode.commands.registerCommand('fliwright.runCurrentTest', async (node?: TestFileEntry) => {
+      await runTests(node);
+    }),
+    vscode.commands.registerCommand('fliwright.runWorkspaceTests', async () => {
+      await runTests(undefined, true);
+    }),
+    vscode.commands.registerCommand('fliwright.openFailure', async (node?: FailureTreeEntry) => {
+      if (!node || node.kind !== 'failure') {
+        const failure = runsTree.failuresList[0];
+        if (failure) failurePanel.open(failure);
+        return;
+      }
+      failurePanel.open(node.failure);
+    }),
+    vscode.commands.registerCommand('fliwright.startRecording', async () => {
+      await runCommand('Start Recording', async () => {
+        session.setRecording();
+        const recording = await recorderService.start(session.connectedDriver);
+        statusBar.setRecording(recording);
+        recordingPanel.open(recording);
+        vscode.window.showInformationMessage('Fliwright recording started.');
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.stopRecording', async () => {
+      await runCommand('Stop Recording', async () => {
+        const recording = await recorderService.stop(session.connectedDriver, vscode.window.activeTextEditor?.document.uri);
+        statusBar.setRecording(recording);
+        recordingPanel.open(recording);
+        session.setConnectedIdle();
+        output.appendLine(`Recorded ${recording.operationCount} operation(s).`);
+        vscode.window.showInformationMessage(`Recorded ${recording.operationCount} operation(s).`, 'Insert Test').then((selection) => {
+          if (selection === 'Insert Test') void vscode.commands.executeCommand('fliwright.insertRecordedTest');
+        });
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.insertRecordedTest', async () => {
+      await runCommand('Insert Recorded Test', async () => {
+        const uri = await recorderService.insertGeneratedCode(requireWorkspaceRoot());
+        vscode.window.showInformationMessage(`Inserted recorded test into ${uri.fsPath}`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.refreshStateProviders', async () => {
+      await runCommand('Refresh State Providers', async () => {
+        const providers = await stateService.listProviders(session.connectedDriver);
+        stateTree.setProviders(providers);
+        vscode.window.showInformationMessage(`Loaded ${providers.length} provider(s).`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.readStateProvider', async (node?: StateProviderEntry) => {
+      await runCommand('Read State Provider', async () => {
+        if (!node || node.kind !== 'stateProvider') throw new Error('Select a state provider to read.');
+        const value = await stateService.read(session.connectedDriver, node.key);
+        stateTree.setProviders([{ ...node, value }]);
+        output.appendLine(`${node.key}: ${JSON.stringify(value)}`);
+        vscode.window.showInformationMessage(`${node.key}: ${JSON.stringify(value)}`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.overrideStateProvider', async (node?: StateProviderEntry) => {
+      await runCommand('Override State Provider', async () => {
+        if (!node || node.kind !== 'stateProvider') throw new Error('Select a state provider to override.');
+        const raw = await vscode.window.showInputBox({
+          title: 'Override State Provider',
+          prompt: `JSON value for ${node.key}`,
+          value: JSON.stringify(node.value ?? null),
+        });
+        if (raw === undefined) return;
+        await stateService.override(session.connectedDriver, node.key, JSON.parse(raw));
+        const providers = await stateService.listProviders(session.connectedDriver).catch(() => [{ ...node, value: JSON.parse(raw) }]);
+        stateTree.setProviders(providers);
+        vscode.window.showInformationMessage(`Overrode ${node.key}.`);
+      });
+    }),
   );
 
   await Promise.all([mockTree.refresh(), formTree.refresh()]);
@@ -193,6 +294,41 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       formTree.setLastSummary(formHelperService.getLastSummary());
       output.appendLine(`Filled form with ${formRulesFileName(node)}: ${result.filled} filled, ${result.skipped} skipped, ${result.errors.length} errors.`);
       vscode.window.showInformationMessage(`Filled ${result.filled} field(s), skipped ${result.skipped}, errors ${result.errors.length}.`);
+    });
+  }
+
+  async function runTests(node?: TestFileEntry, workspace = false): Promise<void> {
+    await runCommand(workspace ? 'Run Workspace Tests' : 'Run Current Test', async () => {
+      const root = requireWorkspaceRoot();
+      const file = workspace ? undefined : node?.uri ?? vscode.window.activeTextEditor?.document.uri;
+      const failureContextDir = resolveWorkspacePath(root, loadConfig().failureContextDir);
+      session.setRunning(workspace ? 'workspace tests' : file?.fsPath ?? 'current test');
+      const result = await runner.run({
+        workspaceRoot: root,
+        testFile: file,
+        vmServiceUrl: session.currentUrl,
+        failureContextDir,
+      });
+      const failures = await failureStore.loadLatest(failureContextDir, result);
+      const run: RunEntry = {
+        kind: 'run',
+        id: `${Date.now()}`,
+        label: workspace ? 'Workspace tests' : file?.fsPath.split(/[\\/]/).pop() ?? 'Current test',
+        filePath: file?.fsPath,
+        result,
+        ranAt: Date.now(),
+      };
+      runsTree.prependRun(run, failures);
+      statusBar.setRunResult(result);
+      session.setConnectedIdle();
+      output.appendLine(`Run complete: ${result.passedTests}/${result.totalTests} passed, ${result.failedTests} failed.`);
+      if (result.failedTests > 0) {
+        vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, 'Open Failure').then((selection) => {
+          if (selection === 'Open Failure' && failures[0]) failurePanel.open(failures[0]);
+        });
+      } else {
+        vscode.window.showInformationMessage(`Fliwright tests passed: ${result.passedTests}/${result.totalTests}`);
+      }
     });
   }
 }

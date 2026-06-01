@@ -189,7 +189,7 @@ class MockServerExtension {
     String? requestBody;
     if (request.contentLength != 0) {
       requestBody = await utf8.decodeStream(request);
-      if (requestBody!.isEmpty) requestBody = null;
+      if (requestBody.isEmpty) requestBody = null;
     }
 
     final callHeaders = <String, String>{};

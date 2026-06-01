@@ -6,8 +6,7 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
-        "--extensionDevelopmentPath=/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vscode",
-        "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vscode/.vscode/exio-fliwright.code-workspace"
+        "--extensionDevelopmentPath=${workspaceFolder}"
       ],
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"

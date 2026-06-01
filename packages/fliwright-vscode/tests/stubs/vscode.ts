@@ -71,6 +71,25 @@ export class TreeItem {
   ) {}
 }
 
+export enum StatusBarAlignment {
+  Left = 1,
+  Right = 2,
+}
+
+export enum ViewColumn {
+  Beside = -2,
+}
+
+export class Position {
+  constructor(public readonly line: number, public readonly character: number) {}
+}
+
+export class Range {
+  constructor(public readonly start: Position, public readonly end: Position) {}
+}
+
+export class Selection extends Range {}
+
 export interface Command {
   command: string;
   title: string;
@@ -126,17 +145,44 @@ export const workspace = {
       .filter((entry) => entry.endsWith(suffix ?? ''))
       .map((entry) => Uri.file(path.join(dir, entry)));
   },
+  async openTextDocument(uri: Uri): Promise<{ uri: Uri }> {
+    return { uri };
+  },
 };
 
 export const window = {
   createOutputChannel() {
     return { appendLine() {}, show() {}, dispose() {} };
   },
+  createStatusBarItem() {
+    return { text: '', command: undefined as string | undefined, show() {}, dispose() {} };
+  },
+  createWebviewPanel() {
+    return {
+      webview: {
+        html: '',
+        onDidReceiveMessage() {
+          return { dispose() {} };
+        },
+      },
+      onDidDispose() {
+        return { dispose() {} };
+      },
+      reveal() {},
+      dispose() {},
+    };
+  },
   registerTreeDataProvider() {
     return { dispose() {} };
   },
+  activeTextEditor: undefined as any,
   showInputBox: async () => undefined,
-  showTextDocument: async () => undefined,
+  showTextDocument: async (documentOrUri?: unknown) => ({
+    document: 'uri' in (documentOrUri as any ?? {}) ? documentOrUri : { uri: documentOrUri },
+    selection: undefined,
+    edit: async () => true,
+    revealRange() {},
+  }),
   showInformationMessage: async () => undefined,
   showWarningMessage: async () => undefined,
   showErrorMessage: async () => undefined,
@@ -149,6 +195,7 @@ export const commands = {
   registerCommand() {
     return { dispose() {} };
   },
+  executeCommand: async () => undefined,
 };
 
 export const env = {

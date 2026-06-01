@@ -39,7 +39,7 @@ export class DevicesTreeProvider implements vscode.TreeDataProvider<DeviceTreeNo
   getChildren(element?: DeviceTreeNode): DeviceTreeNode[] {
     if (element) return [];
     const nodes: DeviceTreeNode[] = [{ kind: 'deviceStatus', state: this.state }];
-    if (this.state.status === 'connected') {
+    if (this.state.status === 'connected' || this.state.status === 'recording' || this.state.status === 'running') {
       nodes.push(
         {
           kind: 'deviceCapability',
@@ -60,7 +60,7 @@ export class DevicesTreeProvider implements vscode.TreeDataProvider<DeviceTreeNo
 
   private statusItem(state: DeviceConnectionState): vscode.TreeItem {
     const label = statusLabel(state);
-    const item = new vscode.TreeItem(label, state.status === 'connected'
+    const item = new vscode.TreeItem(label, state.status === 'connected' || state.status === 'recording' || state.status === 'running'
       ? vscode.TreeItemCollapsibleState.Expanded
       : vscode.TreeItemCollapsibleState.None);
     item.description = statusDescription(state);
@@ -79,19 +79,24 @@ export class DevicesTreeProvider implements vscode.TreeDataProvider<DeviceTreeNo
 
 function statusLabel(state: DeviceConnectionState): string {
   if (state.status === 'connected') return 'Connected';
+  if (state.status === 'recording') return 'Recording';
+  if (state.status === 'running') return 'Running Tests';
   if (state.status === 'connecting') return 'Connecting';
   if (state.status === 'error') return 'Connection Error';
   return 'No VM Service';
 }
 
 function statusDescription(state: DeviceConnectionState): string | undefined {
-  if (state.status === 'connected' || state.status === 'connecting') return state.url;
+  if (state.status === 'connected' || state.status === 'connecting' || state.status === 'recording') return state.url;
+  if (state.status === 'running') return state.label;
   if (state.status === 'error') return state.message;
   return 'Click to connect';
 }
 
 function statusTooltip(state: DeviceConnectionState): string | undefined {
   if (state.status === 'connected') return `${state.url}\nConnected ${new Date(state.connectedAt).toLocaleString()}`;
+  if (state.status === 'recording') return `${state.url}\nRecording since ${new Date(state.startedAt).toLocaleString()}`;
+  if (state.status === 'running') return `${state.label}\nStarted ${new Date(state.startedAt).toLocaleString()}`;
   if (state.status === 'connecting') return state.url;
   if (state.status === 'error') return `${state.url ? `${state.url}\n` : ''}${state.message}`;
   return undefined;
@@ -99,6 +104,8 @@ function statusTooltip(state: DeviceConnectionState): string | undefined {
 
 function statusIcon(state: DeviceConnectionState): string {
   if (state.status === 'connected') return 'vm-active';
+  if (state.status === 'recording') return 'record';
+  if (state.status === 'running') return 'run';
   if (state.status === 'connecting') return 'sync~spin';
   if (state.status === 'error') return 'error';
   return 'circle-outline';

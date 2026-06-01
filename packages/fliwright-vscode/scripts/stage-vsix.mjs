@@ -8,7 +8,7 @@ const stage = path.join(root, '.vsix-stage');
 await fs.rm(stage, { recursive: true, force: true });
 await fs.mkdir(stage, { recursive: true });
 
-for (const entry of ['dist', 'media', 'README.md', 'CHANGELOG.md']) {
+for (const entry of ['dist', 'media', 'README.md', 'CHANGELOG.md', 'LICENSE']) {
   await fs.cp(path.join(root, entry), path.join(stage, entry), { recursive: true });
 }
 
@@ -21,6 +21,7 @@ manifest.files = [
   'media/fliwright.svg',
   'README.md',
   'CHANGELOG.md',
+  'LICENSE',
 ];
 delete manifest.private;
 delete manifest.dependencies;

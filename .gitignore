@@ -11,5 +11,6 @@ dist/
 coverage/
 *.vsix
 .vsix-stage/
+.vscode-test/
 *.log
 /packages/fliwright-bridge/pubspec.lock

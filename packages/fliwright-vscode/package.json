@@ -5,6 +5,16 @@
   "version": "0.1.0",
   "private": true,
   "publisher": "fliwright",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/0x01lab/fliwright.git",
+    "directory": "packages/fliwright-vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/0x01lab/fliwright/issues"
+  },
+  "homepage": "https://github.com/0x01lab/fliwright/tree/main/packages/fliwright-vscode#readme",
   "type": "module",
   "engines": {
     "vscode": "^1.90.0"
@@ -16,10 +26,13 @@
   "main": "./dist/extension.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && pnpm run bundle",
-    "bundle": "esbuild src/extension.ts --bundle --platform=node --format=esm --external:vscode --outfile=dist/extension.js --sourcemap",
+    "bundle": "esbuild src/extension.ts --bundle --platform=node --format=esm --external:vscode --outfile=dist/extension.js --sourcemap --banner:js='import{createRequire}from\"module\";const require=createRequire(import.meta.url);'",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "package": "pnpm run build && node scripts/stage-vsix.mjs && cd .vsix-stage && pnpm dlx @vscode/vsce package --no-dependencies --out ../fliwright-vscode-0.1.0.vsix"
+    "test:integration": "node scripts/run-integration.mjs",
+    "verify:release": "pnpm run lint && pnpm run test && pnpm run test:integration && pnpm run package",
+    "package": "pnpm run build && node scripts/stage-vsix.mjs && cd .vsix-stage && pnpm dlx @vscode/vsce package --no-dependencies --out ../fliwright-vscode-0.1.0.vsix",
+    "publish:vsce": "pnpm run verify:release && cd .vsix-stage && pnpm dlx @vscode/vsce publish --packagePath ../fliwright-vscode-0.1.0.vsix"
   },
   "activationEvents": [
     "onView:fliwright.devices",
@@ -37,7 +50,16 @@
     "onCommand:fliwright.stopSandbox",
     "onCommand:fliwright.analyzeForm",
     "onCommand:fliwright.fillForm",
-    "onCommand:fliwright.fillFormWithRules"
+    "onCommand:fliwright.fillFormWithRules",
+    "onCommand:fliwright.runCurrentTest",
+    "onCommand:fliwright.runWorkspaceTests",
+    "onCommand:fliwright.openFailure",
+    "onCommand:fliwright.startRecording",
+    "onCommand:fliwright.stopRecording",
+    "onCommand:fliwright.insertRecordedTest",
+    "onCommand:fliwright.refreshStateProviders",
+    "onCommand:fliwright.readStateProvider",
+    "onCommand:fliwright.overrideStateProvider"
   ],
   "contributes": {
     "viewsContainers": {
@@ -62,6 +84,18 @@
         {
           "id": "fliwright.formData",
           "name": "Form Data"
+        },
+        {
+          "id": "fliwright.tests",
+          "name": "Tests"
+        },
+        {
+          "id": "fliwright.runs",
+          "name": "Runs"
+        },
+        {
+          "id": "fliwright.state",
+          "name": "State"
         }
       ]
     },
@@ -146,6 +180,51 @@
         "command": "fliwright.fillFormWithRules",
         "title": "Fliwright: Fill Current Form With Rules",
         "icon": "$(wand)"
+      },
+      {
+        "command": "fliwright.runCurrentTest",
+        "title": "Fliwright: Run Current Test",
+        "icon": "$(run)"
+      },
+      {
+        "command": "fliwright.runWorkspaceTests",
+        "title": "Fliwright: Run Workspace Tests",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "fliwright.openFailure",
+        "title": "Fliwright: Open Failure Context",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "fliwright.startRecording",
+        "title": "Fliwright: Start Recording",
+        "icon": "$(record)"
+      },
+      {
+        "command": "fliwright.stopRecording",
+        "title": "Fliwright: Stop Recording",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "fliwright.insertRecordedTest",
+        "title": "Fliwright: Insert Recorded Test",
+        "icon": "$(insert)"
+      },
+      {
+        "command": "fliwright.refreshStateProviders",
+        "title": "Fliwright: Refresh State Providers",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "fliwright.readStateProvider",
+        "title": "Fliwright: Read State Provider",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "fliwright.overrideStateProvider",
+        "title": "Fliwright: Override State Provider",
+        "icon": "$(replace)"
       }
     ],
     "menus": {
@@ -204,6 +283,36 @@
           "command": "fliwright.fillForm",
           "when": "view == fliwright.formData",
           "group": "navigation@4"
+        },
+        {
+          "command": "fliwright.runCurrentTest",
+          "when": "view == fliwright.tests",
+          "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.runWorkspaceTests",
+          "when": "view == fliwright.tests",
+          "group": "navigation@2"
+        },
+        {
+          "command": "fliwright.startRecording",
+          "when": "view == fliwright.runs",
+          "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.stopRecording",
+          "when": "view == fliwright.runs",
+          "group": "navigation@2"
+        },
+        {
+          "command": "fliwright.insertRecordedTest",
+          "when": "view == fliwright.runs",
+          "group": "navigation@3"
+        },
+        {
+          "command": "fliwright.refreshStateProviders",
+          "when": "view == fliwright.state",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -241,6 +350,26 @@
           "command": "fliwright.fillFormWithRules",
           "when": "view == fliwright.formData && viewItem == formRulesFile",
           "group": "inline@3"
+        },
+        {
+          "command": "fliwright.runCurrentTest",
+          "when": "view == fliwright.tests && viewItem == testFile",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.openFailure",
+          "when": "view == fliwright.runs && viewItem == failure",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.readStateProvider",
+          "when": "view == fliwright.state && viewItem == stateProvider",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.overrideStateProvider",
+          "when": "view == fliwright.state && viewItem == stateProvider",
+          "group": "inline@2"
         }
       ]
     },
@@ -269,6 +398,40 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically scan common local Flutter VM Service ports when no URL is configured."
+        },
+        "fliwright.testGlob": {
+          "type": "string",
+          "default": "tests/**/*.test.ts",
+          "description": "Workspace glob used to discover Fliwright test files."
+        },
+        "fliwright.runner": {
+          "type": "string",
+          "enum": [
+            "vitest",
+            "cli"
+          ],
+          "default": "vitest",
+          "description": "Runner backend used by the VS Code test panel."
+        },
+        "fliwright.screenshotMode": {
+          "type": "string",
+          "enum": [
+            "file",
+            "base64",
+            "off"
+          ],
+          "default": "file",
+          "description": "Failure screenshot mode used by Fliwright test runs."
+        },
+        "fliwright.failureContextDir": {
+          "type": "string",
+          "default": ".fliwright/failures",
+          "description": "Directory where Fliwright failure context JSON files are read from."
+        },
+        "fliwright.traceDir": {
+          "type": "string",
+          "default": ".fliwright/traces",
+          "description": "Directory reserved for Fliwright trace artifacts."
         },
         "fliwright.formRulesDir": {
           "type": "string",
@@ -300,6 +463,7 @@
     "@fliwright/core": "workspace:*",
     "@types/node": "^20.14.0",
     "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.4.1",
     "esbuild": "^0.21.5",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"

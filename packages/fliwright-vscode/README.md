@@ -19,6 +19,7 @@ Mock files are JSON-only. Legacy YAML mock files are intentionally unsupported.
 pnpm --filter @fliwright/vscode build
 pnpm --filter @fliwright/vscode lint
 pnpm --filter @fliwright/vscode test
+pnpm --filter @fliwright/vscode test:integration
 ```
 
 Open `packages/fliwright-vscode` in VS Code or launch an Extension Development Host using this package as the extension root.
@@ -30,3 +31,15 @@ pnpm --filter @fliwright/vscode package
 ```
 
 The package script builds the extension and invokes `vsce` through `pnpm dlx`, so generated `dist/` output does not need to be committed.
+
+Run the full release gate before publishing:
+
+```bash
+pnpm --filter @fliwright/vscode verify:release
+```
+
+Publish to the VS Code Marketplace with a configured `VSCE_PAT`:
+
+```bash
+pnpm --filter @fliwright/vscode publish:vsce
+```
