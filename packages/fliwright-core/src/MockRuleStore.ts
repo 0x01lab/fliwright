@@ -6,6 +6,18 @@ export class MockRuleStore {
   private entries = new Map<string, MockRuleEntry>();
 
   /**
+   * Convert a MockRule to a MockRouteResponse.
+   */
+  private ruleToResponse(rule: MockRule): MockRouteResponse {
+    const response: MockRouteResponse = {};
+    if (rule.status !== undefined) response.status = rule.status;
+    if (rule.headers !== undefined) response.headers = rule.headers;
+    if (rule.body !== undefined) response.body = rule.body;
+    if (rule.delay !== undefined) response.delay = rule.delay;
+    return response;
+  }
+
+  /**
    * Load mock configurations from a directory.
    * Reads mock-index.json for the default rule and file list,
    * then parses each endpoint config file.
@@ -22,7 +34,23 @@ export class MockRuleStore {
       return;
     }
 
-    const index = JSON.parse(indexJson) as MockIndex;
+    let index: MockIndex;
+    try {
+      index = JSON.parse(indexJson) as MockIndex;
+      // Validate required fields
+      if (!index.files || !Array.isArray(index.files)) {
+        console.warn('[MockRuleStore] Index missing "files" array, skipping');
+        return;
+      }
+      if (!index.defaultRule) {
+        console.warn('[MockRuleStore] Index missing "defaultRule", skipping');
+        return;
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.warn(`[MockRuleStore] Invalid index JSON: ${message}, skipping`);
+      return;
+    }
 
     for (const file of index.files) {
       const filePath = join(mockDir, file);
@@ -85,13 +113,7 @@ export class MockRuleStore {
     const rule = entry.rules.get(entry.activeRule);
     if (!rule) return null;
 
-    const response: MockRouteResponse = {};
-    if (rule.status !== undefined) response.status = rule.status;
-    if (rule.headers !== undefined) response.headers = rule.headers;
-    if (rule.body !== undefined) response.body = rule.body;
-    if (rule.delay !== undefined) response.delay = rule.delay;
-
-    return response;
+    return this.ruleToResponse(rule);
   }
 
   /**
@@ -117,13 +139,7 @@ export class MockRuleStore {
 
     entry.activeRule = ruleName;
 
-    const response: MockRouteResponse = {};
-    if (rule.status !== undefined) response.status = rule.status;
-    if (rule.headers !== undefined) response.headers = rule.headers;
-    if (rule.body !== undefined) response.body = rule.body;
-    if (rule.delay !== undefined) response.delay = rule.delay;
-
-    return response;
+    return this.ruleToResponse(rule);
   }
 
   /**

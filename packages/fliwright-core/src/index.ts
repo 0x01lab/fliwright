@@ -51,6 +51,7 @@ export { FailureCollector } from './FailureCollector.js';
 export { EventAggregator } from './EventAggregator.js';
 export { CodeGenerator } from './CodeGenerator.js';
 export { MockManager } from './MockManager.js';
+export { MockRuleStore } from './MockRuleStore.js';
 export { RecorderController } from './RecorderController.js';
 export type { RecorderStartOptions } from './RecorderController.js';
 export { SnapshotStore } from './SnapshotStore.js';

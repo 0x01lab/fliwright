@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MockRuleStore } from '../src/MockRuleStore.js';
 import type { MockRule, MockEndpointConfig, MockIndex } from '../src/types.js';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 
 // We'll mock fs/promises at the module level
 vi.mock('node:fs/promises', () => ({
@@ -11,7 +11,6 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 const mockReadFile = vi.mocked(readFile);
-const mockReaddir = vi.mocked(readdir);
 
 describe('MockRuleStore', () => {
   let store: MockRuleStore;
@@ -121,6 +120,35 @@ describe('MockRuleStore', () => {
       await store.loadFromDirectory('/project/.fliwright/mocks');
 
       expect(store.listEndpoints()[0].activeRule).toBe('empty');
+    });
+
+    it('falls back to first rule when defaultRule does not match any rule', async () => {
+      const mockIndex: MockIndex = {
+        version: 1,
+        defaultRule: 'nonexistent',
+        files: ['api/test.json'],
+      };
+      const mockEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'Test',
+        method: 'GET',
+        endpoint: '/api/test',
+        rules: [
+          { name: 'success', status: 200, body: {} },
+          { name: 'empty', status: 200, body: {} },
+        ],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) return JSON.stringify(mockIndex);
+        if (p.endsWith('test.json')) return JSON.stringify(mockEndpoint);
+        throw new Error(`Unexpected read: ${p}`);
+      });
+
+      await store.loadFromDirectory('/project/.fliwright/mocks');
+
+      expect(store.listEndpoints()[0].activeRule).toBe('success');
     });
   });
 
