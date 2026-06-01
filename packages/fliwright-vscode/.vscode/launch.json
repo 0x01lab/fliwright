@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Fliwright Extension in Flutter Project",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vscode",
+        "/Volumes/HIKSEMI/project/fliwright/packages/fliwright-vscode/.vscode/exio-fliwright.code-workspace"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "preLaunchTask": "npm: build"
+    }
+  ]
+}

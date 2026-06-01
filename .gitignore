@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 .dart_tool/
 build/
 *.iml
@@ -8,5 +9,7 @@ build/
 .flutter-plugins-dependencies
 dist/
 coverage/
+*.vsix
+.vsix-stage/
 *.log
 /packages/fliwright-bridge/pubspec.lock

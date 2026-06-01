@@ -1,0 +1,13 @@
+{
+  "folders": [
+    {
+      "path": "/Users/leo/project/exio/exio"
+    }
+  ],
+  "settings": {
+    "fliwright.mockDir": ".fliwright/mocks",
+    "fliwright.mockIndex": ".fliwright/mocks/mock-index.json",
+    "fliwright.formRulesDir": ".fliwright/forms"
+  }
+}
+

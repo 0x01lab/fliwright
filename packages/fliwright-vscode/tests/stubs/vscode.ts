@@ -1,0 +1,166 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+
+type Listener<T> = (event: T) => void;
+
+export class Uri {
+  constructor(public readonly fsPath: string) {}
+
+  get path(): string {
+    return this.fsPath.replace(/\\/g, '/');
+  }
+
+  static file(filePath: string): Uri {
+    return new Uri(path.resolve(filePath));
+  }
+
+  static joinPath(base: Uri, ...segments: string[]): Uri {
+    return new Uri(path.join(base.fsPath, ...segments));
+  }
+}
+
+export class RelativePattern {
+  constructor(
+    public readonly base: Uri,
+    public readonly pattern: string,
+  ) {}
+}
+
+export class EventEmitter<T> {
+  private listeners: Array<Listener<T>> = [];
+
+  readonly event = (listener: Listener<T>) => {
+    this.listeners.push(listener);
+    return { dispose: () => this.disposeListener(listener) };
+  };
+
+  fire(event: T): void {
+    for (const listener of this.listeners) listener(event);
+  }
+
+  dispose(): void {
+    this.listeners = [];
+  }
+
+  private disposeListener(listener: Listener<T>): void {
+    this.listeners = this.listeners.filter((entry) => entry !== listener);
+  }
+}
+
+export class ThemeIcon {
+  constructor(public readonly id: string) {}
+}
+
+export enum TreeItemCollapsibleState {
+  None = 0,
+  Collapsed = 1,
+  Expanded = 2,
+}
+
+export class TreeItem {
+  description?: string;
+  tooltip?: string;
+  contextValue?: string;
+  iconPath?: ThemeIcon;
+  command?: Command;
+  resourceUri?: Uri;
+
+  constructor(
+    public readonly label: string,
+    public readonly collapsibleState: TreeItemCollapsibleState,
+  ) {}
+}
+
+export interface Command {
+  command: string;
+  title: string;
+  arguments?: unknown[];
+}
+
+export interface Disposable {
+  dispose(): void;
+}
+
+export interface TreeDataProvider<T> {
+  onDidChangeTreeData?: unknown;
+  getTreeItem(element: T): TreeItem;
+  getChildren(element?: T): T[] | Promise<T[]>;
+}
+
+let workspaceFoldersValue: Array<{ uri: Uri }> | undefined;
+let configValue: Record<string, unknown> = {};
+
+export const workspace = {
+  get workspaceFolders() {
+    return workspaceFoldersValue;
+  },
+  set workspaceFolders(value: Array<{ uri: Uri }> | undefined) {
+    workspaceFoldersValue = value;
+  },
+  getConfiguration() {
+    return {
+      get<T>(key: string, defaultValue: T): T {
+        return (key in configValue ? configValue[key] : defaultValue) as T;
+      },
+    };
+  },
+  fs: {
+    readFile(uri: Uri) {
+      return fs.readFile(uri.fsPath);
+    },
+    writeFile(uri: Uri, bytes: Uint8Array) {
+      return fs.writeFile(uri.fsPath, bytes);
+    },
+    createDirectory(uri: Uri) {
+      return fs.mkdir(uri.fsPath, { recursive: true });
+    },
+    stat(uri: Uri) {
+      return fs.stat(uri.fsPath);
+    },
+  },
+  async findFiles(pattern: RelativePattern): Promise<Uri[]> {
+    const [prefix, suffix] = pattern.pattern.split('*');
+    const dir = path.join(pattern.base.fsPath, prefix.replace(/\/$/, ''));
+    const entries = await fs.readdir(dir).catch(() => []);
+    return entries
+      .filter((entry) => entry.endsWith(suffix ?? ''))
+      .map((entry) => Uri.file(path.join(dir, entry)));
+  },
+};
+
+export const window = {
+  createOutputChannel() {
+    return { appendLine() {}, show() {}, dispose() {} };
+  },
+  registerTreeDataProvider() {
+    return { dispose() {} };
+  },
+  showInputBox: async () => undefined,
+  showTextDocument: async () => undefined,
+  showInformationMessage: async () => undefined,
+  showWarningMessage: async () => undefined,
+  showErrorMessage: async () => undefined,
+  showQuickPick: async (items: unknown[], options?: { canPickMany?: boolean }) => (
+    options?.canPickMany ? items : items[0]
+  ),
+};
+
+export const commands = {
+  registerCommand() {
+    return { dispose() {} };
+  },
+};
+
+export const env = {
+  clipboard: {
+    writeText: async () => undefined,
+  },
+};
+
+export function __setWorkspaceRoot(root: string | undefined): void {
+  workspaceFoldersValue = root ? [{ uri: Uri.file(root) }] : undefined;
+}
+
+export function __setConfiguration(config: Record<string, unknown>): void {
+  configValue = config;
+}

@@ -1,0 +1,307 @@
+{
+  "name": "@fliwright/vscode",
+  "displayName": "Fliwright",
+  "description": "VS Code tools for Fliwright Flutter E2E testing.",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "fliwright",
+  "type": "module",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Testing",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && pnpm run bundle",
+    "bundle": "esbuild src/extension.ts --bundle --platform=node --format=esm --external:vscode --outfile=dist/extension.js --sourcemap",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "package": "pnpm run build && node scripts/stage-vsix.mjs && cd .vsix-stage && pnpm dlx @vscode/vsce package --no-dependencies --out ../fliwright-vscode-0.1.0.vsix"
+  },
+  "activationEvents": [
+    "onView:fliwright.devices",
+    "onView:fliwright.mockApis",
+    "onView:fliwright.formData",
+    "onCommand:fliwright.reloadMocks",
+    "onCommand:fliwright.reloadFormRules",
+    "onCommand:fliwright.connect",
+    "onCommand:fliwright.disconnect",
+    "onCommand:fliwright.discoverVmService",
+    "onCommand:fliwright.createMockConfig",
+    "onCommand:fliwright.createFormRules",
+    "onCommand:fliwright.applyMockRule",
+    "onCommand:fliwright.applyDefaultMocks",
+    "onCommand:fliwright.stopSandbox",
+    "onCommand:fliwright.analyzeForm",
+    "onCommand:fliwright.fillForm",
+    "onCommand:fliwright.fillFormWithRules"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "fliwright",
+          "title": "Fliwright",
+          "icon": "media/fliwright.svg"
+        }
+      ]
+    },
+    "views": {
+      "fliwright": [
+        {
+          "id": "fliwright.devices",
+          "name": "Devices"
+        },
+        {
+          "id": "fliwright.mockApis",
+          "name": "Mock APIs"
+        },
+        {
+          "id": "fliwright.formData",
+          "name": "Form Data"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "fliwright.connect",
+        "title": "Fliwright: Connect to VM Service",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "fliwright.disconnect",
+        "title": "Fliwright: Disconnect VM Service",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "fliwright.discoverVmService",
+        "title": "Fliwright: Discover VM Service",
+        "icon": "$(search)"
+      },
+      {
+        "command": "fliwright.reloadMocks",
+        "title": "Fliwright: Reload Mock Configs",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "fliwright.createMockConfig",
+        "title": "Fliwright: Create Mock Config",
+        "icon": "$(add)"
+      },
+      {
+        "command": "fliwright.openMockConfig",
+        "title": "Fliwright: Open Mock Config"
+      },
+      {
+        "command": "fliwright.copyMockEndpoint",
+        "title": "Fliwright: Copy Mock Endpoint"
+      },
+      {
+        "command": "fliwright.copyMockRuleJson",
+        "title": "Fliwright: Copy Mock Rule JSON"
+      },
+      {
+        "command": "fliwright.applyMockRule",
+        "title": "Fliwright: Apply Mock Rule",
+        "icon": "$(play)"
+      },
+      {
+        "command": "fliwright.applyDefaultMocks",
+        "title": "Fliwright: Apply Default Mocks",
+        "icon": "$(play)"
+      },
+      {
+        "command": "fliwright.stopSandbox",
+        "title": "Fliwright: Clear Mock Routes",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "fliwright.reloadFormRules",
+        "title": "Fliwright: Reload Form Rules",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "fliwright.createFormRules",
+        "title": "Fliwright: Create Form Rules",
+        "icon": "$(add)"
+      },
+      {
+        "command": "fliwright.openFormRules",
+        "title": "Fliwright: Open Form Rules"
+      },
+      {
+        "command": "fliwright.analyzeForm",
+        "title": "Fliwright: Analyze Current Form",
+        "icon": "$(inspect)"
+      },
+      {
+        "command": "fliwright.fillForm",
+        "title": "Fliwright: Fill Current Form",
+        "icon": "$(wand)"
+      },
+      {
+        "command": "fliwright.fillFormWithRules",
+        "title": "Fliwright: Fill Current Form With Rules",
+        "icon": "$(wand)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "fliwright.connect",
+          "when": "view == fliwright.devices",
+          "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.disconnect",
+          "when": "view == fliwright.devices",
+          "group": "navigation@2"
+        },
+        {
+          "command": "fliwright.discoverVmService",
+          "when": "view == fliwright.devices",
+          "group": "navigation@3"
+        },
+        {
+          "command": "fliwright.reloadMocks",
+          "when": "view == fliwright.mockApis",
+          "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.createMockConfig",
+          "when": "view == fliwright.mockApis",
+          "group": "navigation@2"
+        },
+        {
+          "command": "fliwright.applyDefaultMocks",
+          "when": "view == fliwright.mockApis",
+          "group": "navigation@3"
+        },
+        {
+          "command": "fliwright.stopSandbox",
+          "when": "view == fliwright.mockApis",
+          "group": "navigation@4"
+        },
+        {
+          "command": "fliwright.reloadFormRules",
+          "when": "view == fliwright.formData",
+          "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.createFormRules",
+          "when": "view == fliwright.formData",
+          "group": "navigation@2"
+        },
+        {
+          "command": "fliwright.analyzeForm",
+          "when": "view == fliwright.formData",
+          "group": "navigation@3"
+        },
+        {
+          "command": "fliwright.fillForm",
+          "when": "view == fliwright.formData",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "fliwright.openMockConfig",
+          "when": "view == fliwright.mockApis && viewItem =~ /mockEndpoint|mockRule|mockInvalid/",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.copyMockEndpoint",
+          "when": "view == fliwright.mockApis && viewItem == mockEndpoint",
+          "group": "2_copy@1"
+        },
+        {
+          "command": "fliwright.copyMockRuleJson",
+          "when": "view == fliwright.mockApis && viewItem =~ /mockRule/",
+          "group": "2_copy@2"
+        },
+        {
+          "command": "fliwright.applyMockRule",
+          "when": "view == fliwright.mockApis && viewItem =~ /mockRule/",
+          "group": "inline@2"
+        },
+        {
+          "command": "fliwright.openFormRules",
+          "when": "view == fliwright.formData && viewItem =~ /formRulesFile|formRule|formInvalid/",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.analyzeForm",
+          "when": "view == fliwright.formData && viewItem == formRulesFile",
+          "group": "inline@2"
+        },
+        {
+          "command": "fliwright.fillFormWithRules",
+          "when": "view == fliwright.formData && viewItem == formRulesFile",
+          "group": "inline@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Fliwright",
+      "properties": {
+        "fliwright.mockDir": {
+          "type": "string",
+          "default": ".fliwright/mocks",
+          "description": "Directory containing Fliwright API Mock JSON files."
+        },
+        "fliwright.mockIndex": {
+          "type": "string",
+          "default": ".fliwright/mocks/mock-index.json",
+          "description": "Optional Fliwright mock index JSON file."
+        },
+        "fliwright.vmServiceUrl": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Flutter VM Service WebSocket URL used by Fliwright commands."
+        },
+        "fliwright.autoDiscoverVmService": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan common local Flutter VM Service ports when no URL is configured."
+        },
+        "fliwright.formRulesDir": {
+          "type": "string",
+          "default": ".fliwright/forms",
+          "description": "Directory containing Fliwright form rule JSON files."
+        },
+        "fliwright.formRulesFile": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional single form rules JSON file override."
+        },
+        "fliwright.formLocale": {
+          "type": "string",
+          "default": "zh_CN",
+          "description": "Default locale for generated form data."
+        },
+        "fliwright.formPreviewBeforeFill": {
+          "type": "boolean",
+          "default": true,
+          "description": "Preview generated form data before filling the current screen."
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@fliwright/core": "workspace:*",
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
