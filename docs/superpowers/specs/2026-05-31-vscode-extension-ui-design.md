@@ -31,6 +31,14 @@ Fliwright Activity Bar
 │   ├── Connection status
 │   ├── VM Service URL
 │   └── Bridge capability checks
+├── Mock APIs
+│   ├── API endpoint files
+│   ├── Response rules
+│   └── Active mock routes
+├── Form Data
+│   ├── Form rule files
+│   ├── Rule summaries
+│   └── Analyze/fill actions
 ├── Tests
 │   ├── Test files
 │   ├── Test cases
@@ -39,11 +47,9 @@ Fliwright Activity Bar
 │   ├── Latest run summary
 │   ├── Failed tests
 │   └── Failure context entries
-└── Sandbox
-    ├── Mock config
-    ├── Active routes
+└── Sandbox / Adapters
     ├── State adapters
-    └── Form helper
+    └── Future hardware mocks
 
 Editor Area
 ├── Failure Context Webview
@@ -64,7 +70,7 @@ Recommended user path:
 3. Inspect failed item in `Runs`.
 4. Use Failure Webview to open source or apply selector suggestion.
 5. Use Recording Webview to generate new tests.
-6. Use Sandbox and Form Helper for setup-heavy flows.
+6. Use Mock APIs and Form Data for setup-heavy flows.
 
 ---
 
@@ -86,11 +92,13 @@ Contribution:
 Default order:
 
 1. `Devices`
-2. `Tests`
-3. `Runs`
-4. `Sandbox`
+2. `Mock APIs`
+3. `Form Data`
+4. `Tests`
+5. `Runs`
+6. `Sandbox / Adapters` when state/hardware adapters are enabled
 
-Reasoning: connection gates most operations, test execution is the core loop, run history is reactive, sandbox is supporting setup.
+Reasoning: connection gates most operations. The first implementation slice prioritizes Mock and Form setup, so those views appear before test execution and run history.
 
 ### 3.3 Sidebar Density
 
@@ -350,67 +358,180 @@ Healed entries should be visible even when tests pass, because they are maintena
 
 ---
 
-## 7. Sandbox View
+## 7. Mock APIs View
 
-Purpose: manage local mock routes and debugging helpers.
+Purpose: list local API Mock JSON files, choose response rules, and apply/clear active routes.
 
 Toolbar actions:
 
 | Icon | Command | Tooltip |
 |------|---------|---------|
-| `play` | `fliwright.startSandbox` | Apply Sandbox |
-| `debug-stop` | `fliwright.stopSandbox` | Clear Sandbox |
-| `refresh` | Reload mock config | Reload Mock Config |
-| `edit` | Open mock config | Open Mock Config |
+| `play` | `fliwright.applyDefaultMocks` | Apply Default Mocks |
+| `debug-stop` | `fliwright.stopSandbox` | Clear Mocks |
+| `refresh` | `fliwright.reloadMocks` | Reload Mock Configs |
+| `add` | `fliwright.createMockConfig` | Create Mock Config |
 
 ### 7.1 Default State
 
 ```text
-SANDBOX
-  Mock Config
-    fliwright.mock.json
-    3 routes
+MOCK APIS
+  Config Directory
+    .fliwright/mocks/api
+    3 endpoints · 8 rules
 
-  Network Routes
-    GET /api/me
-    POST /api/login
-    GET /api/cart
-
-  State Adapters
-    Riverpod available
-
-  Tools
-    Fill Current Form
+  GET /v1/public/token
+    ○ success 200
+    ○ empty 200
+    ○ server_error 500
+  POST /api/login
+    ○ success 200
+    ○ invalid_password 401
 ```
 
 ### 7.2 Applied State
 
 ```text
-SANDBOX
+MOCK APIS
   ● Active
-    3 routes applied
+    2 routes applied
 
-  Network Routes
-    ✓ GET /api/me 200
-    ✓ POST /api/login 200
-    ✓ GET /api/cart 200
+  GET /v1/public/token
+    ✓ success 200
+    ○ empty 200
+    ○ server_error 500
+  POST /api/login
+    ✓ invalid_password 401
 ```
 
 ### 7.3 Missing Config
 
 ```text
-SANDBOX
-  No mock config
-  Expected: fliwright.mock.json
+MOCK APIS
+  No mock configs
+  Expected: .fliwright/mocks/api/*.json
 
   Create Mock Config
 ```
 
 MVP can create a minimal template only after explicit user action.
 
+### 7.4 Invalid Config
+
+```text
+MOCK APIS
+  ! get-token.example.json
+    JSON parse error at line 18
+```
+
+Invalid rows remain visible. Apply commands are disabled for invalid entries.
+
+### 7.5 Context Menu
+
+API endpoint row:
+
+- Apply Default Rule
+- Open Mock Config
+- Reveal in Explorer
+- Copy Endpoint
+
+API rule row:
+
+- Apply Rule
+- Preview Response Body
+- Copy Rule JSON
+
+Form rules row:
+
+- Analyze Current Form With Rules
+- Fill Current Form With Rules
+- Open Form Rules
+- Reveal in Explorer
+
 ---
 
-## 8. Status Bar
+## 8. Form Data View
+
+Purpose: list `.fliwright/forms/*.json`, preview generated form data, and fill the current app screen.
+
+Toolbar actions:
+
+| Icon | Command | Tooltip |
+|------|---------|---------|
+| `symbol-field` | `fliwright.analyzeForm` | Analyze Current Form |
+| `check` | `fliwright.fillForm` | Fill Current Form |
+| `refresh` | `fliwright.reloadFormRules` | Reload Form Rules |
+| `add` | `fliwright.createFormRules` | Create Form Rules |
+
+### 8.1 Default State
+
+```text
+FORM DATA
+  Rule Directory
+    .fliwright/forms
+    2 files · 7 rules
+
+  form-rules.example.json
+    3 rules · zh-CN
+    label=手机号 REGEXP_MOCK
+    label=邮箱 PRESET_SKILL
+    hintText=请输入验证码 REGEXP_MOCK
+
+  checkout-rules.json
+    4 rules · zh-CN
+```
+
+### 8.2 Analyze Result
+
+```text
+FORM DATA
+  Last Analyze
+    4 fields · 3 fillable · 1 skipped
+    email        alice.chen@example.com
+    phone        13912345678
+    password     skipped obscure field
+
+  form-rules.example.json
+    3 rules · zh-CN
+```
+
+### 8.3 Missing Rules
+
+```text
+FORM DATA
+  No form rules
+  Expected: .fliwright/forms/*.json
+
+  Create Form Rules
+```
+
+### 8.4 Invalid Rules
+
+```text
+FORM DATA
+  ! checkout-rules.json
+    rule[2].pattern is required for REGEXP_MOCK
+```
+
+Invalid rows remain visible. Analyze can still run with built-in generators, but filling with invalid selected rules is disabled.
+
+### 8.5 Context Menu
+
+Form rules file row:
+
+- Analyze Current Form With Rules
+- Fill Current Form With Rules
+- Open Form Rules
+- Reveal in Explorer
+
+Generated field row:
+
+- Copy Generated Value
+- Fill This Field
+- Regenerate
+
+---
+
+## 9. Status Bar
 
 Placement:
 
@@ -433,7 +554,7 @@ Use VS Code ThemeColor state colors only. Do not hardcode red/green values in ex
 
 ---
 
-## 9. CodeLens
+## 10. CodeLens
 
 Show CodeLens only in files that import `@fliwright/vitest`.
 
@@ -457,11 +578,11 @@ Rules:
 
 ---
 
-## 10. Failure Context Webview
+## 11. Failure Context Webview
 
 Purpose: make a failed or healed test actionable in one screen.
 
-### 10.1 Desktop Layout
+### 13.1 Desktop Layout
 
 For editor widths >= 900px:
 
@@ -491,7 +612,7 @@ For editor widths >= 900px:
 +--------------------------------------------------------------------------------+
 ```
 
-### 10.2 Narrow Layout
+### 13.2 Narrow Layout
 
 For editor widths < 900px:
 
@@ -517,7 +638,7 @@ Widget Tree
 ...
 ```
 
-### 10.3 Sections
+### 13.3 Sections
 
 Header:
 
@@ -565,7 +686,7 @@ Widget Tree:
 - Search box.
 - Copy selected node.
 
-### 10.4 Visual Rules
+### 13.4 Visual Rules
 
 - No decorative cards. Use full-width sections separated by 1px VS Code border color.
 - Header remains sticky inside the Webview.
@@ -575,11 +696,11 @@ Widget Tree:
 
 ---
 
-## 11. Recording Webview
+## 12. Recording Webview
 
 Purpose: record a manual flow and turn it into a test file.
 
-### 11.1 Idle State
+### 13.1 Idle State
 
 ```text
 +------------------------------------------------------------------+
@@ -592,7 +713,7 @@ Purpose: record a manual flow and turn it into a test file.
 +------------------------------------------------------------------+
 ```
 
-### 11.2 Recording State
+### 13.2 Recording State
 
 ```text
 +------------------------------------------------------------------+
@@ -614,7 +735,7 @@ Rules:
 - Stop button is primary.
 - Status Bar also shows `Fliwright: Recording`.
 
-### 11.3 Preview State
+### 13.3 Preview State
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -639,7 +760,7 @@ Code preview:
 - Provide copy and insert actions.
 - Do not auto-create files.
 
-### 11.4 Error State
+### 13.4 Error State
 
 ```text
 Recording unavailable
@@ -650,11 +771,11 @@ The running app does not expose ext.fliwright.startRecording.
 
 ---
 
-## 12. Trace Viewer Webview
+## 13. Trace Viewer Webview
 
 MVP trace is a compact run inspector, not a full playback engine.
 
-### 12.1 Layout
+### 13.1 Layout
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -684,20 +805,37 @@ V1 trace additions:
 
 ---
 
-## 13. Form Helper UI
+## 14. Form Helper UI
 
 Use Quick Pick for MVP instead of a dedicated Webview.
 
-Flow:
+Analyze flow:
+
+1. Command: `Analyze Current Form`.
+2. Extract fields through `ext.fliwright.extractForm`.
+3. Load selected `.fliwright/forms/*.json` rules, or use the configured rules directory.
+4. Show generated values without mutating the app.
+
+```text
+Analyze Current Form
+email        email        alice.chen@example.com
+phone        phone        13912345678
+code         text         482915
+
+[Fill Form] [Regenerate] [Open Rules]
+```
+
+Fill flow:
 
 1. Command: `Fill Current Form`.
 2. Extract fields.
-3. Show preview Quick Pick with generated values.
+3. Show preview Quick Pick with generated values when `fliwright.formPreviewBeforeFill` is enabled.
+4. Fill selected fields through existing locator/type APIs.
 
 ```text
 Fill Current Form
 ✓ email       alice.chen@example.com
-✓ phone       +886912345678
+✓ phone       13912345678
 ✓ password    ************
 
 [Fill Form] [Regenerate]
@@ -709,10 +847,12 @@ Rules:
 - User can deselect fields before filling.
 - `Regenerate` runs the form-helper again.
 - If no fields are found, show a short notification and log details.
+- Obscure/password fields are skipped by default.
+- Generated values are local only and must not be logged unless explicitly revealed by the user.
 
 ---
 
-## 14. Settings UI
+## 15. Settings UI
 
 Use native VS Code Settings.
 
@@ -722,7 +862,10 @@ Important settings should also be discoverable from view empty states:
 - Test glob.
 - Runner.
 - Screenshot mode.
-- Mock config path.
+- Mock directory: `.fliwright/mocks`.
+- Mock index: `.fliwright/mocks/mock-index.json`.
+- Form rules directory: `.fliwright/forms`.
+- Form locale.
 
 Quick pick for connection:
 
@@ -735,7 +878,7 @@ Connect to VM Service
 
 ---
 
-## 15. Notifications and Output
+## 16. Notifications and Output
 
 Notifications:
 
@@ -750,6 +893,8 @@ Examples:
 | Run complete failed | `Fliwright run failed: 1 test failed.` Action: `Open Runs` |
 | Recording stopped | `Recorded 6 operations.` Action: `Preview` |
 | Sandbox applied | `Applied 3 mock routes.` |
+| Mock config invalid | `Mock config has validation errors.` Action: `Open Output` |
+| Form filled | `Filled 4 fields, skipped 1.` Action: `Show Details` |
 
 OutputChannel:
 
@@ -759,7 +904,7 @@ OutputChannel:
 
 ---
 
-## 16. Webview Visual System
+## 17. Webview Visual System
 
 Use VS Code CSS variables:
 
@@ -820,7 +965,7 @@ Layout:
 
 ---
 
-## 17. Accessibility
+## 18. Accessibility
 
 Requirements:
 
@@ -840,7 +985,7 @@ Keyboard shortcuts:
 
 ---
 
-## 18. UI Copy
+## 19. UI Copy
 
 Tone:
 
@@ -867,7 +1012,7 @@ Create Example Test
 
 ---
 
-## 19. Implementation Mapping
+## 20. Implementation Mapping
 
 | UI Surface | Planned File |
 |------------|--------------|
@@ -876,7 +1021,8 @@ Create Example Test
 | Devices Tree | `src/views/DevicesTreeProvider.ts` |
 | Tests Tree | `src/views/TestsTreeProvider.ts` |
 | Runs Tree | `src/views/RunsTreeProvider.ts` |
-| Sandbox Tree | `src/views/SandboxTreeProvider.ts` |
+| Mock APIs Tree | `src/views/MockApiTreeProvider.ts` |
+| Form Data Tree | `src/views/FormDataTreeProvider.ts` |
 | Failure Webview | `src/webview/FailurePanel.ts`, `media/webview.js`, `media/main.css` |
 | Recording Webview | `src/webview/RecordingPanel.ts`, `media/webview.js`, `media/main.css` |
 | Trace Viewer | `src/webview/TraceViewerPanel.ts`, `media/webview.js`, `media/main.css` |
@@ -884,14 +1030,15 @@ Create Example Test
 
 ---
 
-## 20. MVP UI Checklist
+## 21. MVP UI Checklist
 
 - Devices view shows disconnected, connecting, connected, and error states.
 - Tests view discovers files and exposes run actions.
 - Runs view shows latest pass/fail/healed summaries.
 - Failure Webview supports source opening, JSON copy, selector copy, and diff preview entrypoint.
 - Recording Webview supports idle, recording, preview, and error states.
-- Sandbox view supports missing config, loaded config, and active routes.
+- Mock APIs view supports missing config, loaded config, invalid config, and active routes.
+- Form Data view lists form rule files and last analyze/fill results.
 - Form helper uses Quick Pick preview with selectable fields.
 - Status Bar reflects connection, running, recording, failed, and healed states.
 - All webviews work at 320px, 900px, and wide editor widths.
