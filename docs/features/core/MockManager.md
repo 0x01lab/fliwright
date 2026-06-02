@@ -2,16 +2,17 @@
 module: "MockManager"
 package: "@fliwright/core"
 source: "src/MockManager.ts"
-generated: "2026-06-01"
+tests: "tests/MockManager.test.ts"
+generated: "2026-06-02"
 ---
 
 # MockManager
 
-> HTTP mock route management for stubbing API responses in Flutter tests.
+> Register HTTP mock routes, switch between predefined rule sets, and inspect calls captured by the bridge's mock server.
 
 ## Overview
 
-`MockManager` registers, removes, and queries mock HTTP routes via the Dart bridge's mock server extension. It supports path patterns, method filtering, passthrough mode, and call logging.
+`MockManager` is the TypeScript side of the bridge's `MockServerExtension`. It exposes two layers: low-level `route / removeRoute / clear` for ad-hoc mocking, and `loadRules / listRules / switchRule` for switching between rules loaded from `.fliwright/mocks/*.json`. Calls are forwarded as JSON-RPC to the running Flutter app, which intercepts HTTP requests via `dio` interceptors and `HttpOverrides`.
 
 ## Constructor
 
@@ -21,48 +22,64 @@ constructor(sendRequest: SendRequest)
 
 ## Public Methods
 
-### `route(path: string, response: MockRouteResponse & { method?: string }): Promise<void>`
+### `route(path, response): Promise<void>`
 
-Registers a mock route.
+Register a single mock route.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` | Yes | URL path pattern |
-| `response` | `MockRouteResponse & { method?: string }` | Yes | Response config |
-| `response.status` | `number` | No | HTTP status (default: 200) |
-| `response.headers` | `Record<string, string>` | No | Response headers |
-| `response.body` | `unknown` | No | Response body |
-| `response.delay` | `number` | No | Response delay in ms |
-| `response.method` | `string` | No | HTTP method filter |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | string | URL path (e.g. `/v1/login`) |
+| `response.status` | number | HTTP status |
+| `response.headers` | object | Response headers |
+| `response.body` | unknown | Body (will be JSON-serialized) |
+| `response.delay` | number | Optional delay in ms |
+| `response.method` | string | HTTP method filter |
 
-### `addRoute(pattern: string, response: MockRouteResponse): Promise<void>`
+---
 
-Alias for `route()`.
+### `addRoute(pattern, response): Promise<void>` — alias of `route`.
 
-### `removeRoute(path: string): Promise<void>`
+### `removeRoute(path): Promise<void>` — remove a single route.
 
-Removes a mock route by path.
+### `clear(): Promise<void>` — remove all routes.
 
-### `clear(): Promise<void>`
+### `setPassthrough(enabled): Promise<void>` — when `true`, unmatched requests go to the real network.
 
-Removes all mock routes.
+### `getCalls(path?): Promise<MockCall[]>` — return captured calls.
 
-### `setPassthrough(enabled: boolean): Promise<void>`
+### `listRoutes(): Promise<{id, method?, path}[]>` — currently registered routes.
 
-When enabled, unmatched requests pass through to real servers.
+### `clearCalls(): Promise<void>` — clear the captured-call log.
 
-### `getCalls(path?: string): Promise<MockCall[]>`
+### `loadRules(mockDir?): Promise<void>`
 
-Returns recorded calls, optionally filtered by path.
+Loads `.fliwright/mocks/<mockDir>/mock-index.json` and every endpoint config referenced therein, then applies each endpoint's active rule as a route via the bridge. Silently skips if the index file is missing.
 
-### `listRoutes(): Promise<Array<{ id: string; method?: string; path: string }>>`
+### `listRules(): { endpoint, method, rules[], activeRule }[]`
 
-Lists all registered routes.
+Returns a summary of loaded endpoints and their rules.
 
-### `clearCalls(): Promise<void>`
+### `switchRule(endpoint, ruleName): Promise<void>`
 
-Clears all recorded calls.
+Switch the active rule for an endpoint, then re-apply it to the bridge. Throws if endpoint or rule isn't found.
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `_ruleStore` | `MockRuleStore` | (Internal) loaded rules; shared with MCP `fliwright_mock_*` tools |
+
+## Example
+
+```typescript
+await driver.mock.route('/v1/login', { status: 200, body: { token: 'abc' } });
+await driver.mock.loadRules();  // loads .fliwright/mocks/mock-index.json
+await driver.mock.switchRule('/v1/login', 'server_error');
+const calls = await driver.mock.getCalls('/v1/login');
+```
 
 ## Related
 
-- **Source:** `src/MockManager.ts`
+- **Depends on:** [MockRuleStore](./MockRuleStore.md)
+- **Bridge counterpart:** `packages/fliwright-bridge/lib/src/extensions/mock_server.dart`
+- **Source:** `packages/fliwright-core/src/MockManager.ts`

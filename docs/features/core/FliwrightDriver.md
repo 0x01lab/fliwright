@@ -3,92 +3,91 @@ module: "FliwrightDriver"
 package: "@fliwright/core"
 source: "src/Driver.ts"
 tests: "tests/Driver.test.ts"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
 # FliwrightDriver
 
-> Main orchestrator that connects to a Flutter VM Service and provides access to Page, MockManager, SelfHealingEngine, RecorderController, and state adapters.
+> Top-level entry point that owns the VM Service connection and lazily instantiates `Page`, `MockManager`, `SelfHealingEngine`, `RecorderController`, and the plugin registry.
 
 ## Overview
 
-`FliwrightDriver` is the entry point for all Fliwright operations. It manages the WebSocket connection to the Dart VM Service, initializes plugin extensions, and exposes lazy-initialized subsystems (page, mock, healing, recorder, state). Plugins are registered at construction time and initialized during `connect()`.
+`FliwrightDriver` is the single object tests interact with. Construction is cheap — it only initializes a `PluginRegistry` and a `VMServiceConnector`. Calling `connect(vmServiceUrl)` opens the WebSocket, runs every registered plugin's `onInit` hook, and makes the rest of the subsystems usable. Sub-systems are lazy: `page`, `mock`, `healing`, and `recorder` are constructed on first access.
 
 ## Constructor
 
 ```typescript
 constructor(options?: DriverOptions)
+
+interface DriverOptions {
+  plugins?: FliwrightPlugin[];
+}
 ```
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `options` | `DriverOptions` | No | Configuration options |
-
-### DriverOptions
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `plugins` | `FliwrightPlugin[]` | No | Plugins to register before connection |
+| `options.plugins` | `FliwrightPlugin[]` | No | Plugins registered before `connect` runs their `onInit` |
 
 ## Public Methods
 
-### `connect(vmServiceUrl: string): Promise<void>`
+### `connect(vmServiceUrl): Promise<void>`
 
-Connects to the Flutter VM Service via WebSocket. Initializes all registered plugins and the healing subsystem.
+Opens the VM Service WebSocket, then runs `onInit` on every registered plugin with the driver's `sendRequest` channel and `VMServiceConnector`.
 
-**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `vmServiceUrl` | string | Dart VM Service WebSocket URL |
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `vmServiceUrl` | `string` | Yes | WebSocket URL of the Dart VM Service |
+---
+
+### `attachMockConnector(mockWS): Promise<void>`
+
+For testing: bypasses the WebSocket and uses a fake/in-process connection.
+
+---
+
+### `sendRequest(method, params?): Promise<unknown>`
+
+Low-level escape hatch — call any RPC method on the bridge.
+
+---
 
 ### `dispose(): Promise<void>`
 
-Disconnects from VM Service, disposes all plugins, and cleans up resources.
-
-### `sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown>`
-
-Sends a JSON-RPC request to the VM Service.
-
-### `getStateAdapter(name: string): StateAdapter`
-
-Returns a named state adapter registered by a plugin.
-
-### `getMockAdapter(name: string): MockAdapter`
-
-Returns a named mock adapter registered by a plugin.
-
-### `getFinderStrategy(name: string): FinderStrategy`
-
-Returns a named finder strategy registered by a plugin.
-
-### `getHealingStrategy(name: string): HealingStrategy`
-
-Returns a named healing strategy registered by a plugin.
-
-### `notifyTestStart(testName: string): Promise<void>`
-
-Notifies all plugins that a test has started.
-
-### `notifyTestEnd(testName: string, result: TestResult): Promise<void>`
-
-Notifies all plugins that a test has ended.
-
-### `attachMockConnector(mockWS: MockWebSocket): Promise<void>`
-
-Attaches a mock WebSocket for testing the driver itself.
+Runs `onDispose` on every plugin, then closes the WebSocket.
 
 ## Properties
 
-| Property | Type | Readonly | Description |
-|----------|------|----------|-------------|
-| `page` | `Page` | Yes | Lazy-initialized Page object |
-| `mock` | `MockManager` | Yes | Lazy-initialized MockManager |
-| `healing` | `SelfHealingEngine` | Yes | Lazy-initialized SelfHealingEngine |
-| `recorder` | `RecorderController` | Yes | Lazy-initialized RecorderController |
-| `state` | `StateAdapter` | Yes | First registered state adapter |
+| Property | Type | Lazy | Description |
+|----------|------|------|-------------|
+| `page` | `Page` | Yes | Page-object entry |
+| `mock` | `MockManager` | Yes | Mock route manager |
+| `healing` | `SelfHealingEngine` | Yes | Healing engine (default `MultiDimensionalHealingStrategy`) |
+| `recorder` | `RecorderController` | Yes | Recording controller |
+| `state` | `StateAdapter` | No | Returns `riverpod` state adapter if registered |
+
+## Plugin Lookup
+
+- `getStateAdapter(name)`, `getMockAdapter(name)`, `getFinderStrategy(name)`, `getHealingStrategy(name)` — return registered adapter by name.
+- `notifyTestStart(name)` / `notifyTestEnd(name, result)` — fan out to plugin lifecycle hooks.
+
+## Example
+
+```typescript
+import { FliwrightDriver } from '@fliwright/core';
+import { riverpodPlugin } from '@fliwright/plugin-riverpod';
+
+const driver = new FliwrightDriver({ plugins: [riverpodPlugin()] });
+await driver.connect('ws://127.0.0.1:54321/abc=');
+
+try {
+  await driver.page.locator({ text: 'Login' }).click();
+} finally {
+  await driver.dispose();
+}
+```
 
 ## Related
 
-- **Depends on:** [PluginRegistry](./PluginRegistry.md), [VMServiceConnector](./VMServiceConnector.md), [Page](./Page.md), [MockManager](./MockManager.md), [SelfHealingEngine](./SelfHealingEngine.md), [RecorderController](./RecorderController.md)
-- **Source:** `src/Driver.ts`
+- **Depends on:** [Page](./Page.md), [MockManager](./MockManager.md), [SelfHealingEngine](./SelfHealingEngine.md), [RecorderController](./RecorderController.md), [PluginRegistry](./PluginRegistry.md), [VMServiceConnector](./VMServiceConnector.md)
+- **Source:** `packages/fliwright-core/src/Driver.ts`

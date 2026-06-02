@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import RandExp from 'randexp';
-import type { FormSkill, FormFieldMeta, FormRule, FormRulesFile } from './types.js';
+import type { FormSkill, FormFieldMeta, FormRule, FormRulesFile, SemanticType } from './types.js';
 
 export class JsonRuleLoader {
   private readonly projectRoot: string;
@@ -96,14 +96,49 @@ export class JsonRuleLoader {
     };
   }
 
-  private matchesRule(field: FormFieldMeta, rule: FormRule): boolean {
+  private matchesRule(field: FormFieldMeta & { semanticType?: SemanticType }, rule: FormRule): boolean {
     for (const [key, value] of Object.entries(rule.match)) {
-      if (key === 'hintText') {
-        if (field.hintText !== value) return false;
-      } else if (key === 'label') {
-        if (field.label !== value) return false;
-      }
+      const actual = this.matchValue(field, key);
+      if (actual === undefined || actual !== value) return false;
     }
     return true;
+  }
+
+  private matchValue(
+    field: FormFieldMeta & { semanticType?: SemanticType },
+    key: string,
+  ): string | undefined {
+    switch (key) {
+      case 'id':
+        return field.id;
+      case 'selector':
+        return field.selector;
+      case 'type':
+        return field.type;
+      case 'hintText':
+        return field.hintText;
+      case 'label':
+        return field.label;
+      case 'keyboardType':
+        return field.keyboardType;
+      case 'key':
+        return field.key;
+      case 'ancestorKey':
+        return field.ancestorKey;
+      case 'name':
+        return field.name;
+      case 'semanticsId':
+        return field.semanticsId;
+      case 'semanticsLabel':
+        return field.semanticsLabel;
+      case 'semanticsHint':
+        return field.semanticsHint;
+      case 'role':
+        return field.role;
+      case 'semanticType':
+        return field.semanticType;
+      default:
+        return undefined;
+    }
   }
 }

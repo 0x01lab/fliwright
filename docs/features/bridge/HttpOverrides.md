@@ -1,30 +1,32 @@
 ---
 module: "FliwrightHttpOverrides"
-package: "fliwright-bridge"
+package: "fliwright_bridge"
 source: "lib/src/extensions/http_overrides.dart"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
 # FliwrightHttpOverrides
 
-> HTTP proxy that redirects Flutter's HTTP requests to the mock server.
+> Install a global `dart:io` `HttpOverrides` that redirects all `HttpClient` traffic through the in-app `MockServerExtension`.
 
 ## Overview
 
-`FliwrightHttpOverrides` installs a global `HttpOverrides` that redirects all HTTP requests through the mock server's port. This enables transparent API mocking without modifying application code.
+`FliwrightHttpOverrides.install({ port })` swaps Dart's global `HttpOverrides` for an instance whose `createHttpClient` returns an `HttpClient` wired to the mock server bound at `localhost:<port>`. This catches HTTP traffic from packages that use `dart:io` directly (e.g. `http` package, some Firebase SDKs). It does **not** intercept HTTPS — apps using HTTPS should use the [`DioMockExtension`](./DioMockExtension.md) path instead.
 
 ## Static Methods
 
-### `install(port: int): void`
+| Method | Description |
+|--------|-------------|
+| `install({ port })` | Replace global `HttpOverrides` |
+| `uninstall()` | Restore previous `HttpOverrides` (called by `FliwrightBridge.reset`) |
 
-Installs the HTTP overrides, redirecting all traffic to `localhost:<port>`.
+## Behavior
 
-### `uninstall(): void`
+- All `HttpClient` requests are sent to `localhost:<port>` with the same path/method/headers/body.
+- The mock server's response (status, headers, body, delay) is mapped back to the client.
+- Unmatched paths return 404 unless `passthrough` is enabled (in which case the original URL is fetched).
 
-Restores the previous HTTP overrides.
+## Related
 
-## Implementation
-
-- Overrides `createHttpClient` and `findProxyFromEnvironment`
-- Sets proxy to `PROXY localhost:<mockPort>`
-- Stores and restores the previous `HttpOverrides` on uninstall
+- **Used by:** `FliwrightBridge.init`
+- **Source:** `packages/fliwright-bridge/lib/src/extensions/http_overrides.dart`

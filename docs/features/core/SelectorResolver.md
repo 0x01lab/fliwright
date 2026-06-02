@@ -2,69 +2,56 @@
 module: "SelectorResolver"
 package: "@fliwright/core"
 source: "src/SelectorResolver.ts"
-generated: "2026-06-01"
+tests: "tests/SelectorResolver.test.ts"
+generated: "2026-06-02"
 ---
 
-# SelectorResolver & resolveSelector
+# SelectorResolver
 
-> Resolves widget info to selector strings with ARIA-like role mapping.
+> Convert a `WidgetInfo` into the most stable selector for code generation.
 
 ## Overview
 
-`SelectorResolver` converts partial `WidgetInfo` objects into selector strings. It maps Flutter widget types to ARIA-like roles using a built-in mapping table, falling back to raw type names.
+`resolveSelector` walks a priority list to pick the most stable identifier:
 
-## resolveSelector (function)
+1. **`text`** — non-empty trimmed text → `{ text: '...' }`
+2. **`key`** — non-empty trimmed key → `{ key: '...' }`
+3. **Role mapping** — see table below → `{ role: '...' }`
+4. **`type`** — falls back to `{ type: '...' }` (or `{ type: 'Widget' }` if missing)
 
-```typescript
-function resolveSelector(widget: Partial<WidgetInfo>): string
-```
-
-Resolution order: `text` -> `key` -> `type` (with role mapping) -> fallback `'Widget'`.
-
-## SelectorResolver (class)
-
-### Constructor
-
-```typescript
-constructor()
-```
-
-### Public Methods
-
-### `resolve(widget: Partial<WidgetInfo>): string`
-
-Same logic as the standalone function.
+Values containing single quotes are escaped with `\\'`.
 
 ## Role Map
 
-Maps 22 Flutter widget types to ARIA-like roles:
+| Flutter type | ARIA role |
+|--------------|-----------|
+| ElevatedButton, TextButton, OutlinedButton, IconButton, FloatingActionButton | `button` |
+| TextField, TextFormField, CupertinoTextField | `textbox` |
+| Checkbox, CheckboxListTile | `checkbox` |
+| Switch, SwitchListTile | `switch` |
+| Slider | `slider` |
+| DropdownButton, DropdownButtonFormField | `combobox` |
+| NavigationRail, BottomNavigationBar | `navigation` |
+| TabBar | `tablist` |
 
-| Flutter Widget | Role |
-|----------------|------|
-| `ElevatedButton` | `button` |
-| `TextButton` | `button` |
-| `OutlinedButton` | `button` |
-| `IconButton` | `button` |
-| `FloatingActionButton` | `button` |
-| `TextField` | `textbox` |
-| `TextFormField` | `textbox` |
-| `Checkbox` | `checkbox` |
-| `Switch` | `switch` |
-| `Radio` | `radio` |
-| `Slider` | `slider` |
-| `DropdownButton` | `combobox` |
-| `PopupMenuButton` | `combobox` |
-| `ListTile` | `listitem` |
-| `InkWell` | `link` |
-| `GestureDetector` | `generic` |
-| `AppBar` | `banner` |
-| `BottomNavigationBar` | `navigation` |
-| `TabBar` | `tablist` |
-| `Tab` | `tab` |
-| `Drawer` | `navigation` |
-| `Dialog` | `dialog` |
+## Public API
+
+### `resolveSelector(widget): string` — free function.
+
+### `class SelectorResolver { resolve(widget): string }` — wraps the function.
+
+## Example
+
+```typescript
+import { resolveSelector } from '@fliwright/core';
+
+resolveSelector({ text: 'Login' });          // "{ text: 'Login' }"
+resolveSelector({ key: 'email' });           // "{ key: 'email' }"
+resolveSelector({ type: 'TextField' });      // "{ role: 'textbox' }"
+resolveSelector({ type: 'Scaffold' });       // "{ type: 'Scaffold' }"
+```
 
 ## Related
 
-- **Used by:** Recording pipeline, healing pipeline
-- **Source:** `src/SelectorResolver.ts`
+- **Used by:** [RecorderController](./RecorderController.md)
+- **Source:** `packages/fliwright-core/src/SelectorResolver.ts`

@@ -2,16 +2,17 @@
 module: "VMServiceConnector"
 package: "@fliwright/core"
 source: "src/VMServiceConnector.ts"
-generated: "2026-06-01"
+tests: "tests/VMServiceConnector.test.ts"
+generated: "2026-06-02"
 ---
 
 # VMServiceConnector
 
-> WebSocket connection to Dart VM Service with isolate management.
+> WebSocket client for the Dart VM Service with isolate discovery, request/response correlation, and event-stream fan-out.
 
 ## Overview
 
-`VMServiceConnector` manages the WebSocket connection to a Flutter VM Service. It handles JSON-RPC message routing, pending request tracking, isolate discovery, and event streaming.
+`connect(url)` opens a `ws://` connection to the Dart VM Service. `sendRequest('ext.fliwright.*', params)` automatically injects `isolateId` (resolved once via `getVM`) so bridge extensions receive properly-scoped requests. Event listeners registered with `onEvent` receive `streamNotify` events (used by recording, riverpod state changes, etc.).
 
 ## Constructor
 
@@ -21,36 +22,50 @@ constructor(protocol?: Protocol)
 
 ## Public Methods
 
-### `connect(url: string): Promise<void>`
+### `connect(url): Promise<void>`
 
-Opens a WebSocket to the VM Service URL and discovers the main isolate.
+Opens the WebSocket. Resolves on `open`; rejects on connection error.
 
-### `sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown>`
+### `sendRequest(method, params?): Promise<unknown>`
 
-Sends a JSON-RPC request. Auto-injects `isolateId` for `ext.*` methods.
+For methods starting with `ext.`, automatically calls `getMainIsolateId()` and merges it into `params.isolateId`. Returns a promise that resolves when the matching response arrives.
 
-### `onEvent(callback: EventCallback): () => void`
+### `onEvent(callback): () => void`
 
-Registers an event listener. Returns an unsubscribe function.
+Subscribe to `streamNotify` events. Returns an unsubscribe function.
 
 ### `disconnect(): void`
 
-Closes the WebSocket and clears all state.
+Closes the WebSocket, clears pending requests with an error, and removes all event listeners.
 
-### `attachMock(mockWS: MockWebSocket): void`
+### `attachMock(mockWS): void`
 
-Attaches a mock WebSocket for testing.
+For testing: swap the real WebSocket for a fake one implementing `on('message'|'close')` and `send`.
 
-## MockWebSocket (interface)
+## Properties
 
-| Method | Signature |
-|--------|-----------|
-| `on` | `(event: string, fn: (...args: any[]) => void) => void` |
-| `send` | `(data: string) => void` |
-| `close` | `() => void` |
+| Property | Type | Description |
+|----------|------|-------------|
+| `mainIsolateId` (private) | string? | Cached main isolate id |
+
+## Errors
+
+- `Error('Not connected. Call connect() first.')` when `sendRequest` runs without a WebSocket.
+- `Error('No runnable Dart isolate found...')` when `getVM` returns no usable isolate.
+- `Error('WebSocket connection closed')` rejects all pending requests when the socket closes.
+
+## Example
+
+```typescript
+const connector = new VMServiceConnector();
+await connector.connect('ws://127.0.0.1:54321/abc=');
+const off = connector.onEvent((e) => console.log(e.kind));
+const result = await connector.sendRequest('ext.fliwright.click', { x: 10, y: 20 });
+connector.disconnect();
+```
 
 ## Related
 
 - **Depends on:** [Protocol](./Protocol.md)
 - **Used by:** [FliwrightDriver](./FliwrightDriver.md)
-- **Source:** `src/VMServiceConnector.ts`
+- **Source:** `packages/fliwright-core/src/VMServiceConnector.ts`

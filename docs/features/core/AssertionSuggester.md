@@ -2,16 +2,17 @@
 module: "AssertionSuggester"
 package: "@fliwright/core"
 source: "src/AssertionSuggester.ts"
-generated: "2026-06-01"
+tests: "tests/AssertionSuggester.test.ts"
+generated: "2026-06-02"
 ---
 
 # AssertionSuggester
 
-> Suggests assertions based on patterns in recorded operations.
+> Heuristics that propose follow-up `expect()` calls after a sequence of recorded operations.
 
 ## Overview
 
-`AssertionSuggester` analyzes a sequence of recorded operations and identifies points where assertions would be valuable. It uses heuristic rules to detect navigation, form submission, and list selection patterns.
+After `RecorderController.stop()` produces generated code, the suggester scans the operation list for patterns that imply a state change worth asserting (navigation tap, form submit, list-item selection, large Y-position change).
 
 ## Constructor
 
@@ -21,30 +22,28 @@ constructor()
 
 ## Public Methods
 
-### `suggest(operations: RecordedOperation[]): AssertionSuggestion[]`
+### `suggest(operations): AssertionSuggestion[]`
 
-Returns an array of assertion suggestions.
+Each suggestion is `{ afterIndex, reason, template }`.
 
-**Returns:** `AssertionSuggestion[]`
+| Rule | Trigger |
+|------|---------|
+| Top-of-screen tap | `op.kind === 'tap' && op.position.y < 100` |
+| Form submit | `tap` following a `type` within 10s |
+| List item selection | `tap` immediately after a `drag` |
+| Large Y change | Next op's Y is at least 200px lower than current tap |
 
-## AssertionSuggestion
+**Returns:** `AssertionSuggestion[]` — suggestions, each containing a `template` like `// TODO: Assert expected page content`.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `afterIndex` | `number` | Operation index after which to insert assertion |
-| `reason` | `string` | Human-readable reason for the suggestion |
-| `template` | `string` | Code template for the assertion |
+## Example
 
-## Detection Rules
-
-| Rule | Pattern | Suggestion |
-|------|---------|------------|
-| 1 | Tap at top of screen (y < 100) | Navigation assertion |
-| 2 | Tap after recent type input (< 10s) | Form submit assertion |
-| 3 | Tap after drag | List item selection assertion |
-| 4 | Large Y position drop (> 200px) | Navigation assertion |
+```typescript
+const suggestions = new AssertionSuggester().suggest(operations);
+for (const s of suggestions) {
+  console.log(`after op ${s.afterIndex}: ${s.reason}`);
+}
+```
 
 ## Related
 
-- **Used by:** Recording pipeline
-- **Source:** `src/AssertionSuggester.ts`
+- **Source:** `packages/fliwright-core/src/AssertionSuggester.ts`

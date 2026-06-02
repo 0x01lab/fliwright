@@ -1,23 +1,34 @@
 ---
 module: "TypeExtension"
-package: "fliwright-bridge"
+package: "fliwright_bridge"
 source: "lib/src/extensions/type_extension.dart"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
 # TypeExtension
 
-> Text input simulation for Flutter widgets.
+> Simulate text entry into a Flutter `EditableText` field.
 
-## Registered Extension
+## Registered Methods
+
+| Method | Description |
+|--------|-------------|
+| `ext.fliwright.type` | Insert / replace text |
 
 ### `ext.fliwright.type`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `selector` | `string` | Yes | Widget selector |
-| `text` | `string` | Yes | Text to input |
-| `replaceAll` | `string` | No | `'true'` to replace all text (default: `'false'`) |
-| `charDelay` | `int` | No | Delay between characters in ms (default: 0) |
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `selector` | string | Yes | Wire-format selector for the field |
+| `text` | string | Yes | Text to enter |
+| `charDelay` | number (string) | No | Delay between characters in ms |
+| `replaceAll` | `'true' \| 'false'` | No | If `'true'`, clears existing text first |
 
-**Returns:** `{ success: true, currentText: string }`
+**Returns:** `{ success: true }` on success. `{ success: false, error }` if the field can't be found or isn't editable.
+
+Internally: resolves the selector via `ext.fliwright.inspect`, focuses the field, then either clears + types (replace) or appends one character at a time (with optional `charDelay`).
+
+## Related
+
+- **TS counterpart:** [`Locator.type/fill`](../core/Locator.md)
+- **Source:** `packages/fliwright-bridge/lib/src/extensions/type_extension.dart`

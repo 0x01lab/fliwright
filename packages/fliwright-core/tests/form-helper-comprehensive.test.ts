@@ -316,8 +316,8 @@ describe('FormHelper: selector type parsing', () => {
       ...DEFAULT_MOCK_RESPONSES,
     });
     const result = await new FormHelper(send).fill();
-    const inspectCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.inspect');
-    expect(inspectCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
+    const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+    expect(typeCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
     expect(result.fields[0].selector).toBe('text=姓名');
   });
 
@@ -328,8 +328,8 @@ describe('FormHelper: selector type parsing', () => {
       ...DEFAULT_MOCK_RESPONSES,
     });
     await new FormHelper(send).fill();
-    const inspectCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.inspect');
-    expect(inspectCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
+    const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+    expect(typeCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
   });
 
   it('handles byType= selector', async () => {
@@ -339,8 +339,8 @@ describe('FormHelper: selector type parsing', () => {
       ...DEFAULT_MOCK_RESPONSES,
     });
     await new FormHelper(send).fill();
-    const inspectCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.inspect');
-    expect(inspectCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
+    const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+    expect(typeCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
   });
 
   it('handles bare text selector (no prefix)', async () => {
@@ -350,8 +350,8 @@ describe('FormHelper: selector type parsing', () => {
       ...DEFAULT_MOCK_RESPONSES,
     });
     await new FormHelper(send).fill();
-    const inspectCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.inspect');
-    expect(inspectCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
+    const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+    expect(typeCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
   });
 });
 
@@ -612,7 +612,7 @@ describe('FormHelper: error handling', () => {
     const fields = [field({ id: 'f1', hintText: 'Name' })];
     const send = createMockSendRequest({
       'ext.fliwright.extractForm': { fields },
-      'ext.fliwright.inspect': { widgets: [] }, // Widget not found
+      'ext.fliwright.type': { success: false, error: 'No widget found for selector: id=f1' },
     });
     const result = await new FormHelper(send).fill();
     expect(result.errors.length).toBeGreaterThan(0);
@@ -627,15 +627,14 @@ describe('FormHelper: error handling', () => {
     ];
     const send = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
       if (method === 'ext.fliwright.extractForm') return Promise.resolve({ fields });
-      if (method === 'ext.fliwright.inspect') {
+      if (method === 'ext.fliwright.type') {
         // First field fails on both id and fallback selector, second succeeds.
         if (params?.selector === 'id=f1' || params?.selector === 'text=Name') {
-          return Promise.resolve({ widgets: [] });
+          return Promise.resolve({ success: false, error: `No widget found for selector: ${params.selector}` });
         }
-        return Promise.resolve({ widgets: [GENERIC_WIDGET] });
+        return Promise.resolve({ success: true });
       }
       if (method === 'ext.fliwright.click') return Promise.resolve({ status: 'ok' });
-      if (method === 'ext.fliwright.type') return Promise.resolve({ status: 'ok' });
       return Promise.resolve({});
     });
 

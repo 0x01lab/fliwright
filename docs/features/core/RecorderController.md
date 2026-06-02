@@ -2,60 +2,66 @@
 module: "RecorderController"
 package: "@fliwright/core"
 source: "src/RecorderController.ts"
-generated: "2026-06-01"
+tests: "tests/RecorderController.test.ts"
+generated: "2026-06-02"
 ---
 
 # RecorderController
 
-> Controls interaction recording sessions on a Flutter app.
+> Start/stop recording on the bridge, accumulate raw events into semantic operations, resolve selectors, and emit generated code.
 
 ## Overview
 
-`RecorderController` starts and stops recording sessions via the bridge's recording extension. It captures raw pointer and text input events, aggregates them into semantic operations, and generates test code on stop.
+`start()` subscribes to the VM Service `Extension` event stream and asks the bridge to begin emitting `FliwrightRecording` events. Each event is appended to `rawEvents` and re-aggregated into `operations`. An optional `onOperation` callback fires for every newly-emerged operation. `stop()` halts the bridge, resolves a stable selector for each operation via `ext.fliwright.hitTest`, and runs `CodeGenerator` (or `DartCodeGenerator` for `lang: 'dart'`).
 
 ## Constructor
 
 ```typescript
-constructor(sendRequest: SendRequest, onEvent: OnEvent)
+constructor(
+  sendRequest: SendRequest,
+  onEvent: (callback: (event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) => () => void,
+)
 ```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `sendRequest` | `SendRequest` | Yes | JSON-RPC request sender |
-| `onEvent` | `OnEvent` | Yes | Event subscription function |
-
-Where `OnEvent = (callback: (event) => void) => () => void`
 
 ## Public Methods
 
-### `start(options?: RecorderStartOptions): Promise<void>`
-
-Starts recording. Subscribes to VM service events and begins capturing.
+### `start(options?): Promise<void>`
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `options.onOperation` | `(operation: RecordedOperation, index: number) => void` | Callback for each aggregated operation |
+| `options.onOperation` | `(op, index) => void` | Streaming callback for each new operation |
 
-### `stop(options?: CodegenOptions): Promise<string>`
+Calls `streamListen` on the `Extension` stream (idempotent — `already subscribed` errors are swallowed) and `ext.fliwright.startRecording`.
 
-Stops recording and generates test code. Returns the generated code string.
+### `stop(options?): Promise<string>`
 
-### `getOperations(): RecordedOperation[]`
+Calls `ext.fliwright.stopRecording`, unsubscribes, re-aggregates, resolves a selector per operation, and returns generated source.
 
-Returns all aggregated operations from the current or last recording.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `options.lang` | `'ts' \| 'dart'` | Output language |
+| `options.testName` | string | Test name |
+| `options.imports` | string | Override import source (TS only) |
 
-### `getRawEvents(): RawInputEvent[]`
+**Returns:** `Promise<string>` — generated test code.
 
-Returns all raw events captured during the recording.
+### `getOperations(): RecordedOperation[]` — snapshot copy.
 
-## RecorderStartOptions
+### `getRawEvents(): RawInputEvent[]` — snapshot copy.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `onOperation` | `(operation, index) => void` | Real-time callback for each operation |
+## Example
+
+```typescript
+const recorder = driver.recorder;
+await recorder.start({
+  onOperation: (op, i) => console.log(i, op.kind),
+});
+// ...interact with the app...
+const code = await recorder.stop({ lang: 'ts', testName: 'login' });
+```
 
 ## Related
 
-- **Depends on:** [EventAggregator](./EventAggregator.md), [CodeGenerator](./CodeGenerator.md)
-- **Used by:** [FliwrightDriver](./FliwrightDriver.md)
-- **Source:** `src/RecorderController.ts`
+- **Depends on:** [EventAggregator](./EventAggregator.md), [CodeGenerator](./CodeGenerator.md), [SelectorResolver](./SelectorResolver.md)
+- **Bridge counterpart:** `extensions/recording.dart`
+- **Source:** `packages/fliwright-core/src/RecorderController.ts`

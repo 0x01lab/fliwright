@@ -24,7 +24,7 @@ class TypeExtension {
     // Step 1: Inspect to find the widget.
     final inspectResult = await FliwrightBridge.registry.invoke(
       'ext.fliwright.inspect',
-      {'selector': selector},
+      {'selector': selector, 'limit': '1'},
     );
 
     if (inspectResult.containsKey('error')) {

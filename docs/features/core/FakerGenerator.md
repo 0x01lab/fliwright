@@ -2,50 +2,62 @@
 module: "FakerGenerator"
 package: "@fliwright/core"
 source: "src/FakerGenerator.ts"
-generated: "2026-06-01"
+tests: "tests/FakerGenerator.test.ts"
+generated: "2026-06-02"
 ---
 
 # FakerGenerator
 
-> Generates realistic fake data for form fields based on semantic type.
+> Generate a localized, length-bounded value for a `SemanticType` using `@faker-js/faker`.
 
 ## Overview
 
-`FakerGenerator` uses `@faker-js/faker` to generate locale-aware fake data. Each semantic type maps to a specific generation strategy (phone numbers, emails, addresses, etc.).
+Used as the fallback generator when no `SkillRegistry` rule matches. Each semantic type has its own generator method; values are truncated to `maxLength` when supplied.
 
 ## Constructor
 
 ```typescript
-constructor(options?: FakerGeneratorOptions)
+constructor(options?: { locale?: string })
 ```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `options.locale` | `string` | Faker locale (default: system locale) |
 
 ## Public Methods
 
-### `generate(semanticType: SemanticType, maxLength?: number): string`
+### `generate(semanticType, maxLength?): string`
 
-Generates fake data for the given semantic type.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `semanticType` | `SemanticType` | One of: phone/email/idCard/fullName/address/password/captcha/number/text/url/date |
+| `maxLength` | number | Optional truncation length |
 
-## Generation Strategies
+**Returns:** `string` — generated value.
 
-| Semantic Type | Strategy |
-|---------------|----------|
-| `phone` | Chinese mobile format |
-| `email` | Faker email |
-| `idCard` | Chinese 18-digit ID with checksum |
-| `fullName` | Faker full name |
-| `address` | Faker street address |
-| `password` | Random alphanumeric (8-16 chars) |
-| `captcha` | 4-6 digit number |
-| `number` | Random number |
-| `text` | Faker lorem word |
-| `url` | Faker URL |
-| `date` | Date string |
+## Per-Type Behavior
+
+| Type | Generator |
+|------|-----------|
+| `phone` | `1` + digit `[3-9]` + 9 random digits (Chinese mobile) |
+| `email` | `faker.internet.email()` |
+| `idCard` | 18-digit Chinese ID with valid checksum |
+| `fullName` | `faker.person.fullName()` |
+| `address` | `faker.location.streetAddress({ useFullAddress: true })` |
+| `password` | Mixed-case letters + digits + symbols, shuffled |
+| `captcha` | 4–6 random digits |
+| `number` | 1–5 random digits |
+| `text` | `faker.lorem.sentence()` |
+| `url` | `faker.internet.url()` |
+| `date` | ISO date within the recent past (yyyy-mm-dd) |
+
+## Example
+
+```typescript
+const gen = new FakerGenerator();
+gen.generate('email');      // e.g. 'foo@example.com'
+gen.generate('phone');      // e.g. '13812345678'
+gen.generate('idCard');     // 18-digit valid Chinese ID
+gen.generate('password', 16);
+```
 
 ## Related
 
 - **Used by:** [FormHelper](./FormHelper.md)
-- **Source:** `src/FakerGenerator.ts`
+- **Source:** `packages/fliwright-core/src/FakerGenerator.ts`

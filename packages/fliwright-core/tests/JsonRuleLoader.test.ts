@@ -86,6 +86,47 @@ describe('JsonRuleLoader', () => {
     });
     const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'));
     expect(skills[0].name).toBe('rule:semanticType=address');
+    expect(skills[0].match({ semanticType: 'address' } as any)).toBe(true);
+    expect(skills[0].match({ semanticType: 'email' } as any)).toBe(false);
+  });
+
+  it('matches stable form metadata fields exactly', () => {
+    writeRuleFile('rules.json', {
+      version: 1,
+      rules: [
+        {
+          match: {
+            name: 'email',
+            ancestorKey: 'loginForm',
+            semanticsId: 'login.email',
+          },
+          type: 'PRESET_SKILL',
+          data: ['test@example.com'],
+        },
+      ],
+    });
+    const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'));
+    expect(skills[0].match({
+      name: 'email',
+      ancestorKey: 'loginForm',
+      semanticsId: 'login.email',
+    } as any)).toBe(true);
+    expect(skills[0].match({
+      name: 'backupEmail',
+      ancestorKey: 'loginForm',
+      semanticsId: 'login.email',
+    } as any)).toBe(false);
+  });
+
+  it('does not match unknown rule keys', () => {
+    writeRuleFile('rules.json', {
+      version: 1,
+      rules: [
+        { match: { unknownSelector: 'email' }, type: 'PRESET_SKILL', data: ['test@example.com'] },
+      ],
+    });
+    const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'));
+    expect(skills[0].match({ hintText: 'email' } as any)).toBe(false);
   });
 
   it('loads all JSON files from a directory', () => {

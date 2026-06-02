@@ -203,12 +203,12 @@ describe('Locator', () => {
 
     it('throws when no widget found', async () => {
       const sendRequest = createMockSendRequest({
-        inspect: { widgets: [], count: 0 },
+        type: { success: false, error: 'No widget found for selector: text=Missing' },
       });
 
       const locator = new Locator({ text: 'Missing' }, sendRequest);
       await expect(locator.type('hello')).rejects.toThrow(
-        'No widget found matching selector: text=Missing',
+        'No widget found for selector: text=Missing',
       );
     });
 

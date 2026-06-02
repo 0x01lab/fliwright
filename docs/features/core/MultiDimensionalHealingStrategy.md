@@ -2,16 +2,17 @@
 module: "MultiDimensionalHealingStrategy"
 package: "@fliwright/core"
 source: "src/strategies/MultiDimensionalHealingStrategy.ts"
-generated: "2026-06-01"
+tests: "tests/MultiDimensionalHealingStrategy.test.ts"
+generated: "2026-06-02"
 ---
 
 # MultiDimensionalHealingStrategy
 
-> Multi-dimensional widget matching strategy using position, context, code binding, and text similarity.
+> Scores candidate widget snapshots against a baseline across four weighted dimensions: position, context, code-binding, and text similarity.
 
 ## Overview
 
-`MultiDimensionalHealingStrategy` scores candidate widgets against an original snapshot across four dimensions: position (Euclidean distance), context (Jaccard similarity of adjacent text), code binding (callback name similarity), and text (Levenshtein distance). Each dimension is weighted and combined into a single confidence score.
+The strategy combines four sub-scores via configurable weights (defaults: position 0.20, context 0.30, codeBinding 0.15, text 0.35 — must sum to 1.0). The best candidate above the confidence threshold (default 0.85) is returned with a freshly built selector.
 
 ## Constructor
 
@@ -19,66 +20,79 @@ generated: "2026-06-01"
 constructor(weights?: Partial<StrategyWeights>)
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `weights.position` | `number` | Position weight (default: 0.20) |
-| `weights.context` | `number` | Context weight (default: 0.30) |
-| `weights.codeBinding` | `number` | Code binding weight (default: 0.15) |
-| `weights.text` | `number` | Text weight (default: 0.35) |
+```typescript
+interface StrategyWeights {
+  position: number;
+  context: number;
+  codeBinding: number;
+  text: number;
+}
+```
 
-Weights must sum to 1.0 (within 0.001 tolerance).
+**Throws:** `Error('Strategy weights must sum to 1.0')` if weights don't total 1.
 
 ## Public Methods
 
-### `score(original: WidgetSnapshot, candidate: WidgetSnapshot): number`
+### `score(original, candidate): number`
 
-Returns the weighted score between 0 and 1.
+Returns the weighted total score.
 
-### `scoreDimensions(original: WidgetSnapshot, candidate: WidgetSnapshot): { position, context, codeBinding, text, weighted }`
+### `scoreDimensions(original, candidate): { position, context, codeBinding, text, weighted }`
 
-Returns per-dimension scores.
+Returns per-dimension sub-scores plus the weighted total. Used by `SelfHealingEngine` to populate `HealingReport.scores`.
 
-### `heal(original: WidgetSnapshot, candidates: WidgetSnapshot[], threshold?: number): HealingResult | null`
+### `heal(original, candidates, threshold?): HealingResult | null`
 
-Finds the best candidate exceeding the threshold (default: 0.85). Returns `null` if no match.
+Finds the highest-scoring candidate, returns `null` if it's below `threshold` (default 0.85). Otherwise returns:
+
+```typescript
+{
+  originalSelector: '',
+  suggestedSelector: string,  // 'text=...' or 'byType=...'
+  confidence: number,         // best score
+  matchedWidget: { id, type, text?, rect, properties: {} },
+}
+```
+
+## Standalone Functions
+
+### `ngramSimilarity(textA, textB, n?): number`
+
+Cosine similarity over n-gram frequency vectors. Returns 0..1.
+
+### `buildNgramFreq(text, n): Map<string, number>`
+
+### `cosineSimilarity(a, b): number`
 
 ## Properties
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `strategyName` | `string` | `'multidimensional'` |
+| `strategyName` | `'multidimensional'` | Static identifier |
 
-## Exported Functions
+## Sub-Score Formulas
 
-### `ngramSimilarity(textA: string, textB: string, n?: number): number`
+| Dimension | Formula |
+|-----------|---------|
+| `position` | `max(0, 1 − euclidean(center(a), center(b)) / sqrt(800² + 1600²))` |
+| `context` | `0.5 · parentTypeMatch + 0.3 · adjacentTextJaccard + 0.2 · typeMatch` |
+| `codeBinding` | Best of: 1.0 exact callback name match, 0.6 if Levenshtein ≤ 3, else 0.5 if both empty |
+| `text` | `ngramSimilarity(a.description, b.description)` (n=2) |
 
-Computes n-gram cosine similarity between two strings.
+## Example
 
-### `buildNgramFreq(text: string, n: number): Map<string, number>`
+```typescript
+import { MultiDimensionalHealingStrategy, ngramSimilarity } from '@fliwright/core';
 
-Builds n-gram frequency map.
+const strategy = new MultiDimensionalHealingStrategy();
+const result = strategy.heal(baselineSnapshot, candidateSnapshots);
+console.log(result?.confidence, result?.suggestedSelector);
 
-### `cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number`
-
-Computes cosine similarity between frequency maps.
-
-## StrategyWeights
-
-| Field | Type | Default |
-|-------|------|---------|
-| `position` | `number` | 0.20 |
-| `context` | `number` | 0.30 |
-| `codeBinding` | `number` | 0.15 |
-| `text` | `number` | 0.35 |
-
-## Constants
-
-| Name | Value |
-|------|-------|
-| `DEFAULT_THRESHOLD` | `0.85` |
+const sim = ngramSimilarity('Login', 'Log in', 2);
+```
 
 ## Related
 
-- **Implements:** `HealingStrategy`
+- **Implements:** `HealingStrategy` (interface)
 - **Used by:** [SelfHealingEngine](./SelfHealingEngine.md)
-- **Source:** `src/strategies/MultiDimensionalHealingStrategy.ts`
+- **Source:** `packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts`

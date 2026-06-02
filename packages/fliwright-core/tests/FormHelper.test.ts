@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { FormHelper } from '../src/FormHelper.js';
 
 function createMockSendRequest(responses: Record<string, unknown>) {
@@ -34,6 +37,8 @@ const sampleFields = {
         type: 'TextFormField',
         rect: { x: 20, y: 200, width: 360, height: 48 },
         hintText: '请输入密码',
+        label: 'Login password',
+        name: 'password',
         keyboardType: 'visiblePassword',
         obscureText: true,
         enabled: true,
@@ -43,6 +48,8 @@ const sampleFields = {
         id: 'w3',
         type: 'TextFormField',
         rect: { x: 20, y: 300, width: 360, height: 48 },
+        name: 'email',
+        ancestorKey: 'loginForm',
         hintText: '邮箱地址',
         keyboardType: 'emailAddress',
         obscureText: false,
@@ -92,7 +99,111 @@ describe('FormHelper', () => {
       expect(result.filled).toBe(3);
     });
 
-    it('calls click and type for each filled field', async () => {
+    it('skips unmatched fields when requireRuleMatch is true', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { label: '邮箱' },
+            type: 'PRESET_SKILL',
+            data: ['test.user@example.com'],
+          }],
+        }));
+
+        const result = await helper.fill({ rulesFile, requireRuleMatch: true });
+        expect(result.filled).toBe(0);
+        expect(result.skipped).toBe(3);
+        expect(result.fields.find(f => f.id === 'w1')?.reason).toBe('no matching form rule');
+        expect(result.fields.find(f => f.id === 'w3')?.reason).toBe('no matching form rule');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('uses matching rule values when requireRuleMatch is true', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { hintText: '邮箱地址' },
+            type: 'PRESET_SKILL',
+            data: ['test.user@example.com'],
+          }],
+        }));
+
+        const result = await helper.fill({ rulesFile, requireRuleMatch: true });
+        expect(result.filled).toBe(1);
+        expect(result.skipped).toBe(2);
+        expect(result.fields.find(f => f.id === 'w3')?.generatedValue).toBe('test.user@example.com');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('fills matched obscure fields from explicit rules', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'password' },
+            type: 'PRESET_SKILL',
+            data: ['Password123!'],
+          }],
+        }));
+
+        const result = await helper.fill({ rulesFile, requireRuleMatch: true, skipObscureFields: true });
+        expect(result.filled).toBe(1);
+        expect(result.skipped).toBe(2);
+        expect(result.fields.find(f => f.id === 'w2')).toMatchObject({
+          semanticType: 'password',
+          status: 'filled',
+          generatedValue: 'Password123!',
+        });
+        const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+        expect(typeCalls).toHaveLength(1);
+        expect(typeCalls[0][1]).toMatchObject({ selector: 'name=password', replaceAll: 'true' });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('matches rules by stable field name and fills using name selector first', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'email' },
+            type: 'PRESET_SKILL',
+            data: ['stable@example.com'],
+          }],
+        }));
+
+        const result = await helper.fill({ rulesFile, requireRuleMatch: true });
+        expect(result.filled).toBe(1);
+        expect(result.fields.find(f => f.id === 'w3')).toMatchObject({
+          generatedValue: 'stable@example.com',
+          name: 'email',
+          ancestorKey: 'loginForm',
+        });
+        const typeSelectors = sendRequest.mock.calls
+          .filter(c => c[0] === 'ext.fliwright.type')
+          .map(c => (c[1] as Record<string, unknown>).selector);
+        expect(typeSelectors).toContain('name=email');
+        expect(typeSelectors).not.toContain('id=w3');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('calls type for each filled field', async () => {
       await helper.fill({ skipObscureFields: true });
       const extractCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.extractForm');
       const clickCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.click');
@@ -145,7 +256,7 @@ describe('FormHelper', () => {
 
       const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
       expect(typeCalls).toHaveLength(1);
-      expect(typeCalls[0][1]).toMatchObject({ selector: 'id=w3', replaceAll: 'true' });
+      expect(typeCalls[0][1]).toMatchObject({ selector: 'name=email', replaceAll: 'true' });
     });
   });
 
@@ -198,14 +309,10 @@ describe('FormHelper', () => {
         if (method === 'ext.fliwright.extractForm') {
           return Promise.resolve(sampleFields['ext.fliwright.extractForm']);
         }
-        if (method === 'ext.fliwright.inspect') {
-          return Promise.resolve(
-            params?.selector === 'id=w1'
-              ? { widgets: [], count: 0 }
-              : sampleFields['ext.fliwright.inspect'],
-          );
-        }
         if (method === 'ext.fliwright.type') {
+          if (params?.selector === 'id=w1') {
+            return Promise.resolve({ success: false, error: 'No widget found for selector: id=w1' });
+          }
           return Promise.resolve({ success: true });
         }
         return Promise.resolve({});
@@ -213,20 +320,20 @@ describe('FormHelper', () => {
 
       const result = await new FormHelper(send).fillFields(['手机号']);
       expect(result.filled).toBe(1);
-      const inspectSelectors = send.mock.calls
-        .filter((call) => call[0] === 'ext.fliwright.inspect')
+      const typeSelectors = send.mock.calls
+        .filter((call) => call[0] === 'ext.fliwright.type')
         .map((call) => (call[1] as Record<string, unknown>).selector);
-      expect(inspectSelectors).toContain('id=w1');
-      expect(inspectSelectors).toContain('text=请输入手机号');
+      expect(typeSelectors).toContain('id=w1');
+      expect(typeSelectors).toContain('text=请输入手机号');
     });
 
     it('reports both primary and fallback errors when both lookups fail', async () => {
-      const send = vi.fn().mockImplementation((method: string) => {
+      const send = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
         if (method === 'ext.fliwright.extractForm') {
           return Promise.resolve(sampleFields['ext.fliwright.extractForm']);
         }
-        if (method === 'ext.fliwright.inspect') {
-          return Promise.resolve({ widgets: [], count: 0 });
+        if (method === 'ext.fliwright.type') {
+          return Promise.resolve({ success: false, error: `No widget found for selector: ${params?.selector}` });
         }
         return Promise.resolve({});
       });

@@ -70,20 +70,19 @@ class FormExtractExtension {
 
         final keyboardType = _keyboardTypeName(widget.keyboardType);
 
-        String selector;
-        final key = info['key'];
-        if (key != null) {
-          selector = 'key=$key';
-        } else {
-          selector = 'byType=${info['type']}';
-        }
+        final selector = _selectorFor(
+          info,
+          fallbackType: info['type']?.toString(),
+        );
 
         fields.add({
           'id': info['id'],
           'type': info['type'],
           if (info['rect'] != null) 'rect': info['rect'],
+          ..._stableMetadata(info),
           if (keyboardType != null) 'keyboardType': keyboardType,
           'obscureText': widget.obscureText,
+          'enabled': true,
           'selector': selector,
         });
       }
@@ -130,22 +129,18 @@ class FormExtractExtension {
     final effectiveMaxLength =
         (maxLength != null && maxLength > 0) ? maxLength : null;
 
-    String selector;
-    if (hintText != null && hintText.isNotEmpty) {
-      selector = 'text=$hintText';
-    } else {
-      final key = info['key'];
-      if (key != null) {
-        selector = 'key=$key';
-      } else {
-        selector = 'byType=${overrideType ?? info['type']}';
-      }
-    }
+    final selector = _selectorFor(
+      info,
+      hintText: hintText,
+      label: label,
+      fallbackType: overrideType ?? info['type']?.toString(),
+    );
 
     fields.add({
       'id': info['id'],
       'type': overrideType ?? info['type'],
       if (info['rect'] != null) 'rect': info['rect'],
+      ..._stableMetadata(info),
       if (hintText != null) 'hintText': hintText,
       if (label != null) 'label': label,
       if (kbType != null) 'keyboardType': kbType,
@@ -154,6 +149,46 @@ class FormExtractExtension {
       'enabled': enabled ?? true,
       'selector': selector,
     });
+  }
+
+  static Map<String, dynamic> _stableMetadata(Map<String, dynamic> info) {
+    return {
+      if (info['key'] != null) 'key': info['key'],
+      if (info['ancestorKey'] != null) 'ancestorKey': info['ancestorKey'],
+      if (info['name'] != null) 'name': info['name'],
+      if (info['semanticsId'] != null) 'semanticsId': info['semanticsId'],
+      if (info['semanticsLabel'] != null)
+        'semanticsLabel': info['semanticsLabel'],
+      if (info['semanticsHint'] != null) 'semanticsHint': info['semanticsHint'],
+      if (info['role'] != null) 'role': info['role'],
+    };
+  }
+
+  static String _selectorFor(
+    Map<String, dynamic> info, {
+    String? hintText,
+    String? label,
+    String? fallbackType,
+  }) {
+    final semanticsId = info['semanticsId'];
+    if (semanticsId is String && semanticsId.isNotEmpty) {
+      return 'semanticsId=$semanticsId';
+    }
+
+    final name = info['name'];
+    if (name is String && name.isNotEmpty) return 'name=$name';
+
+    final key = info['key'];
+    if (key is String && key.isNotEmpty) return 'key=$key';
+
+    final ancestorKey = info['ancestorKey'];
+    if (ancestorKey is String && ancestorKey.isNotEmpty) {
+      return 'ancestorKey=$ancestorKey';
+    }
+
+    if (hintText != null && hintText.isNotEmpty) return 'text=$hintText';
+    if (label != null && label.isNotEmpty) return 'text=$label';
+    return 'byType=${fallbackType ?? info['type']}';
   }
 
   /// Walk descendants of a TextField to find the inner EditableText

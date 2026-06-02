@@ -1,43 +1,46 @@
 ---
 module: "GestureExtension"
-package: "fliwright-bridge"
+package: "fliwright_bridge"
 source: "lib/src/extensions/gesture.dart"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
 # GestureExtension
 
-> Handles click and gesture (longPress, drag, pinch) interactions on Flutter widgets.
+> Programmatic click and complex gesture synthesis (long-press, drag, pinch).
 
-## Registered Extensions
+## Registered Methods
+
+| Method | Description |
+|--------|-------------|
+| `ext.fliwright.click` | Tap at `(x, y)` (screen center) |
+| `ext.fliwright.gesture` | Synthesize a gesture (longPress / drag / pinch) |
+
+## Methods
 
 ### `ext.fliwright.click`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `x` | `double` | Yes | X coordinate |
-| `y` | `double` | Yes | Y coordinate |
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `x` | number | Yes | Screen x |
+| `y` | number | Yes | Screen y |
 
-**Returns:** `{ success: bool }`
+**Returns:** `{ success: true }` on success.
 
 ### `ext.fliwright.gesture`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `gesture` | `string` | Yes | One of: `longPress`, `drag`, `pinch` |
-| `selector` | `string` | Yes | Widget selector |
-| `ancestorSelector` | `string` | No | Ancestor scope selector |
-| `duration` | `int` | No | Duration for longPress (default: 500) |
-| `deltaX` | `double` | For drag | Horizontal displacement |
-| `deltaY` | `double` | For drag | Vertical displacement |
-| `steps` | `int` | No | Animation steps (default: 10) |
-| `scale` | `double` | No | Scale for pinch (default: 0.5) |
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `gesture` | `'longPress' \| 'drag' \| 'pinch'` | Yes | Gesture type |
+| `selector` | string | Yes | Wire-format selector (target widget) |
+| `duration` | number | No | Long-press duration in µs |
+| `deltaX`, `deltaY` | number | For drag | Displacement |
+| `scale` | number | For pinch | Scale factor |
+| `steps` | number | No | Interpolated pointer-move steps |
 
-**Returns:** `{ success: bool, gesture: string }`
+**Coordinate system:** logical (Flutter-independent) pixels relative to the screen top-left. Coordinates from `WidgetInfo.rect` are in the same system.
 
-## Implementation Details
+## Related
 
-- Uses `GestureBinding` to inject pointer events
-- Pointer IDs start at 10000 and increment
-- For drag: calculates start/end points from widget center + delta
-- For pinch: creates two pointer paths converging/diverging at widget center
+- **TS counterpart:** [`Locator`](../core/Locator.md) `click/longPress/drag/pinch`
+- **Source:** `packages/fliwright-bridge/lib/src/extensions/gesture.dart`

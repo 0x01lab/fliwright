@@ -2,16 +2,23 @@
 module: "FailureCollector"
 package: "@fliwright/core"
 source: "src/FailureCollector.ts"
-generated: "2026-06-01"
+tests: "tests/FailureCollector.test.ts"
+generated: "2026-06-02"
 ---
 
 # FailureCollector
 
-> Collects failure context including screenshot, widget tree, and source location.
+> Capture screenshot, widget tree, and source location for a failed assertion.
 
 ## Overview
 
-`FailureCollector` captures rich failure context when an assertion fails. It takes a screenshot via the bridge, collects the widget tree, and extracts source code location from the error stack trace.
+On assertion failure, `FailureCollector.collect()` runs three calls in parallel:
+
+1. `ext.fliwright.screenshot` (falls back to `ext.flutter.driver.screenshot` if absent)
+2. `ext.fliwright.snapshot` (falls back to `ext.fliwright.inspect` with empty selector)
+3. Stack-trace parsing for `{ file, line, snippet }`
+
+Errors at any step are swallowed so a partial `FailureContext` is always returned.
 
 ## Constructor
 
@@ -21,30 +28,40 @@ constructor(sendRequest: SendRequest)
 
 ## Public Methods
 
-### `collect(error: AssertionError, timeout: number): Promise<FailureContext>`
+### `collect(error, timeout): Promise<FailureContext>`
 
-Captures failure context.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `error` | `AssertionError` | The failure |
+| `timeout` | number | Assertion timeout (carried into context) |
 
-**Parameters:**
+**Returns:** `Promise<FailureContext>`:
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `error` | `AssertionError` | Yes | The assertion error |
-| `timeout` | `number` | Yes | Assertion timeout in ms |
+```typescript
+{
+  assertion: { matcher, expected, actual, timeout };
+  screenshot: Buffer | null;
+  widgetTree: object;
+  source: { file, line, snippet };
+  timestamp: string;  // ISO
+}
+```
 
-**Returns:** `Promise<FailureContext>`
+## Example
 
-## FailureContext
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `assertion` | `{ matcher, expected, actual, timeout }` | Assertion details |
-| `screenshot` | `Buffer \| null` | PNG screenshot |
-| `widgetTree` | `object` | Widget tree snapshot |
-| `source` | `{ file, line, snippet }` | Source code location |
-| `timestamp` | `string` | ISO timestamp |
+```typescript
+const collector = new FailureCollector(driver.sendRequest.bind(driver));
+try {
+  await expect(locator).toBeVisible();
+} catch (e) {
+  if (e instanceof AssertionError) {
+    const ctx = await collector.collect(e, 5000);
+    // ...report...
+  }
+}
+```
 
 ## Related
 
-- **Used by:** [Assertion](./Assertion.md), `@fliwright/vitest`
-- **Source:** `src/FailureCollector.ts`
+- **Used by:** [Assertion](./Assertion.md), `@fliwright/vitest` failure writer
+- **Source:** `packages/fliwright-core/src/FailureCollector.ts`

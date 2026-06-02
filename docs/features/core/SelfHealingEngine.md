@@ -2,16 +2,17 @@
 module: "SelfHealingEngine"
 package: "@fliwright/core"
 source: "src/SelfHealingEngine.ts"
-generated: "2026-06-01"
+tests: "tests/SelfHealingEngine.test.ts"
+generated: "2026-06-02"
 ---
 
 # SelfHealingEngine
 
-> Self-healing engine that recovers from broken selectors by matching widget snapshots.
+> Records baseline widget snapshots on assertion success and, on failure, asks the healing strategy to find the best candidate match in the current widget tree.
 
 ## Overview
 
-When an assertion fails because a selector no longer matches, the `SelfHealingEngine` uses a `HealingStrategy` to find the best alternative widget. It records successful snapshots for future healing attempts and generates detailed `HealingReport` entries.
+The engine sits between `Assertion` and `SnapshotStore`. On every successful assertion, it persists the widget snapshot keyed by `(testName, selector)`. When an assertion fails after timeout, the engine loads the baseline, fetches live candidates, runs them through a `HealingStrategy`, and (if a match exceeds the threshold) emits a `HealingReport` containing the suggested selector and per-dimension scores.
 
 ## Constructor
 
@@ -21,35 +22,61 @@ constructor(store: SnapshotStore, strategy: HealingStrategy)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `store` | `SnapshotStore` | Yes | Snapshot persistence store |
-| `strategy` | `HealingStrategy` | Yes | Scoring and matching strategy |
+| `store` | `SnapshotStore` | Yes | Disk-backed snapshot persistence |
+| `strategy` | `HealingStrategy` | Yes | Scoring/matching algorithm (default `MultiDimensionalHealingStrategy`) |
 
 ## Public Methods
 
-### `setEnabled(enabled: boolean): void`
+### `recordSuccess(locator, testName, fetchSnapshot): Promise<void>`
 
-Enables or disables the healing engine.
+Persists a widget snapshot for `(testName, locator.selectorString)`.
 
-### `recordSuccess(locator: Locator, testName: string, fetchSnapshot: FetchSnapshot): Promise<void>`
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `locator` | `Locator` | The locator that succeeded |
+| `testName` | string | The current test name |
+| `fetchSnapshot` | `() => Promise<WidgetSnapshot | WidgetSnapshot[]>` | Callback returning the snapshot |
 
-Saves a snapshot of the successfully matched widget for future healing.
+---
 
-### `tryHeal(locator: Locator, testName: string, failure: FailureContext, fetchCandidates: () => Promise<WidgetSnapshot[]>): Promise<{ healed: boolean; report?: HealingReport }>`
+### `tryHeal(locator, testName, failure, fetchCandidates): Promise<{ healed, report? }>`
 
-Attempts to find an alternative widget matching the original snapshot.
+Attempts to heal a failing locator. Returns `{ healed: true, report }` if a candidate exceeds the strategy's threshold.
 
-### `getReports(testName?: string): HealingReport[]`
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `locator` | `Locator` | The failing locator |
+| `testName` | string | Test name (for snapshot lookup) |
+| `failure` | `FailureContext` | Context from the failing assertion |
+| `fetchCandidates` | `() => Promise<WidgetSnapshot[]>` | Callback returning live candidate widgets |
 
-Returns healing reports, optionally filtered by test name.
+**Returns:** `{ healed: boolean; report?: HealingReport }`
+
+---
+
+### `getReports(testName?): HealingReport[]`
+
+Returns a copy of all stored healing reports, optionally filtered by test name.
 
 ## Properties
 
-| Property | Type | Readonly | Description |
-|----------|------|----------|-------------|
-| `enabled` | `boolean` | Yes (getter) | Whether healing is active |
+| Property | Type | Description |
+|----------|------|-------------|
+| `enabled` | boolean | Read/set; when `false`, `tryHeal` short-circuits |
+
+## Example
+
+```typescript
+import { SelfHealingEngine, MultiDimensionalHealingStrategy, SnapshotStore } from '@fliwright/core';
+
+const engine = new SelfHealingEngine(new SnapshotStore(), new MultiDimensionalHealingStrategy());
+await engine.recordSuccess(locator, 'login', fetchSnapshot);
+const { healed, report } = await engine.tryHeal(locator, 'login', failure, fetchCandidates);
+```
 
 ## Related
 
-- **Depends on:** [SnapshotStore](./SnapshotStore.md), [MultiDimensionalHealingStrategy](./MultiDimensionalHealingStrategy.md)
-- **Used by:** [Assertion](./Assertion.md)
-- **Source:** `src/SelfHealingEngine.ts`
+- **Depends on:** [SnapshotStore](./SnapshotStore.md), [MultiDimensionalHealingStrategy](./MultiDimensionalHealingStrategy.md), `HealingStrategy` interface
+- **Used by:** [Assertion](./Assertion.md), [FliwrightDriver](./FliwrightDriver.md)
+- **Pipeline:** [self-healing-pipeline.md](../self-healing-pipeline.md)
+- **Source:** `packages/fliwright-core/src/SelfHealingEngine.ts`

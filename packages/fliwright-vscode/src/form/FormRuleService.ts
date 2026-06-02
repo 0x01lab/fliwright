@@ -5,6 +5,22 @@ import { jsonErrorMessage, readJson, writeJson } from '../json.js';
 import type { FormDiscoveryResult, FormRulesEntry, FormRulesFile, InvalidFileEntry } from '../types.js';
 
 const RULE_TYPES = new Set(['PRESET_SKILL', 'REGEXP_MOCK', 'LLM_GENERATE']);
+const MATCH_KEYS = new Set([
+  'id',
+  'selector',
+  'type',
+  'hintText',
+  'label',
+  'keyboardType',
+  'key',
+  'ancestorKey',
+  'name',
+  'semanticsId',
+  'semanticsLabel',
+  'semanticsHint',
+  'role',
+  'semanticType',
+]);
 
 export class FormRuleService {
   async discover(workspaceRoot: vscode.Uri): Promise<FormDiscoveryResult> {
@@ -70,6 +86,14 @@ export class FormRuleService {
     file.rules.forEach((rule, index) => {
       if (!rule.match || typeof rule.match !== 'object' || Array.isArray(rule.match)) {
         throw new Error(`rules[${index}].match is required`);
+      }
+      for (const [key, value] of Object.entries(rule.match)) {
+        if (!MATCH_KEYS.has(key)) {
+          throw new Error(`rules[${index}].match.${key} is not supported`);
+        }
+        if (typeof value !== 'string') {
+          throw new Error(`rules[${index}].match.${key} must be a string`);
+        }
       }
       if (!RULE_TYPES.has(rule.type)) {
         throw new Error(`rules[${index}].type must be PRESET_SKILL, REGEXP_MOCK, or LLM_GENERATE`);

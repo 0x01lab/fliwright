@@ -162,6 +162,13 @@ export interface FormFieldMeta {
   id: string;
   type: string;
   rect: { x: number; y: number; width: number; height: number };
+  key?: string;
+  ancestorKey?: string;
+  name?: string;
+  semanticsId?: string;
+  semanticsLabel?: string;
+  semanticsHint?: string;
+  role?: string;
   hintText?: string;
   label?: string;
   keyboardType?: string;
@@ -185,6 +192,14 @@ export interface FormFillResult {
     generatedValue: string;
     selector: string;
     status: 'filled' | 'skipped' | 'error';
+    reason?: string;
+    key?: string;
+    ancestorKey?: string;
+    name?: string;
+    semanticsId?: string;
+    semanticsLabel?: string;
+    semanticsHint?: string;
+    role?: string;
   }>;
 }
 
@@ -196,6 +211,13 @@ export interface FormAnalyzeResult {
     selector: string;
     hintText?: string;
     label?: string;
+    key?: string;
+    ancestorKey?: string;
+    name?: string;
+    semanticsId?: string;
+    semanticsLabel?: string;
+    semanticsHint?: string;
+    role?: string;
   }>;
 }
 
@@ -205,6 +227,7 @@ export interface FormHelperOptions {
   locale?: string;
   skipObscureFields?: boolean;
   scope?: string;
+  requireRuleMatch?: boolean;
 }
 
 export interface FormSkill {

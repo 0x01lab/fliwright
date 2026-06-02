@@ -13,6 +13,8 @@ import { SkillRegistry } from './SkillRegistry.js';
 import { JsonRuleLoader } from './JsonRuleLoader.js';
 import { Locator } from './Locator.js';
 
+type RuleMatchField = FormFieldMeta & { semanticType?: SemanticType };
+
 export class FormHelper {
   private sendRequest: SendRequest;
 
@@ -42,7 +44,8 @@ export class FormHelper {
     return {
       fields: fields.map((field) => {
         const semanticType = semanticTypes.get(field.id) ?? 'text';
-        const skill = registry.match(field);
+        const matchField: RuleMatchField = { ...field, semanticType };
+        const skill = registry.match(matchField);
         const generatedValue = skill
           ? skill.generate(field, options?.locale ?? 'zh_CN')
           : generator.generate(semanticType, field.maxLength);
@@ -53,6 +56,13 @@ export class FormHelper {
           selector: field.selector,
           hintText: field.hintText,
           label: field.label,
+          key: field.key,
+          ancestorKey: field.ancestorKey,
+          name: field.name,
+          semanticsId: field.semanticsId,
+          semanticsLabel: field.semanticsLabel,
+          semanticsHint: field.semanticsHint,
+          role: field.role,
         };
       }),
     };
@@ -80,6 +90,8 @@ export class FormHelper {
           generatedValue: '',
           selector: field.selector,
           status: 'skipped',
+          reason: 'not selected',
+          ...this.resultMetadata(field),
         });
         result.skipped++;
       } else {
@@ -134,25 +146,44 @@ export class FormHelper {
         generatedValue: '',
         selector: field.selector,
         status: 'skipped',
-      });
-      result.skipped++;
-      return;
-    }
-
-    if (field.obscureText && (options?.skipObscureFields ?? true)) {
-      result.fields.push({
-        id: field.id,
-        semanticType: semanticTypes.get(field.id) ?? 'password',
-        generatedValue: '',
-        selector: field.selector,
-        status: 'skipped',
+        reason: 'disabled',
+        ...this.resultMetadata(field),
       });
       result.skipped++;
       return;
     }
 
     const semanticType = semanticTypes.get(field.id) ?? 'text';
-    const skill = registry.match(field);
+    const matchField: RuleMatchField = { ...field, semanticType };
+    const skill = registry.match(matchField);
+
+    if (field.obscureText && (options?.skipObscureFields ?? true) && !skill) {
+      result.fields.push({
+        id: field.id,
+        semanticType,
+        generatedValue: '',
+        selector: field.selector,
+        status: 'skipped',
+        reason: 'obscure field',
+        ...this.resultMetadata(field),
+      });
+      result.skipped++;
+      return;
+    }
+
+    if (options?.requireRuleMatch && !skill) {
+      result.fields.push({
+        id: field.id,
+        semanticType,
+        generatedValue: '',
+        selector: field.selector,
+        status: 'skipped',
+        reason: 'no matching form rule',
+        ...this.resultMetadata(field),
+      });
+      result.skipped++;
+      return;
+    }
     const generatedValue = skill
       ? skill.generate(field, options?.locale ?? 'zh_CN')
       : generator.generate(semanticType, field.maxLength);
@@ -165,6 +196,7 @@ export class FormHelper {
         generatedValue,
         selector: field.selector,
         status: 'filled',
+        ...this.resultMetadata(field),
       });
       result.filled++;
     } catch (err) {
@@ -176,8 +208,21 @@ export class FormHelper {
         generatedValue,
         selector: field.selector,
         status: 'error',
+        ...this.resultMetadata(field),
       });
     }
+  }
+
+  private resultMetadata(field: FormFieldMeta) {
+    return {
+      key: field.key,
+      ancestorKey: field.ancestorKey,
+      name: field.name,
+      semanticsId: field.semanticsId,
+      semanticsLabel: field.semanticsLabel,
+      semanticsHint: field.semanticsHint,
+      role: field.role,
+    };
   }
 
   private async fillWithFallback(field: FormFieldMeta, generatedValue: string): Promise<void> {
@@ -216,6 +261,10 @@ export class FormHelper {
   }
 
   private selectorForFill(field: FormFieldMeta): SelectorInput {
+    if (field.semanticsId) return `semanticsId=${field.semanticsId}`;
+    if (field.name) return `name=${field.name}`;
+    if (field.key) return { key: field.key };
+    if (field.ancestorKey) return `ancestorKey=${field.ancestorKey}`;
     return field.id ? `id=${field.id}` : this.parseSelector(field.selector);
   }
 }

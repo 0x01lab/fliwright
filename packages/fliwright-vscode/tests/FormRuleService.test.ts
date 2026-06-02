@@ -28,6 +28,35 @@ describe('FormRuleService', () => {
     expect(result.invalid[0]?.error).toContain('type must be PRESET_SKILL');
   });
 
+  it('accepts stable selector match keys', async () => {
+    const root = await createWorkspace();
+    await writeJson(root, '.fliwright/forms/login.json', {
+      version: 1,
+      rules: [{
+        match: { name: 'email', ancestorKey: 'loginForm' },
+        type: 'PRESET_SKILL',
+        data: ['test@example.com'],
+      }],
+    });
+
+    const result = await new FormRuleService().discover(Uri.file(root));
+
+    expect(result.files).toHaveLength(1);
+    expect(result.invalid).toHaveLength(0);
+  });
+
+  it('reports unsupported match keys', async () => {
+    const root = await createWorkspace();
+    await writeJson(root, '.fliwright/forms/bad.json', {
+      version: 1,
+      rules: [{ match: { unknownSelector: 'email' }, type: 'PRESET_SKILL', data: ['x'] }],
+    });
+
+    const result = await new FormRuleService().discover(Uri.file(root));
+
+    expect(result.invalid[0]?.error).toContain('match.unknownSelector is not supported');
+  });
+
   it('requires regexp pattern for REGEXP_MOCK', async () => {
     const root = await createWorkspace();
     await writeJson(root, '.fliwright/forms/bad.json', {

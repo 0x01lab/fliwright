@@ -1,26 +1,29 @@
 ---
 module: "ScreenshotExtension"
-package: "fliwright-bridge"
+package: "fliwright_bridge"
 source: "lib/src/extensions/screenshot.dart"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
 # ScreenshotExtension
 
-> Captures screenshots by rendering the Flutter widget tree to PNG.
+> Capture a PNG screenshot of the rendered Flutter surface.
 
-## Registered Extension
+## Registered Methods
+
+| Method | Description |
+|--------|-------------|
+| `ext.fliwright.screenshot` | Return base64-encoded PNG |
 
 ### `ext.fliwright.screenshot`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `pixelRatio` | `double` | No | Pixel ratio (default: 1.0) |
+No params.
 
-**Returns:** `{ success: true, format: 'png', screenshot: string(base64), width: double, height: double, pixelRatio: double }`
+**Returns:** `{ screenshot: '<base64 PNG>' }` on success. `{ screenshot: null }` if capture fails (e.g. headless test environment).
 
-## Implementation
+Captured via `RenderingFlutterBinding.instance.takeScreenshot(...)` when available, with a fallback to `RepaintBoundary.toImage`.
 
-- Finds the root `RenderRepaintBoundary`
-- Renders to PNG via `RenderRepaintBoundary.toImage()`
-- Encodes to base64
+## Related
+
+- **TS counterpart:** [`FailureCollector._takeScreenshot`](../core/FailureCollector.md)
+- **Source:** `packages/fliwright-bridge/lib/src/extensions/screenshot.dart`

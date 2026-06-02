@@ -2,16 +2,17 @@
 module: "Protocol"
 package: "@fliwright/core"
 source: "src/Protocol.ts"
-generated: "2026-06-01"
+tests: "tests/Protocol.test.ts"
+generated: "2026-06-02"
 ---
 
 # Protocol
 
-> JSON-RPC 2.0 protocol handler for VM Service communication.
+> JSON-RPC 2.0 request/response encoder/decoder for the VM Service WebSocket.
 
 ## Overview
 
-`Protocol` creates and parses JSON-RPC 2.0 messages for communication with the Dart VM Service. It auto-injects protocol version on handshake requests and manages request IDs.
+Wraps each outbound call in a `{ jsonrpc: '2.0', id, method, params }` envelope and unwraps responses, throwing on `error`. The handshake method `ext.fliwright.handshake` automatically injects `protocolVersion: 1` into params.
 
 ## Constructor
 
@@ -21,19 +22,27 @@ constructor()
 
 ## Public Methods
 
-### `createRequest(method: string, params?: Record<string, unknown>): ProtocolMessage & { id: string }`
+### `createRequest(method, params?): ProtocolMessage & { id: string }`
 
-Creates a JSON-RPC 2.0 request with auto-incremented ID. Injects `protocolVersion` for handshake methods.
+Allocates a sequential numeric id (stringified) and returns the wire message.
 
-### `parseResponse(message: ProtocolMessage): unknown`
+### `parseResponse(message): unknown`
 
-Parses a JSON-RPC response. Throws on error, returns `result` on success.
+Returns `message.result`. Throws `Error('VM Service error [code]: message')` if `message.error` is set.
 
-### `getProtocolVersion(): number`
+### `getProtocolVersion(): number` — returns `1`.
 
-Returns the protocol version: `1`.
+## Example
+
+```typescript
+const protocol = new Protocol();
+const req = protocol.createRequest('ext.fliwright.click', { x: 100, y: 200 });
+ws.send(JSON.stringify(req));
+// later:
+const result = protocol.parseResponse(JSON.parse(raw));
+```
 
 ## Related
 
 - **Used by:** [VMServiceConnector](./VMServiceConnector.md)
-- **Source:** `src/Protocol.ts`
+- **Source:** `packages/fliwright-core/src/Protocol.ts`

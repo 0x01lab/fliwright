@@ -1,28 +1,39 @@
 ---
 module: "SnapshotExtension"
-package: "fliwright-bridge"
+package: "fliwright_bridge"
 source: "lib/src/extensions/snapshot.dart"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
 # SnapshotExtension
 
-> Captures interactive widget metadata from the Flutter widget tree.
+> Capture a serialized view of the interactive widget tree (and selected metadata) for self-healing analysis and failure context.
 
-## Registered Extension
+## Registered Methods
+
+| Method | Description |
+|--------|-------------|
+| `ext.fliwright.snapshot` | Return interactive widget tree |
 
 ### `ext.fliwright.snapshot`
 
-**Parameters:** None
+No params.
 
-**Returns:** `{ widgets: List<Map>, count: int }`
+**Returns:** an object whose top-level structure includes a list of `WidgetSnapshot`-style entries:
 
-## Interactive Widget Types
+| Field | Description |
+|-------|-------------|
+| `type` | Runtime type |
+| `text`, `key` | Identifiers |
+| `parentType` | Immediate parent's type |
+| `adjacentText` | Sibling widget text labels (used for `context` healing score) |
+| `rect` | `{ x, y, width, height }` |
+| `callbackNames` | Bound callback names (used for `codeBinding` healing score) |
+| `description` | Human-readable text used for `text` healing score |
 
-Captures widgets of these types:
+Captured widget types include `TextField`, `TextFormField`, `EditableText`, `ElevatedButton`, `TextButton`, `OutlinedButton`, `IconButton`, `FloatingActionButton`, `Checkbox`, `Switch`, `Slider`, `DropdownButton`, plus common containers (for context).
 
-`ElevatedButton`, `TextButton`, `OutlinedButton`, `IconButton`, `FloatingActionButton`, `TextField`, `TextFormField`, `Checkbox`, `Switch`, `Radio`, `Slider`, `DropdownButton`, `PopupMenuButton`, `ListTile`, `InkWell`, `GestureDetector`, `DropdownButtonFormField`
+## Related
 
-## Widget Metadata
-
-Each widget includes: `id`, `type`, `text`, `key`, `rect`, `parentType`, `parentText`, `adjacentText`, `callbackNames`, `properties`, `description`
+- **TS counterpart:** [`SelfHealingEngine.tryHeal`](../core/SelfHealingEngine.md), [`FailureCollector`](../core/FailureCollector.md)
+- **Source:** `packages/fliwright-bridge/lib/src/extensions/snapshot.dart`

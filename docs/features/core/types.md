@@ -1,18 +1,21 @@
 ---
 module: "types"
 package: "@fliwright/core"
-source: "src/types.ts, src/interfaces/*.ts"
-generated: "2026-06-01"
+source: "src/types.ts"
+generated: "2026-06-02"
 ---
 
 # Types & Interfaces
 
-## Core Types
+All public types and interfaces exported from `@fliwright/core`'s `types.ts` and `interfaces/*.ts`.
+
+## Type Aliases
 
 ### `SendRequest`
 ```typescript
 type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 ```
+Standard RPC channel signature used throughout the codebase.
 
 ### `SelectorInput`
 ```typescript
@@ -22,275 +25,195 @@ type SelectorInput =
   | { key: string; ancestor?: SelectorInput }
   | { type: string; ancestor?: SelectorInput };
 ```
+Input accepted by `Page.locator(...)` and `Locator`'s constructor.
 
 ### `SemanticType`
 ```typescript
-type SemanticType = 'phone' | 'email' | 'idCard' | 'fullName' | 'address' | 'password' | 'captcha' | 'number' | 'text' | 'url' | 'date';
+type SemanticType =
+  | 'phone' | 'email' | 'idCard' | 'fullName' | 'address'
+  | 'password' | 'captcha' | 'number' | 'text' | 'url' | 'date';
 ```
+Result of `SemanticInferrer.infer(field)`.
 
-## Widget Types
+## Interfaces
 
 ### `WidgetInfo`
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | `string` | Widget identifier |
-| `type` | `string` | Widget type name |
-| `text` | `string?` | Display text |
-| `key` | `string?` | Value key |
-| `rect` | `{ x, y, width, height }` | Bounding rectangle |
-| `properties` | `Record<string, unknown>` | Additional properties |
+| `id` | string | Bridge-assigned widget id |
+| `type` | string | Widget runtime type (e.g. `ElevatedButton`) |
+| `text` | string? | Visible text |
+| `key` | string? | Value key |
+| `rect` | `{x,y,width,height}` | Render bounds in px |
+| `properties` | `Record<string, unknown>` | Catch-all bag |
 
 ### `WidgetSnapshot`
 | Field | Type | Description |
 |-------|------|-------------|
-| `type` | `string` | Widget type |
-| `text` | `string?` | Display text |
-| `key` | `string?` | Value key |
-| `parentType` | `string` | Parent widget type |
-| `adjacentText` | `string[]` | Text of adjacent widgets |
-| `rect` | `{ x, y, width, height }` | Bounding rectangle |
-| `callbackNames` | `string[]` | Callback function names |
-| `description` | `string?` | Semantics description |
-| `firstSeen` | `string?` | First seen timestamp |
-
-### `WidgetMatch`
-| Field | Type | Description |
-|-------|------|-------------|
-| `widget` | `WidgetInfo` | Matched widget |
-| `score` | `number` | Match score |
-
-## Healing Types
+| `type` | string | Widget runtime type |
+| `text`, `key` | string? | Identifiers |
+| `parentType` | string | Immediate parent's runtime type |
+| `adjacentText` | string[] | Sibling widget text labels |
+| `rect` | `{x,y,width,height}` | Render bounds |
+| `callbackNames` | string[] | Names of bound callbacks (healing code-binding signal) |
+| `description` | string? | Human-readable description (healing text signal) |
+| `firstSeen` | string? | ISO timestamp |
 
 ### `HealingResult`
 | Field | Type | Description |
 |-------|------|-------------|
-| `originalSelector` | `string` | Original broken selector |
-| `suggestedSelector` | `string` | Healed selector |
-| `confidence` | `number` | Match confidence |
-| `matchedWidget` | `WidgetInfo` | Matched widget |
+| `originalSelector` | string | Original (failed) selector |
+| `suggestedSelector` | string | New selector to use |
+| `confidence` | number | Score 0..1 |
+| `matchedWidget` | `WidgetInfo` | Best candidate widget |
 
 ### `HealingReport`
 | Field | Type | Description |
 |-------|------|-------------|
-| `testName` | `string` | Test name |
-| `originalSelector` | `string` | Original selector |
-| `suggestedSelector` | `string` | Healed selector |
-| `confidence` | `number` | Confidence score |
-| `scores` | `{ position, context, codeBinding, text, weighted }` | Per-dimension scores |
-| `originalSnapshot` | `WidgetSnapshot` | Original snapshot |
-| `matchedWidget` | `WidgetInfo` | Matched widget |
-| `timestamp` | `string` | ISO timestamp |
+| `testName` | string | Test that triggered the heal |
+| `originalSelector`, `suggestedSelector` | string | Selectors |
+| `confidence` | number | Best-candidate score |
+| `scores` | `{ position, context, codeBinding, text, weighted }` | Per-dimension breakdown |
+| `originalSnapshot` | `WidgetSnapshot` | Baseline snapshot |
+| `matchedWidget` | `WidgetInfo` | Live match |
+| `timestamp` | string | ISO |
 
-## Mock Types
-
-### `MockResponse` / `MockRouteResponse`
+### `MockResponse`, `MockRouteResponse`
 | Field | Type | Description |
 |-------|------|-------------|
-| `status` | `number?` | HTTP status code |
-| `headers` | `Record<string, string>?` | Response headers |
-| `body` | `unknown` | Response body |
-| `delay` | `number?` | Delay in ms |
+| `status?` | number | HTTP status |
+| `headers?` | `Record<string, string>` | Response headers |
+| `body?` | unknown | Body |
+| `delay?` | number | Optional response delay (ms) |
 
 ### `MockRouteConfig`
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | `string?` | Route identifier |
-| `method` | `string?` | HTTP method |
-| `path` | `string` | URL path pattern |
-| `response` | `MockRouteResponse` | Response configuration |
+| `id?`, `method?` | string | Method filter / route id |
+| `path` | string | URL path |
+| `response` | `MockRouteResponse` | Canned response |
 
 ### `MockCall`
 | Field | Type | Description |
 |-------|------|-------------|
-| `method` | `string` | HTTP method |
-| `path` | `string` | Request path |
+| `method`, `path` | string | Request line |
 | `headers` | `Record<string, string>` | Request headers |
-| `body` | `string` | Request body |
-| `timestamp` | `string` | ISO timestamp |
+| `body` | string | Request body |
+| `timestamp` | string | ISO |
 
-## Form Types
-
-### `FormFieldMeta`
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | Field identifier |
-| `type` | `string` | Widget type |
-| `rect` | `{ x, y, width, height }` | Bounding rectangle |
-| `hintText` | `string?` | Hint/placeholder text |
-| `label` | `string?` | Label text |
-| `keyboardType` | `string?` | Flutter keyboard type |
-| `maxLength` | `number?` | Max character length |
-| `obscureText` | `boolean` | Whether obscured |
-| `enabled` | `boolean` | Whether enabled |
-| `selector` | `string` | Resolved selector |
-
-### `FormFillResult`
-| Field | Type | Description |
-|-------|------|-------------|
-| `filled` | `number` | Successfully filled count |
-| `skipped` | `number` | Skipped count |
-| `errors` | `{ fieldId, error }[]` | Error details |
-| `fields` | `{ id, semanticType, generatedValue, selector, status }[]` | Per-field results |
-
-### `FormAnalyzeResult`
-| Field | Type | Description |
-|-------|------|-------------|
-| `fields` | `{ id, semanticType, generatedValue, selector, hintText?, label? }[]` | Analysis results |
-
-### `FormHelperOptions`
-| Field | Type | Description |
-|-------|------|-------------|
-| `rulesFile` | `string?` | JSON rules file path |
-| `rulesDir` | `string?` | Rules directory path |
-| `locale` | `string?` | Data generation locale |
-| `skipObscureFields` | `boolean?` | Skip obscured fields |
-| `scope` | `string?` | Scope selector |
-
-### `FormSkill`
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `string` | Skill name |
-| `type` | `'PRESET_SKILL' \| 'REGEXP_MOCK' \| 'LLM_GENERATE'` | Skill type |
-| `match` | `(field: FormFieldMeta) => boolean` | Match function |
-| `generate` | `(field: FormFieldMeta, locale: string) => string` | Value generator |
-
-### `FormRule`
-| Field | Type | Description |
-|-------|------|-------------|
-| `match` | `Record<string, string>` | Match criteria |
-| `type` | `'PRESET_SKILL' \| 'REGEXP_MOCK' \| 'LLM_GENERATE'` | Rule type |
-| `data` | `string[]?` | Data for preset/regexp |
-| `pattern` | `string?` | Pattern for regexp |
-
-### `FormRulesFile`
-| Field | Type | Description |
-|-------|------|-------------|
-| `version` | `number` | File format version |
-| `locale` | `string?` | Default locale |
-| `rules` | `FormRule[]` | Array of rules |
-
-## Recording Types
+### `MockRule`, `MockEndpointConfig`, `MockIndex`, `MockRuleEntry`
+See [MockRuleStore](./MockRuleStore.md) — these describe the `.fliwright/mocks/` file format.
 
 ### `RawInputEvent`
 | Field | Type | Description |
 |-------|------|-------------|
-| `type` | `'pointerEvent' \| 'textInput'` | Event type |
-| `kind` | `'down' \| 'move' \| 'up'?` | Pointer kind |
-| `pointer` | `number?` | Pointer ID |
-| `position` | `{ x, y }?` | Pointer position |
-| `timestamp` | `number` | Event timestamp |
-| `buttons` | `number?` | Button state |
-| `text` | `string?` | Text input value |
-| `action` | `'replace'?` | Text action |
+| `type` | `'pointerEvent' \| 'textInput'` | Event source |
+| `kind?` | `'down' \| 'move' \| 'up'` | For pointer events |
+| `pointer?` | number | Pointer id |
+| `position?` | `{x, y}` | Pointer position |
+| `timestamp` | number | ms since epoch |
+| `text?`, `action?` | string, `'replace'?` | For text events |
 
 ### `RecordedOperation`
 | Field | Type | Description |
 |-------|------|-------------|
-| `kind` | `'tap' \| 'longPress' \| 'drag' \| 'type'` | Operation type |
-| `position` | `{ x, y }` | Screen position |
-| `delta` | `{ x, y }?` | Drag delta |
-| `text` | `string?` | Typed text |
-| `action` | `'replace'?` | Text action |
-| `duration` | `number?` | Gesture duration |
-| `timestamp` | `number` | Operation timestamp |
+| `kind` | `'tap' \| 'longPress' \| 'drag' \| 'type'` | Aggregated op |
+| `position` | `{x, y}` | Location |
+| `delta?` | `{x, y}` | For drag |
+| `text?`, `action?` | string, `'replace'?` | For type |
+| `duration?` | number | For longPress |
+| `timestamp` | number | ms since epoch |
 
 ### `CodegenOptions`
 | Field | Type | Description |
 |-------|------|-------------|
-| `testName` | `string?` | Test name |
-| `imports` | `string?` | Custom imports |
-| `lang` | `'ts' \| 'dart'?` | Output language |
+| `testName?` | string | Test name (default `'recorded test'`) |
+| `imports?` | string | TS import source (default `@fliwright/vitest`) |
+| `lang?` | `'ts' \| 'dart'` | Output language |
 
-## Protocol Types
-
-### `ProtocolMessage`
+### `FormFieldMeta`
 | Field | Type | Description |
 |-------|------|-------------|
-| `jsonrpc` | `'2.0'` | Protocol version |
-| `id` | `string?` | Message ID |
-| `method` | `string` | Method name |
-| `params` | `Record<string, unknown>?` | Parameters |
-| `result` | `unknown?` | Result |
-| `error` | `{ code, message, data? }?` | Error |
+| `id` | string | Stable per-field id |
+| `type` | string | Widget runtime type |
+| `rect` | `{x,y,width,height}` | Render bounds |
+| `key?`, `ancestorKey?`, `name?` | string? | Identifiers |
+| `semanticsId?`, `semanticsLabel?`, `semanticsHint?` | string? | Semantics node info |
+| `role?` | string? | ARIA-style role |
+| `hintText?`, `label?`, `keyboardType?` | string? | Input hints |
+| `maxLength?` | number? | Max input length |
+| `obscureText`, `enabled` | boolean | Field state |
+| `selector` | string | Wire-format selector |
 
-### `VMServiceEvent`
-| Field | Type | Description |
-|-------|------|-------------|
-| `kind` | `string` | Event kind |
-| `timestamp` | `number` | Event timestamp |
-| `data` | `Record<string, unknown>` | Event data |
-
-### `TestResult`
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `string` | Test name |
-| `passed` | `boolean` | Pass/fail |
-| `duration` | `number` | Duration in ms |
-| `error` | `string?` | Error message |
+### `FormFillResult`, `FormAnalyzeResult`, `FormHelperOptions`, `FormSkill`, `FormRule`, `FormRulesFile`
+See [FormHelper](./FormHelper.md), [JsonRuleLoader](./JsonRuleLoader.md).
 
 ### `FailureContext`
 | Field | Type | Description |
 |-------|------|-------------|
-| `assertion` | `{ matcher, expected, actual, timeout }` | Assertion details |
-| `screenshot` | `Buffer \| null` | PNG screenshot |
-| `widgetTree` | `object` | Widget tree |
-| `source` | `{ file, line, snippet }` | Source location |
-| `timestamp` | `string` | ISO timestamp |
+| `assertion` | `{ matcher, expected, actual, timeout }` | What failed |
+| `screenshot` | `Buffer \| null` | Captured screenshot |
+| `widgetTree` | object | Live tree |
+| `source` | `{ file, line, snippet }` | Stack-trace origin |
+| `timestamp` | string | ISO |
+
+### `ProtocolMessage`
+| Field | Type | Description |
+|-------|------|-------------|
+| `jsonrpc` | `'2.0'` | — |
+| `id?` | string | Correlation id |
+| `method` | string | RPC method |
+| `params?`, `result?` | unknown | Payload |
+| `error?` | `{ code, message, data? }` | Error |
+
+### `VMServiceEvent`
+| Field | Type | Description |
+|-------|------|-------------|
+| `kind` | string | Event kind (e.g. `'FliwrightRecording'`, `'riverpod.stateChanged'`) |
+| `timestamp` | number | ms since epoch |
+| `data` | `Record<string, unknown>` | Event payload |
 
 ### `ProviderInfo`
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | `string` | Provider name |
-| `type` | `string` | Provider type |
-| `value` | `unknown` | Current value |
+| `name` | string | Provider key |
+| `type` | string | Provider type description |
+| `value` | unknown | Current value |
 
-## Interface Types
+### `WidgetMatch`, `TestResult`
+Self-explanatory; see source.
+
+## Interfaces from `src/interfaces/`
 
 ### `FliwrightPlugin`
-| Member | Signature | Description |
-|--------|-----------|-------------|
-| `name` | `readonly string` | Plugin identifier |
-| `onInit` | `(context: PluginContext) => Promise<void>?` | Initialization hook |
-| `onTestStart` | `(testName: string) => Promise<void>?` | Test start hook |
-| `onTestEnd` | `(testName: string, result: TestResult) => Promise<void>?` | Test end hook |
-| `onDispose` | `() => Promise<void>?` | Cleanup hook |
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Unique plugin name |
+| `onInit?` | `(ctx: PluginContext) => Promise<void>` | Setup hook |
+| `onTestStart?`, `onTestEnd?` | `(name, result?) => Promise<void>` | Per-test hooks |
+| `onDispose?` | `() => Promise<void>` | Cleanup |
 
 ### `PluginContext`
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `sendRequest` | `(method, params?) => Promise<unknown>` | JSON-RPC sender |
-| `registerStateAdapter` | `(name, adapter) => void` | Register state adapter |
-| `registerMockAdapter` | `(name, adapter) => void` | Register mock adapter |
-| `registerFinderStrategy` | `(name, strategy) => void` | Register finder strategy |
-| `registerHealingStrategy` | `(name, strategy) => void` | Register healing strategy |
-| `onEvent` | `(callback) => () => void` | Subscribe to events |
+| Field | Type | Description |
+|-------|------|-------------|
+| `sendRequest` | `SendRequest` | RPC channel |
+| `registerStateAdapter` | `(name, adapter) => void` | — |
+| `registerMockAdapter` | `(name, adapter) => void` | — |
+| `registerFinderStrategy` | `(name, strategy) => void` | — |
+| `registerHealingStrategy` | `(name, strategy) => void` | — |
+| `onEvent` | `(cb) => () => void` | Subscribe to bridge events |
 
 ### `StateAdapter`
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `read` | `(key: string) => Promise<unknown>` | Read state value |
-| `write` | `(key: string, value: unknown) => Promise<void>` | Write state value |
-| `watch` | `(key, callback) => Promise<() => void>` | Watch state changes |
-| `listProviders` | `() => Promise<ProviderInfo[]>` | List all providers |
-| `override` | `(key, value) => Promise<void>` | Override provider value |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `read(key)` | `Promise<unknown>` | Read current value |
+| `write(key, value)` | `Promise<void>` | Override value |
+| `watch(key, cb)` | `Promise<() => void>` | Subscribe |
+| `listProviders?()` | `Promise<ProviderInfo[]>` | Optional introspection |
 
-### `MockAdapter`
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `addRoute` | `(pattern, handler) => Promise<void>` | Add mock route |
-| `removeRoute` | `(pattern) => Promise<void>` | Remove route |
-| `clear` | `() => Promise<void>` | Clear all routes |
+### `MockAdapter`, `FinderStrategy`, `HealingStrategy`
+See source — minimal contracts for adapters/strategies that plugins can register.
 
-### `FinderStrategy`
-| Member | Signature | Description |
-|--------|-----------|-------------|
-| `strategyName` | `readonly string` | Strategy identifier |
-| `find` | `(query) => Promise<WidgetMatch[]>` | Find widgets |
-| `describe` | `(widget) => string` | Describe widget |
+## Related
 
-### `HealingStrategy`
-| Member | Signature | Description |
-|--------|-----------|-------------|
-| `strategyName` | `readonly string` | Strategy identifier |
-| `score` | `(original, candidate) => number` | Score similarity |
-| `heal` | `(original, candidates, threshold?) => HealingResult \| null` | Find healing match |
+- **Source:** `packages/fliwright-core/src/types.ts`, `packages/fliwright-core/src/interfaces/*.ts`

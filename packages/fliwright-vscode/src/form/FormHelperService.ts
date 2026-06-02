@@ -91,6 +91,7 @@ export class FormHelperService {
       rulesDir: rulesFile || configuredRulesFile ? undefined : rulesDir,
       locale: rulesFile?.rulesFile.locale ?? config.formLocale,
       skipObscureFields: true,
+      requireRuleMatch: Boolean(rulesFile || configuredRulesFile),
     };
   }
 }
@@ -124,8 +125,18 @@ export function formatFormFillDebug(result: FormFillResult): string[] {
     const error = result.errors.find((entry) => entry.fieldId === field.id)?.error;
     const value = field.generatedValue ? ` value=${JSON.stringify(field.generatedValue)}` : '';
     const errorText = error ? ` error=${error}` : '';
+    const reason = field.reason ? ` reason=${field.reason}` : '';
+    const metadata = [
+      field.name ? `name=${field.name}` : '',
+      field.key ? `key=${field.key}` : '',
+      field.ancestorKey ? `ancestorKey=${field.ancestorKey}` : '',
+      field.semanticsId ? `semanticsId=${field.semanticsId}` : '',
+      field.semanticsLabel ? `semanticsLabel=${JSON.stringify(field.semanticsLabel)}` : '',
+      field.role ? `role=${field.role}` : '',
+    ].filter(Boolean).join(' ');
+    const metadataText = metadata ? ` ${metadata}` : '';
     lines.push(
-      `  - id=${field.id} selector=${field.selector} type=${field.semanticType} status=${field.status}${value}${errorText}`,
+      `  - id=${field.id} selector=${field.selector} type=${field.semanticType} status=${field.status}${metadataText}${reason}${value}${errorText}`,
     );
   }
   return lines;

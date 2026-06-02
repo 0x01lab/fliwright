@@ -1,37 +1,44 @@
 ---
 module: "FormExtractExtension"
-package: "fliwright-bridge"
+package: "fliwright_bridge"
 source: "lib/src/extensions/form_extract.dart"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
 # FormExtractExtension
 
-> Extracts form field metadata (TextField, TextFormField, EditableText) from the Flutter widget tree.
+> Walk the widget tree and return one `FormFieldMeta` per `TextField` / `TextFormField` / `EditableText`, deduplicated by controller identity.
 
-## Registered Extension
+## Registered Methods
+
+| Method | Description |
+|--------|-------------|
+| `ext.fliwright.extractForm` | Return form fields |
 
 ### `ext.fliwright.extractForm`
 
-**Parameters:** None
+No params.
 
-**Returns:** `{ fields: List<Map>, count: int }`
+**Returns:** `{ fields: FormFieldMeta[] }`:
 
-## Field Metadata
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | Unique identifier |
-| `type` | `string` | Widget type |
-| `rect` | `{ x, y, width, height }?` | Bounding rectangle |
-| `hintText` | `string?` | Hint/placeholder text |
-| `label` | `string?` | Label text |
-| `keyboardType` | `string?` | Flutter keyboard type name |
-| `maxLength` | `int?` | Max character length |
-| `obscureText` | `boolean` | Whether obscured |
-| `enabled` | `boolean` | Whether enabled |
-| `selector` | `string` | Resolved selector string |
+| Field | Description |
+|-------|-------------|
+| `id` | Stable hash-based id (controller identity + initial rect) |
+| `type` | Widget runtime type |
+| `rect` | Render bounds |
+| `key`, `ancestorKey`, `name` | Identifiers |
+| `hintText`, `label`, `keyboardType`, `maxLength` | Input hints |
+| `obscureText`, `enabled` | State |
+| `semanticsId`, `semanticsLabel`, `semanticsHint` | Semantics info |
+| `role` | Mapped ARIA-style role |
+| `selector` | Pre-resolved wire selector (same logic as `SelectorResolver`) |
 
 ## Deduplication
 
-Duplicate `EditableText` widgets (e.g., those wrapped by both `TextField` and `TextFormField`) are deduplicated using a seen-set based on element identity.
+Two fields with the same `TextEditController` instance are collapsed into a single entry to avoid emitting duplicates when the same controller is wired to multiple `TextField`s.
+
+## Related
+
+- **TS counterpart:** [`FormHelper`](../core/FormHelper.md)
+- **Pipeline:** [form-filling-pipeline.md](../form-filling-pipeline.md)
+- **Source:** `packages/fliwright-bridge/lib/src/extensions/form_extract.dart`

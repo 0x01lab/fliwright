@@ -2,16 +2,17 @@
 module: "Locator"
 package: "@fliwright/core"
 source: "src/Locator.ts"
-generated: "2026-06-01"
+tests: "tests/Locator.test.ts"
+generated: "2026-06-02"
 ---
 
 # Locator
 
-> Widget locator that provides gesture actions (click, drag, pinch), text input (type, fill), scrolling, and query methods (count, isVisible).
+> Resolves a selector into one or more `WidgetInfo` entries on the running Flutter app and performs gestures / text entry against the first match.
 
 ## Overview
 
-`Locator` wraps a selector and a sendRequest function. It does not eagerly resolve the widget — resolution happens when an action is invoked. Actions send JSON-RPC requests to the Flutter bridge extension to perform gestures and queries.
+`Locator` is the workhorse of Fliwright — every user interaction goes through one of its methods. Each action first calls `ext.fliwright.inspect` to resolve the selector into widget metadata, then dispatches a gesture or text RPC. Coordinates for `click` are computed as the center of the first match's `rect`.
 
 ## Constructor
 
@@ -21,87 +22,102 @@ constructor(input: SelectorInput, sendRequest: SendRequest)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `input` | `SelectorInput` | Yes | Selector input |
-| `sendRequest` | `SendRequest` | Yes | JSON-RPC request sender |
+| `input` | `SelectorInput` | Yes | Selector — see [Selector](./Selector.md) |
+| `sendRequest` | `SendRequest` | Yes | RPC channel |
 
 ## Public Methods
 
 ### `click(): Promise<void>`
 
-Taps the widget at its center.
+Computes the center of the first matching widget's `rect` and calls `ext.fliwright.click` with `{ x, y }`. Throws if no match or the widget has no `rect`.
 
-### `longPress(options?: { duration?: number }): Promise<void>`
+---
 
-Performs a long press on the widget.
+### `longPress(options?): Promise<void>`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `options.duration` | `number` | Duration in ms (default: 500) |
-
-### `drag(deltaX: number, deltaY: number, options?: { steps?: number }): Promise<void>`
-
-Drags the widget by the given delta.
+Calls `ext.fliwright.gesture` with `gesture: 'longPress'` and an optional `duration` (ms).
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `deltaX` | `number` | Horizontal displacement |
-| `deltaY` | `number` | Vertical displacement |
-| `options.steps` | `number` | Number of intermediate steps (default: 10) |
+| `options.duration` | number | Press duration in ms |
 
-### `pinch(scale: number, options?: { steps?: number }): Promise<void>`
+---
 
-Performs a pinch gesture on the widget.
+### `drag(deltaX, deltaY, options?): Promise<void>`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `scale` | `number` | Pinch scale factor |
-| `options.steps` | `number` | Number of intermediate steps (default: 10) |
-
-### `type(text: string, options?: { delay?: number; charDelay?: number }): Promise<void>`
-
-Types text character by character into the widget.
+Calls `ext.fliwright.gesture` with `gesture: 'drag'`.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `text` | `string` | Text to type |
-| `options.delay` | `number` | Initial delay before typing |
-| `options.charDelay` | `number` | Delay between characters in ms |
+| `deltaX` | number | Horizontal displacement |
+| `deltaY` | number | Vertical displacement |
+| `options.steps` | number | Optional interpolated steps |
 
-### `fill(text: string, options?: { delay?: number; charDelay?: number }): Promise<void>`
+---
 
-Replaces existing text in the widget with new text.
+### `pinch(scale, options?): Promise<void>`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `text` | `string` | Text to fill |
-| `options.delay` | `number` | Initial delay before filling |
-| `options.charDelay` | `number` | Delay between characters in ms |
-
-### `scrollIntoView(options?: { alignment?: number; duration?: number }): Promise<void>`
-
-Scrolls the widget into view.
+Calls `ext.fliwright.gesture` with `gesture: 'pinch'`.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `options.alignment` | `number` | 0=top, 0.5=center, 1=bottom (default: 0.5) |
-| `options.duration` | `number` | Scroll animation duration in ms (default: 300) |
+| `scale` | number | Scale factor (>1 zoom in, <1 zoom out) |
+| `options.steps` | number | Optional interpolated steps |
+
+---
+
+### `type(text, options?): Promise<void>`
+
+Calls `ext.fliwright.type` to insert text into the matched `EditableText`. Existing text is preserved.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `text` | string | Text to insert |
+| `options.charDelay` | number | Delay between characters in ms |
+| `options.delay` | number | Alias of `charDelay` |
+
+---
+
+### `fill(text, options?): Promise<void>`
+
+Like `type` but with `replaceAll: true` — clears existing content first.
+
+---
+
+### `scrollIntoView(options?): Promise<void>`
+
+Calls `ext.fliwright.scrollIntoView` with `alignment` (0=top, 1=bottom, default 0.5) and `duration` (default 300ms).
+
+---
 
 ### `count(): Promise<number>`
 
-Returns the number of widgets matching this locator's selector.
+Returns the number of widgets currently matching the selector.
+
+---
 
 ### `isVisible(): Promise<boolean>`
 
-Returns whether at least one matching widget is visible.
+Returns `true` if at least one match exists and it has a render `rect`.
 
 ## Properties
 
 | Property | Type | Readonly | Description |
 |----------|------|----------|-------------|
-| `selectorString` | `string` | Yes | The serialized selector string |
+| `selectorString` | string | Yes | Wire-format selector string (e.g. `"text=Login"`) |
+
+## Example
+
+```typescript
+const email = page.locator({ key: 'email-field' });
+await email.fill('leo@example.com');
+await page.locator({ text: 'Submit' }).click();
+
+const count = await page.locator({ type: 'ListTile' }).count();
+const visible = await page.locator({ text: 'Welcome' }).isVisible();
+```
 
 ## Related
 
 - **Depends on:** [Selector](./Selector.md)
-- **Used by:** [Page](./Page.md), [Assertion](./Assertion.md)
-- **Source:** `src/Locator.ts`
+- **Source:** `packages/fliwright-core/src/Locator.ts`

@@ -2,16 +2,25 @@
 module: "EventAggregator"
 package: "@fliwright/core"
 source: "src/EventAggregator.ts"
-generated: "2026-06-01"
+tests: "tests/EventAggregator.test.ts"
+generated: "2026-06-02"
 ---
 
 # EventAggregator
 
-> Aggregates raw pointer and text input events into semantic operations.
+> Transforms a stream of raw pointer / text-input events into semantic `RecordedOperation` entries (tap / longPress / drag / type).
 
 ## Overview
 
-`EventAggregator` converts a stream of `RawInputEvent` entries into `RecordedOperation` entries. It classifies pointer down/up pairs as taps, long presses, or drags based on duration and displacement thresholds, and merges text input events with nearby operations.
+Pointer-down/up pairs are classified by duration and displacement:
+
+| Condition | Operation |
+|-----------|-----------|
+| displacement > 10px | `drag` |
+| duration ≥ 500ms (and displacement ≤ 10px) | `longPress` |
+| otherwise | `tap` |
+
+Text-input events within 1s of an editable operation merge into a single `type` operation; otherwise they emit standalone `type` operations.
 
 ## Constructor
 
@@ -23,26 +32,27 @@ constructor()
 
 ### `aggregate(events: RawInputEvent[]): RecordedOperation[]`
 
-Converts raw events into semantic operations.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `events` | `RawInputEvent[]` | Raw events from the bridge |
 
-## Classification Thresholds
+**Returns:** `RecordedOperation[]` — sorted by timestamp.
+
+## Constants
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `TAP_MAX_DURATION` | 500ms | Max duration for a tap (vs long press) |
-| `TAP_MAX_DISPLACEMENT` | 10px | Max displacement for a tap (vs drag) |
-| `TYPE_INPUT_WINDOW` | 1000ms | Time window for merging text input |
+| `TAP_MAX_DURATION` | 500 ms | Tap upper duration bound |
+| `TAP_MAX_DISPLACEMENT` | 10 px | Tap upper displacement bound |
+| `TYPE_INPUT_WINDOW` | 1000 ms | Window after an editable op within which text events merge |
 
-## Classification Logic
+## Example
 
-| Condition | Classification |
-|-----------|----------------|
-| Duration < 500ms AND displacement < 10px | `tap` |
-| Duration >= 500ms AND displacement < 10px | `longPress` |
-| Displacement >= 10px | `drag` |
-| `textInput` event type | Merged with nearby tap/type |
+```typescript
+const ops = new EventAggregator().aggregate(rawEvents);
+```
 
 ## Related
 
 - **Used by:** [RecorderController](./RecorderController.md)
-- **Source:** `src/EventAggregator.ts`
+- **Source:** `packages/fliwright-core/src/EventAggregator.ts`

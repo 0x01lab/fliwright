@@ -2,32 +2,58 @@
 module: "test_report"
 package: "@fliwright/mcp"
 source: "src/resources/testReport.ts"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
-# test_report
+# `test_report` Resource
 
-> MCP resource providing results from the most recent test run.
+> Read-only MCP resource exposing the most recent `RunResult` produced by `fliwright_run`.
 
-## Resource URI
+## URI
 
-`fliwright://test-report/latest`
+```
+fliwright://test-report/latest
+```
 
 ## MIME Type
 
 `application/json`
 
-## Data Format
+## Description
 
-Returns `RunResult | { message: 'No test run yet' }`
+Reading this resource returns the same `RunResult` object that `fliwright_run` last returned (sans failures, which live on `ServerState` and are surfaced via `fliwright_get_failure`). When no run has happened yet, returns `{ "message": "No test run yet" }`.
 
-### RunResult
+## Output Shape
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `passed` | `boolean` | Whether all tests passed |
-| `totalTests` | `number` | Total test count |
-| `passedTests` | `number` | Passed count |
-| `failedTests` | `number` | Failed count |
-| `duration` | `number` | Duration in ms |
-| `results` | `{ name, passed, duration, error? }[]` | Per-test results |
+```typescript
+{
+  passed: boolean;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  duration: number;
+  results: Array<{ name: string; status: string; duration: number; error?: string }>;
+}
+```
+
+## Example
+
+MCP `resources/read` request:
+
+```json
+{ "uri": "fliwright://test-report/latest" }
+```
+
+Response:
+
+```json
+{
+  "contents": [
+    {
+      "uri": "fliwright://test-report/latest",
+      "mimeType": "application/json",
+      "text": "{\"passed\":true,\"totalTests\":1,...}"
+    }
+  ]
+}
+```

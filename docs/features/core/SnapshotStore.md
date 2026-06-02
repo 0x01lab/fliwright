@@ -2,16 +2,17 @@
 module: "SnapshotStore"
 package: "@fliwright/core"
 source: "src/SnapshotStore.ts"
-generated: "2026-06-01"
+tests: "tests/SnapshotStore.test.ts"
+generated: "2026-06-02"
 ---
 
 # SnapshotStore
 
-> Persistent file-based storage for widget snapshots used in self-healing.
+> Disk-backed key/value store for baseline `WidgetSnapshot` objects, keyed by `(testName, selector)`.
 
 ## Overview
 
-`SnapshotStore` saves and loads widget snapshots to `.fliwright/snapshots/` on disk. Each snapshot is keyed by test name and selector, enabling the self-healing engine to compare current widget trees against previously successful states.
+Used by `SelfHealingEngine` to persist the "last known good" widget snapshot for each (test, selector) pair. The on-disk layout is `.fliwright/snapshots/<sanitized-testName>/<encodeURIComponent(selector)>.json`. Each file holds `{ testName, selector, snapshot, firstSeen, lastUpdated }`. The store preserves `firstSeen` across updates.
 
 ## Constructor
 
@@ -19,25 +20,34 @@ generated: "2026-06-01"
 constructor(baseDir?: string)
 ```
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `baseDir` | `string` | No | Default: `<cwd>/.fliwright/snapshots` |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `baseDir` | string | `<cwd>/.fliwright/snapshots` | Root directory for snapshot files |
 
 ## Public Methods
 
-### `save(testName: string, selector: string, snapshot: WidgetSnapshot): Promise<void>`
+### `load(testName, selector): WidgetSnapshot | null`
 
-Persists a widget snapshot to disk.
+Returns the stored snapshot, or `null` if missing/unreadable. Errors are swallowed.
 
-### `load(testName: string, selector: string): WidgetSnapshot | null`
+### `save(testName, selector, snapshot): Promise<void>`
 
-Loads a previously saved snapshot. Returns `null` if not found.
+Writes the snapshot to disk. Creates intermediate directories. Preserves `firstSeen` if the file already existed.
 
-### `list(testName: string): Map<string, WidgetSnapshot>`
+### `list(testName): Map<string, WidgetSnapshot>`
 
-Returns all snapshots for a given test name.
+Returns all snapshots for a given test name, keyed by selector. Returns an empty map if the directory doesn't exist or contains only malformed files.
+
+## Example
+
+```typescript
+const store = new SnapshotStore();
+await store.save('login test', 'text=Login', widgetSnapshot);
+const baseline = store.load('login test', 'text=Login');
+const all = store.list('login test');
+```
 
 ## Related
 
 - **Used by:** [SelfHealingEngine](./SelfHealingEngine.md)
-- **Source:** `src/SnapshotStore.ts`
+- **Source:** `packages/fliwright-core/src/SnapshotStore.ts`

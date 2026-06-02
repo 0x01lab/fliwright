@@ -1,67 +1,71 @@
 ---
-feature: "MCP Integration"
+feature: "MCP Agent Integration"
 packages: ["@fliwright/mcp", "@fliwright/vitest", "@fliwright/core"]
 status: implemented
 agent_accessible: true
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
-# MCP Integration
+# MCP Agent Integration
 
-> Model Context Protocol integration that exposes Fliwright as tools for AI coding agents.
+> Expose Fliwright's run / failure-diagnosis / test-generation / recording / mock-management capabilities to any MCP-compatible AI agent (Claude Code, Claude Agent SDK, custom MCP clients) through a single `fliwright` MCP server.
 
 ## Architecture
 
-1. **createFliwrightServer()** (`server.ts`): Creates MCP server with stdio transport.
-2. **ServerState** (`state.ts`): Mutable state holding last run results and failures.
-3. **Tool Registration** (`tools/*.ts`): Registers 4 tools with input schemas via Zod.
-4. **Resource Registration** (`resources/testReport.ts`): Registers test report resource.
-5. **Vitest Integration** (`@fliwright/vitest`): Writes failure context to temp file during test runs.
+1. **Server entry** (`@fliwright/mcp` `createFliwrightServer`): instantiates an MCP server named `fliwright` at version 0.1.0 with a shared `state` object.
+2. **State sharing** (`createServerState`): holds the last `RunResult`, collected failure contexts, mock rule store, and recording session handle so tools/resources can read each other's output.
+3. **Tool registration** (`tools/*.ts`): each `register*Tool(server, state)` function adds one tool with a zod input schema and a handler that calls into `@fliwright/core` or `@fliwright/vitest`.
+4. **Resource registration** (`resources/testReport.ts`): exposes a `test://report` resource an agent can `read` to fetch the latest test report JSON.
+5. **Transport**: the `fliwright-mcp` bin speaks stdio MCP transport by default; the VS Code extension's `fliwright.configureMcp` command writes the proper `claude.code.mcp.json` entry to enable Claude Code to launch it.
+6. **Vitest reporter bridge** (`@fliwright/vitest` reporter): when a Vitest run executes through the CLI or VS Code, the reporter writes a structured failure context file that `fliwright_get_failure` later reads.
 
-## Agent Integration
-
-AI agents (Claude, Cursor, etc.) interact with Fliwright exclusively through MCP tools:
+## Tools
 
 | Tool | Purpose |
 |------|---------|
-| `fliwright_run` | Execute tests and get pass/fail results |
-| `fliwright_get_failure` | Get detailed failure context with healing suggestions |
-| `fliwright_generate_test` | Generate test code from Flutter source |
-| `fliwright_record` | Record interactions and generate test code |
+| `fliwright_run` (runTest) | Run a Vitest test file, optionally a single test by name, with a specific VM service URL. Returns `RunResult`. |
+| `fliwright_get_failure` (getFailure) | Return the latest `FailureContext` (screenshot, widget tree, source snippet, healing report). |
+| `fliwright_generate_test` (generateTest) | Generate a new test file from a description + a target widget / page identifier. |
+| `fliwright_record` (record) | Start/stop recording and return the generated code. |
+| `fliwright_mock_list` (mockList) | List available mock rule files in the workspace. |
+| `fliwright_mock_switch` (mockSwitch) | Activate a specific mock rule set for the next run. |
+
+## Resources
+
+| Resource | URI | Description |
+|----------|-----|-------------|
+| `test_report` | `test://report` | Latest test run summary: passed/failed counts, durations, failure entries. |
+
+## Agent Integration
+
+- **Claude Code**: run `fliwright: Configure MCP` in VS Code, or add the server to `.mcp.json` manually:
+  ```json
+  { "mcpServers": { "fliwright": { "command": "npx", "args": ["-y", "@fliwright/mcp"] } } }
+  ```
+- **Claude Agent SDK**: pass the same command to the SDK's MCP launcher.
+- **Custom clients**: connect via stdio; the server uses the official `@modelcontextprotocol/sdk`.
 
 ## Data Flow
 
 ```
-AI Agent (Claude, Cursor, etc.)
-    │
-    ▼ MCP Protocol (stdio)
-fliwright-mcp server
-    │
-    ├── fliwright_run → spawn Vitest → parse JSON output
-    │   │
-    │   ├── @fliwright/vitest → FliwrightDriver → bridge
-    │   │   │
-    │   │   └── On failure: write MCP failure context to temp file
-    │   │
-    │   └── Read failure context → store in ServerState
-    │
-    ├── fliwright_get_failure → read from ServerState
-    │
-    ├── fliwright_generate_test → parse source → generate code
-    │
-    └── fliwright_record → RecorderController → bridge → codegen
-    │
-    ▼
-Resource: fliwright://test-report/latest → last RunResult
+Agent (Claude Code / SDK / custom MCP client)
+        │ JSON-RPC over stdio
+        ▼
+McpServer "fliwright"  (@fliwright/mcp/server.ts)
+        │
+        ├── tools/runTest.ts        ──> @fliwright/vitest reporter ──> state.lastRun
+        ├── tools/getFailure.ts     ──> state.failures + healing report
+        ├── tools/generateTest.ts   ──> @fliwright/core CodeGenerator
+        ├── tools/record.ts         ──> RecorderController + bridge
+        ├── tools/mockTools.ts      ──> MockRuleStore
+        └── resources/testReport.ts ──> state.lastRun (read-only)
 ```
 
 ## Key Files
 
-- `packages/fliwright-mcp/src/server.ts` — Server factory
-- `packages/fliwright-mcp/src/state.ts` — Server state management
-- `packages/fliwright-mcp/src/tools/runTest.ts` — Test runner tool
-- `packages/fliwright-mcp/src/tools/getFailure.ts` — Failure retrieval tool
-- `packages/fliwright-mcp/src/tools/generateTest.ts` — Test generation tool
-- `packages/fliwright-mcp/src/tools/record.ts` — Recording tool
-- `packages/fliwright-mcp/src/resources/testReport.ts` — Test report resource
-- `packages/fliwright-vitest/src/index.ts` — Vitest integration (writes failure context)
+- `packages/fliwright-mcp/src/server.ts` — server factory.
+- `packages/fliwright-mcp/src/state.ts` — shared state container.
+- `packages/fliwright-mcp/src/tools/` — tool registrations.
+- `packages/fliwright-mcp/src/resources/testReport.ts` — test report resource.
+- `packages/fliwright-vitest/src/reporter.ts` — Vitest reporter that feeds the state.
+- `packages/fliwright-cli/src/index.ts` — CLI alternative for non-MCP runs.

@@ -89,10 +89,6 @@ export class Locator {
     text: string,
     options?: { delay?: number; charDelay?: number; replaceAll?: boolean },
   ): Promise<void> {
-    const widgets = await this._resolve();
-    if (widgets.length === 0) {
-      throw new Error(`No widget found matching selector: ${this.selectorString}`);
-    }
     const params: Record<string, unknown> = {
       ...this.selector.toWireParams(),
       text,

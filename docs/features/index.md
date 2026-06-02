@@ -1,6 +1,6 @@
 ---
 purpose: "AI-agent-consumable feature index"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
 # Fliwright Feature Index
@@ -11,79 +11,74 @@ generated: "2026-06-01"
 
 | Package | Description | Overview | Detailed Docs |
 |---------|-------------|----------|---------------|
-| `@fliwright/core` | Core SDK — driver, page model, locators, assertions, healing, recording, mocking, forms | [core/README.md](./core/README.md) | FliwrightDriver, Page, Locator, Selector, Assertion, MockManager, SelfHealingEngine, SnapshotStore, RecorderController, CodeGenerator, DartCodeGenerator, AssertionSuggester, FormHelper, SemanticInferrer, FakerGenerator, SkillRegistry, JsonRuleLoader, SelectorResolver, PluginRegistry, Protocol, VMServiceConnector, EventAggregator, FailureCollector, MultiDimensionalHealingStrategy |
-| `@fliwright/mcp` | MCP server — exposes Fliwright as tools for AI agents | [mcp/README.md](./mcp/README.md) | fliwright_run, fliwright_get_failure, fliwright_generate_test, fliwright_record, test_report |
-| `@fliwright/vitest` | Vitest integration — test fixtures, expect, auto-driver lifecycle | [vitest/README.md](./vitest/README.md) | test, expect |
-| `@fliwright/cli` | CLI — run tests, init project, doctor, record | [cli/README.md](./cli/README.md) | run, init, doctor, record |
-| `@fliwright/plugin-riverpod` | Riverpod plugin — provider read/write/watch/override | [plugin-riverpod/README.md](./plugin-riverpod/README.md) | RiverpodStateAdapter |
-| `fliwright-bridge` | Dart bridge — VM service extensions for Flutter | [bridge/README.md](./bridge/README.md) | 26 extension methods across 12 extension groups |
+| `@fliwright/core` | Core SDK — driver, page, locator, assertions, mocks, healing, recording, form-fill, plugins | [core/README.md](./core/README.md) | FliwrightDriver, Page, Locator, Selector, Assertion, MockManager, MockRuleStore, SelfHealingEngine, SnapshotStore, MultiDimensionalHealingStrategy, RecorderController, EventAggregator, CodeGenerator, DartCodeGenerator, AssertionSuggester, FailureCollector, FormHelper, SemanticInferrer, FakerGenerator, SkillRegistry, JsonRuleLoader, SelectorResolver, PluginRegistry, Protocol, VMServiceConnector, types |
+| `@fliwright/mcp` | MCP server exposing tools and resources to AI agents | [mcp/README.md](./mcp/README.md) | fliwright_run, fliwright_get_failure, fliwright_generate_test, fliwright_record, fliwright_mock_list, fliwright_mock_switch, test_report |
+| `@fliwright/vitest` | Vitest integration — `test()` fixture, `expect()`, reporter, setup | [vitest/README.md](./vitest/README.md) | test, expect, setup, reporter |
+| `@fliwright/cli` | `fliwright` CLI — run / init / doctor / record, config, vm-discovery, reporter | [cli/README.md](./cli/README.md) | run, init, doctor, record, config, vm-discovery, reporter |
+| `@fliwright/plugin-riverpod` | Riverpod state-management plugin | [plugin-riverpod/README.md](./plugin-riverpod/README.md) | RiverpodStateAdapter, plugin |
+| `@fliwright/ai-plugin` | `fliwright-ai-setup` installer for Claude Code skills & Codex AGENTS.md | [ai-plugin/README.md](./ai-plugin/README.md) | setup |
+| `@fliwright/vscode` | VS Code extension — commands, views, CodeLens, webviews | [vscode/README.md](./vscode/README.md) | commands, views, session, sandbox, form, recording, runner, failure, state |
+| `fliwright_bridge` | Dart bridge — VM Service extensions registered inside the Flutter app | [bridge/README.md](./bridge/README.md) | GestureExtension, InspectExtension, TypeExtension, ScrollExtension, SnapshotExtension, ScreenshotExtension, RecordingExtension, FormExtractExtension, RiverpodExtension, RouterNavigateExtension, MockServerExtension, DioMockExtension, HttpOverrides |
 
 ## By Class
 
 | Class | Package | Description | Doc |
 |-------|---------|-------------|-----|
-| `FliwrightDriver` | core | Main orchestrator — connects to Flutter VM, manages lifecycle | [core/FliwrightDriver.md](./core/FliwrightDriver.md) |
-| `Page` | core | Page object model — creates locators and waits for widgets | [core/Page.md](./core/Page.md) |
-| `Locator` | core | Widget locator with gesture, typing, and query actions | [core/Locator.md](./core/Locator.md) |
-| `Selector` | core | Selector parsing and wire-format serialization | [core/Selector.md](./core/Selector.md) |
-| `Assertion` | core | Fluent assertion API with self-healing integration | [core/Assertion.md](./core/Assertion.md) |
-| `AssertionError` | core | Error thrown on assertion failure | [core/Assertion.md](./core/Assertion.md) |
-| `createExpect` | core | Assertion factory function | [core/Assertion.md](./core/Assertion.md) |
-| `MockManager` | core | HTTP mock route management for API stubbing | [core/MockManager.md](./core/MockManager.md) |
-| `SelfHealingEngine` | core | Self-healing engine that recovers from broken selectors | [core/SelfHealingEngine.md](./core/SelfHealingEngine.md) |
-| `SnapshotStore` | core | Persistent file-based snapshot storage | [core/SnapshotStore.md](./core/SnapshotStore.md) |
-| `RecorderController` | core | Controls interaction recording sessions | [core/RecorderController.md](./core/RecorderController.md) |
-| `CodeGenerator` | core | Generates TypeScript/Vitest test code from recordings | [core/CodeGenerator.md](./core/CodeGenerator.md) |
-| `DartCodeGenerator` | core | Generates Dart integration_test code from recordings | [core/DartCodeGenerator.md](./core/DartCodeGenerator.md) |
-| `AssertionSuggester` | core | Suggests assertions based on recorded operations | [core/AssertionSuggester.md](./core/AssertionSuggester.md) |
-| `FormHelper` | core | Auto-fills forms using semantic inference and Faker | [core/FormHelper.md](./core/FormHelper.md) |
-| `SemanticInferrer` | core | Infers semantic types from form field metadata | [core/SemanticInferrer.md](./core/SemanticInferrer.md) |
-| `FakerGenerator` | core | Generates realistic fake data for form fields | [core/FakerGenerator.md](./core/FakerGenerator.md) |
-| `SkillRegistry` | core | Registry for custom form-filling skills | [core/SkillRegistry.md](./core/SkillRegistry.md) |
-| `JsonRuleLoader` | core | Loads form-filling rules from JSON files | [core/JsonRuleLoader.md](./core/JsonRuleLoader.md) |
-| `SelectorResolver` | core | Resolves widget info to selector strings with role mapping | [core/SelectorResolver.md](./core/SelectorResolver.md) |
-| `resolveSelector` | core | Standalone function for selector resolution | [core/SelectorResolver.md](./core/SelectorResolver.md) |
-| `PluginRegistry` | core | Plugin lifecycle management and adapter registry | [core/PluginRegistry.md](./core/PluginRegistry.md) |
-| `Protocol` | core | JSON-RPC 2.0 protocol handler | [core/Protocol.md](./core/Protocol.md) |
-| `VMServiceConnector` | core | WebSocket connection to Dart VM Service | [core/VMServiceConnector.md](./core/VMServiceConnector.md) |
-| `EventAggregator` | core | Aggregates raw input events into semantic operations | [core/EventAggregator.md](./core/EventAggregator.md) |
-| `FailureCollector` | core | Collects failure context (screenshot + widget tree + source) | [core/FailureCollector.md](./core/FailureCollector.md) |
-| `MultiDimensionalHealingStrategy` | core | Multi-dimensional widget matching strategy | [core/MultiDimensionalHealingStrategy.md](./core/MultiDimensionalHealingStrategy.md) |
-| `ngramSimilarity` | core | N-gram cosine similarity function | [core/MultiDimensionalHealingStrategy.md](./core/MultiDimensionalHealingStrategy.md) |
-| `RiverpodStateAdapter` | plugin-riverpod | State adapter for Riverpod providers | [plugin-riverpod/RiverpodStateAdapter.md](./plugin-riverpod/RiverpodStateAdapter.md) |
-| `riverpodPlugin` | plugin-riverpod | Plugin factory for Riverpod | [plugin-riverpod/README.md](./plugin-riverpod/README.md) |
-| `FliwrightBridge` | bridge | Static bridge initializer | [bridge/README.md](./bridge/README.md) |
-| `ExtensionRegistry` | bridge | Extension method registry | [bridge/README.md](./bridge/README.md) |
+| `FliwrightDriver` | core | Main orchestrator | [core/FliwrightDriver.md](./core/FliwrightDriver.md) |
+| `Page` | core | Page object — locators, navigation, form helper | [core/Page.md](./core/Page.md) |
+| `Locator` | core | Widget locator with gestures / typing | [core/Locator.md](./core/Locator.md) |
+| `Selector` | core | Selector parser | [core/Selector.md](./core/Selector.md) |
+| `Assertion` / `AssertionError` / `createExpect` | core | Auto-waiting assertions + self-healing | [core/Assertion.md](./core/Assertion.md) |
+| `MockManager` | core | Mock route lifecycle | [core/MockManager.md](./core/MockManager.md) |
+| `MockRuleStore` | core | In-memory store of `.fliwright/mocks/` rules | [core/MockRuleStore.md](./core/MockRuleStore.md) |
+| `SelfHealingEngine` | core | Snapshot baseline + retry on failure | [core/SelfHealingEngine.md](./core/SelfHealingEngine.md) |
+| `SnapshotStore` | core | Disk-backed snapshot persistence | [core/SnapshotStore.md](./core/SnapshotStore.md) |
+| `MultiDimensionalHealingStrategy` / `ngramSimilarity` | core | Position+context+codeBinding+text scoring | [core/MultiDimensionalHealingStrategy.md](./core/MultiDimensionalHealingStrategy.md) |
+| `RecorderController` | core | Recording lifecycle | [core/RecorderController.md](./core/RecorderController.md) |
+| `EventAggregator` | core | Raw events → operations | [core/EventAggregator.md](./core/EventAggregator.md) |
+| `CodeGenerator` | core | TypeScript codegen | [core/CodeGenerator.md](./core/CodeGenerator.md) |
+| `DartCodeGenerator` | core | Dart `integration_test` codegen | [core/DartCodeGenerator.md](./core/DartCodeGenerator.md) |
+| `AssertionSuggester` | core | Heuristic assertion suggestions | [core/AssertionSuggester.md](./core/AssertionSuggester.md) |
+| `FailureCollector` | core | Screenshot + tree + source for failures | [core/FailureCollector.md](./core/FailureCollector.md) |
+| `FormHelper` | core | Discover / analyze / fill forms | [core/FormHelper.md](./core/FormHelper.md) |
+| `SemanticInferrer` | core | Field → semantic type | [core/SemanticInferrer.md](./core/SemanticInferrer.md) |
+| `FakerGenerator` | core | Faker-backed value generation | [core/FakerGenerator.md](./core/FakerGenerator.md) |
+| `SkillRegistry` | core | Custom rule registry | [core/SkillRegistry.md](./core/SkillRegistry.md) |
+| `JsonRuleLoader` | core | `.fliwright/form-rules.json` loader | [core/JsonRuleLoader.md](./core/JsonRuleLoader.md) |
+| `SelectorResolver` / `resolveSelector` | core | Widget → wire selector | [core/SelectorResolver.md](./core/SelectorResolver.md) |
+| `PluginRegistry` | core | Plugin lifecycle + adapter lookup | [core/PluginRegistry.md](./core/PluginRegistry.md) |
+| `Protocol` | core | JSON-RPC 2.0 encoder/decoder | [core/Protocol.md](./core/Protocol.md) |
+| `VMServiceConnector` | core | WebSocket client with isolate discovery | [core/VMServiceConnector.md](./core/VMServiceConnector.md) |
+| `RiverpodStateAdapter` | plugin-riverpod | Riverpod `StateAdapter` | [plugin-riverpod/RiverpodStateAdapter.md](./plugin-riverpod/RiverpodStateAdapter.md) |
+| `riverpodPlugin` | plugin-riverpod | Plugin factory | [plugin-riverpod/plugin.md](./plugin-riverpod/plugin.md) |
 
 ## By Feature Slice
 
 | Feature | Packages | Doc | Agent-Accessible | Status |
 |---------|----------|-----|------------------|--------|
-| Self-Healing Pipeline | core, bridge | [self-healing-pipeline.md](./self-healing-pipeline.md) | via `fliwright_get_failure` | Implemented |
-| Recording & Codegen Pipeline | core, bridge, mcp, cli | [recording-pipeline.md](./recording-pipeline.md) | via `fliwright_record` | Implemented |
-| Form Auto-Fill Pipeline | core, bridge | [form-filling-pipeline.md](./form-filling-pipeline.md) | No direct MCP tool | Implemented |
-| MCP Integration | mcp, vitest, core | [mcp-integration.md](./mcp-integration.md) | Yes — all MCP tools | Implemented |
-| Gesture System | core (Locator), bridge (GestureExtension) | [core/Locator.md](./core/Locator.md) · [bridge/GestureExtension.md](./bridge/GestureExtension.md) | via test code | Implemented |
-| Mock API System | core (MockManager), bridge (MockServerExtension) | [core/MockManager.md](./core/MockManager.md) · [bridge/MockServerExtension.md](./bridge/MockServerExtension.md) | via test code | Implemented |
-| Riverpod State Management | plugin-riverpod, bridge (RiverpodExtension) | [plugin-riverpod/RiverpodStateAdapter.md](./plugin-riverpod/RiverpodStateAdapter.md) · [bridge/RiverpodExtension.md](./bridge/RiverpodExtension.md) | via `driver.state` | Implemented |
+| Self-Healing Pipeline | core, bridge | [self-healing-pipeline.md](./self-healing-pipeline.md) | via `fliwright_get_failure` MCP tool | Implemented |
+| Recording & Codegen Pipeline | core, bridge, mcp, vscode | [recording-pipeline.md](./recording-pipeline.md) | via `fliwright_record` MCP tool + VS Code commands | Implemented |
+| Form Auto-Fill Pipeline | core, bridge, vscode | [form-filling-pipeline.md](./form-filling-pipeline.md) | via VS Code commands (no MCP tool) | Implemented |
+| MCP Agent Integration | mcp, vitest, core | [mcp-integration.md](./mcp-integration.md) | Yes — `fliwright_run`, `fliwright_get_failure`, `fliwright_generate_test`, `fliwright_record`, `fliwright_mock_list`, `fliwright_mock_switch`, `test_report` resource | Implemented |
 
 ## MCP Tool Quick Reference
 
 | Tool | Input | Output | Doc |
 |------|-------|--------|-----|
 | `fliwright_run` | `testFile`, `vmServiceUrl?`, `testName?`, `cwd?` | `RunResult` | [mcp/fliwright-run.md](./mcp/fliwright-run.md) |
-| `fliwright_get_failure` | `testName?` | `GetFailureResult` (FailureEntry[]) | [mcp/fliwright-get-failure.md](./mcp/fliwright-get-failure.md) |
-| `fliwright_generate_test` | `source`, `description?`, `testName?` | `GenerateTestResult` (testCode, testName) | [mcp/fliwright-generate-test.md](./mcp/fliwright-generate-test.md) |
-| `fliwright_record` | `vmServiceUrl?`, `duration?`, `testName?`, `lang?` | `RecordResult` (testCode, testName, operationCount) | [mcp/fliwright-record.md](./mcp/fliwright-record.md) |
-
-**Resource:** `fliwright://test-report/latest` — [mcp/test-report.md](./mcp/test-report.md)
+| `fliwright_get_failure` | `testName?` | `{ failures: FailureEntry[] }` | [mcp/fliwright-get-failure.md](./mcp/fliwright-get-failure.md) |
+| `fliwright_generate_test` | `source`, `description?`, `testName?` | `{ testName, testCode, widgets }` | [mcp/fliwright-generate-test.md](./mcp/fliwright-generate-test.md) |
+| `fliwright_record` | `vmServiceUrl?`, `duration?`, `testName?`, `lang?` | `{ testCode, testName, operationCount }` | [mcp/fliwright-record.md](./mcp/fliwright-record.md) |
+| `fliwright_mock_list` | (none) | `{ endpoints: [...] }` | [mcp/fliwright-mock-list.md](./mcp/fliwright-mock-list.md) |
+| `fliwright_mock_switch` | `endpoint`, `ruleName`, `mockDir?` | `{ endpoint, activeRule }` | [mcp/fliwright-mock-switch.md](./mcp/fliwright-mock-switch.md) |
+| Resource: `test_report` | URI `fliwright://test-report/latest` | JSON `RunResult` | [mcp/test-report.md](./mcp/test-report.md) |
 
 ## Quick Start for AI Agents
 
-1. To **run tests**: Use `fliwright_run` with `testFile` path and `vmServiceUrl` (or set `FLIWRIGHT_VM_URL` env)
-2. To **diagnose failures**: Use `fliwright_get_failure` to get widget tree, source location, and healing suggestions
-3. To **generate tests**: Use `fliwright_generate_test` with Flutter source code to auto-generate test scripts
-4. To **record interactions**: Use `fliwright_record` with a running Flutter app to capture user actions and generate test code
-5. To **manipulate state**: Use `driver.state.read/write/override` via the Riverpod plugin (e.g., `riverpodPlugin()`)
-6. To **mock APIs**: Use `driver.mock.route/addRoute` to stub HTTP responses in tests
-7. To **auto-fill forms**: Use `page.formHelper.fill()` to extract, infer, and fill form fields with realistic data
+1. **Run tests**: `fliwright_run` (MCP) or `npx fliwright run` (CLI). Pass `vmServiceUrl` or set `FLIWRIGHT_VM_URL`.
+2. **Diagnose failures**: After a run, call `fliwright_get_failure` to get widget tree, source, and the latest healing report (with suggested selector + per-dimension scores).
+3. **Generate tests**: `fliwright_generate_test` accepts Flutter source and synthesizes a Vitest test that clicks buttons, types into fields, and asserts visibility.
+4. **Record interactions**: `fliwright_record` captures `duration` seconds of user input from the running app and returns generated code (`lang: 'ts' | 'dart'`).
+5. **Manipulate state**: Use the Riverpod plugin — `driver.state.read('provider')`, `.write`, `.watch`. Or from VS Code, use `Fliwright: Read/Override State Provider`.
+6. **Switch mocks**: `fliwright_mock_list` to see loaded endpoints, `fliwright_mock_switch` to flip a rule. Or use VS Code's Mock APIs tree view.
+7. **Author tests by demonstration**: In VS Code, `Fliwright: Start Recording` → interact with the app → `Stop Recording` → `Insert Recorded Test` at the cursor.

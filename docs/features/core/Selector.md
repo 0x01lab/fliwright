@@ -2,16 +2,17 @@
 module: "Selector"
 package: "@fliwright/core"
 source: "src/Selector.ts"
-generated: "2026-06-01"
+tests: "tests/Selector.test.ts"
+generated: "2026-06-02"
 ---
 
 # Selector
 
-> Parses and serializes widget selectors into wire format for the Flutter bridge.
+> Normalizes selector inputs into a wire-format string used by the bridge's `ext.fliwright.inspect` and gesture RPCs.
 
 ## Overview
 
-`Selector` normalizes various selector input formats (plain text, object with text/key/type, nested with ancestor) into a consistent wire format string (`text=...`, `key=...`, `byType=...`). It validates input at construction time and supports recursive ancestor chains.
+`Selector` accepts a flexible input shape (string or object) and validates it eagerly. It then exposes `toWireFormat()` and `toWireParams()` so callers can serialize the selector for the bridge. Ancestor chains are supported via the `ancestor` field.
 
 ## Constructor
 
@@ -19,41 +20,41 @@ generated: "2026-06-01"
 constructor(input: SelectorInput)
 ```
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `input` | `SelectorInput` | Yes | String, `{ text, ancestor? }`, `{ key, ancestor? }`, or `{ type, ancestor? }` |
+| Input shape | Wire format |
+|-------------|-------------|
+| `'text=Login'` (already-formatted string) | `'text=Login'` |
+| `{ text: 'Login' }` | `'text=Login'` |
+| `{ key: 'emailBtn' }` | `'key=emailBtn'` |
+| `{ type: 'ElevatedButton' }` | `'byType=ElevatedButton'` |
+| `{ text: 'Login', ancestor: { type: 'Scaffold' } }` | `'text=Login'` + `ancestorSelector: 'byType=Scaffold'` |
+
+**Throws:** `Error` for null/empty inputs, empty text/key/type strings, or objects missing all three fields.
 
 ## Public Methods
 
 ### `toWireFormat(): string`
 
-Converts selector to wire format string: `"text=..."`, `"key=..."`, `"byType=..."`, or the raw string.
-
-**Returns:** `string`
+Returns the bridge-ready selector string.
 
 ### `toWireParams(): Record<string, unknown>`
 
-Returns parameters object for JSON-RPC calls: `{ selector, ancestorSelector? }`.
-
-**Returns:** `Record<string, unknown>`
+Returns `{ selector, ancestorSelector? }` for RPC params that expect ancestor chains.
 
 ## Properties
 
-| Property | Type | Readonly | Description |
-|----------|------|----------|-------------|
-| `ancestor` | `Selector \| undefined` | Yes | Parent selector if specified |
+| Property | Type | Description |
+|----------|------|-------------|
+| `ancestor` | `Selector?` | Nested ancestor selector if provided |
 
-## Selector Formats
+## Example
 
-| Input | Wire Format | Description |
-|-------|-------------|-------------|
-| `'Login'` | `'text=Login'` | Text match |
-| `{ text: 'Login' }` | `'text=Login'` | Explicit text |
-| `{ key: 'submitBtn' }` | `'key=submitBtn'` | Value key match |
-| `{ type: 'ElevatedButton' }` | `'byType=ElevatedButton'` | Widget type match |
-| `{ text: 'Email', ancestor: { type: 'Form' } }` | `'text=Email'` with ancestor | Scoped search |
+```typescript
+new Selector({ text: 'Login' }).toWireFormat();           // 'text=Login'
+new Selector({ key: 'btn', ancestor: { type: 'AppBar' } }).toWireParams();
+// { selector: 'key=btn', ancestorSelector: 'byType=AppBar' }
+```
 
 ## Related
 
 - **Used by:** [Locator](./Locator.md), [Page](./Page.md)
-- **Source:** `src/Selector.ts`
+- **Source:** `packages/fliwright-core/src/Selector.ts`

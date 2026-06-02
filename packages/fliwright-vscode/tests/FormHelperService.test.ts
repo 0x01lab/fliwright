@@ -53,7 +53,10 @@ describe('FormHelperService', () => {
 
   it('fills selected fields through FormHelper.fillFields', async () => {
     const service = new FormHelperService();
-    const fillFields = async (hints: string[], options: unknown) => ({
+    let receivedOptions: Record<string, unknown> | undefined;
+    const fillFields = async (hints: string[], options: unknown) => {
+      receivedOptions = options as Record<string, unknown>;
+      return ({
       filled: hints.length,
       skipped: 1,
       errors: [],
@@ -66,15 +69,22 @@ describe('FormHelperService', () => {
           status: 'filled' as const,
         },
       ],
-    });
+      });
+    };
 
     const result = await service.fillSelected(
       { page: { formHelper: { fillFields } } } as any,
       Uri.file('/workspace'),
       ['Name'],
+      {
+        kind: 'formRulesFile',
+        uri: Uri.file('/workspace/.fliwright/forms/login.json'),
+        rulesFile: { version: 1, locale: 'en_US', rules: [] },
+      },
     );
 
     expect(result.filled).toBe(1);
+    expect(receivedOptions).toMatchObject({ requireRuleMatch: true });
     expect(service.getLastSummary()).toMatchObject({ action: 'fill', filled: 1, skipped: 1 });
   });
 
@@ -106,6 +116,19 @@ describe('FormHelperService', () => {
     expect(lines[1]).toContain('selector=text=Username / Email');
     expect(lines[1]).toContain('status=error');
     expect(lines[1]).toContain('No widget found');
+    expect(formatFormFillDebug({
+      filled: 0,
+      skipped: 1,
+      errors: [],
+      fields: [{
+        id: 'unmatched',
+        semanticType: 'email',
+        generatedValue: '',
+        selector: 'text=Username / Email',
+        status: 'skipped',
+        reason: 'no matching form rule',
+      }],
+    })[1]).toContain('reason=no matching form rule');
     expect(lines[2]).toContain('status=skipped');
   });
 });

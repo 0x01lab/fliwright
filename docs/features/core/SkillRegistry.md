@@ -2,16 +2,17 @@
 module: "SkillRegistry"
 package: "@fliwright/core"
 source: "src/SkillRegistry.ts"
-generated: "2026-06-01"
+tests: "tests/SkillRegistry.test.ts"
+generated: "2026-06-02"
 ---
 
 # SkillRegistry
 
-> Registry for custom form-filling skills that override default inference.
+> Ordered list of `FormSkill` instances; first-match-wins.
 
 ## Overview
 
-`SkillRegistry` allows registering custom `FormSkill` entries that can match specific form fields and generate custom values. Skills take priority over the default `SemanticInferrer` + `FakerGenerator` pipeline.
+A skill is `{ name, type, match, generate }`. The registry iterates in insertion order and returns the first skill whose `match(field)` returns `true`. Skills are typically built by `JsonRuleLoader` from `.fliwright/form-rules.json` files.
 
 ## Constructor
 
@@ -21,19 +22,32 @@ constructor()
 
 ## Public Methods
 
-### `register(skill: FormSkill): void`
+### `register(skill): void`
 
-Registers a skill.
+Append a skill.
 
-### `match(field: FormFieldMeta): FormSkill | null`
+### `match(field): FormSkill | null`
 
-Finds the first skill that matches the field.
+Return the first matching skill, or `null`.
 
 ### `clear(): void`
 
-Removes all registered skills.
+Remove all skills.
+
+## Example
+
+```typescript
+const registry = new SkillRegistry();
+registry.register({
+  name: 'company-name',
+  type: 'PRESET_SKILL',
+  match: (f) => /公司/.test(f.hintText ?? ''),
+  generate: () => 'ACME Inc.',
+});
+const skill = registry.match(field);
+```
 
 ## Related
 
 - **Used by:** [FormHelper](./FormHelper.md), [JsonRuleLoader](./JsonRuleLoader.md)
-- **Source:** `src/SkillRegistry.ts`
+- **Source:** `packages/fliwright-core/src/SkillRegistry.ts`

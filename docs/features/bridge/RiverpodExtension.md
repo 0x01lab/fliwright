@@ -1,55 +1,56 @@
 ---
 module: "RiverpodExtension"
-package: "fliwright-bridge"
+package: "fliwright_bridge"
 source: "lib/src/extensions/riverpod.dart"
-generated: "2026-06-01"
+generated: "2026-06-02"
 ---
 
 # RiverpodExtension
 
-> Riverpod state management bridge — exposes provider operations.
+> Bridge for Riverpod's `ProviderContainer` — list, read, override, watch, unwatch providers.
 
-## Prerequisites
+## Registered Methods
 
-Requires `RiverpodExtension.setProviderContainer(container)` to be called during app initialization with the app's `ProviderContainer`.
+| Method | Description |
+|--------|-------------|
+| `ext.fliwright.riverpod.list` | Return all known providers |
+| `ext.fliwright.riverpod.read` | Read current value |
+| `ext.fliwright.riverpod.override` | Override a provider for the next build |
+| `ext.fliwright.riverpod.watch` | Subscribe to a provider and emit state-change events |
+| `ext.fliwright.riverpod.unwatch` | Stop subscribing |
 
-## Registered Extensions
+## Setup
+
+The bridge expects a `ProviderContainer` to be available. The host app must call `RiverpodExtension.attachContainer(container)` once (typically in `main()` after `ProviderScope` is set up) before the bridge methods are invoked.
+
+## Method Details
 
 ### `ext.fliwright.riverpod.list`
 
-**Parameters:** None
-
-**Returns:** `{ providers: List, containerReady: bool }`
+No params. Returns `{ providers: ProviderInfo[] }`.
 
 ### `ext.fliwright.riverpod.read`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `provider` | `string` | Yes | Provider name |
+| Param | Type | Description |
+|-------|------|-------------|
+| `provider` | string | Provider key |
 
-**Returns:** `{ provider: string, value: any, found: bool }`
+Returns `{ value: unknown }`.
 
 ### `ext.fliwright.riverpod.override`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `provider` | `string` | Yes | Provider name |
-| `value` | `string (JSON)` | Yes | New value as JSON string |
+| Param | Type | Description |
+|-------|------|-------------|
+| `provider` | string | Provider key |
+| `value` | string | JSON-stringified value |
 
-**Returns:** `{ provider: string, overridden: bool, message: string }`
+Permanently overrides the provider on the container.
 
-### `ext.fliwright.riverpod.watch`
+### `ext.fliwright.riverpod.watch` / `unwatch`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `provider` | `string` | Yes | Provider name |
+Subscribing emits `Extension` events with `kind: 'riverpod.stateChanged'` and `data: { providerKey, oldValue, newValue }` whenever the provider's value changes.
 
-**Returns:** `{ watching: true, provider: string }`
+## Related
 
-### `ext.fliwright.riverpod.unwatch`
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `provider` | `string` | Yes | Provider name |
-
-**Returns:** `{ watching: false, provider: string }`
+- **TS counterpart:** [`RiverpodStateAdapter`](../plugin-riverpod/RiverpodStateAdapter.md)
+- **Source:** `packages/fliwright-bridge/lib/src/extensions/riverpod.dart`
