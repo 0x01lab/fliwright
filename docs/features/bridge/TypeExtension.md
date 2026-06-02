@@ -1,34 +1,34 @@
 ---
 module: "TypeExtension"
-package: "fliwright_bridge"
+package: "fliwright-bridge"
 source: "lib/src/extensions/type_extension.dart"
 generated: "2026-06-02"
 ---
 
 # TypeExtension
 
-> Simulate text entry into a Flutter `EditableText` field.
+> Text input simulation with character-by-character typing and replaceAll support.
 
-## Registered Methods
+## Overview
 
-| Method | Description |
-|--------|-------------|
-| `ext.fliwright.type` | Insert / replace text |
+Registers `ext.fliwright.type` extension. Finds an `EditableText` widget by selector, focuses it, and simulates text input via `TextEditingController`. Supports both append mode and replaceAll mode.
+
+## Registered Extensions
 
 ### `ext.fliwright.type`
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `selector` | string | Yes | Wire-format selector for the field |
-| `text` | string | Yes | Text to enter |
-| `charDelay` | number (string) | No | Delay between characters in ms |
-| `replaceAll` | `'true' \| 'false'` | No | If `'true'`, clears existing text first |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `selector` | `string` | Yes | Widget selector |
+| `ancestorSelector` | `string` | No | Ancestor constraint |
+| `text` | `string` | Yes | Text to input |
+| `charDelay` | `string` | No | Delay between characters (ms) |
+| `replaceAll` | `string` | No | `'true'` to replace existing text |
 
-**Returns:** `{ success: true }` on success. `{ success: false, error }` if the field can't be found or isn't editable.
+## Behavior
 
-Internally: resolves the selector via `ext.fliwright.inspect`, focuses the field, then either clears + types (replace) or appends one character at a time (with optional `charDelay`).
-
-## Related
-
-- **TS counterpart:** [`Locator.type/fill`](../core/Locator.md)
-- **Source:** `packages/fliwright-bridge/lib/src/extensions/type_extension.dart`
+1. Finds the `EditableText` state by walking the element tree
+2. Requests focus on the text field
+3. If `replaceAll=true`, clears existing text via `userText = ''`
+4. Types text character by character with configurable delay
+5. Returns `{ success: true }` or `{ success: false, error, debug }`

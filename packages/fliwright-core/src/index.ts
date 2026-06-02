@@ -18,6 +18,8 @@ export type {
   RecordedOperation,
   CodegenOptions,
   FormFieldMeta,
+  FormControlType,
+  FormFieldOption,
   SemanticType,
   FormFillResult,
   FormAnalyzeResult,
@@ -52,6 +54,8 @@ export { EventAggregator } from './EventAggregator.js';
 export { CodeGenerator } from './CodeGenerator.js';
 export { MockManager } from './MockManager.js';
 export { MockRuleStore } from './MockRuleStore.js';
+export { ToolMockServer } from './ToolMockServer.js';
+export type { ToolMockRequest, ToolMockResult, ToolMockServerOptions } from './ToolMockServer.js';
 export { RecorderController } from './RecorderController.js';
 export type { RecorderStartOptions } from './RecorderController.js';
 export { SnapshotStore } from './SnapshotStore.js';

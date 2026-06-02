@@ -1,39 +1,35 @@
 ---
 module: "SnapshotExtension"
-package: "fliwright_bridge"
+package: "fliwright-bridge"
 source: "lib/src/extensions/snapshot.dart"
 generated: "2026-06-02"
 ---
 
 # SnapshotExtension
 
-> Capture a serialized view of the interactive widget tree (and selected metadata) for self-healing analysis and failure context.
+> Captures interactive widget types with metadata for self-healing reference.
 
-## Registered Methods
+## Overview
 
-| Method | Description |
-|--------|-------------|
-| `ext.fliwright.snapshot` | Return interactive widget tree |
+Registers `ext.fliwright.snapshot` extension. Walks the widget tree and collects `WidgetSnapshot` objects for interactive widgets (buttons, text fields, checkboxes, etc.). Each snapshot includes type, text, key, parent type, adjacent text, render bounds, callback names, and semantics description.
+
+## Registered Extensions
 
 ### `ext.fliwright.snapshot`
 
-No params.
+No parameters required.
 
-**Returns:** an object whose top-level structure includes a list of `WidgetSnapshot`-style entries:
+Returns `{ widgets: WidgetSnapshot[] }` where each snapshot contains:
+- `type`: Widget runtime type
+- `text`: Visible text
+- `key`: Flutter Key
+- `parentType`: Parent widget type
+- `adjacentText`: Array of adjacent sibling text values
+- `rect`: `{ x, y, width, height }` render bounds
+- `callbackNames`: Array of callback handler names (e.g., `onPressed`)
+- `description`: Semantics description
+- `firstSeen`: ISO timestamp
 
-| Field | Description |
-|-------|-------------|
-| `type` | Runtime type |
-| `text`, `key` | Identifiers |
-| `parentType` | Immediate parent's type |
-| `adjacentText` | Sibling widget text labels (used for `context` healing score) |
-| `rect` | `{ x, y, width, height }` |
-| `callbackNames` | Bound callback names (used for `codeBinding` healing score) |
-| `description` | Human-readable text used for `text` healing score |
+## Captured Widget Types
 
-Captured widget types include `TextField`, `TextFormField`, `EditableText`, `ElevatedButton`, `TextButton`, `OutlinedButton`, `IconButton`, `FloatingActionButton`, `Checkbox`, `Switch`, `Slider`, `DropdownButton`, plus common containers (for context).
-
-## Related
-
-- **TS counterpart:** [`SelfHealingEngine.tryHeal`](../core/SelfHealingEngine.md), [`FailureCollector`](../core/FailureCollector.md)
-- **Source:** `packages/fliwright-bridge/lib/src/extensions/snapshot.dart`
+Interactive widget types: ElevatedButton, TextButton, OutlinedButton, IconButton, FloatingActionButton, TextField, TextFormField, Checkbox, Switch, DropdownButton, Slider, BottomNavigationBar, NavigationRail, TabBar.

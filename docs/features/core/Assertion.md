@@ -2,83 +2,29 @@
 module: "Assertion"
 package: "@fliwright/core"
 source: "src/Assertion.ts"
-tests: "tests/Assertion.test.ts"
 generated: "2026-06-02"
 ---
 
 # Assertion
 
-> Playwright-style auto-waiting assertion wrapper around a `Locator`, with optional self-healing on failure.
+> Playwright-style auto-wait polling assertion with `.not` negation and self-healing integration.
 
 ## Overview
 
-`Assertion` polls a matcher up to a timeout (default 5s, 100ms interval). On failure it can invoke `SelfHealingEngine.tryHeal` to look up a replacement selector and retry once. Negation is supported via the `.not` property. `createExpect(locator, options)` is the public factory; the `@fliwright/vitest` `expect()` wraps it to attach the current driver's healing engine.
+`Assertion` wraps a `Locator` and provides matcher methods (`toBeVisible`, `toHaveText`, `toContainText`, `toBeEnabled`, `toBeDisabled`) that poll until the condition is met or a timeout elapses. On failure, it attempts self-healing via `SelfHealingEngine.tryHeal()`. On success, it records a snapshot for future healing.
 
-## Constructor
+## createExpect
 
 ```typescript
-constructor(
-  locator: Locator,
-  negated?: boolean,
-  failureCollector?: FailureCollector,
-  healingEngine?: SelfHealingEngine,
-  testName?: string,
-  sendRequest?: (method: string, params?: Record<string, unknown>) => Promise<unknown>,
-)
+function createExpect(locator: Locator, failureCollector?: FailureCollector): Assertion
 ```
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `locator` | `Locator` | Yes | The locator to assert against |
-| `negated` | boolean | No | Default `false`. Set via `.not` |
-| `failureCollector` | `FailureCollector` | No | Used to capture context on failure |
-| `healingEngine` | `SelfHealingEngine` | No | Triggers self-healing retry |
-| `testName` | string | No | Test name — required for healing lookup |
-| `sendRequest` | function | No | RPC channel — required for healing |
+Creates an Assertion for the given Locator.
 
-## Public Methods
-
-### `toBeVisible(options?): Promise<void>`
-
-Asserts the locator matches at least one widget with a render `rect`.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `options.timeout` | number | Max wait in ms (default 5000) |
-
----
-
-### `toHaveText(text, options?): Promise<void>`
-
-Asserts the first match's `text` equals `text` exactly.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `text` | string | Expected exact text |
-| `options.timeout` | number | Max wait in ms |
-
----
-
-### `toContainText(text, options?): Promise<void>`
-
-Asserts the first match's `text` contains `text` as a substring.
-
----
-
-### `toBeEnabled(options?): Promise<void>` / `toBeDisabled(options?): Promise<void>`
-
-Assert the widget's `enabled` property.
-
-## Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `not` | `Assertion` | Returns a negated copy |
-
-## `AssertionError` (class)
+## AssertionError
 
 ```typescript
-export class AssertionError extends Error {
+class AssertionError extends Error {
   readonly matcher: string;
   readonly expected: string;
   readonly actual: string;
@@ -86,34 +32,33 @@ export class AssertionError extends Error {
 }
 ```
 
-Thrown after polling exhausts and (optionally) healing fails.
+## Public Methods
 
-## `createExpect(locator, options?)`
+### `toBeVisible(options?: { timeout?: number }): Promise<void>`
 
-```typescript
-function createExpect(
-  locator: Locator,
-  options?: { healing?: SelfHealingEngine; testName?: string; sendRequest?: SendRequest },
-): Assertion;
-```
+Asserts the element is visible. Default timeout: 5000ms. On failure, attempts self-healing before throwing.
 
-Convenience factory that returns a fresh `Assertion` bound to the supplied healing context. Used by `@fliwright/vitest`'s `expect()`.
+### `toHaveText(text: string, options?: { timeout?: number }): Promise<void>`
 
-## Example
+Asserts the element has the exact text.
 
-```typescript
-import { createExpect } from '@fliwright/core';
+### `toContainText(text: string, options?: { timeout?: number }): Promise<void>`
 
-const expect = createExpect(page.locator({ text: 'Welcome' }), {
-  healing: driver.healing,
-  testName: 'login flow',
-});
+Asserts the element contains the given text substring.
 
-await expect.toBeVisible();
-await expect.not.toHaveText('Loading...');
-```
+### `toBeEnabled(options?: { timeout?: number }): Promise<void>`
+
+Asserts the element is enabled (checks `properties.enabled`).
+
+### `toBeDisabled(options?: { timeout?: number }): Promise<void>`
+
+Asserts the element is disabled (delegates to `toBeEnabled` with negation).
+
+### `not` (property)
+
+Returns a new Assertion with negation applied. Negated assertions flip the check: `toBeVisible` checks not-visible, etc.
 
 ## Related
 
 - **Depends on:** [Locator](./Locator.md), [SelfHealingEngine](./SelfHealingEngine.md), [FailureCollector](./FailureCollector.md)
-- **Source:** `packages/fliwright-core/src/Assertion.ts`
+- **Source:** `src/Assertion.ts`

@@ -1,44 +1,39 @@
 ---
 module: "RecordingExtension"
-package: "fliwright_bridge"
+package: "fliwright-bridge"
 source: "lib/src/extensions/recording.dart"
 generated: "2026-06-02"
 ---
 
 # RecordingExtension
 
-> Capture live pointer and text-input events from the running Flutter app and emit them as `Extension` stream events.
+> Captures pointer events and text input for recording user interactions.
 
-## Registered Methods
+## Overview
 
-| Method | Description |
-|--------|-------------|
-| `ext.fliwright.startRecording` | Begin capturing events |
-| `ext.fliwright.stopRecording` | Stop capturing events |
-| `ext.fliwright.hitTest` | Resolve `(x, y)` to a `WidgetInfo` (used per-op by RecorderController) |
+Registers `ext.fliwright.startRecording` and `ext.fliwright.stopRecording`. When recording is active, captures `PointerDownEvent`/`PointerMoveEvent`/`PointerUpEvent` events and polls for text input changes on focused `EditableText` widgets.
+
+## Registered Extensions
 
 ### `ext.fliwright.startRecording`
 
-No params (or optionally `pollIntervalMs`). Installs a `PointerDataEventListener` and a periodic text-polling timer. Each event is emitted via `postEvent('Extension', { kind: 'FliwrightRecording', ... })` on the VM Service `Extension` event stream.
+Starts capturing pointer events via `PointerRouter` and text input changes via periodic polling.
 
 ### `ext.fliwright.stopRecording`
 
-Removes the listener, cancels the timer.
+Stops capturing and cleans up listeners.
 
 ### `ext.fliwright.hitTest`
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `x` | number | Yes | Screen x |
-| `y` | number | Yes | Screen y |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `x` | `double` | Yes | X coordinate |
+| `y` | `double` | Yes | Y coordinate |
 
-**Returns:** `{ widget: Partial<WidgetInfo> }` — the topmost widget at the location (via `HitTestResult`). Used by `RecorderController.resolveSelector` to attach a stable selector to each recorded operation.
+Performs a hit test at the given position and returns the widget at that location.
 
-## Reset
+## Event Stream
 
-`RecordingExtension.reset()` is called by `FliwrightBridge.reset()` to clear state between test runs.
-
-## Related
-
-- **TS counterpart:** [`RecorderController`](../core/RecorderController.md)
-- **Source:** `packages/fliwright-bridge/lib/src/extensions/recording.dart`
+Events are emitted on the `Extension` stream with kind `FliwrightRecording`. Each event contains:
+- Pointer events: `type: 'pointerEvent'`, `kind: 'down'|'move'|'up'`, `pointer`, `position`, `timestamp`
+- Text events: `type: 'textInput'`, `text`, `action: 'replace'`, `timestamp`

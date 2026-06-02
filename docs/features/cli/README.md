@@ -1,53 +1,54 @@
 ---
 package: "@fliwright/cli"
 version: "0.1.0"
-layer: transport
+layer: integration
 status: implemented
 generated: "2026-06-02"
 ---
 
 # @fliwright/cli
 
-> Command-line entry point (`fliwright`) that runs Fliwright tests via Vitest, initializes projects, records user interactions, and diagnoses environment issues.
+> Command-line interface for Fliwright — run tests, initialize projects, check environments, record interactions, and manage mocks.
 
 ## Modules
 
 | Module | Description | Doc |
 |--------|-------------|-----|
-| `run` command | Runs Vitest with the right VM Service URL and failure-context env vars. | [run.md](./run.md) |
-| `init` command | Scaffolds `fliwright.config.ts` and an example test file. | [init.md](./init.md) |
-| `doctor` command | Checks Node, Flutter, packages, config, and VM Service availability. | [doctor.md](./doctor.md) |
-| `record` command | Records user interactions and emits TypeScript or Dart test code with assertion suggestions. | [record.md](./record.md) |
-| `config` | Loads `fliwright.config.ts` via `jiti` and merges with defaults. | [config.md](./config.md) |
-| `vm-discovery` | Resolves a VM Service URL from CLI flag, env var, config, or port scan. | [vm-discovery.md](./vm-discovery.md) |
-| `reporter` | Pretty / JSON / JUnit output formatters for `CliRunResult`. | [reporter.md](./reporter.md) |
+| `run` | Run Fliwright tests via Vitest | [run.md](./run.md) |
+| `init` | Initialize Fliwright in a project | [init.md](./init.md) |
+| `doctor` | Check environment prerequisites | [doctor.md](./doctor.md) |
+| `record` | Record interactions and generate code | [record.md](./record.md) |
+| `mock:start` | Start tool-side mock controller | [mock-start.md](./mock-start.md) |
 
 ## Dependencies
 
-- `@fliwright/core` — `workspace:*`
-- `commander` — `^12.0.0` (CLI parser)
-- `chalk` — `^5.3.0` (colored output)
-- `jiti` — `^2.0.0` (TypeScript config loader)
-- Peer: `vitest` `^2.0.0`, optional peer: `@fliwright/vitest` `workspace:*`
+- `@fliwright/core` workspace:* — core SDK
+- `commander` ^12.0.0 — CLI framework
+- `chalk` ^5.3.0 — terminal colors
+- `jiti` ^2.0.0 — TypeScript config loading
 
-## Usage Example
+## Configuration
 
-```bash
-# Scaffold a new project
-npx fliwright init
+The CLI reads `fliwright.config.ts` from the project root using jiti (TypeScript support without pre-compilation).
 
-# Start your Flutter app in another terminal
-flutter run
+```typescript
+import { defineConfig } from '@fliwright/cli';
 
-# Run tests (auto-discovers VM Service on ports 8181/9189/54321)
-npx fliwright run
-
-# JSON output for CI
-npx fliwright run --reporter json --timeout 60000
-
-# Record a session and emit Dart code
-npx fliwright record --lang dart --output tests/recorded.dart
-
-# Diagnose setup issues
-npx fliwright doctor
+export default defineConfig({
+  // vmServiceUrl: 'ws://127.0.0.1:8181/ws',
+  timeout: 30000,
+  screenshot: 'file',
+  testDir: 'tests',
+  reporter: 'pretty',
+});
 ```
+
+## Config Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `vmServiceUrl` | `string` | — | VM Service WebSocket URL |
+| `timeout` | `number` | 30000 | Per-test timeout (ms) |
+| `screenshot` | `'file' \| 'base64' \| 'off'` | 'file' | Screenshot mode |
+| `testDir` | `string` | 'tests' | Test directory |
+| `reporter` | `'pretty' \| 'json' \| 'junit'` | 'pretty' | Output format |

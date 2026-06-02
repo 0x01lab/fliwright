@@ -80,6 +80,10 @@ export enum ViewColumn {
   Beside = -2,
 }
 
+export enum ProgressLocation {
+  Window = 10,
+}
+
 export class Position {
   constructor(public readonly line: number, public readonly character: number) {}
 }
@@ -202,6 +206,7 @@ export const window = {
   showQuickPick: async (items: unknown[], options?: { canPickMany?: boolean }) => (
     options?.canPickMany ? items : items[0]
   ),
+  withProgress: async (_options: unknown, task: () => Promise<unknown>) => task(),
 };
 
 export const commands = {

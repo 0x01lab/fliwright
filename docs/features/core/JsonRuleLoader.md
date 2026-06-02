@@ -2,17 +2,16 @@
 module: "JsonRuleLoader"
 package: "@fliwright/core"
 source: "src/JsonRuleLoader.ts"
-tests: "tests/JsonRuleLoader.test.ts"
 generated: "2026-06-02"
 ---
 
 # JsonRuleLoader
 
-> Load `FormSkill` instances from `.fliwright/form-rules.json` files.
+> Loads form-filling rules from JSON files (PRESET_SKILL, REGEXP_MOCK, LLM_GENERATE).
 
 ## Overview
 
-The loader supports three rule types — `PRESET_SKILL`, `LLM_GENERATE`, and `REGEXP_MOCK`. Each rule specifies a `match` object whose keys are field-property names (`id`, `selector`, `type`, `hintText`, `label`, `keyboardType`, `key`, `ancestorKey`, `name`, `semanticsId`, `semanticsLabel`, `semanticsHint`, `role`, `semanticType`).
+Reads `fliwright.form-rules.json` or `fliwright.form-rules/*.json` files. Each rule defines a `match` object (field attribute patterns), a `type` (PRESET_SKILL, REGEXP_MOCK, or LLM_GENERATE), and type-specific `data` or `pattern`. Uses `randexp` for regex-based generation.
 
 ## Constructor
 
@@ -20,54 +19,21 @@ The loader supports three rule types — `PRESET_SKILL`, `LLM_GENERATE`, and `RE
 constructor(projectRoot?: string)
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `projectRoot` | string | `process.cwd()` | Used by `autoDiscover` |
-
 ## Public Methods
 
-### `loadFromFile(filePath): FormSkill[]`
+### `loadFromFile(filePath: string): FormSkill[]`
 
-Returns `[]` if the file is missing or unparsable.
+Loads skills from a single JSON file.
 
-### `loadFromDir(dirPath): FormSkill[]`
+### `loadFromDir(dirPath: string): FormSkill[]`
 
-Loads every `*.json` file in the directory.
+Loads skills from all `.json` files in a directory.
 
 ### `autoDiscover(): FormSkill[]`
 
-Loads `<projectRoot>/fliwright.form-rules.json` (single file) and `<projectRoot>/fliwright.form-rules/` (directory).
-
-## File Format
-
-```json
-{
-  "version": 1,
-  "rules": [
-    {
-      "type": "PRESET_SKILL",
-      "match": { "hintText": "公司名称" },
-      "data": ["ACME", "Globex"]
-    },
-    {
-      "type": "REGEXP_MOCK",
-      "match": { "label": "订单号" },
-      "pattern": "ORD-\\d{8}"
-    }
-  ]
-}
-```
-
-## Example
-
-```typescript
-const loader = new JsonRuleLoader(process.cwd());
-const skills = loader.autoDiscover();
-const registry = new SkillRegistry();
-for (const s of skills) registry.register(s);
-```
+Auto-discovers rules from `fliwright.form-rules.json` and `fliwright.form-rules/` directory.
 
 ## Related
 
 - **Used by:** [FormHelper](./FormHelper.md)
-- **Source:** `packages/fliwright-core/src/JsonRuleLoader.ts`
+- **Source:** `src/JsonRuleLoader.ts`

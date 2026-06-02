@@ -2,55 +2,66 @@
 module: "PluginRegistry"
 package: "@fliwright/core"
 source: "src/PluginRegistry.ts"
-tests: "tests/PluginRegistry.test.ts"
 generated: "2026-06-02"
 ---
 
 # PluginRegistry
 
-> Holds the list of registered plugins plus their contributed adapters (state / mock / finder / healing) and runs plugin lifecycle hooks.
+> Plugin lifecycle management — register, initAll, test lifecycle hooks.
 
 ## Overview
 
-Plugins are registered before `connect()`. When `initAll` runs (during `FliwrightDriver.connect`), each plugin's `onInit(context)` is called with a `PluginContext` whose `registerX` callbacks populate the registry's adapter maps. The driver then looks up adapters by name (`getStateAdapter('riverpod')`).
-
-## Constructor
-
-```typescript
-constructor()
-```
+Manages `FliwrightPlugin` instances and their registered adapters (StateAdapter, MockAdapter, FinderStrategy, HealingStrategy). Provides lifecycle hooks: `onInit`, `onTestStart`, `onTestEnd`, `onDispose`.
 
 ## Public Methods
 
-### `register(plugin): void`
+### `register(plugin: FliwrightPlugin): void`
 
-Register a plugin. Throws if a plugin with the same `name` is already registered.
+Registers a plugin. Throws if a plugin with the same name is already registered.
 
-### `resolve(name): FliwrightPlugin` — return the plugin or throw.
+### `resolve(name: string): FliwrightPlugin`
 
-### `pluginNames: string[]` — list of registered plugin names.
+Returns a registered plugin by name. Throws if not found.
 
-### `getStateAdapter(name)`, `getMockAdapter(name)`, `getFinderStrategy(name)`, `getHealingStrategy(name)`
+### `getStateAdapter(name: string): StateAdapter`
 
-Look up an adapter by name; throw if not registered.
+Returns a registered StateAdapter.
+
+### `getMockAdapter(name: string): MockAdapter`
+
+Returns a registered MockAdapter.
+
+### `getFinderStrategy(name: string): FinderStrategy`
+
+Returns a registered FinderStrategy.
+
+### `getHealingStrategy(name: string): HealingStrategy`
+
+Returns a registered HealingStrategy.
 
 ### `initAll(sendRequest, eventSource?): Promise<void>`
 
-Runs each plugin's `onInit` once with a `PluginContext`. Subsequent calls are no-ops.
+Initializes all plugins with a PluginContext. Called once after VM Service connection.
 
-### `notifyTestStart(testName): Promise<void>`, `notifyTestEnd(testName, result): Promise<void>`, `disposeAll(): Promise<void>`
+### `notifyTestStart(testName: string): Promise<void>`
 
-Fan out lifecycle hooks. `disposeAll` also resets `initialized` so `initAll` could run again.
+Calls `onTestStart` on all plugins.
 
-## Example
+### `notifyTestEnd(testName: string, result: TestResult): Promise<void>`
 
-```typescript
-const registry = new PluginRegistry();
-registry.register(riverpodPlugin());
-await registry.initAll(sendRequest, connector);
-const riverpod = registry.getStateAdapter('riverpod');
-```
+Calls `onTestEnd` on all plugins.
+
+### `disposeAll(): Promise<void>`
+
+Calls `onDispose` on all plugins.
+
+## Properties
+
+| Property | Type | Readonly | Description |
+|----------|------|----------|-------------|
+| `pluginNames` | `string[]` | Yes | Names of all registered plugins |
 
 ## Related
 
-- **Source:** `packages/fliwright-core/src/PluginRegistry.ts`
+- **Used by:** [FliwrightDriver](./FliwrightDriver.md)
+- **Source:** `src/PluginRegistry.ts`

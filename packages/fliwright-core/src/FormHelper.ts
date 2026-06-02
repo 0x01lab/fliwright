@@ -1,4 +1,5 @@
 import type {
+  FormFieldOption,
   FormFieldMeta,
   FormFillResult,
   FormAnalyzeResult,
@@ -46,14 +47,14 @@ export class FormHelper {
         const semanticType = semanticTypes.get(field.id) ?? 'text';
         const matchField: RuleMatchField = { ...field, semanticType };
         const skill = registry.match(matchField);
-        const generatedValue = skill
-          ? skill.generate(field, options?.locale ?? 'zh_CN')
-          : generator.generate(semanticType, field.maxLength);
+        const generatedValue = this.generateFieldValue(field, semanticType, generator, skill, options);
         return {
           id: field.id,
           semanticType,
           generatedValue,
           selector: field.selector,
+          controlType: field.controlType,
+          options: field.options,
           hintText: field.hintText,
           label: field.label,
           key: field.key,
@@ -184,9 +185,7 @@ export class FormHelper {
       result.skipped++;
       return;
     }
-    const generatedValue = skill
-      ? skill.generate(field, options?.locale ?? 'zh_CN')
-      : generator.generate(semanticType, field.maxLength);
+    const generatedValue = this.generateFieldValue(field, semanticType, generator, skill, options);
 
     try {
       await this.fillWithFallback(field, generatedValue);
@@ -216,6 +215,8 @@ export class FormHelper {
   private resultMetadata(field: FormFieldMeta) {
     return {
       key: field.key,
+      controlType: field.controlType,
+      options: field.options,
       ancestorKey: field.ancestorKey,
       name: field.name,
       semanticsId: field.semanticsId,
@@ -225,10 +226,32 @@ export class FormHelper {
     };
   }
 
+  private generateFieldValue(
+    field: FormFieldMeta,
+    semanticType: SemanticType,
+    generator: FakerGenerator,
+    skill: { generate: (field: FormFieldMeta, locale: string) => string } | null,
+    options?: FormHelperOptions,
+  ): string {
+    if (skill) return skill.generate(field, options?.locale ?? 'zh_CN');
+
+    if (field.controlType === 'checkbox') {
+      const option = this.firstFillableOption(field);
+      return option?.value ?? option?.label ?? 'true';
+    }
+
+    if (field.controlType === 'radio' || field.controlType === 'select') {
+      const option = this.firstFillableOption(field);
+      return option?.value ?? option?.label ?? generator.generate(semanticType, field.maxLength);
+    }
+
+    return generator.generate(semanticType, field.maxLength);
+  }
+
   private async fillWithFallback(field: FormFieldMeta, generatedValue: string): Promise<void> {
     const primarySelector = this.selectorForFill(field);
     try {
-      await new Locator(primarySelector, this.sendRequest).fill(generatedValue);
+      await this.applyFieldValue(field, primarySelector, generatedValue);
       return;
     } catch (primaryError) {
       const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
@@ -243,7 +266,7 @@ export class FormHelper {
       }
 
       try {
-        await new Locator(fallbackSelector, this.sendRequest).fill(generatedValue);
+        await this.applyFieldValue(field, fallbackSelector, generatedValue);
       } catch (fallbackError) {
         const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
         throw new Error(
@@ -253,11 +276,119 @@ export class FormHelper {
     }
   }
 
+  private async applyFieldValue(
+    field: FormFieldMeta,
+    fieldSelector: SelectorInput,
+    generatedValue: string,
+  ): Promise<void> {
+    if (!field.controlType || field.controlType === 'textInput') {
+      await new Locator(fieldSelector, this.sendRequest).fill(generatedValue);
+      return;
+    }
+
+    switch (field.controlType) {
+      case 'checkbox':
+        await this.applyCheckboxValue(field, fieldSelector, generatedValue);
+        return;
+      case 'radio':
+        await this.clickOption(field, fieldSelector, generatedValue, { openFieldFirst: false });
+        return;
+      case 'select':
+        await this.clickOption(field, fieldSelector, generatedValue, { openFieldFirst: true });
+        return;
+      default:
+        await new Locator(fieldSelector, this.sendRequest).fill(generatedValue);
+    }
+  }
+
+  private async applyCheckboxValue(
+    field: FormFieldMeta,
+    fieldSelector: SelectorInput,
+    generatedValue: string,
+  ): Promise<void> {
+    const hasMultipleOptions = (field.options?.length ?? 0) > 1;
+    if (hasMultipleOptions) {
+      await this.clickOption(field, fieldSelector, generatedValue, { openFieldFirst: false });
+      return;
+    }
+
+    const desired = this.parseBooleanValue(generatedValue);
+    if (desired === false) {
+      return;
+    }
+    if (field.value === true) {
+      return;
+    }
+    await new Locator(fieldSelector, this.sendRequest).click();
+  }
+
+  private async clickOption(
+    field: FormFieldMeta,
+    fieldSelector: SelectorInput,
+    generatedValue: string,
+    options: { openFieldFirst: boolean },
+  ): Promise<void> {
+    const option = this.resolveOption(field, generatedValue);
+    const optionLabel = option?.label ?? generatedValue;
+
+    if (options.openFieldFirst) {
+      await new Locator(fieldSelector, this.sendRequest).click();
+      await this.delay(50);
+    }
+
+    if (!optionLabel) {
+      throw new Error(`No selectable option available for field ${field.id}`);
+    }
+
+    if (option?.semanticsId) {
+      await new Locator(`semanticsId=${option.semanticsId}`, this.sendRequest).click();
+      return;
+    }
+
+    const scopedOptionSelector: SelectorInput = { text: optionLabel, ancestor: fieldSelector };
+    try {
+      await new Locator(scopedOptionSelector, this.sendRequest).click();
+    } catch (scopedError) {
+      if (!options.openFieldFirst) throw scopedError;
+      await new Locator({ text: optionLabel }, this.sendRequest).click();
+    }
+  }
+
+  private resolveOption(field: FormFieldMeta, target: string): FormFieldOption | undefined {
+    const normalizedTarget = this.normalizeOptionValue(target);
+    if (!normalizedTarget) return this.firstFillableOption(field);
+    return field.options?.find((option) => {
+      if (option.enabled === false) return false;
+      return this.normalizeOptionValue(option.value) === normalizedTarget
+        || this.normalizeOptionValue(option.label) === normalizedTarget;
+    });
+  }
+
+  private firstFillableOption(field: FormFieldMeta): FormFieldOption | undefined {
+    return field.options?.find((option) => option.enabled !== false && option.selected !== true)
+      ?? field.options?.find((option) => option.enabled !== false);
+  }
+
+  private parseBooleanValue(value: string): boolean | undefined {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', '是'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n', '否'].includes(normalized)) return false;
+    return undefined;
+  }
+
+  private normalizeOptionValue(value: unknown): string {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   private parseSelector(selectorStr: string): SelectorInput {
     if (selectorStr.startsWith('text=')) return { text: selectorStr.slice(5) };
     if (selectorStr.startsWith('key=')) return { key: selectorStr.slice(4) };
     if (selectorStr.startsWith('byType=')) return { type: selectorStr.slice(7) };
-    return { text: selectorStr };
+    return selectorStr;
   }
 
   private selectorForFill(field: FormFieldMeta): SelectorInput {

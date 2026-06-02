@@ -5,52 +5,31 @@ source: "src/tools/generateTest.ts"
 generated: "2026-06-02"
 ---
 
-# `fliwright_generate_test`
+# fliwright_generate_test
 
-> Generate a Fliwright test script from a Flutter/Dart source snippet by parsing out text widgets, buttons, and text fields, then emitting a `test()` block that types into fields, clicks buttons, and asserts visibility.
-
-## Description
-
-`handleGenerateTest` parses the supplied `source` string with `parseFlutterSource`, classifies widgets into `text | button | textField`, and synthesizes a Vitest test file that:
-
-1. For each `textField`: clicks the field, then types `'test_input'`.
-2. For each `button`: clicks it via `page.locator({ text: '...' })`.
-3. For the last `text` widget: asserts visibility via `expect(...).toBeVisible()`.
+> Generate a Fliwright test script from Flutter/Dart source code.
 
 ## Input Schema
 
-```typescript
-{
-  source: string;            // required
-  description?: string;      // optional natural-language intent
-  testName?: string;         // optional, defaults to "generated test"
-}
-```
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source` | `string` | Yes | Flutter/Dart source code of the page or widget |
+| `description` | `string` | No | Natural language description of what to test |
+| `testName` | `string` | No | Name for the generated test |
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `source` | string | Yes | Flutter/Dart source code of the page or widget to test |
-| `description` | string | No | Natural-language description of what the test should verify (currently advisory) |
-| `testName` | string | No | Name for the generated `test()` block. Default `'generated test'` |
-
-## Output
+## Output Schema
 
 ```typescript
-{
+interface GenerateTestResult {
+  testCode: string;
   testName: string;
-  testCode: string;          // full file including imports + test block
-  widgets: Array<{ type, text?, hintText? }>;
 }
 ```
 
-## Example
+## Behavior
 
-```json
-{
-  "name": "fliwright_generate_test",
-  "arguments": {
-    "source": "class LoginPage extends StatelessWidget { ... }",
-    "testName": "login flow"
-  }
-}
-```
+1. Parses Flutter source for widgets: AppBar titles, TextField/TextFormField with hints, button labels, Text widgets
+2. Generates type operations for TextFields (click + type)
+3. Generates click operations for buttons
+4. Adds visibility assertion for last text widget
+5. Returns complete test file content

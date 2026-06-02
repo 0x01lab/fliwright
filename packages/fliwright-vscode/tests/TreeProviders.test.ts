@@ -56,6 +56,60 @@ describe('tree providers', () => {
     expect(item.description).toContain('active');
   });
 
+  it('shows at most one applied rule per mock endpoint', async () => {
+    const root = await createWorkspace();
+    const provider = new MockApiTreeProvider({
+      discover: vi.fn<MockConfigService['discover']>().mockResolvedValue({
+        root: Uri.file(`${root}/.fliwright/mocks`),
+        indexUri: Uri.file(`${root}/.fliwright/mocks/mock-index.json`),
+        endpoints: [
+          {
+            kind: 'endpoint',
+            uri: Uri.file(`${root}/.fliwright/mocks/api/token.json`),
+            indexed: true,
+            defaultRule: 'success',
+            endpointFile: {
+              version: 1,
+              name: 'Token',
+              method: 'GET',
+              endpoint: '/v1/token',
+              rules: [
+                { name: 'success', status: 200 },
+                { name: 'error', status: 400 },
+              ],
+            },
+          },
+        ],
+        invalid: [],
+      }),
+    } as unknown as MockConfigService);
+
+    provider.setAppliedRules([
+      {
+        endpoint: '/v1/token',
+        method: 'GET',
+        ruleName: 'success',
+        filePath: `${root}/.fliwright/mocks/api/token.json`,
+        appliedAt: 1,
+      },
+      {
+        endpoint: '/v1/token',
+        method: 'GET',
+        ruleName: 'error',
+        filePath: `${root}/.fliwright/mocks/api/token.json`,
+        appliedAt: 2,
+      },
+    ]);
+    const [endpoint] = await provider.getChildren();
+    const rules = await provider.getChildren(endpoint);
+
+    expect(rules).toHaveLength(2);
+    expect(rules.filter((rule) => rule.kind === 'rule' && rule.applied)).toHaveLength(1);
+    expect(rules[0]).toMatchObject({ kind: 'rule', applied: false });
+    expect(rules[1]).toMatchObject({ kind: 'rule', applied: true });
+    expect(provider.getTreeItem(endpoint!).description).toContain('1 active');
+  });
+
   it('returns empty form state without refresh loop', async () => {
     const root = await createWorkspace();
     const discover = vi.fn<FormRuleService['discover']>().mockResolvedValue({
@@ -85,5 +139,44 @@ describe('tree providers', () => {
     });
 
     expect(item.contextValue).toBe('formInvalid');
+  });
+
+  it('shows last analyzed form fields as clickable insert rows', async () => {
+    const root = await createWorkspace();
+    const provider = new FormDataTreeProvider({
+      discover: vi.fn<FormRuleService['discover']>().mockResolvedValue({
+        root: Uri.file(`${root}/.fliwright/forms`),
+        files: [
+          {
+            kind: 'formRulesFile',
+            uri: Uri.file(`${root}/.fliwright/forms/login.json`),
+            rulesFile: { version: 1, rules: [] },
+          },
+        ],
+        invalid: [],
+      }),
+    } as unknown as FormRuleService);
+
+    provider.setLastSummary({ action: 'analyze', total: 1, ranAt: 1 });
+    provider.setLastAnalyze({
+      fields: [
+        {
+          id: 'username',
+          label: 'Username',
+          semanticType: 'email',
+          generatedValue: 'test@example.com',
+          selector: 'name=username',
+        },
+      ],
+    });
+
+    const [summary] = await provider.getChildren();
+    expect(summary).toMatchObject({ kind: 'formRoot', label: 'Last analyze' });
+    const fields = await provider.getChildren(summary);
+    expect(fields).toHaveLength(1);
+
+    const item = provider.getTreeItem(fields[0]!);
+    expect(item.contextValue).toBe('formAnalyzeField');
+    expect(item.command).toMatchObject({ command: 'fliwright.insertFormFieldSelector' });
   });
 });

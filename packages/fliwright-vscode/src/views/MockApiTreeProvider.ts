@@ -19,7 +19,7 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
   }
 
   setAppliedRules(appliedRules: AppliedMockRule[]): void {
-    this.appliedRules = appliedRules;
+    this.appliedRules = normalizeAppliedRules(appliedRules);
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -149,6 +149,18 @@ function statusIcon(status: number): string {
   if (status >= 200 && status < 300) return 'check';
   if (status >= 400) return 'error';
   return 'circle-outline';
+}
+
+function normalizeAppliedRules(appliedRules: AppliedMockRule[]): AppliedMockRule[] {
+  const latestByEndpoint = new Map<string, AppliedMockRule>();
+  for (const rule of appliedRules) {
+    const key = `${rule.method.toUpperCase()} ${rule.endpoint}`;
+    const previous = latestByEndpoint.get(key);
+    if (!previous || rule.appliedAt >= previous.appliedAt) {
+      latestByEndpoint.set(key, rule);
+    }
+  }
+  return Array.from(latestByEndpoint.values());
 }
 
 export function mockFileNameFromInput(input: string | undefined): string {

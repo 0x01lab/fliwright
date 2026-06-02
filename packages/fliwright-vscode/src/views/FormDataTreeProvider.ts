@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { FormDiscoveryResult, FormRule, FormRuleEntry, FormRulesEntry, FormRunSummary, FormTreeNode } from '../types.js';
+import type { FormAnalyzeResult } from '@fliwright/core';
+import type { FormAnalyzeFieldEntry, FormDiscoveryResult, FormRule, FormRuleEntry, FormRulesEntry, FormRunSummary, FormTreeNode } from '../types.js';
 import { getWorkspaceRoot } from '../config.js';
 import { FormRuleService } from '../form/FormRuleService.js';
 
@@ -10,12 +11,18 @@ export class FormDataTreeProvider implements vscode.TreeDataProvider<FormTreeNod
 
   private result: FormDiscoveryResult | undefined;
   private lastSummary: FormRunSummary | undefined;
+  private lastAnalyze: FormAnalyzeResult | undefined;
   private loaded = false;
 
   constructor(private readonly service: FormRuleService) {}
 
   setLastSummary(summary: FormRunSummary | undefined): void {
     this.lastSummary = summary;
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
+  setLastAnalyze(result: FormAnalyzeResult | undefined): void {
+    this.lastAnalyze = result;
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -33,7 +40,10 @@ export class FormDataTreeProvider implements vscode.TreeDataProvider<FormTreeNod
   getTreeItem(element: FormTreeNode): vscode.TreeItem {
     switch (element.kind) {
       case 'formRoot': {
-        const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+        const collapsibleState = this.lastSummary?.action === 'analyze' && this.lastAnalyze?.fields.length
+          ? vscode.TreeItemCollapsibleState.Expanded
+          : vscode.TreeItemCollapsibleState.None;
+        const item = new vscode.TreeItem(element.label, collapsibleState);
         item.description = element.description;
         item.iconPath = new vscode.ThemeIcon('history');
         return item;
@@ -42,6 +52,8 @@ export class FormDataTreeProvider implements vscode.TreeDataProvider<FormTreeNod
         return this.rulesFileItem(element);
       case 'formRule':
         return this.ruleItem(element);
+      case 'formAnalyzeField':
+        return analyzeFieldItem(element);
       case 'invalid':
         return invalidItem(element);
       case 'empty': {
@@ -64,8 +76,14 @@ export class FormDataTreeProvider implements vscode.TreeDataProvider<FormTreeNod
     }
 
     if (!element) {
+      const summary = this.lastSummary ? [{
+        kind: 'formRoot' as const,
+        label: this.lastSummary.action === 'analyze' ? 'Last analyze' : 'Last fill',
+        description: summaryDescription(this.lastSummary),
+      }] : [];
       if (this.result.files.length === 0 && this.result.invalid.length === 0) {
         return [
+          ...summary,
           {
             kind: 'empty',
             label: 'No form rules',
@@ -77,11 +95,6 @@ export class FormDataTreeProvider implements vscode.TreeDataProvider<FormTreeNod
           },
         ];
       }
-      const summary = this.lastSummary ? [{
-        kind: 'formRoot' as const,
-        label: this.lastSummary.action === 'analyze' ? 'Last analyze' : 'Last fill',
-        description: summaryDescription(this.lastSummary),
-      }] : [];
       return [...summary, ...this.result.invalid, ...this.result.files];
     }
 
@@ -91,6 +104,13 @@ export class FormDataTreeProvider implements vscode.TreeDataProvider<FormTreeNod
         uri: element.uri,
         rule,
         index,
+      }));
+    }
+
+    if (element.kind === 'formRoot' && this.lastSummary?.action === 'analyze') {
+      return (this.lastAnalyze?.fields ?? []).map<FormAnalyzeFieldEntry>((field) => ({
+        kind: 'formAnalyzeField',
+        field,
       }));
     }
 
@@ -115,6 +135,22 @@ export class FormDataTreeProvider implements vscode.TreeDataProvider<FormTreeNod
     item.iconPath = new vscode.ThemeIcon('symbol-string');
     return item;
   }
+}
+
+function analyzeFieldItem(element: FormAnalyzeFieldEntry): vscode.TreeItem {
+  const field = element.field;
+  const label = field.label ?? field.hintText ?? field.name ?? field.key ?? field.selector;
+  const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+  item.description = field.semanticType;
+  item.tooltip = JSON.stringify(field, null, 2);
+  item.contextValue = 'formAnalyzeField';
+  item.iconPath = new vscode.ThemeIcon('symbol-string');
+  item.command = {
+    command: 'fliwright.insertFormFieldSelector',
+    title: 'Insert Form Field Selector',
+    arguments: [element],
+  };
+  return item;
 }
 
 function invalidItem(element: { label: string; error: string; uri: vscode.Uri }): vscode.TreeItem {

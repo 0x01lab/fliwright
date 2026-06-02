@@ -1,46 +1,33 @@
 ---
 module: "RouterNavigateExtension"
-package: "fliwright_bridge"
+package: "fliwright-bridge"
 source: "lib/src/extensions/router_navigate.dart"
 generated: "2026-06-02"
 ---
 
 # RouterNavigateExtension
 
-> Programmatic navigation via the host app's router (typically GoRouter).
+> Programmatic navigation via an injected router (e.g. GoRouter).
 
-## Registered Methods
+## Overview
 
-| Method | Description |
-|--------|-------------|
-| `ext.fliwright.navigate` | Navigate to a route |
-| `ext.fliwright.currentRoute` | Return the current route path |
-| `ext.fliwright.goBack` | Pop the current route |
+Registers `ext.fliwright.navigate`, `ext.fliwright.currentRoute`, and `ext.fliwright.goBack`. Requires a router to be injected via `FliwrightBridge.init(router: myRouter)`.
 
-## Setup
-
-The host app passes a router instance to `FliwrightBridge.init(router: myRouter)`. The extension invokes `router.go(path)`, `router.routerDelegate.currentConfiguration.uri.path`, etc. via `dynamic` dispatch — no hard dependency on `go_router`.
-
-## Method Details
+## Registered Extensions
 
 ### `ext.fliwright.navigate`
 
-| Param | Type | Description |
-|-------|------|-------------|
-| `path` | string | Route path |
-| `extra` | string (JSON) | Optional extra data forwarded to the router |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` | Yes | Route path to navigate to |
+| `extra` | `string` | No | JSON-encoded extra data |
 
-Returns `{ success: true }` or `{ success: false, error }`.
+Calls `router.go(path)` via dynamic dispatch. Returns `{ success: true }` or `{ success: false, error }`.
 
 ### `ext.fliwright.currentRoute`
 
-No params. Returns `{ path: string }`.
+Returns `{ path: string }` — the current route path.
 
 ### `ext.fliwright.goBack`
 
-No params. Returns `{ success: true }` or `{ success: false, error }`.
-
-## Related
-
-- **TS counterpart:** [`Page.navigate/currentRoute/goBack`](../core/Page.md)
-- **Source:** `packages/fliwright-bridge/lib/src/extensions/router_navigate.dart`
+Pops the current route. Returns `{ success: true }` or `{ success: false, error }`.

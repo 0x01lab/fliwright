@@ -1,64 +1,47 @@
 ---
 module: "MockServerExtension"
-package: "fliwright_bridge"
+package: "fliwright-bridge"
 source: "lib/src/extensions/mock_server.dart"
 generated: "2026-06-02"
 ---
 
 # MockServerExtension
 
-> In-app HTTP mock server that intercepts requests via `dart:io` `HttpOverrides` (HTTP only) and serves canned responses matched by path.
+> HTTP mock server running in the Flutter process for intercepting HTTP requests.
 
-## Registered Methods
+## Overview
 
-| Method | Description |
-|--------|-------------|
-| `ext.fliwright.mock.addRoute` | Register a route |
-| `ext.fliwright.mock.removeRoute` | Remove a route |
-| `ext.fliwright.mock.clearRoutes` | Remove all routes |
-| `ext.fliwright.mock.listRoutes` | List registered routes |
-| `ext.fliwright.mock.setPassthrough` | When enabled, unmatched requests hit the network |
-| `ext.fliwright.mock.getCalls` | Return captured calls |
-| `ext.fliwright.mock.clearCalls` | Clear captured-call log |
-| `ext.fliwright.mock.testRequest` | Synthesize a request against the matcher (for tests) |
+Starts an `HttpServer` in the Flutter process that receives mock routing decisions from the Node.js tool-side `ToolMockServer`. The Flutter app's HTTP requests are intercepted via `HttpOverrides` and forwarded to this server for mock matching.
 
-## Method Details
+## Registered Extensions
 
-### `ext.fliwright.mock.addRoute`
+### `ext.fliwright.mock.setController`
 
-| Param | Type | Description |
-|-------|------|-------------|
-| `route` | string (JSON) | `{ path, method?, response: { status, headers, body, delay } }` |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | `string` | Yes | URL of the tool-side mock controller |
 
-### `ext.fliwright.mock.removeRoute`
+Sets the URL of the Node.js mock controller. The Flutter mock server forwards requests to this controller for matching.
 
-| Param | Description |
-|-------|-------------|
-| `path` | Route path to remove |
+## Server Endpoints
 
-### `ext.fliwright.mock.setPassthrough`
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/mock` | POST | Main mock endpoint — receives HTTP requests and returns mock responses |
+| `/routes` | GET | List registered routes |
+| `/routes` | POST | Add a route |
+| `/routes` | DELETE | Remove route(s) |
+| `/calls` | GET | List recorded calls |
+| `/calls` | DELETE | Clear recorded calls |
+| `/passthrough` | POST | Toggle passthrough mode |
+| `/debug` | GET | Debug state dump |
 
-| Param | Description |
-|-------|-------------|
-| `enabled` | `'true'` or `'false'` |
+## Route Matching
 
-### `ext.fliwright.mock.getCalls`
+Routes support exact path matching and wildcard patterns (`/api/*`). Method matching is case-insensitive. Unmatched routes return 404 or passthrough based on configuration.
 
-Optional `path` filter. Returns `{ calls: MockCall[] }` with `{ method, path, headers, body, timestamp }`.
+## Static Methods
 
-### `ext.fliwright.mock.testRequest`
-
-Internal — used by bridge unit tests to verify route matching without spinning up HTTP traffic.
-
-## Static Lifecycle
-
-| Method | Description |
-|--------|-------------|
-| `startServer()` | Starts the localhost HTTP server on a free port |
-| `serverPort` | The port the server bound to (used by `FliwrightHttpOverrides`) |
-| `reset()` | Stops the server, clears routes/calls (called by `FliwrightBridge.reset`) |
-
-## Related
-
-- **TS counterpart:** [`MockManager`](../core/MockManager.md)
-- **Source:** `packages/fliwright-bridge/lib/src/extensions/mock_server.dart`
+- `startServer()`: Starts the HTTP server on a random port
+- `reset()`: Resets all state
+- `serverPort`: Returns the current server port (nullable)

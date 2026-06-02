@@ -2,75 +2,40 @@
 module: "MockRuleStore"
 package: "@fliwright/core"
 source: "src/MockRuleStore.ts"
-tests: "tests/MockRuleStore.test.ts"
 generated: "2026-06-02"
 ---
 
 # MockRuleStore
 
-> In-memory store of mock endpoint rules loaded from `.fliwright/mocks/`, with per-endpoint active-rule tracking.
+> Loads and manages named mock rules from `.fliwright/mocks/` JSON configuration files.
 
 ## Overview
 
-The store reads `mock-index.json` (which lists config files and a `defaultRule`), parses each per-endpoint config file (`{ endpoint, method, rules: [{ name, status, body, headers, delay }] }`), and tracks which rule is active per endpoint. Used by `MockManager` and the MCP mock tools.
-
-## Constructor
-
-```typescript
-constructor()
-```
-
-No parameters. The store starts empty.
+`MockRuleStore` reads `mock-index.json` for file list and default rule, or auto-discovers `api/*.json` files. Each endpoint config defines named rules (e.g., "success", "error", "empty") that can be switched at runtime.
 
 ## Public Methods
 
-### `loadFromDirectory(mockDir): Promise<void>`
+### `loadFromDirectory(mockDir: string): Promise<void>`
 
-Reads `<mockDir>/mock-index.json` and every file referenced in `index.files`. Validates that `files` is an array and `defaultRule` is set; otherwise logs a warning and skips. Per-file JSON errors are also warned-and-skipped.
+Loads all mock configurations from a directory. Reads `mock-index.json` if present, otherwise scans `api/*.json`.
 
----
+### `listEndpoints(): Array<{ endpoint, method, rules[], activeRule }>`
 
-### `listEndpoints(): { endpoint, method, rules, activeRule }[]`
+Lists all registered endpoints with their rule names and active selection.
 
-Returns a snapshot of every loaded endpoint.
+### `getActiveResponse(endpoint: string): MockRouteResponse | null`
 
----
+Returns the response for the currently active rule of an endpoint.
 
-### `getActiveResponse(endpoint): MockRouteResponse | null`
+### `switchRule(endpoint: string, ruleName: string): MockRouteResponse | null`
 
-Returns `{ status, headers, body, delay }` for the endpoint's currently active rule, or `null` if not loaded.
+Switches the active rule. Throws if endpoint or rule not found.
 
----
+### `isLoaded` (getter)
 
-### `switchRule(endpoint, ruleName): MockRouteResponse | null`
-
-Sets the active rule. Throws if endpoint or ruleName is unknown. Returns the now-active response.
-
-## Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `isLoaded` | boolean | True if any endpoint has been loaded |
-
-## File Layout
-
-```
-.fliwright/mocks/
-├── mock-index.json         # { files: [...], defaultRule: "success" }
-├── login.json              # { endpoint, method, rules: [...] }
-└── token.json
-```
-
-## Example
-
-```typescript
-const store = new MockRuleStore();
-await store.loadFromDirectory('.fliwright/mocks');
-const rules = store.listEndpoints();
-await store.switchRule('/v1/login', 'server_error');
-```
+Returns `true` if any rules have been loaded.
 
 ## Related
 
-- **Used by:** [MockManager](./MockManager.md), `@fliwright/mcp` mock tools
-- **Source:** `packages/fliwright-core/src/MockRuleStore.ts`
+- **Used by:** [ToolMockServer](./ToolMockServer.md), [MockManager](./MockManager.md)
+- **Source:** `src/MockRuleStore.ts`

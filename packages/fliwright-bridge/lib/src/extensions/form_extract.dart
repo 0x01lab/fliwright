@@ -19,6 +19,7 @@ class FormExtractExtension {
     final scope = params['scope'];
     final fields = <Map<String, dynamic>>[];
     final seenEditableKeys = <String>{};
+    final seenNamedFields = <String>{};
 
     InspectExtension.walkTree(root, (Element element) {
       // Scope filtering: only extract fields inside the specified widget type.
@@ -55,6 +56,7 @@ class FormExtractExtension {
           overrideType: formFieldType,
           fields: fields,
         );
+        _markNamedFieldSeen(element, seenNamedFields);
         // Track underlying EditableText so we don't duplicate.
         _markEditableSeen(element, seenEditableKeys);
         return;
@@ -78,6 +80,7 @@ class FormExtractExtension {
         fields.add({
           'id': info['id'],
           'type': info['type'],
+          'controlType': 'textInput',
           if (info['rect'] != null) 'rect': info['rect'],
           ..._stableMetadata(info),
           if (keyboardType != null) 'keyboardType': keyboardType,
@@ -85,6 +88,20 @@ class FormExtractExtension {
           'enabled': true,
           'selector': selector,
         });
+        _markNamedFieldSeen(element, seenNamedFields);
+        return;
+      }
+
+      final name = _readString(widget, 'name');
+      if (name != null) {
+        if (seenNamedFields.contains(name)) return;
+        if (_hasEditableDescendant(element)) return;
+
+        final field = _extractNamedField(element, name);
+        if (field != null) {
+          fields.add(field);
+          seenNamedFields.add(name);
+        }
       }
     });
 
@@ -139,6 +156,7 @@ class FormExtractExtension {
     fields.add({
       'id': info['id'],
       'type': overrideType ?? info['type'],
+      'controlType': 'textInput',
       if (info['rect'] != null) 'rect': info['rect'],
       ..._stableMetadata(info),
       if (hintText != null) 'hintText': hintText,
@@ -162,6 +180,328 @@ class FormExtractExtension {
       if (info['semanticsHint'] != null) 'semanticsHint': info['semanticsHint'],
       if (info['role'] != null) 'role': info['role'],
     };
+  }
+
+  static Map<String, dynamic>? _extractNamedField(
+    Element element,
+    String name,
+  ) {
+    final info = InspectExtension.extractWidgetInfo(element);
+    if (info == null) return null;
+
+    final value = _fieldValue(element);
+    final options = _collectOptions(element, value);
+    final controlType = _inferControlType(element, value, options);
+    if (controlType == null) return null;
+
+    final label = _fieldLabel(element);
+    final selector = _selectorFor(
+      info,
+      label: label,
+      fallbackType: info['type']?.toString(),
+    );
+
+    return {
+      'id': info['id'],
+      'type': info['type'],
+      'controlType': controlType,
+      if (info['rect'] != null) 'rect': info['rect'],
+      ..._stableMetadata(info),
+      if (label != null) 'label': label,
+      'name': name,
+      'obscureText': false,
+      'enabled': _fieldEnabled(element),
+      if (value != null) 'value': _jsonValue(value),
+      if (options.isNotEmpty) 'options': options,
+      'selector': selector,
+    };
+  }
+
+  static String? _inferControlType(
+    Element element,
+    Object? value,
+    List<Map<String, dynamic>> options,
+  ) {
+    if (_hasSemanticRole(element, 'checkbox')) return 'checkbox';
+    if (value is bool) {
+      return options.length > 1 ? 'radio' : 'checkbox';
+    }
+    if (_looksLikeBooleanOptions(options)) return 'radio';
+    if (value is Iterable || value is num) {
+      return options.isEmpty ? null : 'checkbox';
+    }
+    if (value is String) return 'select';
+    if (options.length > 1) return 'select';
+    return null;
+  }
+
+  static bool _looksLikeBooleanOptions(List<Map<String, dynamic>> options) {
+    final values = options
+        .map((option) => (option['value'] ?? option['label'])
+            .toString()
+            .trim()
+            .toLowerCase())
+        .toSet();
+    final labels = options
+        .map((option) => option['label'].toString().trim().toLowerCase())
+        .toSet();
+    return options.length >= 2 &&
+        (values.contains('true') && values.contains('false') ||
+            labels.contains('yes') && labels.contains('no') ||
+            labels.contains('是') && labels.contains('否'));
+  }
+
+  static List<Map<String, dynamic>> _collectOptions(
+    Element element,
+    Object? currentValue,
+  ) {
+    final byLabel = <String, Map<String, dynamic>>{};
+
+    void addOption(
+      String? label,
+      Object? value, {
+      String? semanticsId,
+      bool? selected,
+    }) {
+      final normalizedLabel = label?.trim();
+      if (normalizedLabel == null || normalizedLabel.isEmpty) return;
+      byLabel.putIfAbsent(normalizedLabel, () {
+        final option = <String, dynamic>{
+          'label': normalizedLabel,
+          if (value != null) 'value': _jsonValue(value).toString(),
+          if (semanticsId != null && semanticsId.isNotEmpty)
+            'semanticsId': semanticsId,
+          if (selected != null) 'selected': selected,
+          'enabled': true,
+        };
+        return option;
+      });
+    }
+
+    void visit(Element candidate) {
+      final widget = candidate.widget;
+      final widgetOptions = _readOptions(widget);
+      final labelBuilder = _readAny(widget, 'labelBuilder');
+      final optionSemanticsIdentifierBuilder =
+          _readAny(widget, 'optionSemanticsIdentifierBuilder');
+      for (final option in widgetOptions) {
+        final label = _optionLabel(option, labelBuilder);
+        final optionValue = _optionValue(option);
+        addOption(
+          label,
+          optionValue,
+          semanticsId:
+              _optionSemanticsId(option, optionSemanticsIdentifierBuilder),
+          selected: _optionSelected(optionValue, label, currentValue),
+        );
+      }
+
+      final text = InspectExtension.extractText(widget);
+      if (text != null) {
+        final selected = _readBool(widget, 'selected');
+        addOption(text, text, selected: selected);
+      }
+
+      candidate.visitChildren(visit);
+    }
+
+    element.visitChildren(visit);
+    return byLabel.values.toList();
+  }
+
+  static List<Object?> _readOptions(Widget widget) {
+    final options = _readAny(widget, 'options');
+    if (options is Iterable) return options.toList();
+    final countries = _readAny(widget, 'countries');
+    if (countries is Iterable) return countries.toList();
+    return const [];
+  }
+
+  static String? _optionLabel(Object? option, Object? labelBuilder) {
+    if (labelBuilder != null) {
+      try {
+        final dynamic builder = labelBuilder;
+        final built = builder(option);
+        if (built is String && built.trim().isNotEmpty) return built;
+      } catch (_) {
+        // Fall back to common label-like properties.
+      }
+    }
+    final label = _readString(option, 'label') ??
+        _readString(option, 'name') ??
+        _readString(option, 'title');
+    if (label != null) return label;
+    return option?.toString();
+  }
+
+  static Object? _optionValue(Object? option) {
+    if (option == null || option is String || option is num || option is bool) {
+      return option;
+    }
+    return _readAny(option, 'value') ??
+        _readAny(option, 'alpha2Code') ??
+        _readAny(option, 'code') ??
+        _readAny(option, 'bit') ??
+        option.toString();
+  }
+
+  static String? _optionSemanticsId(
+    Object? option,
+    Object? optionSemanticsIdentifierBuilder,
+  ) {
+    if (optionSemanticsIdentifierBuilder == null) return null;
+    try {
+      final dynamic builder = optionSemanticsIdentifierBuilder;
+      final built = builder(option);
+      if (built is String && built.trim().isNotEmpty) return built;
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  static bool _optionSelected(
+    Object? optionValue,
+    String? optionLabel,
+    Object? currentValue,
+  ) {
+    if (currentValue == null) return false;
+    final value = _jsonValue(optionValue).toString();
+    if (currentValue is Iterable) {
+      return currentValue
+          .map((item) => _jsonValue(item).toString())
+          .contains(value);
+    }
+    if (currentValue is int && optionValue is int) {
+      return currentValue & optionValue != 0;
+    }
+    final current = _jsonValue(currentValue).toString();
+    return current == value || current == optionLabel;
+  }
+
+  static String? _fieldLabel(Element element) {
+    String? result;
+    void visit(Element candidate) {
+      if (result != null) return;
+      final widget = candidate.widget;
+      result = _readString(widget, 'placeholder') ??
+          _readString(widget, 'hintText') ??
+          InspectExtension.extractText(widget);
+      if (result != null && result!.trim().isEmpty) result = null;
+      candidate.visitChildren(visit);
+    }
+
+    element.visitChildren(visit);
+    return result;
+  }
+
+  static Object? _fieldValue(Element element) {
+    if (element is StatefulElement) {
+      final state = element.state;
+      final value = _readAny(state, 'value');
+      if (value != null) return value;
+    }
+    return _readAny(element.widget, 'initialValue');
+  }
+
+  static bool _fieldEnabled(Element element) {
+    return _readBool(element.widget, 'enabled') ??
+        !(_readBool(element.widget, 'disabled') ?? false);
+  }
+
+  static Object _jsonValue(Object? value) {
+    if (value == null) return '';
+    if (value is String || value is num || value is bool) return value;
+    if (value is Iterable) {
+      return value.map((item) => _jsonValue(item).toString()).toList();
+    }
+    return value.toString();
+  }
+
+  static bool _hasEditableDescendant(Element element) {
+    var found = false;
+    void visit(Element candidate) {
+      if (found) return;
+      if (candidate.widget is EditableText || candidate.widget is TextField) {
+        found = true;
+        return;
+      }
+      candidate.visitChildren(visit);
+    }
+
+    element.visitChildren(visit);
+    return found;
+  }
+
+  static bool _hasSemanticRole(Element element, String role) {
+    var found = false;
+    void visit(Element candidate) {
+      if (found) return;
+      if (InspectExtension.extractSemantics(candidate).role == role) {
+        found = true;
+        return;
+      }
+      candidate.visitChildren(visit);
+    }
+
+    visit(element);
+    return found;
+  }
+
+  static Object? _readAny(Object? target, String name) {
+    if (target == null) return null;
+    try {
+      final dynamic value = target;
+      switch (name) {
+        case 'alpha2Code':
+          return value.alpha2Code;
+        case 'bit':
+          return value.bit;
+        case 'code':
+          return value.code;
+        case 'countries':
+          return value.countries;
+        case 'disabled':
+          return value.disabled;
+        case 'enabled':
+          return value.enabled;
+        case 'hintText':
+          return value.hintText;
+        case 'initialValue':
+          return value.initialValue;
+        case 'label':
+          return value.label;
+        case 'labelBuilder':
+          return value.labelBuilder;
+        case 'name':
+          return value.name;
+        case 'options':
+          return value.options;
+        case 'optionSemanticsIdentifierBuilder':
+          return value.optionSemanticsIdentifierBuilder;
+        case 'placeholder':
+          return value.placeholder;
+        case 'selected':
+          return value.selected;
+        case 'title':
+          return value.title;
+        case 'value':
+          return value.value;
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  static String? _readString(Object? target, String name) {
+    final value = _readAny(target, name);
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
+  static bool? _readBool(Object? target, String name) {
+    final value = _readAny(target, name);
+    return value is bool ? value : null;
   }
 
   static String _selectorFor(
@@ -205,6 +545,23 @@ class FormExtractExtension {
     }
 
     parent.visitChildren(visitor);
+  }
+
+  static void _markNamedFieldSeen(
+    Element element,
+    Set<String> seenNamedFields,
+  ) {
+    element.visitAncestorElements((ancestor) {
+      final name = _readString(ancestor.widget, 'name');
+      if (name != null) {
+        seenNamedFields.add(name);
+        return false;
+      }
+      if (ancestor.widget is Scaffold || ancestor.widget is WidgetsApp) {
+        return false;
+      }
+      return true;
+    });
   }
 
   static String? _keyboardTypeName(TextInputType inputType) {

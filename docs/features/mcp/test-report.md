@@ -5,55 +5,18 @@ source: "src/resources/testReport.ts"
 generated: "2026-06-02"
 ---
 
-# `test_report` Resource
+# test_report
 
-> Read-only MCP resource exposing the most recent `RunResult` produced by `fliwright_run`.
+> MCP resource providing results from the most recent test run.
 
-## URI
+## Resource URI
 
-```
-fliwright://test-report/latest
-```
+`fliwright://test-report/latest`
 
-## MIME Type
+## Format
 
-`application/json`
+`application/json` — Same structure as `RunResult` from `fliwright_run`.
 
-## Description
+## Behavior
 
-Reading this resource returns the same `RunResult` object that `fliwright_run` last returned (sans failures, which live on `ServerState` and are surfaced via `fliwright_get_failure`). When no run has happened yet, returns `{ "message": "No test run yet" }`.
-
-## Output Shape
-
-```typescript
-{
-  passed: boolean;
-  totalTests: number;
-  passedTests: number;
-  failedTests: number;
-  duration: number;
-  results: Array<{ name: string; status: string; duration: number; error?: string }>;
-}
-```
-
-## Example
-
-MCP `resources/read` request:
-
-```json
-{ "uri": "fliwright://test-report/latest" }
-```
-
-Response:
-
-```json
-{
-  "contents": [
-    {
-      "uri": "fliwright://test-report/latest",
-      "mimeType": "application/json",
-      "text": "{\"passed\":true,\"totalTests\":1,...}"
-    }
-  ]
-}
-```
+Returns `{ message: "No test run yet" }` if no test has been run. Otherwise returns the full `RunResult` object from the last `fliwright_run` call.

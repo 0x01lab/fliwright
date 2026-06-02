@@ -23,7 +23,7 @@ export function registerMockListTool(server: McpServer, state: ServerState): voi
         return {
           content: [{
             type: 'text' as const,
-            text: 'No mock rules loaded. Ensure .fliwright/mocks/mock-index.json exists and lists endpoint config files.',
+            text: 'No mock rules loaded. Add endpoint configs under .fliwright/mocks/api/*.json, or use .fliwright/mocks/mock-index.json to select files and a default rule.',
           }],
         };
       }

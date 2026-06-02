@@ -43,6 +43,10 @@ export function createFliwrightTest(config: FliwrightConfig) {
       if (!sharedDriver) {
         sharedDriver = new FliwrightDriver();
         await sharedDriver.connect(config.vmServiceUrl);
+        const mockControllerUrl = process.env.FLIWRIGHT_MOCK_CONTROLLER_URL;
+        if (mockControllerUrl) {
+          await sharedDriver.mock.configureFlutterController(mockControllerUrl);
+        }
       }
       const testName = getTestName(task);
       try {

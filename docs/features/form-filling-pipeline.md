@@ -1,60 +1,89 @@
 ---
 feature: "Form Auto-Fill Pipeline"
-packages: ["@fliwright/core", "fliwright_bridge", "@fliwright/vscode"]
+packages: ["@fliwright/core", "fliwright-bridge"]
 status: implemented
-agent_accessible: true
-mcp_tool: "—"
+agent_accessible: false
 generated: "2026-06-02"
 ---
 
 # Form Auto-Fill Pipeline
 
-> Discover all form fields in the currently rendered Flutter screen, infer each field's semantic type from labels and keyboard hints, generate a realistic value (Faker or rule-based), and fill the field — replacing brittle manual `fillForm` calls with a single `formHelper.fill()`.
+> Automatically extracts form fields from a Flutter screen, infers their semantic types, generates appropriate fake data, and fills them using Locator actions.
 
 ## Architecture
 
-1. **Field extraction** (bridge `FormExtractExtension`): walks the widget tree, collects every `TextField` / `TextFormField` / `EditableText`, deduplicates by controller identity, and emits one `FormFieldMeta` per field with `hintText`, `label`, `key`, `keyboardType`, `maxLength`, `rect`, and a stable `selector`.
-2. **Semantic inference** (`SemanticInferrer.infer`): maps each field to a `SemanticType` (`phone | email | idCard | address | fullName | password | captcha | date | number | url | text`) using regex over `hintText`/`label`, falling back to `keyboardType`.
-3. **Skill registry** (`SkillRegistry.match`): if the user supplied custom rules (e.g. `{ "hintContains": "公司名", "value": "$faker.company.name()" }`), the registry returns a matching `FormSkill` which overrides Faker generation.
-4. **Rule loading** (`JsonRuleLoader.loadFromFile` / `loadFromDir` / `autoDiscover`): reads `.fliwright/form-rules.json` files into the registry.
-5. **Value generation** (`FakerGenerator.generate`): produces localized, length-bounded values via `@faker-js/faker` for fields without a matching skill. Supports `randexp` for regex-based rules.
-6. **Filling** (`FormHelper.fill` / `fillFields`): iterates fields, invokes the bridge's `type` extension to enter text, captures per-field success/skipped/error status, and returns a structured `FormFillResult`.
-7. **Analyze-only mode** (`FormHelper.analyze`): returns the proposed value for each field without typing — used by VS Code's Form Data view and the `fliwright.analyzeForm` command.
+1. **Extract Fields** (`FormHelper` → `ext.fliwright.extractForm`): The Dart `FormExtractExtension` walks the widget tree, finds all `TextField`, `TextFormField`, `Checkbox`, `DropdownButton`, etc., extracts metadata (type, key, hintText, label, keyboardType, obscureText, enabled, value, options), and deduplicates overlapping entries.
 
-## Agent Integration
+2. **Infer Semantics** (`SemanticInferrer`): For each field, infers a `SemanticType` by:
+   - Checking `controlType` (checkbox → boolean, radio/select → option)
+   - Regex matching on `hintText`/`label` (phone, email, idCard, address, fullName, password, captcha, date)
+   - Mapping `keyboardType` (phone, emailAddress, number, url, visiblePassword)
 
-- **Programmatic**: `driver.page.formHelper.fill({ locale: 'zh_CN' })`.
-- **VS Code**: command palette → `Fliwright: Analyze Form` (preview) / `Fill Form` / `Fill Form With Rules`.
-- **Custom rules**: drop a `.fliwright/form-rules.json` in the workspace root; the VS Code extension auto-discovers it via `JsonRuleLoader.autoDiscover`.
+3. **Load Rules** (`JsonRuleLoader` → `SkillRegistry`): Auto-discovers and loads form rules from:
+   - `fliwright.form-rules.json` (single file)
+   - `fliwright.form-rules/*.json` (directory)
+   Each rule defines match criteria, type (PRESET_SKILL, REGEXP_MOCK, LLM_GENERATE), and data/pattern.
+
+4. **Generate Values** (`FakerGenerator` + `SkillRegistry`): For each field:
+   - If a custom skill matches, use its `generate()` function
+   - Otherwise, use `FakerGenerator.generate(semanticType)` for locale-aware fake data
+   - Handle control types: checkbox (boolean), radio/select (option selection)
+
+5. **Fill Fields** (`FormHelper` → `Locator`): Fills each field using `Locator.fill()` for text inputs or `Locator.click()` for buttons/checkboxes/radios. Uses a fallback selector strategy: `semanticsId` → `name` → `key` → `ancestorKey` → `id` → parsed selector.
+
+6. **Return Results** (`FormHelper`): Returns `FormFillResult` with counts of filled/skipped/errors and per-field details.
 
 ## Data Flow
 
 ```
-FormHelper.fill
-   │
-   ├── bridge ext.fliwright.formExtract ──> FormFieldMeta[]
-   │
-   ├── SemanticInferrer.infer             ──> Map<fieldId, SemanticType>
-   │
-   ├── JsonRuleLoader.autoDiscover ──> SkillRegistry
-   │       └── SkillRegistry.match(field) ──> FormSkill?
-   │
-   ├── FakerGenerator.generate(type, maxLength)  ──> fallback value
-   │
-   ├── for each field:
-   │       └── bridge ext.fliwright.type(value, selector)
-   │
-   └── FormFillResult { filled, skipped, errors, fields[] }
+Flutter App Screen
+    │
+    ▼
+ext.fliwright.extractForm (FormExtractExtension)
+    ├── Walk widget tree
+    ├── Find TextField/TextFormField/Checkbox/etc.
+    ├── Extract metadata (type, key, hint, label, etc.)
+    └── Deduplicate
+    │
+    ▼
+FormFieldMeta[]
+    │
+    ▼
+SemanticInferrer.infer()
+    ├── controlType → boolean/option
+    ├── hintText regex → phone/email/idCard/...
+    └── keyboardType → phone/email/number/...
+    │
+    ▼
+Map<fieldId, SemanticType>
+    │
+    ▼
+JsonRuleLoader.autoDiscover() → SkillRegistry
+    │
+    ▼
+For each field:
+    ├── SkillRegistry.match(field) → custom skill?
+    │   ├── YES → skill.generate()
+    │   └── NO  → FakerGenerator.generate(semanticType)
+    │
+    ├── controlType logic:
+    │   ├── textInput → Locator.fill(value)
+    │   ├── checkbox → Locator.click() (if not already checked)
+    │   ├── radio → click option label (scoped to field)
+    │   └── select → click field first, then click option
+    │
+    └── Fallback selector: semanticsId → name → key → ancestorKey → id → selector
+    │
+    ▼
+FormFillResult { filled, skipped, errors, fields[] }
 ```
 
 ## Key Files
 
-- `packages/fliwright-core/src/FormHelper.ts` — orchestrator (`fill`, `analyze`, `fillFields`).
-- `packages/fliwright-core/src/SemanticInferrer.ts` — regex + keyboardType → semantic type.
-- `packages/fliwright-core/src/FakerGenerator.ts` — Faker-backed value generation.
-- `packages/fliwright-core/src/SkillRegistry.ts` — custom rule matching.
-- `packages/fliwright-core/src/JsonRuleLoader.ts` — `.fliwright/form-rules.json` parser.
-- `packages/fliwright-core/src/SelectorResolver.ts` — converts meta to wire selector.
-- `packages/fliwright-bridge/lib/src/extensions/form_extract.dart` — Dart field extractor.
-- `packages/fliwright-bridge/lib/src/extensions/type.dart` — Dart text-entry simulator.
-- `packages/fliwright-vscode/src/form/` — VS Code form commands and FormHelperService.
+- `packages/fliwright-core/src/FormHelper.ts` — Form fill orchestration
+- `packages/fliwright-core/src/SemanticInferrer.ts` — Semantic type inference
+- `packages/fliwright-core/src/FakerGenerator.ts` — Fake data generation
+- `packages/fliwright-core/src/SkillRegistry.ts` — Custom skill matching
+- `packages/fliwright-core/src/JsonRuleLoader.ts` — JSON rule loading
+- `packages/fliwright-core/src/SelectorResolver.ts` — Role mapping
+- `packages/fliwright-bridge/lib/src/extensions/form_extract.dart` — Dart-side field extraction

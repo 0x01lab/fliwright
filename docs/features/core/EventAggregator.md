@@ -2,57 +2,32 @@
 module: "EventAggregator"
 package: "@fliwright/core"
 source: "src/EventAggregator.ts"
-tests: "tests/EventAggregator.test.ts"
 generated: "2026-06-02"
 ---
 
 # EventAggregator
 
-> Transforms a stream of raw pointer / text-input events into semantic `RecordedOperation` entries (tap / longPress / drag / type).
+> Aggregates raw pointer and text input events into semantic operations (tap, longPress, drag, type).
 
 ## Overview
 
-Pointer-down/up pairs are classified by duration and displacement:
-
-| Condition | Operation |
-|-----------|-----------|
-| displacement > 10px | `drag` |
-| duration ≥ 500ms (and displacement ≤ 10px) | `longPress` |
-| otherwise | `tap` |
-
-Text-input events within 1s of an editable operation merge into a single `type` operation; otherwise they emit standalone `type` operations.
-
-## Constructor
-
-```typescript
-constructor()
-```
+Processes raw `RawInputEvent` streams from the Flutter recording extension. Distinguishes taps from long presses by duration (<500ms = tap), and taps from drags by displacement (<10px = tap). Merges text input events with preceding tap operations.
 
 ## Public Methods
 
 ### `aggregate(events: RawInputEvent[]): RecordedOperation[]`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `events` | `RawInputEvent[]` | Raw events from the bridge |
-
-**Returns:** `RecordedOperation[]` — sorted by timestamp.
+Converts raw events into semantic operations, sorted by timestamp.
 
 ## Constants
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `TAP_MAX_DURATION` | 500 ms | Tap upper duration bound |
-| `TAP_MAX_DISPLACEMENT` | 10 px | Tap upper displacement bound |
-| `TYPE_INPUT_WINDOW` | 1000 ms | Window after an editable op within which text events merge |
-
-## Example
-
-```typescript
-const ops = new EventAggregator().aggregate(rawEvents);
-```
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| TAP_MAX_DURATION | 500ms | Threshold for long press detection |
+| TAP_MAX_DISPLACEMENT | 10px | Threshold for drag detection |
+| TYPE_INPUT_WINDOW | 1000ms | Window for associating text with tap |
 
 ## Related
 
 - **Used by:** [RecorderController](./RecorderController.md)
-- **Source:** `packages/fliwright-core/src/EventAggregator.ts`
+- **Source:** `src/EventAggregator.ts`

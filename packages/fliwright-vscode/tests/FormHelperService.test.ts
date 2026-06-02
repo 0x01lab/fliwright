@@ -49,6 +49,7 @@ describe('FormHelperService', () => {
 
     expect(result.fields[0]?.id).toContain('/workspace/.fliwright/forms/login.json');
     expect(service.getLastSummary()).toMatchObject({ action: 'analyze', total: 1 });
+    expect(service.getLastAnalyze()).toBe(result);
   });
 
   it('fills selected fields through FormHelper.fillFields', async () => {
@@ -86,6 +87,7 @@ describe('FormHelperService', () => {
     expect(result.filled).toBe(1);
     expect(receivedOptions).toMatchObject({ requireRuleMatch: true });
     expect(service.getLastSummary()).toMatchObject({ action: 'fill', filled: 1, skipped: 1 });
+    expect(service.getLastAnalyze()).toBeUndefined();
   });
 
   it('formats fill debug lines with field errors', () => {

@@ -1,39 +1,42 @@
 ---
 module: "DioMockExtension"
-package: "fliwright_bridge"
+package: "fliwright-bridge"
 source: "lib/src/extensions/dio_mock_extension.dart"
 generated: "2026-06-02"
 ---
 
 # DioMockExtension
 
-> Mock route management for apps that use `dio` with HTTPS — exposes the same RPCs as `MockServerExtension` but applies them via `FliwrightDioMockInterceptor` instead of `HttpOverrides`.
+> Dio-compatible mock management via VM Service extensions (no HTTP server required).
 
-## Registered Methods
+## Overview
 
-Same as [`MockServerExtension`](./MockServerExtension.md) minus `testRequest`:
+For apps using Dio with HTTPS APIs, `HttpOverrides` cannot intercept requests. Instead, `DioMockExtension` registers VM Service extensions for managing mock routes, and the app uses `FliwrightDioMockInterceptor` in its Dio instance to check routes against the registered mocks.
 
-- `ext.fliwright.mock.addRoute`
-- `ext.fliwright.mock.removeRoute`
-- `ext.fliwright.mock.clearRoutes`
-- `ext.fliwright.mock.listRoutes`
-- `ext.fliwright.mock.setPassthrough`
-- `ext.fliwright.mock.getCalls`
-- `ext.fliwright.mock.clearCalls`
+## Registered Extensions
 
-## Setup
+### `ext.fliwright.mock.setController`
 
-The host app:
+Sets the tool-side mock controller URL.
 
-1. Adds a `FliwrightDioMockInterceptor` to its Dio instance.
-2. Calls `DioMockExtension.setInterceptor(interceptor)` so the RPC handlers can talk to the live interceptor.
-3. Calls `FliwrightBridge.initForDio()` (not `init()`) — this skips `HttpOverrides` installation.
+### Route Management Extensions
 
-## Route Matching
+- `ext.fliwright.mock.addRoute`: Add a mock route
+- `ext.fliwright.mock.removeRoute`: Remove a mock route
+- `ext.fliwright.mock.clearRoutes`: Clear all routes
+- `ext.fliwright.mock.setPassthrough`: Toggle passthrough mode
+- `ext.fliwright.mock.getCalls`: Get recorded calls
+- `ext.fliwright.mock.clearCalls`: Clear recorded calls
 
-Same path-pattern rules as `MockServerExtension`. The interceptor resolves each Dio `RequestOptions` against the in-memory route map; on a hit it returns a `DioResponse` with the canned status/headers/body/delay. On a miss with `passthrough: false` it returns a 404; with `passthrough: true` it forwards to the network.
+## FliwrightDioMockInterceptor
 
-## Related
+A Dio interceptor that checks each request against registered mock routes. The host app must:
+1. Create a `FliwrightDioMockInterceptor` instance
+2. Insert it into the Dio interceptor chain
+3. Call `DioMockExtension.setInterceptor(interceptor)` to wire it up
 
-- **Interceptor:** [`FliwrightDioMockInterceptor`](./DioMockInterceptor.md)
-- **Source:** `packages/fliwright-bridge/lib/src/extensions/dio_mock_extension.dart`
+## Static Methods
+
+- `register(registry)`: Registers all mock extensions
+- `setInterceptor(interceptor)`: Sets the Dio interceptor
+- `reset()`: Resets all state

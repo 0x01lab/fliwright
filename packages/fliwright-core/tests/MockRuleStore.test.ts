@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MockRuleStore } from '../src/MockRuleStore.js';
 import type { MockRule, MockEndpointConfig, MockIndex } from '../src/types.js';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 
 // We'll mock fs/promises at the module level
 vi.mock('node:fs/promises', () => ({
@@ -11,6 +11,7 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 const mockReadFile = vi.mocked(readFile);
+const mockReaddir = vi.mocked(readdir);
 
 describe('MockRuleStore', () => {
   let store: MockRuleStore;
@@ -56,12 +57,67 @@ describe('MockRuleStore', () => {
       expect(endpoints[0].activeRule).toBe('success');
     });
 
-    it('silently skips when mock-index.json does not exist', async () => {
-      mockReadFile.mockRejectedValue(new Error('ENOENT'));
+    it('auto-loads api/*.json when mock-index.json does not exist', async () => {
+      const instrumentEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'Instrument API',
+        method: 'GET',
+        endpoint: '/api/v1/public/trading/instrument',
+        rules: [
+          { name: 'empty', status: 200, body: { data: [] } },
+          { name: 'success', status: 200, body: { success: true } },
+        ],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) throw new Error('ENOENT');
+        if (p.endsWith('instrument-api.json')) return JSON.stringify(instrumentEndpoint);
+        throw new Error(`Unexpected read: ${p}`);
+      });
+      mockReaddir.mockResolvedValue([
+        { name: 'instrument-api.json', isFile: () => true },
+        { name: 'README.md', isFile: () => true },
+        { name: 'nested', isFile: () => false },
+      ] as any);
 
       await store.loadFromDirectory('/project/.fliwright/mocks');
 
-      expect(store.listEndpoints()).toEqual([]);
+      const endpoints = store.listEndpoints();
+      expect(endpoints).toHaveLength(1);
+      expect(endpoints[0]).toEqual({
+        endpoint: '/api/v1/public/trading/instrument',
+        method: 'GET',
+        rules: ['empty', 'success'],
+        activeRule: 'success',
+      });
+    });
+
+    it('uses first rule during auto-load when success rule is absent', async () => {
+      const endpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'No Success',
+        method: 'GET',
+        endpoint: '/api/no-success',
+        rules: [
+          { name: 'empty', status: 200, body: [] },
+          { name: 'server_error', status: 500, body: { error: true } },
+        ],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) throw new Error('ENOENT');
+        if (p.endsWith('no-success.json')) return JSON.stringify(endpoint);
+        throw new Error(`Unexpected read: ${p}`);
+      });
+      mockReaddir.mockResolvedValue([
+        { name: 'no-success.json', isFile: () => true },
+      ] as any);
+
+      await store.loadFromDirectory('/project/.fliwright/mocks');
+
+      expect(store.listEndpoints()[0].activeRule).toBe('empty');
     });
 
     it('skips individual files that fail to parse', async () => {

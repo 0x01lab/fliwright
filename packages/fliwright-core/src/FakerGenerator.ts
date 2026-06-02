@@ -49,6 +49,12 @@ export class FakerGenerator {
       case 'date':
         value = this.fakerInstance.date.recent().toISOString().slice(0, 10);
         break;
+      case 'boolean':
+        value = 'true';
+        break;
+      case 'option':
+        value = '';
+        break;
       default:
         value = this.fakerInstance.lorem.word();
     }

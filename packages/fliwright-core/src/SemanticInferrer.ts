@@ -34,6 +34,11 @@ export class SemanticInferrer {
   }
 
   private inferField(field: FormFieldMeta): SemanticType {
+    if (field.controlType === 'checkbox') return 'boolean';
+    if (field.controlType === 'radio' || field.controlType === 'select') {
+      return 'option';
+    }
+
     const text = field.hintText ?? field.label ?? '';
     for (const rule of HINT_PATTERNS) {
       if (rule.regex.test(text)) return rule.type;

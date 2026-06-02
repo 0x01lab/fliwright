@@ -1,10 +1,13 @@
 import type * as vscode from 'vscode';
+import type { FormAnalyzeResult } from '@fliwright/core';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 
 export interface ExtensionConfig {
   mockDir: string;
   mockIndex: string;
+  autoStartMockController: boolean;
+  autoApplyDefaultMocksOnConnect: boolean;
   vmServiceUrl: string | null;
   autoDiscoverVmService: boolean;
   testGlob: string;
@@ -126,6 +129,11 @@ export interface FormRunSummary {
   ranAt: number;
 }
 
+export interface FormAnalyzeFieldEntry {
+  kind: 'formAnalyzeField';
+  field: FormAnalyzeResult['fields'][number];
+}
+
 export type DeviceConnectionState =
   | { status: 'disconnected' }
   | { status: 'connecting'; url: string }
@@ -230,6 +238,7 @@ export type FormTreeNode =
   | { kind: 'formRoot'; label: string; description?: string }
   | FormRulesEntry
   | FormRuleEntry
+  | FormAnalyzeFieldEntry
   | InvalidFileEntry
   | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
 

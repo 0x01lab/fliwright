@@ -161,6 +161,7 @@ export interface CodegenOptions {
 export interface FormFieldMeta {
   id: string;
   type: string;
+  controlType?: FormControlType;
   rect: { x: number; y: number; width: number; height: number };
   key?: string;
   ancestorKey?: string;
@@ -175,12 +176,25 @@ export interface FormFieldMeta {
   maxLength?: number;
   obscureText: boolean;
   enabled: boolean;
+  value?: unknown;
+  options?: FormFieldOption[];
   selector: string;
+}
+
+export type FormControlType = 'textInput' | 'select' | 'radio' | 'checkbox';
+
+export interface FormFieldOption {
+  label: string;
+  value?: string;
+  semanticsId?: string;
+  selected?: boolean;
+  enabled?: boolean;
 }
 
 export type SemanticType =
   | 'phone' | 'email' | 'idCard' | 'fullName' | 'address'
-  | 'password' | 'captcha' | 'number' | 'text' | 'url' | 'date';
+  | 'password' | 'captcha' | 'number' | 'text' | 'url' | 'date'
+  | 'boolean' | 'option';
 
 export interface FormFillResult {
   filled: number;
@@ -191,6 +205,8 @@ export interface FormFillResult {
     semanticType: SemanticType;
     generatedValue: string;
     selector: string;
+    controlType?: FormControlType;
+    options?: FormFieldOption[];
     status: 'filled' | 'skipped' | 'error';
     reason?: string;
     key?: string;
@@ -209,6 +225,8 @@ export interface FormAnalyzeResult {
     semanticType: SemanticType;
     generatedValue: string;
     selector: string;
+    controlType?: FormControlType;
+    options?: FormFieldOption[];
     hintText?: string;
     label?: string;
     key?: string;

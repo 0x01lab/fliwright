@@ -5,57 +5,33 @@ source: "src/tools/record.ts"
 generated: "2026-06-02"
 ---
 
-# `fliwright_record`
+# fliwright_record
 
-> Record user interactions on a running Flutter app for a fixed duration, then return generated test code.
-
-## Description
-
-The tool connects a `FliwrightDriver` to the supplied VM Service URL, starts `RecorderController`, sleeps for `duration` seconds while the bridge captures pointer/text events, then stops and returns generated code. Used by AI agents to author tests by demonstration.
+> Record user interactions on a Flutter app and generate test code.
 
 ## Input Schema
 
-```typescript
-{
-  vmServiceUrl?: string;   // optional, falls back to FLIWRIGHT_VM_URL
-  duration?: number;       // optional, default 30 seconds
-  testName?: string;       // optional, default "recorded test"
-  lang?: 'ts' | 'dart';    // optional, default 'ts'
-}
-```
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `vmServiceUrl` | `string` | No | env | Dart VM Service WebSocket URL |
+| `duration` | `number` | No | 30 | Recording duration in seconds |
+| `testName` | `string` | No | "recorded test" | Test name for generated code |
+| `lang` | `'ts' \| 'dart'` | No | 'ts' | Output language |
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `vmServiceUrl` | string | No | `process.env.FLIWRIGHT_VM_URL` | Dart VM Service WebSocket URL |
-| `duration` | number | No | `30` | Recording duration in seconds |
-| `testName` | string | No | `'recorded test'` | Test name in generated code |
-| `lang` | `'ts' \| 'dart'` | No | `'ts'` | Output language |
-
-## Output
+## Output Schema
 
 ```typescript
-{
-  testCode: string;          // generated source
+interface RecordResult {
+  testCode: string;
   testName: string;
-  operationCount: number;    // number of aggregated operations
+  operationCount: number;
 }
 ```
 
-## Errors
+## Behavior
 
-- Throws `Error('No VM Service URL provided...')` if neither parameter nor env var is set.
-- Propagates `FliwrightDriver.connect()` failures (e.g. invalid VM URL).
-
-## Example
-
-```json
-{
-  "name": "fliwright_record",
-  "arguments": {
-    "vmServiceUrl": "ws://127.0.0.1:54321/abc=",
-    "duration": 60,
-    "lang": "ts",
-    "testName": "checkout happy path"
-  }
-}
-```
+1. Connects to Flutter VM Service
+2. Starts recording extension
+3. Waits for specified duration
+4. Stops recording and generates test code
+5. Returns code and operation count

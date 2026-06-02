@@ -8,45 +8,45 @@ generated: "2026-06-02"
 
 # @fliwright/core
 
-> The shared SDK that powers Fliwright — driver, page-object model, locator, assertions, mocks, self-healing, recording, form auto-fill, and plugin registry.
+> Core SDK for Fliwright — provides the driver, page model, locator, assertions, self-healing, mock management, form auto-fill, recording, and code generation.
 
 ## Modules
 
 | Module | Description | Doc |
 |--------|-------------|-----|
-| `FliwrightDriver` | Top-level orchestrator that connects to a Flutter VM Service and exposes every subsystem | [FliwrightDriver.md](./FliwrightDriver.md) |
-| `Page` | Page-object entry — creates locators, waits for widgets, navigates, exposes FormHelper | [Page.md](./Page.md) |
-| `Locator` | Widget locator with click / longPress / drag / pinch / type / fill / scrollIntoView / count / isVisible | [Locator.md](./Locator.md) |
-| `Selector` | Selector parser — supports `text=`, `key=`, `byType=` and ancestor chains | [Selector.md](./Selector.md) |
-| `Assertion` | Auto-waiting, healing-aware assertion wrapper plus `AssertionError` and `createExpect` | [Assertion.md](./Assertion.md) |
-| `MockManager` | Mock route registration / removal / passthrough / call inspection | [MockManager.md](./MockManager.md) |
-| `MockRuleStore` | In-memory store of mock endpoint rules loaded from `.fliwright/mocks/*.json` | [MockRuleStore.md](./MockRuleStore.md) |
-| `SelfHealingEngine` | Records successful locators, retries with multi-dimensional scoring on failure | [SelfHealingEngine.md](./SelfHealingEngine.md) |
-| `SnapshotStore` | Disk-backed key/value store for baseline widget snapshots | [SnapshotStore.md](./SnapshotStore.md) |
-| `MultiDimensionalHealingStrategy` | Weighted position/context/codeBinding/text scoring + `ngramSimilarity` | [MultiDimensionalHealingStrategy.md](./MultiDimensionalHealingStrategy.md) |
-| `RecorderController` | Start/stop recording, aggregate events, resolve selectors, emit code | [RecorderController.md](./RecorderController.md) |
-| `EventAggregator` | Raw pointer + text events → semantic tap/longPress/drag/type operations | [EventAggregator.md](./EventAggregator.md) |
-| `CodeGenerator` | TypeScript/Vitest codegen for recorded operations | [CodeGenerator.md](./CodeGenerator.md) |
-| `DartCodeGenerator` | Dart `integration_test` codegen for recorded operations | [DartCodeGenerator.md](./DartCodeGenerator.md) |
-| `AssertionSuggester` | Heuristics that propose follow-up `expect()` calls after recorded ops | [AssertionSuggester.md](./AssertionSuggester.md) |
-| `FailureCollector` | Collects screenshot + widget tree + source context for a failed assertion | [FailureCollector.md](./FailureCollector.md) |
-| `FormHelper` | Discover, analyze, and auto-fill form fields | [FormHelper.md](./FormHelper.md) |
-| `SemanticInferrer` | Regex/keyboard-type → semantic field type | [SemanticInferrer.md](./SemanticInferrer.md) |
-| `FakerGenerator` | Localized, length-bounded Faker-backed value generation | [FakerGenerator.md](./FakerGenerator.md) |
-| `SkillRegistry` | Custom rule registration and matching | [SkillRegistry.md](./SkillRegistry.md) |
-| `JsonRuleLoader` | Loads `.fliwright/form-rules.json` and directory scans for rule files | [JsonRuleLoader.md](./JsonRuleLoader.md) |
-| `SelectorResolver` | Converts a matched `WidgetInfo` into a stable selector | [SelectorResolver.md](./SelectorResolver.md) |
-| `PluginRegistry` | Plugin lifecycle hooks and adapter lookup | [PluginRegistry.md](./PluginRegistry.md) |
-| `Protocol` | JSON-RPC 2.0 message encoder/decoder | [Protocol.md](./Protocol.md) |
-| `VMServiceConnector` | WebSocket client to the Dart VM Service with isolate management | [VMServiceConnector.md](./VMServiceConnector.md) |
-| `types` | All exported type aliases and interfaces | [types.md](./types.md) |
+| `FliwrightDriver` | Main orchestrator — connects to Flutter VM, exposes page/mock/healing/recorder | [FliwrightDriver.md](./FliwrightDriver.md) |
+| `Page` | Page object model — locators, waitFor, navigation, formHelper | [Page.md](./Page.md) |
+| `Locator` | Widget locator with click, type, fill, drag, pinch, scroll actions | [Locator.md](./Locator.md) |
+| `Selector` | Selector parsing — text=, key=, byType=, ancestor selectors | [Selector.md](./Selector.md) |
+| `Assertion` | Auto-wait polling assertions with .not negation and self-healing | [Assertion.md](./Assertion.md) |
+| `MockManager` | Mock route management — route, removeRoute, clear, rule switching | [MockManager.md](./MockManager.md) |
+| `MockRuleStore` | Loads mock endpoint configs from .fliwright/mocks/ JSON files | [MockRuleStore.md](./MockRuleStore.md) |
+| `ToolMockServer` | HTTP mock server for tool-side request interception | [ToolMockServer.md](./ToolMockServer.md) |
+| `SelfHealingEngine` | Records successful selectors, tries healing on assertion failure | [SelfHealingEngine.md](./SelfHealingEngine.md) |
+| `SnapshotStore` | Persists widget snapshots to .fliwright/snapshots/ | [SnapshotStore.md](./SnapshotStore.md) |
+| `RecorderController` | Records user interactions and generates test code | [RecorderController.md](./RecorderController.md) |
+| `CodeGenerator` | Generates TypeScript test code from recorded operations | [CodeGenerator.md](./CodeGenerator.md) |
+| `DartCodeGenerator` | Generates Dart integration_test code from recorded operations | [DartCodeGenerator.md](./DartCodeGenerator.md) |
+| `AssertionSuggester` | Suggests assertion placements after recording | [AssertionSuggester.md](./AssertionSuggester.md) |
+| `FormHelper` | Auto-fills forms — extract, analyze, fill pipeline | [FormHelper.md](./FormHelper.md) |
+| `SemanticInferrer` | Infers semantic types (phone, email, etc.) from field metadata | [SemanticInferrer.md](./SemanticInferrer.md) |
+| `FakerGenerator` | Generates fake data by semantic type using @faker-js/faker | [FakerGenerator.md](./FakerGenerator.md) |
+| `SkillRegistry` | Registry for form-filling skills with pattern matching | [SkillRegistry.md](./SkillRegistry.md) |
+| `JsonRuleLoader` | Loads form rules from JSON files (PRESET_SKILL, REGEXP_MOCK, LLM_GENERATE) | [JsonRuleLoader.md](./JsonRuleLoader.md) |
+| `SelectorResolver` | Resolves WidgetInfo to selector strings with role mapping | [SelectorResolver.md](./SelectorResolver.md) |
+| `PluginRegistry` | Plugin lifecycle management — register, initAll, test hooks | [PluginRegistry.md](./PluginRegistry.md) |
+| `Protocol` | JSON-RPC 2.0 message creation and response parsing | [Protocol.md](./Protocol.md) |
+| `VMServiceConnector` | WebSocket connection to Dart VM Service | [VMServiceConnector.md](./VMServiceConnector.md) |
+| `EventAggregator` | Aggregates raw pointer/text events into semantic operations | [EventAggregator.md](./EventAggregator.md) |
+| `FailureCollector` | Collects screenshot + widget tree + source on assertion failure | [FailureCollector.md](./FailureCollector.md) |
+| `MultiDimensionalHealingStrategy` | Heals broken selectors via position, context, codeBinding, text dimensions | [MultiDimensionalHealingStrategy.md](./MultiDimensionalHealingStrategy.md) |
+| `types` | All exported types and interfaces | [types.md](./types.md) |
 
 ## Dependencies
 
-- `@faker-js/faker` ^10.4
-- `randexp` ^0.5.3
-- `ws` ^8.17
-- `typedoc` (dev only)
+- `@faker-js/faker` ^10.4.0 — fake data generation
+- `randexp` ^0.5.3 — regex-based random string generation
+- `ws` ^8.17.0 — WebSocket client for VM Service
 
 ## Usage Example
 
@@ -54,22 +54,14 @@ generated: "2026-06-02"
 import { FliwrightDriver, createExpect } from '@fliwright/core';
 
 const driver = new FliwrightDriver();
-await driver.connect('ws://127.0.0.1:54321/abc=');
+await driver.connect('ws://127.0.0.1:8181/ws');
 
 const page = driver.page;
-const loginButton = page.locator({ text: 'Login' });
-await loginButton.click();
+const button = page.locator({ text: 'Submit' });
+await button.click();
 
-const title = page.locator({ key: 'home-title' });
-const expect = createExpect(title, { healing: driver.healing, testName: 'login' });
-await expect.toBeVisible();
-
-// Auto-fill forms
-const result = await page.formHelper.fill({ locale: 'zh_CN' });
-console.log(`Filled ${result.filled} fields`);
-
-// Mock an HTTP endpoint
-await driver.mock.route('/v1/login', { status: 200, body: { token: 'test' } });
+const result = page.locator('text=Success');
+await createExpect(result).toBeVisible();
 
 await driver.dispose();
 ```

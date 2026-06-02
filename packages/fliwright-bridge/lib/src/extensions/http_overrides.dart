@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 
 /// HTTP interceptor that redirects all plain-HTTP traffic through the mock
@@ -16,21 +17,28 @@ class FliwrightHttpOverrides extends HttpOverrides {
 
   FliwrightHttpOverrides._(this.mockPort, this._previous);
 
+  static void _log(String message) {
+    developer.log(message, name: 'fliwright.mock');
+  }
+
   static void install({required int port}) {
     final current = HttpOverrides.current;
     if (current is FliwrightHttpOverrides && current.mockPort == port) {
+      _log('HttpOverrides already installed for mock port $port');
       return;
     }
     HttpOverrides.global = FliwrightHttpOverrides._(
       port,
       current is FliwrightHttpOverrides ? current._previous : current,
     );
+    _log('HttpOverrides installed; http:// traffic proxies to 127.0.0.1:$port');
   }
 
   static void uninstall() {
     final current = HttpOverrides.current;
     if (current is FliwrightHttpOverrides) {
       HttpOverrides.global = current._previous;
+      _log('HttpOverrides uninstalled');
     }
   }
 
@@ -50,7 +58,13 @@ class FliwrightHttpOverrides extends HttpOverrides {
     }
 
     if (url.scheme == 'http') {
+      _log('Proxying ${url.toString()} to 127.0.0.1:$mockPort');
       return 'PROXY 127.0.0.1:$mockPort';
+    }
+
+    if (url.scheme == 'https') {
+      _log(
+          'Cannot proxy HTTPS request ${url.toString()}; use FliwrightDioMockInterceptor for Dio HTTPS APIs');
     }
 
     return _previous?.findProxyFromEnvironment(url, environment) ??

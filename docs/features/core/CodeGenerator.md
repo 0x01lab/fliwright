@@ -2,56 +2,25 @@
 module: "CodeGenerator"
 package: "@fliwright/core"
 source: "src/CodeGenerator.ts"
-tests: "tests/CodeGenerator.test.ts"
 generated: "2026-06-02"
 ---
 
 # CodeGenerator
 
-> Emit a Vitest test file from a list of recorded operations and resolved selectors.
+> Generates TypeScript test code from recorded operations.
 
 ## Overview
 
-For `lang: 'ts'` (default), generates `import { test, expect } from '@fliwright/vitest';` followed by a single `test('...', async ({ page }) => { ... })` block. Each operation maps to one statement:
-
-| Operation | Output |
-|-----------|--------|
-| `tap` | `await page.locator(...).click();` |
-| `longPress` | `await page.locator(...).longPress({ duration: ... });` |
-| `drag` | `await page.locator(...).drag(deltaX, deltaY);` |
-| `type` (action: `replace`) | `await page.locator(...).fill('text');` |
-| `type` (default) | `await page.locator(...).type('text');` |
-
-Delegates to [DartCodeGenerator](./DartCodeGenerator.md) when `options.lang === 'dart'`.
-
-## Constructor
-
-```typescript
-constructor()
-```
+`CodeGenerator` takes `RecordedOperation[]` and a selector map, then outputs a complete `@fliwright/vitest` test file. Supports both TypeScript (default) and Dart via `DartCodeGenerator`.
 
 ## Public Methods
 
-### `generate(operations, selectors, options?): string`
+### `generate(operations: RecordedOperation[], selectors: Map<number, string>, options?: CodegenOptions): string`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `operations` | `RecordedOperation[]` | Recorded operations |
-| `selectors` | `Map<number, string>` | Index → selector string |
-| `options.lang` | `'ts' \| 'dart'` | Output language |
-| `options.testName` | string | Test name (default `'recorded test'`) |
-| `options.imports` | string | Override import source (default `@fliwright/vitest`) |
-
-**Returns:** `string` — full source file.
-
-## Example
-
-```typescript
-const code = new CodeGenerator().generate(operations, selectors, {
-  testName: 'login flow',
-});
-```
+Generates test code. When `options.lang === 'dart'`, delegates to `DartCodeGenerator`. Otherwise generates TypeScript using `@fliwright/vitest` imports.
 
 ## Related
 
-- **Source:** `packages/fliwright-core/src/CodeGenerator.ts`
+- **Depends on:** [DartCodeGenerator](./DartCodeGenerator.md)
+- **Used by:** [RecorderController](./RecorderController.md)
+- **Source:** `src/CodeGenerator.ts`

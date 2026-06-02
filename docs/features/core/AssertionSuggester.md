@@ -2,48 +2,33 @@
 module: "AssertionSuggester"
 package: "@fliwright/core"
 source: "src/AssertionSuggester.ts"
-tests: "tests/AssertionSuggester.test.ts"
 generated: "2026-06-02"
 ---
 
 # AssertionSuggester
 
-> Heuristics that propose follow-up `expect()` calls after a sequence of recorded operations.
+> Suggests assertion placements after recording user interactions.
 
 ## Overview
 
-After `RecorderController.stop()` produces generated code, the suggester scans the operation list for patterns that imply a state change worth asserting (navigation tap, form submit, list-item selection, large Y-position change).
-
-## Constructor
-
-```typescript
-constructor()
-```
+Analyzes recorded operations and identifies points where assertions should be added based on heuristics: navigation taps (top of screen), form submissions, list item selections, and large Y-position changes.
 
 ## Public Methods
 
-### `suggest(operations): AssertionSuggestion[]`
+### `suggest(operations: RecordedOperation[]): AssertionSuggestion[]`
 
-Each suggestion is `{ afterIndex, reason, template }`.
+Returns suggestion objects with `afterIndex`, `reason`, and `template` fields.
 
-| Rule | Trigger |
-|------|---------|
-| Top-of-screen tap | `op.kind === 'tap' && op.position.y < 100` |
-| Form submit | `tap` following a `type` within 10s |
-| List item selection | `tap` immediately after a `drag` |
-| Large Y change | Next op's Y is at least 200px lower than current tap |
+## Heuristic Rules
 
-**Returns:** `AssertionSuggestion[]` — suggestions, each containing a `template` like `// TODO: Assert expected page content`.
-
-## Example
-
-```typescript
-const suggestions = new AssertionSuggester().suggest(operations);
-for (const s of suggestions) {
-  console.log(`after op ${s.afterIndex}: ${s.reason}`);
-}
-```
+| Rule | Trigger | Suggestion |
+|------|---------|------------|
+| Navigation tap | Tap at y < 100 | Assert expected page content |
+| Form submit | Tap after recent type input | Assert submission result |
+| List selection | Tap after drag | Assert detail page content |
+| Page change | Large Y-position jump | Assert expected page loaded |
 
 ## Related
 
-- **Source:** `packages/fliwright-core/src/AssertionSuggester.ts`
+- **Used by:** CLI `record` command
+- **Source:** `src/AssertionSuggester.ts`

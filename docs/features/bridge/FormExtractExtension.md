@@ -1,44 +1,41 @@
 ---
 module: "FormExtractExtension"
-package: "fliwright_bridge"
+package: "fliwright-bridge"
 source: "lib/src/extensions/form_extract.dart"
 generated: "2026-06-02"
 ---
 
 # FormExtractExtension
 
-> Walk the widget tree and return one `FormFieldMeta` per `TextField` / `TextFormField` / `EditableText`, deduplicated by controller identity.
+> Extracts TextField, TextFormField, and EditableText form fields with deduplication.
 
-## Registered Methods
+## Overview
 
-| Method | Description |
-|--------|-------------|
-| `ext.fliwright.extractForm` | Return form fields |
+Registers `ext.fliwright.extractForm` extension. Walks the widget tree to find all form field widgets, extracts their metadata (type, key, hint text, label, keyboard type, obscure flag, enabled state, current value, options), and deduplicates overlapping fields.
+
+## Registered Extensions
 
 ### `ext.fliwright.extractForm`
 
-No params.
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scope` | `string` | No | Optional scope selector to limit extraction area |
 
-**Returns:** `{ fields: FormFieldMeta[] }`:
-
-| Field | Description |
-|-------|-------------|
-| `id` | Stable hash-based id (controller identity + initial rect) |
-| `type` | Widget runtime type |
-| `rect` | Render bounds |
-| `key`, `ancestorKey`, `name` | Identifiers |
-| `hintText`, `label`, `keyboardType`, `maxLength` | Input hints |
-| `obscureText`, `enabled` | State |
-| `semanticsId`, `semanticsLabel`, `semanticsHint` | Semantics info |
-| `role` | Mapped ARIA-style role |
-| `selector` | Pre-resolved wire selector (same logic as `SelectorResolver`) |
+Returns `{ fields: FormFieldMeta[], count: number }` where each field contains:
+- `id`: Unique field identifier
+- `type`: Widget type (TextField, TextFormField, etc.)
+- `controlType`: `textInput`, `select`, `radio`, `checkbox`
+- `rect`: Render bounds
+- `key`, `ancestorKey`: Flutter Keys
+- `name`: Field name attribute
+- `hintText`, `label`: Display labels
+- `keyboardType`: Keyboard type hint
+- `obscureText`, `enabled`: State flags
+- `value`: Current field value
+- `options`: Selectable options (for dropdowns, radios)
+- `selector`: Wire-format selector string
+- `semanticsId`, `semanticsLabel`, `semanticsHint`, `role`: Semantics data
 
 ## Deduplication
 
-Two fields with the same `TextEditController` instance are collapsed into a single entry to avoid emitting duplicates when the same controller is wired to multiple `TextField`s.
-
-## Related
-
-- **TS counterpart:** [`FormHelper`](../core/FormHelper.md)
-- **Pipeline:** [form-filling-pipeline.md](../form-filling-pipeline.md)
-- **Source:** `packages/fliwright-bridge/lib/src/extensions/form_extract.dart`
+Removes duplicate fields that share the same semantic position or controller, ensuring one entry per logical form field.

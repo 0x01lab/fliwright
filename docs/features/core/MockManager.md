@@ -2,17 +2,16 @@
 module: "MockManager"
 package: "@fliwright/core"
 source: "src/MockManager.ts"
-tests: "tests/MockManager.test.ts"
 generated: "2026-06-02"
 ---
 
 # MockManager
 
-> Register HTTP mock routes, switch between predefined rule sets, and inspect calls captured by the bridge's mock server.
+> Manages mock routes for HTTP request interception, supporting both local and remote (Flutter-side) mock servers with rule switching.
 
 ## Overview
 
-`MockManager` is the TypeScript side of the bridge's `MockServerExtension`. It exposes two layers: low-level `route / removeRoute / clear` for ad-hoc mocking, and `loadRules / listRules / switchRule` for switching between rules loaded from `.fliwright/mocks/*.json`. Calls are forwarded as JSON-RPC to the running Flutter app, which intercepts HTTP requests via `dio` interceptors and `HttpOverrides`.
+`MockManager` implements `MockAdapter` and provides a unified API for mock route management. It can operate in two modes: **local** (embedded `ToolMockServer`) or **remote** (delegating to a Flutter-side mock controller via `ext.fliwright.mock.setController`). It also supports loading and switching named mock rules from `.fliwright/mocks/` config files.
 
 ## Constructor
 
@@ -22,64 +21,65 @@ constructor(sendRequest: SendRequest)
 
 ## Public Methods
 
-### `route(path, response): Promise<void>`
+### `route(path: string, response: MockRouteResponse & { method?: string }): Promise<void>`
 
-Register a single mock route.
+Adds a mock route. In remote mode, sends to the Flutter controller; in local mode, registers on the embedded server.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `path` | string | URL path (e.g. `/v1/login`) |
-| `response.status` | number | HTTP status |
-| `response.headers` | object | Response headers |
-| `response.body` | unknown | Body (will be JSON-serialized) |
-| `response.delay` | number | Optional delay in ms |
-| `response.method` | string | HTTP method filter |
+### `removeRoute(path: string, method?: string): Promise<void>`
 
----
+Removes a mock route.
 
-### `addRoute(pattern, response): Promise<void>` — alias of `route`.
+### `clear(): Promise<void>`
 
-### `removeRoute(path): Promise<void>` — remove a single route.
+Removes all mock routes.
 
-### `clear(): Promise<void>` — remove all routes.
+### `setPassthrough(enabled: boolean): Promise<void>`
 
-### `setPassthrough(enabled): Promise<void>` — when `true`, unmatched requests go to the real network.
+Enables/disables passthrough mode for unmatched requests.
 
-### `getCalls(path?): Promise<MockCall[]>` — return captured calls.
+### `getCalls(path?: string): Promise<MockCall[]>`
 
-### `listRoutes(): Promise<{id, method?, path}[]>` — currently registered routes.
+Returns recorded calls, optionally filtered by path.
 
-### `clearCalls(): Promise<void>` — clear the captured-call log.
+### `listRoutes(): Promise<Array<{ id: string; method?: string; path: string }>>`
 
-### `loadRules(mockDir?): Promise<void>`
+Lists all registered routes.
 
-Loads `.fliwright/mocks/<mockDir>/mock-index.json` and every endpoint config referenced therein, then applies each endpoint's active rule as a route via the bridge. Silently skips if the index file is missing.
+### `clearCalls(): Promise<void>`
 
-### `listRules(): { endpoint, method, rules[], activeRule }[]`
+Clears all recorded calls.
 
-Returns a summary of loaded endpoints and their rules.
+### `startServer(options?: ToolMockServerOptions): Promise<string>`
 
-### `switchRule(endpoint, ruleName): Promise<void>`
+Starts the embedded mock server and returns its URL.
 
-Switch the active rule for an endpoint, then re-apply it to the bridge. Throws if endpoint or rule isn't found.
+### `stopServer(): Promise<void>`
+
+Stops the embedded mock server.
+
+### `loadRules(mockDir?: string): Promise<void>`
+
+Loads mock rules from a directory (default `.fliwright/mocks`) and applies active rules.
+
+### `listRules(): Array<{ endpoint, method, rules[], activeRule }>`
+
+Lists all loaded endpoints with their rules and active selection.
+
+### `switchRule(endpoint: string, ruleName: string): Promise<void>`
+
+Switches the active rule for an endpoint and applies it.
+
+### `configureFlutterController(url?: string): Promise<void>`
+
+Configures the Flutter-side mock controller URL via VM Service extension.
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `_ruleStore` | `MockRuleStore` | (Internal) loaded rules; shared with MCP `fliwright_mock_*` tools |
-
-## Example
-
-```typescript
-await driver.mock.route('/v1/login', { status: 200, body: { token: 'abc' } });
-await driver.mock.loadRules();  // loads .fliwright/mocks/mock-index.json
-await driver.mock.switchRule('/v1/login', 'server_error');
-const calls = await driver.mock.getCalls('/v1/login');
-```
+| Property | Type | Readonly | Description |
+|----------|------|----------|-------------|
+| `controllerUrl` | `string \| null` | Yes | The active mock controller URL |
 
 ## Related
 
-- **Depends on:** [MockRuleStore](./MockRuleStore.md)
-- **Bridge counterpart:** `packages/fliwright-bridge/lib/src/extensions/mock_server.dart`
-- **Source:** `packages/fliwright-core/src/MockManager.ts`
+- **Depends on:** [ToolMockServer](./ToolMockServer.md), [MockRuleStore](./MockRuleStore.md)
+- **Source:** `src/MockManager.ts`

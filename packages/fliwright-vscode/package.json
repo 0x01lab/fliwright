@@ -50,7 +50,9 @@
     "onCommand:fliwright.copyMockRuleJson",
     "onCommand:fliwright.createFormRules",
     "onCommand:fliwright.openFormRules",
+    "onCommand:fliwright.insertFormFieldSelector",
     "onCommand:fliwright.applyMockRule",
+    "onCommand:fliwright.stopMockRule",
     "onCommand:fliwright.applyDefaultMocks",
     "onCommand:fliwright.stopSandbox",
     "onCommand:fliwright.analyzeForm",
@@ -153,13 +155,18 @@
         "icon": "$(play)"
       },
       {
+        "command": "fliwright.stopMockRule",
+        "title": "Fliwright: Stop Mock Rule",
+        "icon": "$(debug-stop)"
+      },
+      {
         "command": "fliwright.applyDefaultMocks",
         "title": "Fliwright: Apply Default Mocks",
         "icon": "$(play)"
       },
       {
         "command": "fliwright.stopSandbox",
-        "title": "Fliwright: Clear Mock Routes",
+        "title": "Fliwright: Stop All Mock Routes",
         "icon": "$(debug-stop)"
       },
       {
@@ -175,6 +182,10 @@
       {
         "command": "fliwright.openFormRules",
         "title": "Fliwright: Open Form Rules"
+      },
+      {
+        "command": "fliwright.insertFormFieldSelector",
+        "title": "Fliwright: Insert Form Field Selector"
       },
       {
         "command": "fliwright.analyzeForm",
@@ -352,6 +363,11 @@
           "group": "inline@2"
         },
         {
+          "command": "fliwright.stopMockRule",
+          "when": "view == fliwright.mockApis && viewItem == mockRuleApplied",
+          "group": "inline@3"
+        },
+        {
           "command": "fliwright.openFormRules",
           "when": "view == fliwright.formData && viewItem =~ /formRulesFile|formRule|formInvalid/",
           "group": "inline@1"
@@ -400,6 +416,16 @@
           "type": "string",
           "default": ".fliwright/mocks/mock-index.json",
           "description": "Optional Fliwright mock index JSON file."
+        },
+        "fliwright.autoStartMockController": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start and configure the tool-side mock controller after connecting to a Flutter VM Service."
+        },
+        "fliwright.autoApplyDefaultMocksOnConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically apply default API mocks after connecting to a Flutter VM Service."
         },
         "fliwright.vmServiceUrl": {
           "type": [

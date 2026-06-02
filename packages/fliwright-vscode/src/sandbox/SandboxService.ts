@@ -9,16 +9,29 @@ import type {
 
 export class SandboxService {
   private readonly applied = new Map<string, AppliedMockRule>();
+  private controllerUrl: string | undefined;
 
   getAppliedRules(): AppliedMockRule[] {
     return Array.from(this.applied.values()).sort((a, b) => b.appliedAt - a.appliedAt);
   }
 
   isApplied(rule: MockRuleEntry): AppliedMockRule | undefined {
-    return this.applied.get(appliedKey(rule.method, rule.endpoint, rule.rule.name));
+    const applied = this.applied.get(appliedKey(rule.method, rule.endpoint));
+    return applied?.ruleName === rule.rule.name ? applied : undefined;
+  }
+
+  getControllerUrl(): string | undefined {
+    return this.controllerUrl;
+  }
+
+  async ensureController(driver: FliwrightDriver): Promise<string> {
+    this.controllerUrl = await driver.mock.startServer();
+    await driver.mock.configureFlutterController(this.controllerUrl);
+    return this.controllerUrl;
   }
 
   async applyRule(driver: FliwrightDriver, entry: MockRuleEntry): Promise<AppliedMockRule> {
+    await this.ensureController(driver);
     await routeRule(driver, entry.endpoint, entry.method, entry.rule);
     const applied: AppliedMockRule = {
       endpoint: entry.endpoint,
@@ -27,8 +40,17 @@ export class SandboxService {
       filePath: entry.uri.fsPath,
       appliedAt: Date.now(),
     };
-    this.applied.set(appliedKey(entry.method, entry.endpoint, entry.rule.name), applied);
+    this.applied.set(appliedKey(entry.method, entry.endpoint), applied);
     return applied;
+  }
+
+  async stopRule(driver: FliwrightDriver, entry: MockRuleEntry): Promise<boolean> {
+    const key = appliedKey(entry.method, entry.endpoint);
+    const applied = this.applied.get(key);
+    if (applied?.ruleName !== entry.rule.name) return false;
+    await driver.mock.removeRoute(entry.endpoint, entry.method);
+    this.applied.delete(key);
+    return true;
   }
 
   async applyDefaultMocks(driver: FliwrightDriver, discovery: MockDiscoveryResult): Promise<{
@@ -66,6 +88,16 @@ export class SandboxService {
   }
 }
 
+export function formatMockRuleDebug(entry: MockRuleEntry): string {
+  return [
+    `${entry.method.toUpperCase()} ${entry.endpoint} -> ${entry.rule.name}`,
+    `status=${entry.rule.status}`,
+    `delay=${entry.rule.delay ?? 0}ms`,
+    `headers=${Object.keys(entry.rule.headers ?? {}).length}`,
+    `body=${summarizeBody(entry.rule.body)}`,
+  ].join(' ');
+}
+
 function selectDefaultRule(endpoint: MockEndpointEntry): MockRule | undefined {
   const defaultName = endpoint.defaultRule;
   if (defaultName) {
@@ -89,6 +121,14 @@ async function routeRule(
   });
 }
 
-function appliedKey(method: string, endpoint: string, ruleName: string): string {
-  return `${method.toUpperCase()} ${endpoint} ${ruleName}`;
+function appliedKey(method: string, endpoint: string): string {
+  return `${method.toUpperCase()} ${endpoint}`;
+}
+
+function summarizeBody(body: unknown): string {
+  if (body === undefined) return 'undefined';
+  if (body === null) return 'null';
+  if (Array.isArray(body)) return `array(${body.length})`;
+  if (typeof body === 'object') return `object(${Object.keys(body).length})`;
+  return typeof body;
 }

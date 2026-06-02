@@ -8,86 +8,75 @@ generated: "2026-06-02"
 
 # FliwrightDriver
 
-> Top-level entry point that owns the VM Service connection and lazily instantiates `Page`, `MockManager`, `SelfHealingEngine`, `RecorderController`, and the plugin registry.
+> Main orchestrator that connects to the Flutter VM Service and provides access to Page, MockManager, SelfHealingEngine, RecorderController, and plugin system.
 
 ## Overview
 
-`FliwrightDriver` is the single object tests interact with. Construction is cheap — it only initializes a `PluginRegistry` and a `VMServiceConnector`. Calling `connect(vmServiceUrl)` opens the WebSocket, runs every registered plugin's `onInit` hook, and makes the rest of the subsystems usable. Sub-systems are lazy: `page`, `mock`, `healing`, and `recorder` are constructed on first access.
+`FliwrightDriver` is the entry point for all Fliwright interactions. It manages the WebSocket connection to the Dart VM Service via `VMServiceConnector`, lazily initializes subsystems (page, mock, healing, recorder), and coordinates plugin lifecycle hooks.
 
 ## Constructor
 
 ```typescript
 constructor(options?: DriverOptions)
-
-interface DriverOptions {
-  plugins?: FliwrightPlugin[];
-}
 ```
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `options.plugins` | `FliwrightPlugin[]` | No | Plugins registered before `connect` runs their `onInit` |
-
-## Public Methods
-
-### `connect(vmServiceUrl): Promise<void>`
-
-Opens the VM Service WebSocket, then runs `onInit` on every registered plugin with the driver's `sendRequest` channel and `VMServiceConnector`.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `vmServiceUrl` | string | Dart VM Service WebSocket URL |
-
----
-
-### `attachMockConnector(mockWS): Promise<void>`
-
-For testing: bypasses the WebSocket and uses a fake/in-process connection.
-
----
-
-### `sendRequest(method, params?): Promise<unknown>`
-
-Low-level escape hatch — call any RPC method on the bridge.
-
----
-
-### `dispose(): Promise<void>`
-
-Runs `onDispose` on every plugin, then closes the WebSocket.
+| `options.plugins` | `FliwrightPlugin[]` | No | Plugins to register on construction |
 
 ## Properties
 
-| Property | Type | Lazy | Description |
-|----------|------|------|-------------|
-| `page` | `Page` | Yes | Page-object entry |
-| `mock` | `MockManager` | Yes | Mock route manager |
-| `healing` | `SelfHealingEngine` | Yes | Healing engine (default `MultiDimensionalHealingStrategy`) |
-| `recorder` | `RecorderController` | Yes | Recording controller |
-| `state` | `StateAdapter` | No | Returns `riverpod` state adapter if registered |
+| Property | Type | Readonly | Description |
+|----------|------|----------|-------------|
+| `page` | `Page` | Yes | Lazily-initialized Page object for widget interaction |
+| `mock` | `MockManager` | Yes | Lazily-initialized mock route manager |
+| `healing` | `SelfHealingEngine` | Yes | Lazily-initialized self-healing engine |
+| `recorder` | `RecorderController` | Yes | Lazily-initialized interaction recorder |
+| `state` | `StateAdapter` | Yes | Shortcut for `getStateAdapter('riverpod')` |
 
-## Plugin Lookup
+## Public Methods
 
-- `getStateAdapter(name)`, `getMockAdapter(name)`, `getFinderStrategy(name)`, `getHealingStrategy(name)` — return registered adapter by name.
-- `notifyTestStart(name)` / `notifyTestEnd(name, result)` — fan out to plugin lifecycle hooks.
+### `connect(vmServiceUrl: string): Promise<void>`
 
-## Example
+Connects to the Flutter VM Service via WebSocket and initializes all registered plugins.
 
-```typescript
-import { FliwrightDriver } from '@fliwright/core';
-import { riverpodPlugin } from '@fliwright/plugin-riverpod';
+### `dispose(): Promise<void>`
 
-const driver = new FliwrightDriver({ plugins: [riverpodPlugin()] });
-await driver.connect('ws://127.0.0.1:54321/abc=');
+Disconnects from VM Service and disposes all plugins.
 
-try {
-  await driver.page.locator({ text: 'Login' }).click();
-} finally {
-  await driver.dispose();
-}
-```
+### `attachMockConnector(mockWS: MockWebSocket): Promise<void>`
+
+Attaches a mock WebSocket for testing without a real Flutter app.
+
+### `sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown>`
+
+Sends a raw JSON-RPC request to the VM Service. Useful for custom extension calls.
+
+### `getStateAdapter(name: string): StateAdapter`
+
+Returns a registered StateAdapter by name.
+
+### `getMockAdapter(name: string): MockAdapter`
+
+Returns a registered MockAdapter by name.
+
+### `getFinderStrategy(name: string): FinderStrategy`
+
+Returns a registered FinderStrategy by name.
+
+### `getHealingStrategy(name: string): HealingStrategy`
+
+Returns a registered HealingStrategy by name.
+
+### `notifyTestStart(testName: string): Promise<void>`
+
+Notifies all plugins that a test has started.
+
+### `notifyTestEnd(testName: string, result: TestResult): Promise<void>`
+
+Notifies all plugins that a test has ended.
 
 ## Related
 
-- **Depends on:** [Page](./Page.md), [MockManager](./MockManager.md), [SelfHealingEngine](./SelfHealingEngine.md), [RecorderController](./RecorderController.md), [PluginRegistry](./PluginRegistry.md), [VMServiceConnector](./VMServiceConnector.md)
-- **Source:** `packages/fliwright-core/src/Driver.ts`
+- **Depends on:** [VMServiceConnector](./VMServiceConnector.md), [Page](./Page.md), [MockManager](./MockManager.md), [SelfHealingEngine](./SelfHealingEngine.md), [RecorderController](./RecorderController.md), [PluginRegistry](./PluginRegistry.md)
+- **Source:** `src/Driver.ts`

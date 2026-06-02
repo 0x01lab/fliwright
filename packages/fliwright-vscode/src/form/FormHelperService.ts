@@ -14,14 +14,20 @@ export interface PreviewField {
 
 export class FormHelperService {
   private lastSummary: FormRunSummary | undefined;
+  private lastAnalyze: FormAnalyzeResult | undefined;
 
   getLastSummary(): FormRunSummary | undefined {
     return this.lastSummary;
   }
 
+  getLastAnalyze(): FormAnalyzeResult | undefined {
+    return this.lastAnalyze;
+  }
+
   async analyze(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry): Promise<FormAnalyzeResult> {
     const options = this.options(workspaceRoot, rulesFile);
     const result = await driver.page.formHelper.analyze(options);
+    this.lastAnalyze = result;
     this.lastSummary = {
       action: 'analyze',
       filePath: options.rulesFile,
@@ -34,6 +40,7 @@ export class FormHelperService {
   async fill(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry): Promise<FormFillResult> {
     const options = this.options(workspaceRoot, rulesFile);
     const result = await driver.page.formHelper.fill(options);
+    this.lastAnalyze = undefined;
     this.lastSummary = {
       action: 'fill',
       filePath: options.rulesFile,
@@ -54,6 +61,7 @@ export class FormHelperService {
   ): Promise<FormFillResult> {
     const options = this.options(workspaceRoot, rulesFile);
     const result = await driver.page.formHelper.fillFields(fieldHints, options);
+    this.lastAnalyze = undefined;
     this.lastSummary = {
       action: 'fill',
       filePath: options.rulesFile,

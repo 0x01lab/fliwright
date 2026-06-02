@@ -1,77 +1,59 @@
 ---
-package: "fliwright_bridge"
+package: "fliwright-bridge"
 version: "0.1.0"
-layer: integration
+layer: core
 status: implemented
 generated: "2026-06-02"
 ---
 
-# fliwright_bridge
+# fliwright-bridge
 
-> Dart package installed inside a Flutter app to register VM Service extensions that the TypeScript SDK calls over the VM Service WebSocket.
+> Dart-side Flutter bridge that registers VM Service extensions for gesture simulation, widget inspection, type input, scrolling, snapshotting, recording, form extraction, Riverpod state management, mock server, navigation, and screenshots.
 
 ## Architecture
 
-`FliwrightBridge.init()` (in `lib/src/bridge.dart`) is called once from the app's `main()`. It instantiates a singleton `ExtensionRegistry` and registers each extension in turn. The registry calls Dart's `registerExtension` so the VM Service can route `ext.fliwright.*` calls to the right handler. The `MockServerExtension` also starts a local HTTP server and `FliwrightHttpOverrides` redirects `dart:io` HTTP traffic through it.
+`FliwrightBridge` is the main entry point. It registers all extensions via `ExtensionRegistry` during `init()`. Two initialization modes:
+- **`init()`** — Full mode with `HttpOverrides`-based mock server for HTTP interception
+- **`initForDioMock()`** — Dio-compatible mode without HttpOverrides (for HTTPS APIs)
 
-For apps that use `dio` with HTTPS, an alternative entry point `initForDio()` registers all extensions except `HttpOverrides`, and instead exposes the `DioMockExtension` so the app can plug a `FliwrightDioMockInterceptor` into its Dio instance.
+## ExtensionRegistry
 
-## Extensions
+Each extension registers one or more `ext.fliwright.*` methods that the Node.js SDK calls via JSON-RPC over the VM Service WebSocket.
 
-| Extension | RPC Methods | Doc |
-|-----------|-------------|-----|
-| `GestureExtension` | `ext.fliwright.click`, `ext.fliwright.gesture` | [GestureExtension.md](./GestureExtension.md) |
-| `InspectExtension` | `ext.fliwright.inspect` | [InspectExtension.md](./InspectExtension.md) |
-| `TypeExtension` | `ext.fliwright.type` | [TypeExtension.md](./TypeExtension.md) |
-| `ScrollExtension` | `ext.fliwright.scrollIntoView` | [ScrollExtension.md](./ScrollExtension.md) |
-| `SnapshotExtension` | `ext.fliwright.snapshot` | [SnapshotExtension.md](./SnapshotExtension.md) |
-| `ScreenshotExtension` | `ext.fliwright.screenshot` | [ScreenshotExtension.md](./ScreenshotExtension.md) |
-| `RecordingExtension` | `ext.fliwright.startRecording`, `stopRecording`, `hitTest` | [RecordingExtension.md](./RecordingExtension.md) |
-| `FormExtractExtension` | `ext.fliwright.extractForm` | [FormExtractExtension.md](./FormExtractExtension.md) |
-| `RiverpodExtension` | `ext.fliwright.riverpod.{list,read,override,watch,unwatch}` | [RiverpodExtension.md](./RiverpodExtension.md) |
-| `RouterNavigateExtension` | `ext.fliwright.navigate`, `currentRoute`, `goBack` | [RouterNavigateExtension.md](./RouterNavigateExtension.md) |
-| `MockServerExtension` | `ext.fliwright.mock.{addRoute,removeRoute,clearRoutes,listRoutes,setPassthrough,getCalls,clearCalls,testRequest}` | [MockServerExtension.md](./MockServerExtension.md) |
-| `DioMockExtension` | Same as `MockServerExtension` minus `testRequest` (HTTPS-only) | [DioMockExtension.md](./DioMockExtension.md) |
-| `FliwrightHttpOverrides` | (HTTP interceptor, not an RPC) | [HttpOverrides.md](./HttpOverrides.md) |
+## Modules
 
-## Dependencies
+| Module | Description | Doc |
+|--------|-------------|-----|
+| GestureExtension | Click and gesture simulation (tap, longPress, drag, pinch) | [GestureExtension.md](./GestureExtension.md) |
+| InspectExtension | Widget tree traversal and selector-based lookup | [InspectExtension.md](./InspectExtension.md) |
+| TypeExtension | Text input simulation with char-by-char and replaceAll | [TypeExtension.md](./TypeExtension.md) |
+| ScrollExtension | Scrollable.ensureVisible with alignment | [ScrollExtension.md](./ScrollExtension.md) |
+| SnapshotExtension | Interactive widget type capture with metadata | [SnapshotExtension.md](./SnapshotExtension.md) |
+| RecordingExtension | Pointer event capture and text input polling | [RecordingExtension.md](./RecordingExtension.md) |
+| FormExtractExtension | TextField/TextFormField extraction and deduplication | [FormExtractExtension.md](./FormExtractExtension.md) |
+| RiverpodExtension | ProviderContainer operations (read, override, watch, list) | [RiverpodExtension.md](./RiverpodExtension.md) |
+| MockServerExtension | HTTP mock server with route matching and call logging | [MockServerExtension.md](./MockServerExtension.md) |
+| HttpOverrides | HTTP interception mechanism for HttpOverrides mode | [HttpOverrides.md](./HttpOverrides.md) |
+| ScreenshotExtension | Screenshot capture via RenderRepaintBoundary | [ScreenshotExtension.md](./ScreenshotExtension.md) |
+| RouterNavigateExtension | Programmatic navigation via injected router | [RouterNavigateExtension.md](./RouterNavigateExtension.md) |
+| DioMockExtension | Dio-compatible mock via VM Service extensions | [DioMockExtension.md](./DioMockExtension.md) |
 
-- `flutter` (sdk)
-- `dio` ^5.0.0
-- `test` ^1.25.0 (dev)
-
-## Usage Example
-
-Standard (HttpOverrides-based mock server, HTTP only):
+## Usage
 
 ```dart
+// In your Flutter app's main():
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 
 void main() {
-  runApp(const MyApp());
+  // For standard HTTP mocking:
+  FliwrightBridge.init();
+
+  // For Dio-based HTTPS mocking:
+  // FliwrightBridge.initForDioMock();
+
+  runApp(MyApp());
 }
 
-// In your test entry point:
-Future<void> main() async {
-  await FliwrightBridge.init();
-  runApp(const MyApp());
-}
-```
-
-With a router (enables `page.navigate('/path')`):
-
-```dart
-final router = GoRouter(routes: [...]);
-await FliwrightBridge.init(router: router);
-runApp(MaterialApp.router(routerConfig: router));
-```
-
-For Dio + HTTPS apps:
-
-```dart
-final dio = Dio();
-final interceptor = FliwrightDioMockInterceptor();
-dio.interceptors.add(interceptor);
-await FliwrightBridge.initForDio();
-DioMockExtension.setInterceptor(interceptor);
+// With GoRouter navigation:
+// FliwrightBridge.init(router: goRouter);
 ```

@@ -1,33 +1,30 @@
 ---
 module: "ScrollExtension"
-package: "fliwright_bridge"
+package: "fliwright-bridge"
 source: "lib/src/extensions/scroll_extension.dart"
 generated: "2026-06-02"
 ---
 
 # ScrollExtension
 
-> Bring a widget into the visible viewport via `Scrollable.ensureVisible`.
+> Scrollable.ensureVisible with configurable alignment and duration.
 
-## Registered Methods
+## Overview
 
-| Method | Description |
-|--------|-------------|
-| `ext.fliwright.scrollIntoView` | Scroll until the widget is visible |
+Registers `ext.fliwright.scrollIntoView` extension. Finds a widget by selector and scrolls it into the visible area using `Scrollable.ensureVisible`.
+
+## Registered Extensions
 
 ### `ext.fliwright.scrollIntoView`
 
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `selector` | string | Yes | — | Wire-format selector |
-| `alignment` | number | No | `0.5` | 0=top, 1=bottom, 0.5=center |
-| `duration` | number | No | `300` | Animation duration in ms |
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `selector` | `string` | Yes | — | Widget selector |
+| `alignment` | `double` | No | `0.5` | Target alignment (0.0=top, 0.5=center, 1.0=bottom) |
+| `duration` | `int` | No | `300` | Scroll animation duration (ms) |
 
-**Returns:** `{ success: true }` on success. `{ success: false, error }` if the widget isn't in any scrollable.
+## Behavior
 
-Implementation calls `Scrollable.ensureVisible(...)` with `alignmentPolicy: explicit` and a `Duration(milliseconds: duration)`.
-
-## Related
-
-- **TS counterpart:** [`Locator.scrollIntoView`](../core/Locator.md)
-- **Source:** `packages/fliwright-bridge/lib/src/extensions/scroll_extension.dart`
+1. Finds the target element by selector
+2. Calls `Scrollable.ensureVisible()` with alignment and duration
+3. Waits for the scroll animation to complete

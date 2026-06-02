@@ -2,54 +2,24 @@
 module: "DartCodeGenerator"
 package: "@fliwright/core"
 source: "src/DartCodeGenerator.ts"
-tests: "tests/DartCodeGenerator.test.ts"
 generated: "2026-06-02"
 ---
 
 # DartCodeGenerator
 
-> Emit a Flutter `integration_test` Dart file from recorded operations and selectors.
+> Generates Dart `integration_test` code from recorded operations.
 
 ## Overview
 
-Produces a `void main() { IntegrationTestWidgetsFlutterBinding.ensureInitialized(); testWidgets('...', (tester) async { ... }); }` skeleton. Selectors are converted to Dart `find.*` calls in priority order:
-
-| Selector | Dart finder |
-|----------|-------------|
-| `text='X'` | `find.text('X')` |
-| `key='X'` | `find.byKey(const Key('X'))` |
-| `role='X'` | `find.bySemanticsLabel('X')` |
-| `type='X'` | `find.byType(X)` |
-| (none) | `find.byType(Widget)` |
-
-Each operation emits the corresponding `tester.tap` / `tester.longPress` / `tester.drag` / `tester.enterText` plus `await tester.pumpAndSettle();`.
-
-## Constructor
-
-```typescript
-constructor()
-```
+Generates a Dart file using `flutter_test` and `integration_test` packages with `testWidgets` blocks. Maps selectors to Dart Finder expressions (`find.text`, `find.byKey`, `find.bySemanticsLabel`, `find.byType`).
 
 ## Public Methods
 
-### `generate(operations, selectors, options?): string`
+### `generate(operations: RecordedOperation[], selectors: Map<number, string>, options?: CodegenOptions): string`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `operations` | `RecordedOperation[]` | Recorded ops |
-| `selectors` | `Map<number, string>` | Index → selector |
-| `options.testName` | string | Test name |
-
-**Returns:** `string` — Dart source.
-
-## Example
-
-```typescript
-const dart = new DartCodeGenerator().generate(operations, selectors, {
-  testName: 'login flow',
-});
-```
+Generates Dart integration test code.
 
 ## Related
 
-- **Source:** `packages/fliwright-core/src/DartCodeGenerator.ts`
+- **Used by:** [CodeGenerator](./CodeGenerator.md)
+- **Source:** `src/DartCodeGenerator.ts`

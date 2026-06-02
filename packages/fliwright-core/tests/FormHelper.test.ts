@@ -214,6 +214,126 @@ describe('FormHelper', () => {
       expect(typeCalls.every((call) => (call[1] as Record<string, unknown>).replaceAll === 'true')).toBe(true);
     });
 
+    it('opens composite select fields and clicks the selected bottom sheet option', async () => {
+      const selectField = {
+        id: 'select1',
+        type: 'FormBuilderField<String>',
+        controlType: 'select',
+        rect: { x: 20, y: 100, width: 360, height: 48 },
+        name: 'employmentStatus',
+        label: 'Employment status',
+        obscureText: false,
+        enabled: true,
+        selector: 'name=employmentStatus',
+        options: [
+          {
+            label: 'Employed',
+            value: 'employed',
+            semanticsId: 'kyc.personalInfo.employmentStatus.option.employed',
+          },
+          { label: 'Retired', value: 'retired' },
+        ],
+      };
+      const fieldWidget = {
+        id: 'select1',
+        type: 'FormBuilderField<String>',
+        rect: { x: 20, y: 100, width: 360, height: 48 },
+        properties: {},
+      };
+      const optionWidget = {
+        id: 'option1',
+        type: 'Semantics',
+        text: 'Employed',
+        rect: { x: 20, y: 500, width: 360, height: 48 },
+        properties: {},
+      };
+      const send = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
+        if (method === 'ext.fliwright.extractForm') {
+          return Promise.resolve({ fields: [selectField], count: 1 });
+        }
+        if (method === 'ext.fliwright.inspect') {
+          if (params?.selector === 'name=employmentStatus') {
+            return Promise.resolve({ widgets: [fieldWidget], count: 1 });
+          }
+          if (params?.selector === 'semanticsId=kyc.personalInfo.employmentStatus.option.employed') {
+            return Promise.resolve({ widgets: [optionWidget], count: 1 });
+          }
+        }
+        if (method === 'ext.fliwright.click') {
+          return Promise.resolve({ success: true });
+        }
+        return Promise.resolve({});
+      });
+
+      const result = await new FormHelper(send).fill();
+      expect(result.filled).toBe(1);
+      expect(result.fields[0]).toMatchObject({
+        controlType: 'select',
+        semanticType: 'option',
+        generatedValue: 'employed',
+        status: 'filled',
+      });
+      const inspectSelectors = send.mock.calls
+        .filter((call) => call[0] === 'ext.fliwright.inspect')
+        .map((call) => (call[1] as Record<string, unknown>).selector);
+      expect(inspectSelectors).toEqual([
+        'name=employmentStatus',
+        'semanticsId=kyc.personalInfo.employmentStatus.option.employed',
+      ]);
+    });
+
+    it('clicks inline radio options within the field scope', async () => {
+      const radioField = {
+        id: 'radio1',
+        type: 'FormBuilderField<bool>',
+        controlType: 'radio',
+        rect: { x: 20, y: 100, width: 360, height: 48 },
+        name: 'usPerson',
+        label: 'US person',
+        obscureText: false,
+        enabled: true,
+        selector: 'name=usPerson',
+        options: [
+          { label: 'Yes', value: 'true' },
+          { label: 'No', value: 'false' },
+        ],
+      };
+      const optionWidget = {
+        id: 'radio-option',
+        type: 'Text',
+        text: 'Yes',
+        rect: { x: 20, y: 100, width: 120, height: 48 },
+        properties: {},
+      };
+      const send = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
+        if (method === 'ext.fliwright.extractForm') {
+          return Promise.resolve({ fields: [radioField], count: 1 });
+        }
+        if (method === 'ext.fliwright.inspect') {
+          if (params?.selector === 'text=Yes' && params?.ancestorSelector === 'name=usPerson') {
+            return Promise.resolve({ widgets: [optionWidget], count: 1 });
+          }
+          return Promise.resolve({ widgets: [], count: 0 });
+        }
+        if (method === 'ext.fliwright.click') {
+          return Promise.resolve({ success: true });
+        }
+        return Promise.resolve({});
+      });
+
+      const result = await new FormHelper(send).fill();
+      expect(result.filled).toBe(1);
+      expect(result.fields[0]).toMatchObject({
+        controlType: 'radio',
+        generatedValue: 'true',
+        status: 'filled',
+      });
+      expect(send).toHaveBeenCalledWith('ext.fliwright.inspect', {
+        selector: 'text=Yes',
+        ancestorSelector: 'name=usPerson',
+      });
+    });
+
     it('scopes extraction when scope option is provided', async () => {
       await helper.fill({ scope: 'text=注册表单' });
       expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.extractForm', { scope: 'text=注册表单' });

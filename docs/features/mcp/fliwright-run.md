@@ -5,59 +5,47 @@ source: "src/tools/runTest.ts"
 generated: "2026-06-02"
 ---
 
-# `fliwright_run`
+# fliwright_run
 
-> Run a single Fliwright test file (optionally a single test within it) via Vitest and return a structured pass/fail summary.
-
-## Description
-
-`fliwright_run` is the primary execution surface for AI agents. It resolves the VM Service URL (parameter or `FLIWRIGHT_VM_URL`), spawns Vitest in JSON-reporter mode against `testFile`, parses the result into a `RunResult`, and stores failures in the shared `ServerState` so the next `fliwright_get_failure` call can read them.
+> Run a Fliwright test file and return structured pass/fail results.
 
 ## Input Schema
 
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `testFile` | `string` | Yes | Path to the .test.ts file to run |
+| `vmServiceUrl` | `string` | No | Dart VM Service WebSocket URL (or set FLIWRIGHT_VM_URL) |
+| `testName` | `string` | No | Run only the test matching this name |
+| `cwd` | `string` | No | Working directory (defaults to server cwd) |
+
+## Output Schema
+
 ```typescript
-{
-  testFile: string;             // required, path to .test.ts
-  vmServiceUrl?: string;        // optional, falls back to FLIWRIGHT_VM_URL
-  testName?: string;            // optional, run a single test by name
-  cwd?: string;                 // optional, Vitest working directory
+interface RunResult {
+  passed: boolean;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  duration: number;
+  results: Array<{
+    name: string;
+    passed: boolean;
+    duration: number;
+    error?: string;
+  }>;
 }
 ```
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `testFile` | string | Yes | — | Path to the test file |
-| `vmServiceUrl` | string | No | `process.env.FLIWRIGHT_VM_URL` | Dart VM Service WebSocket URL |
-| `testName` | string | No | — | Run only the test matching this name |
-| `cwd` | string | No | server process cwd | Working directory for Vitest |
+## Behavior
 
-## Output
+1. Resolves VM Service URL from parameter or env var
+2. Spawns Vitest with JSON reporter
+3. Sets FLIWRIGHT_VM_URL and FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH env vars
+4. Reads failure context file if tests failed
+5. Returns structured results
 
-Returns a JSON-serialized `RunResult`:
+## Error Handling
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `passed` | boolean | True if every test passed |
-| `totalTests` | number | Total tests run |
-| `passedTests` | number | Number passing |
-| `failedTests` | number | Number failing |
-| `duration` | number | Total run duration in ms |
-| `results` | array | Per-test results: `{ name, status, duration, error? }` |
-
-## Errors
-
-- Throws `Error('No VM Service URL provided...')` if neither `vmServiceUrl` nor `FLIWRIGHT_VM_URL` is set.
-- Propagates non-zero Vitest exit codes as a `RunResult` with `passed: false` rather than throwing.
-
-## Example
-
-```json
-{
-  "name": "fliwright_run",
-  "arguments": {
-    "testFile": "tests/login.test.ts",
-    "vmServiceUrl": "ws://127.0.0.1:54321/abc=",
-    "testName": "authenticates with valid credentials"
-  }
-}
-```
+- Throws if no VM Service URL is available
+- Returns `passed: false` with error messages for test failures
+- Handles malformed Vitest JSON output gracefully

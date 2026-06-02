@@ -2,56 +2,43 @@
 module: "SelectorResolver"
 package: "@fliwright/core"
 source: "src/SelectorResolver.ts"
-tests: "tests/SelectorResolver.test.ts"
 generated: "2026-06-02"
 ---
 
 # SelectorResolver
 
-> Convert a `WidgetInfo` into the most stable selector for code generation.
+> Resolves WidgetInfo to selector strings with Flutter role mapping.
 
 ## Overview
 
-`resolveSelector` walks a priority list to pick the most stable identifier:
+Maps Flutter widget types to semantic roles (e.g., `ElevatedButton` → `button`, `TextField` → `textbox`). Resolution priority: text → key → role → type.
 
-1. **`text`** — non-empty trimmed text → `{ text: '...' }`
-2. **`key`** — non-empty trimmed key → `{ key: '...' }`
-3. **Role mapping** — see table below → `{ role: '...' }`
-4. **`type`** — falls back to `{ type: '...' }` (or `{ type: 'Widget' }` if missing)
+## Public Methods (SelectorResolver class)
 
-Values containing single quotes are escaped with `\\'`.
+### `resolve(widget: Partial<WidgetInfo>): string`
+
+Returns a selector string for the given widget.
+
+## Exported Function
+
+### `resolveSelector(widget: Partial<WidgetInfo>): string`
+
+Standalone function that resolves a widget to a selector. Same logic as the class method.
 
 ## Role Map
 
-| Flutter type | ARIA role |
-|--------------|-----------|
-| ElevatedButton, TextButton, OutlinedButton, IconButton, FloatingActionButton | `button` |
-| TextField, TextFormField, CupertinoTextField | `textbox` |
-| Checkbox, CheckboxListTile | `checkbox` |
-| Switch, SwitchListTile | `switch` |
-| Slider | `slider` |
-| DropdownButton, DropdownButtonFormField | `combobox` |
-| NavigationRail, BottomNavigationBar | `navigation` |
-| TabBar | `tablist` |
-
-## Public API
-
-### `resolveSelector(widget): string` — free function.
-
-### `class SelectorResolver { resolve(widget): string }` — wraps the function.
-
-## Example
-
-```typescript
-import { resolveSelector } from '@fliwright/core';
-
-resolveSelector({ text: 'Login' });          // "{ text: 'Login' }"
-resolveSelector({ key: 'email' });           // "{ key: 'email' }"
-resolveSelector({ type: 'TextField' });      // "{ role: 'textbox' }"
-resolveSelector({ type: 'Scaffold' });       // "{ type: 'Scaffold' }"
-```
+| Widget Type | Role |
+|-------------|------|
+| ElevatedButton, TextButton, OutlinedButton, IconButton, FloatingActionButton | button |
+| TextField, TextFormField, CupertinoTextField | textbox |
+| Checkbox, CheckboxListTile | checkbox |
+| Switch, SwitchListTile | switch |
+| Slider | slider |
+| DropdownButton, DropdownButtonFormField | combobox |
+| NavigationRail, BottomNavigationBar | navigation |
+| TabBar | tablist |
 
 ## Related
 
 - **Used by:** [RecorderController](./RecorderController.md)
-- **Source:** `packages/fliwright-core/src/SelectorResolver.ts`
+- **Source:** `src/SelectorResolver.ts`

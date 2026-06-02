@@ -4,6 +4,7 @@ import { runCommand } from './commands/run.js';
 import { initCommand } from './commands/init.js';
 import { doctorCommand } from './commands/doctor.js';
 import { recordCommand } from './commands/record.js';
+import { mockStartCommand } from './commands/mock.js';
 
 async function main() {
   const program = new Command();
@@ -61,6 +62,25 @@ async function main() {
           output: opts.output,
           lang: opts.lang as 'ts' | 'dart',
           testName: opts.name,
+        });
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('mock:start')
+    .description('Start the Fliwright tool-side mock controller')
+    .option('--host <host>', 'Host to bind', '127.0.0.1')
+    .option('--port <port>', 'Port to bind. Defaults to a random free port')
+    .option('--mock-dir <dir>', 'Mock directory. Defaults to .fliwright/mocks')
+    .action(async (opts) => {
+      try {
+        await mockStartCommand({
+          host: opts.host,
+          port: opts.port === undefined ? undefined : Number(opts.port),
+          mockDir: opts.mockDir,
         });
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));

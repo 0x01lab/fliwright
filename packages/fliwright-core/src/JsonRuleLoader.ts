@@ -115,6 +115,8 @@ export class JsonRuleLoader {
         return field.selector;
       case 'type':
         return field.type;
+      case 'controlType':
+        return field.controlType;
       case 'hintText':
         return field.hintText;
       case 'label':
@@ -137,6 +139,8 @@ export class JsonRuleLoader {
         return field.role;
       case 'semanticType':
         return field.semanticType;
+      case 'value':
+        return field.value == null ? undefined : String(field.value);
       default:
         return undefined;
     }

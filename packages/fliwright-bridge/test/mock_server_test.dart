@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 
@@ -250,7 +251,8 @@ void main() {
       expect(lastCall['method'], 'GET');
     });
 
-    test('mock server records POST body (including chunked via proxy)', () async {
+    test('mock server records POST body (including chunked via proxy)',
+        () async {
       final port = MockServerExtension.serverPort;
       expect(port, isNotNull);
 
@@ -272,8 +274,7 @@ void main() {
       // Send directly to mock server (explicit Content-Length).
       final client = HttpClient();
       try {
-        final request =
-            await client.post('127.0.0.1', port!, '/api/data');
+        final request = await client.post('127.0.0.1', port!, '/api/data');
         request.headers.contentType = ContentType.json;
         request.write(jsonEncode({'key': 'value'}));
         final response = await request.close();
@@ -335,6 +336,212 @@ void main() {
       final calls = result['calls'] as List<dynamic>;
       expect(calls, isNotEmpty);
       expect(calls.last['path'], '/api/override');
+    });
+
+    test('re-registering the same method and path replaces previous route',
+        () async {
+      final port = MockServerExtension.serverPort;
+      expect(port, isNotNull);
+
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'replace-route-1',
+            'method': 'GET',
+            'path': '/api/replace',
+            'response': {
+              'status': 200,
+              'body': {'version': 1},
+            },
+          }),
+        },
+      );
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'replace-route-2',
+            'method': 'GET',
+            'path': '/api/replace',
+            'response': {
+              'status': 201,
+              'body': {'version': 2},
+            },
+          }),
+        },
+      );
+
+      final routesResult = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.listRoutes',
+        {},
+      );
+      final routes = routesResult['routes'] as List<dynamic>;
+      expect(routes, hasLength(1));
+      expect(routes.first['id'], 'replace-route-2');
+
+      final client = HttpClient();
+      try {
+        final request = await client.get('127.0.0.1', port!, '/api/replace');
+        final response = await request.close();
+        expect(response.statusCode, 201);
+        final body = await utf8.decoder.bind(response).join();
+        final decoded = jsonDecode(body) as Map<String, dynamic>;
+        expect(decoded['version'], 2);
+      } finally {
+        client.close();
+      }
+    });
+  });
+
+  group('DioMockExtension', () {
+    late FliwrightDioMockInterceptor interceptor;
+
+    setUp(() async {
+      await FliwrightBridge.reset();
+      interceptor = FliwrightDioMockInterceptor();
+      DioMockExtension.setInterceptor(interceptor);
+      await FliwrightBridge.initForDioMock();
+    });
+
+    test('matches full Dio URL requests by URI path', () async {
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'dio-route',
+            'method': 'POST',
+            'path': '/api/register',
+            'response': {
+              'status': 200,
+              'body': {'ok': true},
+            },
+          }),
+        },
+      );
+
+      final dio = Dio()..interceptors.add(interceptor);
+      final response = await dio.post<Map<String, dynamic>>(
+        'http://api.example.com/api/register',
+        data: {'name': 'Test'},
+      );
+
+      expect(response.statusCode, 200);
+      expect(response.data?['ok'], isTrue);
+      expect(interceptor.callLog, hasLength(1));
+      expect(interceptor.callLog.single.path, '/api/register');
+    });
+
+    test('re-registering a Dio route replaces the previous response', () async {
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'dio-replace-1',
+            'method': 'GET',
+            'path': '/api/replace',
+            'response': {
+              'status': 200,
+              'body': {'version': 1},
+            },
+          }),
+        },
+      );
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'dio-replace-2',
+            'method': 'GET',
+            'path': '/api/replace',
+            'response': {
+              'status': 202,
+              'body': {'version': 2},
+            },
+          }),
+        },
+      );
+
+      expect(interceptor.routes, hasLength(1));
+      expect(interceptor.routes.single.id, 'dio-replace-2');
+
+      final dio = Dio()..interceptors.add(interceptor);
+      final response = await dio.get<Map<String, dynamic>>(
+        'http://api.example.com/api/replace',
+      );
+
+      expect(response.statusCode, 202);
+      expect(response.data?['version'], 2);
+    });
+
+    test('newly injected Dio interceptor inherits registered routes', () async {
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'preserved-route',
+            'method': 'GET',
+            'path': '/api/preserved',
+            'response': {
+              'status': 200,
+              'body': {'preserved': true},
+            },
+          }),
+        },
+      );
+
+      final replacement = FliwrightDioMockInterceptor();
+      DioMockExtension.setInterceptor(replacement);
+
+      expect(replacement.routes, hasLength(1));
+      expect(replacement.routes.single.id, 'preserved-route');
+
+      final dio = Dio()..interceptors.add(replacement);
+      final response = await dio.get<Map<String, dynamic>>(
+        'https://dev.ex.io/api/preserved',
+      );
+
+      expect(response.statusCode, 200);
+      expect(response.data?['preserved'], isTrue);
+    });
+
+    test('forwards Dio requests to tool mock controller', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final requests = <Map<String, dynamic>>[];
+      server.listen((request) async {
+        final body = await utf8.decoder.bind(request).join();
+        requests.add(jsonDecode(body) as Map<String, dynamic>);
+        request.response
+          ..statusCode = 200
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'matched': true,
+            'status': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': {'fromTool': true},
+          }));
+        await request.response.close();
+      });
+
+      try {
+        await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.setController',
+          {'url': 'http://127.0.0.1:${server.port}'},
+        );
+
+        final dio = Dio()..interceptors.add(interceptor);
+        final response = await dio.get<Map<String, dynamic>>(
+          'https://dev.ex.io/api/tool',
+        );
+
+        expect(response.statusCode, 200);
+        expect(response.data?['fromTool'], isTrue);
+        expect(requests, hasLength(1));
+        expect(requests.single['method'], 'GET');
+        expect(requests.single['path'], '/api/tool');
+      } finally {
+        await server.close(force: true);
+      }
     });
   });
 }

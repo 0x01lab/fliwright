@@ -2,23 +2,16 @@
 module: "FormHelper"
 package: "@fliwright/core"
 source: "src/FormHelper.ts"
-tests: "tests/FormHelper.test.ts"
 generated: "2026-06-02"
 ---
 
 # FormHelper
 
-> Discover form fields on the current screen, infer semantic types, generate values, and type them in.
+> Auto-fills Flutter forms by extracting fields, inferring semantic types, generating fake data, and filling via Locator actions.
 
 ## Overview
 
-`FormHelper` orchestrates the form-filling pipeline:
-
-1. Extract fields via `ext.fliwright.formExtract`.
-2. Build a pipeline of `SemanticInferrer`, `FakerGenerator`, and `SkillRegistry` (with rules loaded by `JsonRuleLoader`).
-3. For each field: prefer a matching skill, else use Faker.
-
-The same pipeline powers `analyze()` (preview without typing) and `fillFields(hints, options)` (only fill fields whose hint/label contains one of the given substrings).
+`FormHelper` orchestrates the full form-filling pipeline: extract fields via `ext.fliwright.extractForm`, infer semantic types via `SemanticInferrer`, generate values via `FakerGenerator` or `SkillRegistry`, and fill via `Locator.fill/click`. Supports text inputs, checkboxes, radio buttons, and select dropdowns with fallback selector strategies.
 
 ## Constructor
 
@@ -28,44 +21,19 @@ constructor(sendRequest: SendRequest)
 
 ## Public Methods
 
-### `fill(options?): Promise<FormFillResult>`
+### `fill(options?: FormHelperOptions): Promise<FormFillResult>`
 
-Extracts fields, generates values, types each into the bridge.
+Extracts all form fields, generates values, and fills them. Returns counts of filled/skipped/errors and per-field details.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `options.locale` | string | Locale passed to skills (e.g. `'zh_CN'`) |
-| `options.scope` | `SelectorInput` | Restrict extraction to a subtree |
-| `options.skills` | `FormSkill[]` | Pre-built skill list (skip JSON loader) |
-| `options.rulesFile` | string | Override path to a rules JSON file |
-| `options.rulesDir` | string | Override path to a rules directory |
+### `analyze(options?: FormHelperOptions): Promise<FormAnalyzeResult>`
 
-**Returns:** `Promise<FormFillResult>` — `{ filled, skipped, errors, fields: [...] }`.
+Extracts fields and generates values without filling. Useful for preview.
 
-### `analyze(options?): Promise<FormAnalyzeResult>`
+### `fillFields(fieldHints: string[], options?: FormHelperOptions): Promise<FormFillResult>`
 
-Same pipeline as `fill`, but does not type. Returns the proposed value per field.
-
-### `fillFields(fieldHints, options?): Promise<FormFillResult>`
-
-Only fill fields whose `hintText`/`label` includes one of the supplied substrings. Other fields are marked `status: 'skipped'` with `reason: 'not selected'`.
-
-## Example
-
-```typescript
-const result = await driver.page.formHelper.fill({ locale: 'zh_CN' });
-console.log(`Filled ${result.filled}, skipped ${result.skipped}`);
-
-const analysis = await driver.page.formHelper.analyze();
-for (const f of analysis.fields) {
-  console.log(f.id, f.semanticType, '→', f.generatedValue);
-}
-
-await driver.page.formHelper.fillFields(['邮箱', '密码']);
-```
+Fills only fields whose hintText or label matches one of the provided hints.
 
 ## Related
 
-- **Depends on:** [SemanticInferrer](./SemanticInferrer.md), [FakerGenerator](./FakerGenerator.md), [SkillRegistry](./SkillRegistry.md), [JsonRuleLoader](./JsonRuleLoader.md)
-- **Pipeline:** [form-filling-pipeline.md](../form-filling-pipeline.md)
-- **Source:** `packages/fliwright-core/src/FormHelper.ts`
+- **Depends on:** [SemanticInferrer](./SemanticInferrer.md), [FakerGenerator](./FakerGenerator.md), [SkillRegistry](./SkillRegistry.md), [JsonRuleLoader](./JsonRuleLoader.md), [Locator](./Locator.md)
+- **Source:** `src/FormHelper.ts`

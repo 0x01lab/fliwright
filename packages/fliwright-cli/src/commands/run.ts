@@ -1,3 +1,4 @@
+import { ToolMockServer } from '@fliwright/core';
 import { resolveVmUrl } from '../vm-discovery.js';
 import { loadConfig } from '../config.js';
 import { formatPretty, formatJson, formatJunit, type CliRunResult } from '../reporter.js';
@@ -47,17 +48,26 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
 
   deps.onVmResolved?.(vmUrl);
 
-  const vitestResult = await runVitest(testPattern, vmUrl, cwd);
-  const formatted = formatOutput(vitestResult, reporter);
+  const mockServer = new ToolMockServer();
+  const mockControllerUrl = await mockServer.start();
+  await mockServer.loadRules(join(cwd, '.fliwright/mocks'));
 
-  console.log(formatted);
-  return vitestResult;
+  try {
+    const vitestResult = await runVitest(testPattern, vmUrl, cwd, mockControllerUrl);
+    const formatted = formatOutput(vitestResult, reporter);
+
+    console.log(formatted);
+    return vitestResult;
+  } finally {
+    await mockServer.stop();
+  }
 }
 
 async function runVitest(
   testPattern: string,
   vmUrl: string,
   cwd: string,
+  mockControllerUrl: string,
 ): Promise<CliRunResult> {
   const vitestCli = require.resolve('vitest/vitest.mjs');
   const failureContextDir = await mkdtemp(join(tmpdir(), 'fliwright-cli-failures-'));
@@ -69,6 +79,7 @@ async function runVitest(
       {
         ...process.env,
         FLIWRIGHT_VM_URL: vmUrl,
+        FLIWRIGHT_MOCK_CONTROLLER_URL: mockControllerUrl,
         FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: failureContextPath,
       },
       cwd,

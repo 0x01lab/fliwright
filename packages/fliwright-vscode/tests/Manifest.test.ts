@@ -22,6 +22,7 @@ describe('VS Code manifest', () => {
       'fliwright.stopSandbox',
       'fliwright.reloadMocks',
       'fliwright.applyMockRule',
+      'fliwright.stopMockRule',
       'fliwright.applyDefaultMocks',
       'fliwright.openMockConfig',
       'fliwright.createMockConfig',
@@ -31,6 +32,7 @@ describe('VS Code manifest', () => {
       'fliwright.reloadFormRules',
       'fliwright.openFormRules',
       'fliwright.createFormRules',
+      'fliwright.insertFormFieldSelector',
       'fliwright.configureMcp',
     ]) {
       expect(commands.has(command), command).toBe(true);

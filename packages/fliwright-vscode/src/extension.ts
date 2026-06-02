@@ -11,10 +11,10 @@ import { VitestRunner } from './runner/VitestRunner.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceUrl } from './session/VmServiceDiscovery.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
-import { SandboxService } from './sandbox/SandboxService.js';
+import { formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
-import type { FailureTreeEntry, FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunEntry, StateProviderEntry, TestFileEntry } from './types.js';
+import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunEntry, StateProviderEntry, TestFileEntry } from './types.js';
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
 import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
@@ -92,6 +92,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (url === undefined) return;
         const state = await session.connect(url);
         if (state.status === 'connected') {
+          await configureMocksAfterConnect();
           vscode.window.showInformationMessage(`Connected to ${state.url}`);
         } else if (state.status === 'error') {
           throw new Error(state.message);
@@ -115,6 +116,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (selection === 'Connect') {
           const state = await session.connect(url);
           if (state.status === 'error') throw new Error(state.message);
+          if (state.status === 'connected') await configureMocksAfterConnect();
         }
       });
     }),
@@ -174,10 +176,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.applyMockRule', async (node?: MockRuleEntry) => {
       await runCommand('Apply Mock Rule', async () => {
         if (!node || node.kind !== 'rule') throw new Error('Select a mock rule to apply.');
+        output.appendLine(`Applying mock ${formatMockRuleDebug(node)}`);
         const applied = await sandboxService.applyRule(session.connectedDriver, node);
         mockTree.setAppliedRules(sandboxService.getAppliedRules());
         output.appendLine(`Applied mock ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
+        await appendMockControllerDebug();
         vscode.window.showInformationMessage(`Applied ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.stopMockRule', async (node?: MockRuleEntry) => {
+      await runCommand('Stop Mock Rule', async () => {
+        if (!node || node.kind !== 'rule') throw new Error('Select an active mock rule to stop.');
+        const stopped = await sandboxService.stopRule(session.connectedDriver, node);
+        mockTree.setAppliedRules(sandboxService.getAppliedRules());
+        if (!stopped) {
+          output.appendLine(`Skipped stopping inactive mock ${formatMockRuleDebug(node)}`);
+          vscode.window.showWarningMessage(`Mock rule is not active: ${node.method} ${node.endpoint} -> ${node.rule.name}`);
+          return;
+        }
+        output.appendLine(`Stopped mock ${node.method} ${node.endpoint} -> ${node.rule.name}`);
+        await appendMockControllerDebug();
+        vscode.window.showInformationMessage(`Stopped ${node.method} ${node.endpoint} -> ${node.rule.name}`);
       });
     }),
     vscode.commands.registerCommand('fliwright.applyDefaultMocks', async () => {
@@ -185,27 +204,53 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (!mockTree.currentResult) await mockTree.refresh();
         const discovery = mockTree.currentResult;
         if (!discovery) throw new Error('Open a workspace to use Fliwright.');
+        for (const endpoint of discovery.endpoints) {
+          const rule = endpoint.defaultRule
+            ? endpoint.endpointFile.rules.find((candidate) => candidate.name === endpoint.defaultRule) ?? endpoint.endpointFile.rules[0]
+            : endpoint.endpointFile.rules[0];
+          if (rule) {
+            output.appendLine(`Applying default mock ${formatMockRuleDebug({
+              kind: 'rule',
+              uri: endpoint.uri,
+              endpoint: endpoint.endpointFile.endpoint,
+              method: endpoint.endpointFile.method,
+              rule,
+              isDefault: true,
+            })}`);
+          }
+        }
         const result = await sandboxService.applyDefaultMocks(session.connectedDriver, discovery);
         mockTree.setAppliedRules(sandboxService.getAppliedRules());
         output.appendLine(`Applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);
+        await appendMockControllerDebug();
         vscode.window.showInformationMessage(`Applied ${result.applied.length} default mock route(s).`);
       });
     }),
     vscode.commands.registerCommand('fliwright.stopSandbox', async () => {
-      await runCommand('Clear Mock Routes', async () => {
+      await runCommand('Stop All Mock Routes', async () => {
         const count = await sandboxService.clear(session.connectedDriver);
         mockTree.setAppliedRules([]);
-        output.appendLine(`Cleared mock routes (${count} tracked route(s)).`);
-        vscode.window.showInformationMessage('Cleared mock routes.');
+        output.appendLine(`Stopped all mock routes (${count} tracked route(s)).`);
+        vscode.window.showInformationMessage('Stopped all mock routes.');
       });
     }),
     vscode.commands.registerCommand('fliwright.analyzeForm', async (node?: FormRulesEntry) => {
       await runCommand('Analyze Current Form', async () => {
         const root = requireWorkspaceRoot();
-        const result = await formHelperService.analyze(session.connectedDriver, root, formRulesNode(node));
+        const result = await withWindowProgress('Fliwright: analyzing current form fields...', () => (
+          formHelperService.analyze(session.connectedDriver, root, formRulesNode(node))
+        ));
         formTree.setLastSummary(formHelperService.getLastSummary());
+        formTree.setLastAnalyze(formHelperService.getLastAnalyze());
         await showFormPreview(formHelperService, result, 'Analyze Current Form');
         output.appendLine(`Analyzed ${result.fields.length} form field(s) with ${formRulesFileName(formRulesNode(node))}.`);
+        vscode.window.showInformationMessage(`Analyzed ${result.fields.length} form field(s).`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.insertFormFieldSelector', async (node?: FormAnalyzeFieldEntry) => {
+      await runCommand('Insert Form Field Selector', async () => {
+        if (!node || node.kind !== 'formAnalyzeField') throw new Error('Select a form field from Last Analyze.');
+        await insertFormFieldRuleAtCursor(node);
       });
     }),
     vscode.commands.registerCommand('fliwright.fillForm', async () => {
@@ -295,23 +340,66 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await runCommand('Fill Current Form', async () => {
       const root = requireWorkspaceRoot();
       if (loadConfig().formPreviewBeforeFill) {
-        const analysis = await formHelperService.analyze(session.connectedDriver, root, node);
+        const analysis = await withWindowProgress('Fliwright: analyzing current form fields...', () => (
+          formHelperService.analyze(session.connectedDriver, root, node)
+        ));
         formTree.setLastSummary(formHelperService.getLastSummary());
+        formTree.setLastAnalyze(formHelperService.getLastAnalyze());
         const selectedHints = await showFormPreview(formHelperService, analysis, 'Fill Current Form', true);
         if (!selectedHints) return;
-        const result = await formHelperService.fillSelected(session.connectedDriver, root, selectedHints, node);
+        const result = await withWindowProgress('Fliwright: filling selected form fields...', () => (
+          formHelperService.fillSelected(session.connectedDriver, root, selectedHints, node)
+        ));
         formTree.setLastSummary(formHelperService.getLastSummary());
+        formTree.setLastAnalyze(formHelperService.getLastAnalyze());
         output.appendLine(`Filled selected form fields with ${formRulesFileName(node)}: ${result.filled} filled, ${result.skipped} skipped, ${result.errors.length} errors.`);
         appendFormFillDebug(result);
         vscode.window.showInformationMessage(`Filled ${result.filled} field(s), skipped ${result.skipped}, errors ${result.errors.length}.`);
         return;
       }
-      const result = await formHelperService.fill(session.connectedDriver, root, node);
+      const result = await withWindowProgress('Fliwright: filling current form...', () => (
+        formHelperService.fill(session.connectedDriver, root, node)
+      ));
       formTree.setLastSummary(formHelperService.getLastSummary());
+      formTree.setLastAnalyze(formHelperService.getLastAnalyze());
       output.appendLine(`Filled form with ${formRulesFileName(node)}: ${result.filled} filled, ${result.skipped} skipped, ${result.errors.length} errors.`);
       appendFormFillDebug(result);
       vscode.window.showInformationMessage(`Filled ${result.filled} field(s), skipped ${result.skipped}, errors ${result.errors.length}.`);
     });
+  }
+
+  async function configureMocksAfterConnect(): Promise<void> {
+    const config = loadConfig();
+    if (!config.autoStartMockController && !config.autoApplyDefaultMocksOnConnect) return;
+
+    if (config.autoStartMockController) {
+      const url = await sandboxService.ensureController(session.connectedDriver);
+      output.appendLine(`Mock controller ready: ${url}`);
+    }
+
+    if (config.autoApplyDefaultMocksOnConnect) {
+      if (!mockTree.currentResult) await mockTree.refresh();
+      const discovery = mockTree.currentResult;
+      if (!discovery) return;
+      const result = await sandboxService.applyDefaultMocks(session.connectedDriver, discovery);
+      mockTree.setAppliedRules(sandboxService.getAppliedRules());
+      output.appendLine(`Auto-applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);
+      await appendMockControllerDebug();
+    }
+  }
+
+  async function appendMockControllerDebug(): Promise<void> {
+    const controllerUrl = sandboxService.getControllerUrl();
+    output.appendLine(`Mock controller: ${controllerUrl ?? '(not configured)'}`);
+    const routes = await session.connectedDriver.mock.listRoutes();
+    if (routes.length === 0) {
+      output.appendLine('Mock controller routes: (none)');
+      return;
+    }
+    output.appendLine(`Mock controller routes (${routes.length}):`);
+    for (const route of routes) {
+      output.appendLine(`  ${(route.method ?? '*').toUpperCase()} ${route.path}`);
+    }
   }
 
   async function runTests(node?: TestFileEntry, workspace = false): Promise<void> {
@@ -392,6 +480,32 @@ function formRulesNode(node?: FormRulesEntry): FormRulesEntry | undefined {
   return node?.kind === 'formRulesFile' ? node : undefined;
 }
 
+async function insertFormFieldRuleAtCursor(node: FormAnalyzeFieldEntry): Promise<void> {
+  const active = vscode.window.activeTextEditor;
+  if (!active) throw new Error('Open a form rules JSON file and place the cursor where the selector should be inserted.');
+
+  const snippet = JSON.stringify(formRuleSnippet(node.field), null, 2);
+  const selection = active.selection;
+  await active.edit((builder) => {
+    builder.insert(selection.active, snippet);
+  });
+  vscode.window.showInformationMessage(`Inserted selector ${node.field.selector}`);
+}
+
+function formRuleSnippet(field: FormAnalyzeResult['fields'][number]): {
+  match: { selector: string };
+  type: 'PRESET_SKILL';
+  data: string[];
+} {
+  return {
+    match: {
+      selector: field.selector,
+    },
+    type: 'PRESET_SKILL',
+    data: field.generatedValue ? [field.generatedValue] : [],
+  };
+}
+
 async function showFormPreview(
   service: FormHelperService,
   result: FormAnalyzeResult,
@@ -447,4 +561,14 @@ async function runCommand(label: string, action: () => Promise<void>): Promise<v
       if (selection === 'Open Output') output.show();
     });
   }
+}
+
+async function withWindowProgress<T>(title: string, task: () => Promise<T>): Promise<T> {
+  return vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Window,
+      title,
+    },
+    task,
+  );
 }

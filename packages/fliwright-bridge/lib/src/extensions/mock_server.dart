@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import '../bridge.dart';
@@ -23,7 +24,8 @@ class MockRoute {
   });
 
   bool matches(String method, String path) {
-    if (this.method != null && this.method!.toUpperCase() != method.toUpperCase()) {
+    if (this.method != null &&
+        this.method!.toUpperCase() != method.toUpperCase()) {
       return false;
     }
     if (pathPattern.endsWith('/*')) {
@@ -67,6 +69,10 @@ class MockServerExtension {
 
   static int? get serverPort => _server?.port;
 
+  static void _log(String message) {
+    developer.log(message, name: 'fliwright.mock');
+  }
+
   static void register(ExtensionRegistry registry) {
     registry.register('ext.fliwright.mock.addRoute', _addRoute);
     registry.register('ext.fliwright.mock.removeRoute', _removeRoute);
@@ -76,17 +82,26 @@ class MockServerExtension {
     registry.register('ext.fliwright.mock.getCalls', _getCalls);
     registry.register('ext.fliwright.mock.clearCalls', _clearCalls);
     registry.register('ext.fliwright.mock.testRequest', _testRequest);
+    registry.register('ext.fliwright.mock.debugState', _debugState);
+    registry.register('ext.fliwright.mock.setController', _setController);
   }
 
   static Future<void> startServer({int port = 0}) async {
-    if (_server != null) return;
+    if (_server != null) {
+      _log('Mock server already running on 127.0.0.1:${_server!.port}');
+      return;
+    }
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+    _log('Mock server started on 127.0.0.1:${_server!.port}');
     _server!.listen(_handleRequest);
   }
 
   static Future<void> stopServer() async {
     final server = _server;
     _server = null;
+    if (server != null) {
+      _log('Stopping mock server on 127.0.0.1:${server.port}');
+    }
     await server?.close(force: true);
   }
 
@@ -97,7 +112,8 @@ class MockServerExtension {
     await stopServer();
   }
 
-  static Future<Map<String, dynamic>> _addRoute(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _addRoute(
+      Map<String, String> params) async {
     final routeJson = params['route'];
     if (routeJson == null || routeJson.isEmpty) {
       return {'error': 'Missing parameter: route'};
@@ -106,9 +122,12 @@ class MockServerExtension {
       final decoded = jsonDecode(routeJson) as Map<String, dynamic>;
       final response = decoded['response'] as Map<String, dynamic>? ?? {};
       final route = MockRoute(
-        id: decoded['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        id: decoded['id'] as String? ??
+            DateTime.now().millisecondsSinceEpoch.toString(),
         method: decoded['method'] as String?,
-        pathPattern: decoded['path'] as String? ?? decoded['pathPattern'] as String? ?? '/',
+        pathPattern: decoded['path'] as String? ??
+            decoded['pathPattern'] as String? ??
+            '/',
         status: response['status'] as int? ?? 200,
         headers: (response['headers'] as Map<String, dynamic>?)?.map(
               (k, v) => MapEntry(k, v.toString()),
@@ -117,36 +136,57 @@ class MockServerExtension {
         body: response['body'],
         delayMs: response['delay'] as int? ?? 0,
       );
+      final beforeReplace = _routes.length;
+      _routes.removeWhere((existing) => _sameRouteKey(existing, route));
+      final replaced = beforeReplace - _routes.length;
       _routes.add(route);
+      _log(
+        'Registered route ${route.method ?? '*'} ${route.pathPattern} '
+        'status=${route.status} delayMs=${route.delayMs} replaced=$replaced routes=${_routes.length}',
+      );
       return {'success': true, 'id': route.id};
     } catch (e) {
+      _log('Failed to register route: $e');
       return {'error': 'Invalid route JSON: $e'};
     }
   }
 
-  static Future<Map<String, dynamic>> _removeRoute(Map<String, String> params) async {
+  static bool _sameRouteKey(MockRoute a, MockRoute b) {
+    return a.pathPattern == b.pathPattern &&
+        (a.method ?? '').toUpperCase() == (b.method ?? '').toUpperCase();
+  }
+
+  static Future<Map<String, dynamic>> _removeRoute(
+      Map<String, String> params) async {
     final id = params['id'];
     final path = params['path'];
     if (id != null) {
       final removed = _routes.length;
       _routes.removeWhere((r) => r.id == id);
+      _log(
+          'Removed route id=$id removed=${removed != _routes.length} routes=${_routes.length}');
       return {'removed': removed != _routes.length};
     }
     if (path != null) {
       final removed = _routes.length;
       _routes.removeWhere((r) => r.pathPattern == path);
+      _log(
+          'Removed route path=$path removed=${removed != _routes.length} routes=${_routes.length}');
       return {'removed': removed != _routes.length};
     }
     return {'error': 'Missing parameter: id or path'};
   }
 
-  static Future<Map<String, dynamic>> _clearRoutes(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _clearRoutes(
+      Map<String, String> params) async {
     final count = _routes.length;
     _routes.clear();
+    _log('Cleared $count route(s)');
     return {'cleared': count};
   }
 
-  static Future<Map<String, dynamic>> _listRoutes(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _listRoutes(
+      Map<String, String> params) async {
     final routes = _routes
         .map((r) => {
               'id': r.id,
@@ -157,12 +197,15 @@ class MockServerExtension {
     return {'routes': routes};
   }
 
-  static Future<Map<String, dynamic>> _setPassthrough(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _setPassthrough(
+      Map<String, String> params) async {
     _passthrough = params['enabled'] == 'true';
+    _log('Passthrough set to $_passthrough');
     return {'passthrough': _passthrough};
   }
 
-  static Future<Map<String, dynamic>> _getCalls(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _getCalls(
+      Map<String, String> params) async {
     final pathFilter = params['path'];
     var calls = _callLog.toList();
     if (pathFilter != null) {
@@ -171,17 +214,48 @@ class MockServerExtension {
     return {'calls': calls.map((c) => c.toJson()).toList()};
   }
 
-  static Future<Map<String, dynamic>> _clearCalls(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _clearCalls(
+      Map<String, String> params) async {
     final count = _callLog.length;
     _callLog.clear();
+    _log('Cleared $count recorded call(s)');
     return {'cleared': count};
+  }
+
+  static Future<Map<String, dynamic>> _debugState(
+      Map<String, String> params) async {
+    return {
+      'mode': 'http',
+      'serverPort': _server?.port,
+      'passthrough': _passthrough,
+      'routes': _routes
+          .map((route) => {
+                'id': route.id,
+                'method': route.method,
+                'path': route.pathPattern,
+                'status': route.status,
+              })
+          .toList(),
+      'calls': _callLog.length,
+    };
+  }
+
+  static Future<Map<String, dynamic>> _setController(
+      Map<String, String> params) async {
+    return {
+      'error':
+          'Tool mock controller is only supported by FliwrightDioMockInterceptor. Use FliwrightBridge.initForDioMock().'
+    };
   }
 
   static Future<void> _handleRequest(HttpRequest request) async {
     final originalUrl = request.headers.value('x-original-url');
-    final uri = originalUrl != null
-        ? Uri.parse(originalUrl)
-        : request.uri;
+    final uri = originalUrl != null ? Uri.parse(originalUrl) : request.uri;
+    _log(
+      'Incoming ${request.method} ${uri.path}'
+      '${uri.hasQuery ? '?${uri.query}' : ''} '
+      'rawUri=${request.uri} originalUrl=${originalUrl ?? '-'}',
+    );
 
     // Read body once — HttpRequest is a single-subscription stream.
     // contentLength is -1 when chunked transfer encoding is used (e.g. via
@@ -211,10 +285,18 @@ class MockServerExtension {
         );
 
     if (route != null) {
+      _log(
+          'Matched route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status}');
       await _respondWithRoute(request, route);
     } else if (_passthrough) {
+      _log(
+          'No route matched ${request.method} ${uri.path}; passthrough enabled');
       await _passthroughRequest(request, uri, requestBody);
     } else {
+      _log(
+        'No route matched ${request.method} ${uri.path}; returning 404. '
+        'Registered routes: ${_routes.map((r) => '${r.method ?? '*'} ${r.pathPattern}').join(', ')}',
+      );
       request.response
         ..statusCode = 404
         ..headers.contentType = ContentType.json
@@ -223,7 +305,8 @@ class MockServerExtension {
     }
   }
 
-  static Future<void> _respondWithRoute(HttpRequest request, MockRoute route) async {
+  static Future<void> _respondWithRoute(
+      HttpRequest request, MockRoute route) async {
     if (route.delayMs > 0) {
       await Future.delayed(Duration(milliseconds: route.delayMs));
     }
@@ -254,6 +337,7 @@ class MockServerExtension {
     await HttpOverrides.runWithHttpOverrides(() async {
       final client = HttpClient();
       try {
+        _log('Passthrough request ${request.method} $originalUri');
         final outgoing = await client.openUrl(request.method, originalUri);
         // Copy headers but strip internal proxy headers.
         const internalHeaders = {'x-original-url'};
@@ -277,6 +361,7 @@ class MockServerExtension {
         });
         await incoming.pipe(proxyResponse);
       } catch (e) {
+        _log('Passthrough failed for ${request.method} $originalUri: $e');
         request.response
           ..statusCode = 502
           ..headers.contentType = ContentType.json
@@ -292,7 +377,8 @@ class MockServerExtension {
   /// HttpClient (subject to HttpOverrides) and returns the response.
   /// This lets E2E tests verify that the mock proxy is intercepting traffic
   /// without depending on the UI layer or third-party HTTP clients like Dio.
-  static Future<Map<String, dynamic>> _testRequest(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _testRequest(
+      Map<String, String> params) async {
     final url = params['url'] ?? 'http://test.local/ping';
     final method = (params['method'] ?? 'GET').toUpperCase();
     try {
@@ -325,6 +411,7 @@ class MockServerExtension {
     }
   }
 }
+
 /// Used by [_passthroughRequest] to bypass the global [FliwrightHttpOverrides]
 /// and connect directly to the real upstream server.
 class _NoProxyHttpOverrides extends HttpOverrides {

@@ -32,6 +32,7 @@ class FliwrightBridge {
     _router = null;
     await RecordingExtension.reset();
     await MockServerExtension.reset();
+    DioMockExtension.reset();
     FliwrightHttpOverrides.uninstall();
   }
 
@@ -109,8 +110,7 @@ class FliwrightBridge {
     });
 
     _registry.register('ext.fliwright.handshake', (params) async {
-      final clientVersion =
-          int.tryParse(params['protocolVersion'] ?? '0') ?? 0;
+      final clientVersion = int.tryParse(params['protocolVersion'] ?? '0') ?? 0;
       return {
         'status': 'ok',
         'protocolVersion': 1,

@@ -1,6 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { MockRule, MockRuleEntry, MockEndpointConfig, MockIndex, MockRouteResponse } from './types.js';
+
+const FALLBACK_DEFAULT_RULE = 'success';
 
 export class MockRuleStore {
   private entries = new Map<string, MockRuleEntry>();
@@ -19,50 +21,84 @@ export class MockRuleStore {
 
   /**
    * Load mock configurations from a directory.
-   * Reads mock-index.json for the default rule and file list,
-   * then parses each endpoint config file.
-   * Silently skips if the directory or index file doesn't exist.
+   * Reads mock-index.json for the default rule and file list when present.
+   * If no index exists, scans api/*.json and uses "success" as the default
+   * active rule, falling back to the first rule in each endpoint file.
    */
   async loadFromDirectory(mockDir: string): Promise<void> {
     const indexPath = join(mockDir, 'mock-index.json');
 
-    let indexJson: string;
-    try {
-      indexJson = await readFile(indexPath, 'utf-8');
-    } catch {
-      // Index file missing — skip silently
-      return;
-    }
+    const source = await this.resolveLoadSource(mockDir, indexPath);
+    if (!source) return;
 
-    let index: MockIndex;
-    try {
-      index = JSON.parse(indexJson) as MockIndex;
-      // Validate required fields
-      if (!index.files || !Array.isArray(index.files)) {
-        console.warn('[MockRuleStore] Index missing "files" array, skipping');
-        return;
-      }
-      if (!index.defaultRule) {
-        console.warn('[MockRuleStore] Index missing "defaultRule", skipping');
-        return;
-      }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      console.warn(`[MockRuleStore] Invalid index JSON: ${message}, skipping`);
-      return;
-    }
-
-    for (const file of index.files) {
+    for (const file of source.files) {
       const filePath = join(mockDir, file);
       try {
         const content = await readFile(filePath, 'utf-8');
         const config = JSON.parse(content) as MockEndpointConfig;
-        this.registerEndpoint(config, index.defaultRule);
+        this.registerEndpoint(config, source.defaultRule);
       } catch (e) {
         // Skip files that fail to parse — log a warning
         const message = e instanceof Error ? e.message : String(e);
         console.warn(`[MockRuleStore] Skipping ${file}: ${message}`);
       }
+    }
+  }
+
+  private async resolveLoadSource(
+    mockDir: string,
+    indexPath: string,
+  ): Promise<{ defaultRule: string; files: string[] } | null> {
+    let indexJson: string | null = null;
+    try {
+      indexJson = await readFile(indexPath, 'utf-8');
+    } catch {
+      return this.fallbackScanApiDirectory(mockDir);
+    }
+
+    try {
+      const index = JSON.parse(indexJson) as MockIndex;
+      if (!index.files || !Array.isArray(index.files)) {
+        console.warn('[MockRuleStore] Index missing "files" array, skipping');
+        return null;
+      }
+      if (!index.defaultRule) {
+        console.warn('[MockRuleStore] Index missing "defaultRule", using "success"');
+      }
+      return {
+        defaultRule: index.defaultRule || FALLBACK_DEFAULT_RULE,
+        files: index.files,
+      };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.warn(`[MockRuleStore] Invalid index JSON: ${message}, skipping`);
+      return null;
+    }
+  }
+
+  private async fallbackScanApiDirectory(
+    mockDir: string,
+  ): Promise<{ defaultRule: string; files: string[] } | null> {
+    try {
+      const entries = await readdir(join(mockDir, 'api'), { withFileTypes: true });
+      const files = entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+        .map((entry) => `api/${entry.name}`)
+        .sort();
+
+      if (files.length === 0) {
+        console.warn('[MockRuleStore] No mock-index.json and no api/*.json files found');
+        return null;
+      }
+
+      console.warn(
+        `[MockRuleStore] mock-index.json not found; auto-loading ${files.length} api/*.json file(s) with defaultRule="${FALLBACK_DEFAULT_RULE}"`,
+      );
+      return { defaultRule: FALLBACK_DEFAULT_RULE, files };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.warn(`[MockRuleStore] mock-index.json not found and api directory could not be scanned: ${message}`);
+      return null;
     }
   }
 
