@@ -3,8 +3,8 @@ import { Page } from '../src/Page.js';
 
 function createMockSendRequest(responses: Record<string, unknown>) {
   return vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
-    if (method === 'ext.fliwright.inspect') {
-      return responses['inspect'] ?? { widgets: [], count: 0 };
+    if (method === 'ext.fliwright.resolve') {
+      return responses['resolve'] ?? { matches: [], widgets: [], count: 0 };
     }
     return responses[method] ?? {};
   });
@@ -37,6 +37,6 @@ describe('Page', () => {
   it('waitFor throws on timeout', async () => {
     const sendRequest = vi.fn().mockResolvedValue({ widgets: [], count: 0 });
     const page = new Page(sendRequest);
-    await expect(page.waitFor('text=Never', 200)).rejects.toThrow('Timeout waiting for selector: text=Never');
+    await expect(page.waitFor('text=Never', 200)).rejects.toThrow('"match":{"text":"Never"}');
   });
 });

@@ -213,6 +213,39 @@ void main() {
       expect(idWidgets.first['id'], id);
       expect(idWidgets.first['text'], 'Login');
     });
+
+    testWidgets('resolve semanticIdentifier matches declaring Semantics only',
+        (tester) async {
+      InspectExtension.register(FliwrightBridge.registry);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Semantics(
+              identifier: 'login.username',
+              label: 'Username / Email',
+              child: TextField(
+                decoration: InputDecoration(hintText: 'Username / Email'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.resolve',
+        {
+          'selector': '{"match":{"semanticIdentifier":"login.username"}}',
+          'strict': 'true',
+          'visible': 'any',
+        },
+      );
+
+      expect(result['success'], isTrue);
+      expect(result['count'], 1);
+      final matches = result['matches'] as List;
+      expect(matches.first, containsPair('type', 'Semantics'));
+      expect(matches.first, containsPair('semanticsId', 'login.username'));
+    });
   });
 
   group('ScrollExtension', () {

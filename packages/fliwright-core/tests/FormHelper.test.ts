@@ -59,10 +59,21 @@ const sampleFields = {
     ],
     count: 3,
   },
-  'ext.fliwright.inspect': { widgets: [inspectWidget], count: 1 },
-  'ext.fliwright.click': { success: true },
-  'ext.fliwright.type': { success: true, currentText: '' },
+  'ext.fliwright.resolve': { matches: [inspectWidget], widgets: [inspectWidget], count: 1 },
+  'ext.fliwright.action': { success: true, currentText: '' },
 };
+
+function fillCalls(sendRequest: ReturnType<typeof createMockSendRequest>) {
+  return sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.action' && (c[1] as any).action === 'fill');
+}
+
+function tapCalls(sendRequest: ReturnType<typeof createMockSendRequest>) {
+  return sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.action' && (c[1] as any).action === 'tap');
+}
+
+function selectorAst(params: unknown) {
+  return JSON.parse((params as Record<string, string>).selector);
+}
 
 describe('FormHelper', () => {
   let sendRequest: ReturnType<typeof createMockSendRequest>;
@@ -165,9 +176,10 @@ describe('FormHelper', () => {
           status: 'filled',
           generatedValue: 'Password123!',
         });
-        const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+        const typeCalls = fillCalls(sendRequest);
         expect(typeCalls).toHaveLength(1);
-        expect(typeCalls[0][1]).toMatchObject({ selector: 'name=password', replaceAll: 'true' });
+        expect(selectorAst(typeCalls[0][1])).toEqual({ match: { name: 'password' } });
+        expect(typeCalls[0][1]).toMatchObject({ replaceAll: 'true' });
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -194,10 +206,10 @@ describe('FormHelper', () => {
           ancestorKey: 'loginForm',
         });
         const typeSelectors = sendRequest.mock.calls
-          .filter(c => c[0] === 'ext.fliwright.type')
-          .map(c => (c[1] as Record<string, unknown>).selector);
-        expect(typeSelectors).toContain('name=email');
-        expect(typeSelectors).not.toContain('id=w3');
+          .filter(c => c[0] === 'ext.fliwright.action' && (c[1] as any).action === 'fill')
+          .map(c => selectorAst(c[1]));
+        expect(typeSelectors).toContainEqual({ match: { name: 'email' } });
+        expect(typeSelectors).not.toContainEqual({ kind: 'id', value: 'w3' });
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -206,8 +218,8 @@ describe('FormHelper', () => {
     it('calls type for each filled field', async () => {
       await helper.fill({ skipObscureFields: true });
       const extractCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.extractForm');
-      const clickCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.click');
-      const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+      const clickCalls = tapCalls(sendRequest);
+      const typeCalls = fillCalls(sendRequest);
       expect(extractCalls).toHaveLength(1);
       expect(clickCalls).toHaveLength(0);
       expect(typeCalls).toHaveLength(2);
@@ -251,15 +263,7 @@ describe('FormHelper', () => {
         if (method === 'ext.fliwright.extractForm') {
           return Promise.resolve({ fields: [selectField], count: 1 });
         }
-        if (method === 'ext.fliwright.inspect') {
-          if (params?.selector === 'name=employmentStatus') {
-            return Promise.resolve({ widgets: [fieldWidget], count: 1 });
-          }
-          if (params?.selector === 'semanticsId=kyc.personalInfo.employmentStatus.option.employed') {
-            return Promise.resolve({ widgets: [optionWidget], count: 1 });
-          }
-        }
-        if (method === 'ext.fliwright.click') {
+        if (method === 'ext.fliwright.action') {
           return Promise.resolve({ success: true });
         }
         return Promise.resolve({});
@@ -274,11 +278,11 @@ describe('FormHelper', () => {
         status: 'filled',
       });
       const inspectSelectors = send.mock.calls
-        .filter((call) => call[0] === 'ext.fliwright.inspect')
-        .map((call) => (call[1] as Record<string, unknown>).selector);
+        .filter((call) => call[0] === 'ext.fliwright.action')
+        .map((call) => selectorAst(call[1]));
       expect(inspectSelectors).toEqual([
-        'name=employmentStatus',
-        'semanticsId=kyc.personalInfo.employmentStatus.option.employed',
+        { match: { name: 'employmentStatus' } },
+        { match: { semanticIdentifier: 'kyc.personalInfo.employmentStatus.option.employed' } },
       ]);
     });
 
@@ -309,13 +313,7 @@ describe('FormHelper', () => {
         if (method === 'ext.fliwright.extractForm') {
           return Promise.resolve({ fields: [radioField], count: 1 });
         }
-        if (method === 'ext.fliwright.inspect') {
-          if (params?.selector === 'text=Yes' && params?.ancestorSelector === 'name=usPerson') {
-            return Promise.resolve({ widgets: [optionWidget], count: 1 });
-          }
-          return Promise.resolve({ widgets: [], count: 0 });
-        }
-        if (method === 'ext.fliwright.click') {
+        if (method === 'ext.fliwright.action') {
           return Promise.resolve({ success: true });
         }
         return Promise.resolve({});
@@ -328,10 +326,13 @@ describe('FormHelper', () => {
         generatedValue: 'true',
         status: 'filled',
       });
-      expect(send).toHaveBeenCalledWith('ext.fliwright.inspect', {
-        selector: 'text=Yes',
-        ancestorSelector: 'name=usPerson',
-      });
+      expect(send).toHaveBeenCalledWith('ext.fliwright.action', expect.objectContaining({
+        action: 'tap',
+        selector: JSON.stringify({
+          match: { text: 'Yes' },
+          within: { match: { name: 'usPerson' } },
+        }),
+      }));
     });
 
     it('scopes extraction when scope option is provided', async () => {
@@ -346,8 +347,8 @@ describe('FormHelper', () => {
       expect(result.fields).toHaveLength(3);
       expect(result.fields[0].semanticType).toBe('phone');
       expect(result.fields[0].hintText).toBe('请输入手机号');
-      const clickCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.click');
-      const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+      const clickCalls = tapCalls(sendRequest);
+      const typeCalls = fillCalls(sendRequest);
       expect(clickCalls).toHaveLength(0);
       expect(typeCalls).toHaveLength(0);
     });
@@ -361,11 +362,12 @@ describe('FormHelper', () => {
       const phoneField = result.fields.find(f => f.id === 'w1');
       expect(phoneField?.status).toBe('filled');
 
-      const clickCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.click');
-      const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+      const clickCalls = tapCalls(sendRequest);
+      const typeCalls = fillCalls(sendRequest);
       expect(clickCalls).toHaveLength(0);
       expect(typeCalls).toHaveLength(1);
-      expect(typeCalls[0][1]).toMatchObject({ selector: 'id=w1', replaceAll: 'true' });
+      expect(selectorAst(typeCalls[0][1])).toEqual({ match: { id: 'w1' } });
+      expect(typeCalls[0][1]).toMatchObject({ replaceAll: 'true' });
     });
 
     it('matches by hintText substring', async () => {
@@ -374,9 +376,10 @@ describe('FormHelper', () => {
       const emailField = result.fields.find(f => f.id === 'w3');
       expect(emailField?.status).toBe('filled');
 
-      const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+      const typeCalls = fillCalls(sendRequest);
       expect(typeCalls).toHaveLength(1);
-      expect(typeCalls[0][1]).toMatchObject({ selector: 'name=email', replaceAll: 'true' });
+      expect(selectorAst(typeCalls[0][1])).toEqual({ match: { name: 'email' } });
+      expect(typeCalls[0][1]).toMatchObject({ replaceAll: 'true' });
     });
 
     it('matches selected fields by stable name when label and hint are absent', async () => {
@@ -397,7 +400,7 @@ describe('FormHelper', () => {
             count: 1,
           });
         }
-        if (method === 'ext.fliwright.type') {
+        if (method === 'ext.fliwright.action') {
           return Promise.resolve({ success: true });
         }
         return Promise.resolve({});
@@ -407,9 +410,10 @@ describe('FormHelper', () => {
 
       expect(result.filled).toBe(1);
       expect(result.skipped).toBe(0);
-      const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+      const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.action' && (c[1] as any).action === 'fill');
       expect(typeCalls).toHaveLength(1);
-      expect(typeCalls[0][1]).toMatchObject({ selector: 'name=jobPosition', replaceAll: 'true' });
+      expect(selectorAst(typeCalls[0][1])).toEqual({ match: { name: 'jobPosition' } });
+      expect(typeCalls[0][1]).toMatchObject({ replaceAll: 'true' });
     });
   });
 
@@ -419,13 +423,7 @@ describe('FormHelper', () => {
         if (method === 'ext.fliwright.extractForm') {
           return Promise.resolve(sampleFields['ext.fliwright.extractForm']);
         }
-        if (method === 'ext.fliwright.inspect') {
-          return Promise.resolve(sampleFields['ext.fliwright.inspect']);
-        }
-        if (method === 'ext.fliwright.click') {
-          return Promise.resolve({ success: true });
-        }
-        if (method === 'ext.fliwright.type') {
+        if (method === 'ext.fliwright.action') {
           return Promise.reject(new Error('No focused EditableText'));
         }
         return Promise.resolve({});
@@ -441,10 +439,7 @@ describe('FormHelper', () => {
         if (method === 'ext.fliwright.extractForm') {
           return Promise.resolve(sampleFields['ext.fliwright.extractForm']);
         }
-        if (method === 'ext.fliwright.inspect') {
-          return Promise.resolve(sampleFields['ext.fliwright.inspect']);
-        }
-        if (method === 'ext.fliwright.type') {
+        if (method === 'ext.fliwright.action') {
           return Promise.resolve({ success: false, error: 'No focused EditableText found after click' });
         }
         return Promise.resolve({});
@@ -462,8 +457,8 @@ describe('FormHelper', () => {
         if (method === 'ext.fliwright.extractForm') {
           return Promise.resolve(sampleFields['ext.fliwright.extractForm']);
         }
-        if (method === 'ext.fliwright.type') {
-          if (params?.selector === 'id=w1') {
+        if (method === 'ext.fliwright.action') {
+          if ((params?.selector as string).includes('"id":"w1"')) {
             return Promise.resolve({ success: false, error: 'No widget found for selector: id=w1' });
           }
           return Promise.resolve({ success: true });
@@ -474,10 +469,10 @@ describe('FormHelper', () => {
       const result = await new FormHelper(send).fillFields(['手机号']);
       expect(result.filled).toBe(1);
       const typeSelectors = send.mock.calls
-        .filter((call) => call[0] === 'ext.fliwright.type')
-        .map((call) => (call[1] as Record<string, unknown>).selector);
-      expect(typeSelectors).toContain('id=w1');
-      expect(typeSelectors).toContain('text=请输入手机号');
+        .filter((call) => call[0] === 'ext.fliwright.action')
+        .map((call) => selectorAst(call[1]));
+      expect(typeSelectors).toContainEqual({ match: { id: 'w1' } });
+      expect(typeSelectors).toContainEqual({ match: { text: '请输入手机号' } });
     });
 
     it('reports both primary and fallback errors when both lookups fail', async () => {
@@ -485,7 +480,7 @@ describe('FormHelper', () => {
         if (method === 'ext.fliwright.extractForm') {
           return Promise.resolve(sampleFields['ext.fliwright.extractForm']);
         }
-        if (method === 'ext.fliwright.type') {
+        if (method === 'ext.fliwright.action') {
           return Promise.resolve({ success: false, error: `No widget found for selector: ${params?.selector}` });
         }
         return Promise.resolve({});

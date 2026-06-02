@@ -1,5 +1,5 @@
 import { Locator } from './Locator.js';
-import type { SelectorInput, SendRequest } from './types.js';
+import type { SelectorInput, SelectorQuery, SendRequest } from './types.js';
 import { Selector } from './Selector.js';
 import { FormHelper } from './FormHelper.js';
 
@@ -8,6 +8,36 @@ export class Page {
 
   locator(selector: SelectorInput): Locator {
     return new Locator(selector, this.sendRequest);
+  }
+
+  find(query: SelectorQuery): Locator {
+    return new Locator(query, this.sendRequest);
+  }
+
+  getByText(
+    text: string | RegExp,
+    options?: { exact?: boolean; match?: 'exact' | 'contains' | 'regex'; caseSensitive?: boolean },
+  ): Locator {
+    return this.locator({ text, ...options });
+  }
+
+  getByKey(key: string): Locator {
+    return this.locator({ key });
+  }
+
+  getByType(type: string): Locator {
+    return this.locator({ type });
+  }
+
+  getBySemantics(semantics: {
+    identifier?: string;
+    label?: string;
+    hint?: string;
+    role?: string;
+    match?: 'exact' | 'contains' | 'regex';
+    caseSensitive?: boolean;
+  }): Locator {
+    return this.locator({ semantics });
   }
 
   async waitFor(selector: SelectorInput, timeoutMs = 5000): Promise<Locator> {
@@ -19,7 +49,7 @@ export class Page {
       if (count > 0) return loc;
       await new Promise((r) => setTimeout(r, 100));
     }
-    throw new Error(`Timeout waiting for selector: ${selectorObj.toWireFormat()}`);
+    throw new Error(`Timeout waiting for selector: ${selectorObj.toString()}`);
   }
 
   private _formHelper: FormHelper | null = null;

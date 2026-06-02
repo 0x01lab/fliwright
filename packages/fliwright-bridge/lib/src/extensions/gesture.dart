@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/gestures.dart';
@@ -24,8 +25,7 @@ class GestureExtension {
 
     final pointer = _nextPointer++;
     final view =
-        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ??
-        0;
+        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
     final position = Offset(x, y);
     final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
 
@@ -64,29 +64,35 @@ class GestureExtension {
       return {'error': 'Missing required parameter: selector'};
     }
 
-    // Use inspect to find the widget
-    final inspectParams = <String, String>{'selector': selector};
-    if (params.containsKey('ancestorSelector')) {
-      inspectParams['ancestorSelector'] = params['ancestorSelector']!;
-    }
+    Map<String, dynamic>? rect;
+    final resolvedRect = params['resolvedRect'];
+    if (resolvedRect != null && resolvedRect.isNotEmpty) {
+      rect = jsonDecode(resolvedRect) as Map<String, dynamic>;
+    } else {
+      // Use inspect to find the widget
+      final inspectParams = <String, String>{'selector': selector};
+      if (params.containsKey('ancestorSelector')) {
+        inspectParams['ancestorSelector'] = params['ancestorSelector']!;
+      }
 
-    final inspectResult = await _registry!.invoke(
-        'ext.fliwright.inspect', inspectParams);
-    final widgets = inspectResult['widgets'] as List<dynamic>?;
-    if (widgets == null || widgets.isEmpty) {
-      return {'error': 'No widget found matching selector: $selector'};
-    }
+      final inspectResult =
+          await _registry!.invoke('ext.fliwright.inspect', inspectParams);
+      final widgets = inspectResult['widgets'] as List<dynamic>?;
+      if (widgets == null || widgets.isEmpty) {
+        return {'error': 'No widget found matching selector: $selector'};
+      }
 
-    final widget = widgets[0] as Map<String, dynamic>;
-    final rect = widget['rect'] as Map<String, dynamic>?;
+      final widget = widgets[0] as Map<String, dynamic>;
+      rect = widget['rect'] as Map<String, dynamic>?;
+    }
     if (rect == null) {
       return {'error': 'Widget matching $selector has no render bounds'};
     }
 
-    final cx = (rect['x'] as num).toDouble() +
-        (rect['width'] as num).toDouble() / 2;
-    final cy = (rect['y'] as num).toDouble() +
-        (rect['height'] as num).toDouble() / 2;
+    final cx =
+        (rect['x'] as num).toDouble() + (rect['width'] as num).toDouble() / 2;
+    final cy =
+        (rect['y'] as num).toDouble() + (rect['height'] as num).toDouble() / 2;
 
     switch (gesture) {
       case 'longPress':

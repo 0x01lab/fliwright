@@ -66,16 +66,7 @@ describe('FormHelper Integration', () => {
       count: 3,
     }));
 
-    // Mock inspect for each locator
-    mock.mockExtension('ext.fliwright.inspect', (params: any) => {
-      if (params.selector === 'id=field-email') return { widgets: [EMAIL_WIDGET] };
-      if (params.selector === 'id=field-submit') return { widgets: [SUBMIT_WIDGET] };
-      return { widgets: [] };
-    });
-
-    // Mock click and type
-    mock.mockExtension('ext.fliwright.click', () => ({ status: 'ok' }));
-    mock.mockExtension('ext.fliwright.type', () => ({ status: 'ok' }));
+    mock.mockExtension('ext.fliwright.action', () => ({ success: true }));
 
     await driver.attachMockConnector(mock.ws);
 
@@ -106,8 +97,8 @@ describe('FormHelper Integration', () => {
     const extractCalls = messages.filter(m => m.method === 'ext.fliwright.extractForm');
     expect(extractCalls).toHaveLength(1);
 
-    // Verify type was called for email
-    const typeCalls = messages.filter(m => m.method === 'ext.fliwright.type');
+    // Verify fill action was called for email
+    const typeCalls = messages.filter(m => m.method === 'ext.fliwright.action' && m.params?.action === 'fill');
     expect(typeCalls.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -120,13 +111,7 @@ describe('FormHelper Integration', () => {
       count: 3,
     }));
 
-    mock.mockExtension('ext.fliwright.inspect', (params: any) => {
-      if (params.selector === 'id=field-email') return { widgets: [EMAIL_WIDGET] };
-      return { widgets: [] };
-    });
-
-    mock.mockExtension('ext.fliwright.click', () => ({ status: 'ok' }));
-    mock.mockExtension('ext.fliwright.type', () => ({ status: 'ok' }));
+    mock.mockExtension('ext.fliwright.action', () => ({ success: true }));
 
     await driver.attachMockConnector(mock.ws);
 
@@ -163,11 +148,9 @@ describe('FormHelper Integration', () => {
     expect(emailField!.semanticType).toBe('email');
     expect(emailField!.generatedValue).toBeTruthy();
 
-    // Verify NO click or type calls were made
+    // Verify NO action calls were made
     const messages = mock.sentMessages();
-    const clickCalls = messages.filter(m => m.method === 'ext.fliwright.click');
-    const typeCalls = messages.filter(m => m.method === 'ext.fliwright.type');
-    expect(clickCalls).toHaveLength(0);
-    expect(typeCalls).toHaveLength(0);
+    const actionCalls = messages.filter(m => m.method === 'ext.fliwright.action');
+    expect(actionCalls).toHaveLength(0);
   });
 });

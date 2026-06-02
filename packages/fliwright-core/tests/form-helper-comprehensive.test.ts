@@ -49,10 +49,17 @@ const GENERIC_WIDGET = {
 
 /** Default mock responses that make Locator.click() / type() succeed */
 const DEFAULT_MOCK_RESPONSES: Record<string, unknown> = {
-  'ext.fliwright.inspect': { widgets: [GENERIC_WIDGET] },
-  'ext.fliwright.click': { status: 'ok' },
-  'ext.fliwright.type': { status: 'ok' },
+  'ext.fliwright.resolve': { matches: [GENERIC_WIDGET], widgets: [GENERIC_WIDGET], count: 1 },
+  'ext.fliwright.action': { success: true },
 };
+
+function selectorAst(params: unknown) {
+  return JSON.parse((params as Record<string, string>).selector);
+}
+
+function fillCalls(send: ReturnType<typeof createMockSendRequest>) {
+  return send.mock.calls.filter(c => c[0] === 'ext.fliwright.action' && (c[1] as any).action === 'fill');
+}
 
 function field(overrides: Partial<FormFieldMeta> & { id: string }): FormFieldMeta {
   return {
@@ -316,8 +323,8 @@ describe('FormHelper: selector type parsing', () => {
       ...DEFAULT_MOCK_RESPONSES,
     });
     const result = await new FormHelper(send).fill();
-    const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
-    expect(typeCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
+    const typeCalls = fillCalls(send);
+    expect(typeCalls.some(c => selectorAst(c[1]).match?.id === 'f1')).toBe(true);
     expect(result.fields[0].selector).toBe('text=姓名');
   });
 
@@ -328,8 +335,8 @@ describe('FormHelper: selector type parsing', () => {
       ...DEFAULT_MOCK_RESPONSES,
     });
     await new FormHelper(send).fill();
-    const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
-    expect(typeCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
+    const typeCalls = fillCalls(send);
+    expect(typeCalls.some(c => selectorAst(c[1]).match?.id === 'f1')).toBe(true);
   });
 
   it('handles byType= selector', async () => {
@@ -339,8 +346,8 @@ describe('FormHelper: selector type parsing', () => {
       ...DEFAULT_MOCK_RESPONSES,
     });
     await new FormHelper(send).fill();
-    const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
-    expect(typeCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
+    const typeCalls = fillCalls(send);
+    expect(typeCalls.some(c => selectorAst(c[1]).match?.id === 'f1')).toBe(true);
   });
 
   it('handles bare text selector (no prefix)', async () => {
@@ -350,8 +357,8 @@ describe('FormHelper: selector type parsing', () => {
       ...DEFAULT_MOCK_RESPONSES,
     });
     await new FormHelper(send).fill();
-    const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
-    expect(typeCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
+    const typeCalls = fillCalls(send);
+    expect(typeCalls.some(c => selectorAst(c[1]).match?.id === 'f1')).toBe(true);
   });
 });
 
@@ -465,12 +472,12 @@ describe('FormHelper: large form with all semantic types', () => {
       expect(f.generatedValue.length).toBeGreaterThan(0);
     }
 
-    // Verify protocol calls: FormHelper delegates focus and value replacement to ext.fliwright.type.
+    // Verify protocol calls: FormHelper delegates focus and value replacement to ext.fliwright.action.
     const extractCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.extractForm');
     expect(extractCalls).toHaveLength(1);
-    const clickCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.click');
-    expect(clickCalls.length).toBe(0);
-    const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+    const tapActionCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.action' && (c[1] as any).action === 'tap');
+    expect(tapActionCalls.length).toBe(0);
+    const typeCalls = fillCalls(send);
     expect(typeCalls.length).toBe(9);
     expect(typeCalls.every(c => (c[1] as Record<string, unknown>).replaceAll === 'true')).toBe(true);
   });
@@ -612,7 +619,7 @@ describe('FormHelper: error handling', () => {
     const fields = [field({ id: 'f1', hintText: 'Name' })];
     const send = createMockSendRequest({
       'ext.fliwright.extractForm': { fields },
-      'ext.fliwright.type': { success: false, error: 'No widget found for selector: id=f1' },
+      'ext.fliwright.action': { success: false, error: 'No widget found for selector: id=f1' },
     });
     const result = await new FormHelper(send).fill();
     expect(result.errors.length).toBeGreaterThan(0);
@@ -627,14 +634,13 @@ describe('FormHelper: error handling', () => {
     ];
     const send = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
       if (method === 'ext.fliwright.extractForm') return Promise.resolve({ fields });
-      if (method === 'ext.fliwright.type') {
+      if (method === 'ext.fliwright.action') {
         // First field fails on both id and fallback selector, second succeeds.
-        if (params?.selector === 'id=f1' || params?.selector === 'text=Name') {
+        if ((params?.selector as string).includes('"id":"f1"') || (params?.selector as string).includes('"text":"Name"')) {
           return Promise.resolve({ success: false, error: `No widget found for selector: ${params.selector}` });
         }
         return Promise.resolve({ success: true });
       }
-      if (method === 'ext.fliwright.click') return Promise.resolve({ status: 'ok' });
       return Promise.resolve({});
     });
 

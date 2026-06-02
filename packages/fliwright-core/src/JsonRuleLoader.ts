@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import RandExp from 'randexp';
-import type { FormSkill, FormFieldMeta, FormRule, FormRulesFile, SemanticType } from './types.js';
+import { Selector } from './Selector.js';
+import type { FormSkill, FormFieldMeta, FormRule, FormRulesFile, MatchCriteria, SemanticType } from './types.js';
 
 export class JsonRuleLoader {
   private readonly projectRoot: string;
@@ -47,14 +48,16 @@ export class JsonRuleLoader {
   }
 
   private ruleToSkill(rule: FormRule): FormSkill {
-    const matchEntries = Object.entries(rule.match);
+    const matchEntries = Object.entries(rule.match ?? {});
     const name = 'rule:' + matchEntries.map(([k, v]) => `${k}=${v}`).join(',');
+    const find = rule.find ? new Selector(rule.find).toQuery() : undefined;
 
     if (rule.type === 'PRESET_SKILL' && rule.data && rule.data.length > 0) {
       let index = 0;
       return {
         name,
         type: 'PRESET_SKILL',
+        find,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: () => {
           const value = rule.data![index % rule.data!.length];
@@ -69,6 +72,7 @@ export class JsonRuleLoader {
       return {
         name,
         type: 'LLM_GENERATE',
+        find,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: () => {
           const value = rule.data![index % rule.data!.length];
@@ -83,6 +87,7 @@ export class JsonRuleLoader {
       return {
         name,
         type: 'REGEXP_MOCK',
+        find,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: () => randexp.gen(),
       };
@@ -97,9 +102,31 @@ export class JsonRuleLoader {
   }
 
   private matchesRule(field: FormFieldMeta & { semanticType?: SemanticType }, rule: FormRule): boolean {
-    for (const [key, value] of Object.entries(rule.match)) {
+    if (rule.find?.match && !this.matchesFindCriteria(field, rule.find.match)) {
+      return false;
+    }
+    for (const [key, value] of Object.entries(rule.match ?? {})) {
       const actual = this.matchValue(field, key);
       if (actual === undefined || actual !== value) return false;
+    }
+    return true;
+  }
+
+  private matchesFindCriteria(
+    field: FormFieldMeta & { semanticType?: SemanticType },
+    match: MatchCriteria,
+  ): boolean {
+    for (const [key, value] of Object.entries(match)) {
+      if (typeof value !== 'string') continue;
+      const actual = this.matchValue(field, key);
+      if (actual === undefined) continue;
+      if (key === 'textContains') {
+        if (!actual.includes(value)) return false;
+      } else if (key === 'textRegex') {
+        if (!new RegExp(value).test(actual)) return false;
+      } else if (actual !== value) {
+        return false;
+      }
     }
     return true;
   }
@@ -130,6 +157,7 @@ export class JsonRuleLoader {
       case 'name':
         return field.name;
       case 'semanticsId':
+      case 'semanticIdentifier':
         return field.semanticsId;
       case 'semanticsLabel':
         return field.semanticsLabel;
@@ -141,6 +169,10 @@ export class JsonRuleLoader {
         return field.semanticType;
       case 'value':
         return field.value == null ? undefined : String(field.value);
+      case 'text':
+      case 'textContains':
+      case 'textRegex':
+        return field.label ?? field.hintText ?? field.semanticsLabel ?? field.selector;
       default:
         return undefined;
     }

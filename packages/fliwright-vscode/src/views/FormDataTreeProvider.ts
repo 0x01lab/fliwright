@@ -164,7 +164,8 @@ function invalidItem(element: { label: string; error: string; uri: vscode.Uri })
 }
 
 function ruleLabel(rule: FormRule): string {
-  const [key, value] = Object.entries(rule.match)[0] ?? ['match', '<empty>'];
+  if (rule.find) return `find=${JSON.stringify(rule.find)}`;
+  const [key, value] = Object.entries(rule.match ?? {})[0] ?? ['match', '<empty>'];
   return `${key}=${value}`;
 }
 

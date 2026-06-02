@@ -1,5 +1,5 @@
 import type * as vscode from 'vscode';
-import type { FormAnalyzeResult } from '@fliwright/core';
+import type { FormAnalyzeResult, SelectorQuery } from '@fliwright/core';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 
@@ -94,7 +94,8 @@ export interface FormRulesFile {
 }
 
 export interface FormRule {
-  match: Record<string, string>;
+  find?: SelectorQuery;
+  match?: Record<string, string>;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
   data?: string[];
   pattern?: string;

@@ -71,7 +71,13 @@ void main() {
       expect(fields.first, containsPair('ancestorKey', 'emailContainer'));
       expect(fields.first, containsPair('semanticsId', 'login.email'));
       expect(fields.first, containsPair('semanticsLabel', 'Email address'));
-      expect(fields.first, containsPair('selector', 'semanticsId=login.email'));
+      expect(
+        fields.first,
+        containsPair(
+          'selector',
+          '{"match":{"semanticIdentifier":"login.email"}}',
+        ),
+      );
     });
 
     testWidgets('extracts named select controls with options', (tester) async {

@@ -58,8 +58,8 @@ export class SelfHealingEngine {
     // Compute per-dimension scores for the matched widget.
     const bestCandidate = candidates.find(c =>
       c.type === result.matchedWidget.type &&
-      c.rect.x === result.matchedWidget.rect.x &&
-      c.rect.y === result.matchedWidget.rect.y,
+      c.rect.x === result.matchedWidget.rect?.x &&
+      c.rect.y === result.matchedWidget.rect?.y,
     ) ?? candidates[0];
     const scores = (this.strategy instanceof MultiDimensionalHealingStrategy)
       ? this.strategy.scoreDimensions(stored, bestCandidate)

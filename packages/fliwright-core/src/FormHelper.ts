@@ -5,7 +5,7 @@ import type {
   FormAnalyzeResult,
   FormHelperOptions,
   SemanticType,
-  SelectorInput,
+  SelectorQuery,
   SendRequest,
   WidgetInfo,
 } from './types.js';
@@ -16,6 +16,10 @@ import { JsonRuleLoader } from './JsonRuleLoader.js';
 import { Locator } from './Locator.js';
 
 type RuleMatchField = FormFieldMeta & { semanticType?: SemanticType };
+type MatchedFormSkill = {
+  find?: SelectorQuery;
+  generate: (field: FormFieldMeta, locale: string) => string;
+};
 
 export class FormHelper {
   private sendRequest: SendRequest;
@@ -189,7 +193,7 @@ export class FormHelper {
     const generatedValue = this.generateFieldValue(field, semanticType, generator, skill, options);
 
     try {
-      await this.fillWithFallback(field, generatedValue);
+      await this.fillWithFallback(field, generatedValue, skill?.find);
       result.fields.push({
         id: field.id,
         semanticType,
@@ -246,7 +250,7 @@ export class FormHelper {
     field: FormFieldMeta,
     semanticType: SemanticType,
     generator: FakerGenerator,
-    skill: { generate: (field: FormFieldMeta, locale: string) => string } | null,
+    skill: MatchedFormSkill | null,
     options?: FormHelperOptions,
   ): string {
     if (skill) return skill.generate(field, options?.locale ?? 'zh_CN');
@@ -264,17 +268,16 @@ export class FormHelper {
     return generator.generate(semanticType, field.maxLength);
   }
 
-  private async fillWithFallback(field: FormFieldMeta, generatedValue: string): Promise<void> {
-    const primarySelector = this.selectorForFill(field);
+  private async fillWithFallback(
+    field: FormFieldMeta,
+    generatedValue: string,
+    ruleFind?: SelectorQuery,
+  ): Promise<void> {
+    const primarySelector = ruleFind ?? this.selectorForFill(field);
     const primaryLocator = new Locator(primarySelector, this.sendRequest);
 
     try {
-      // Resolve once and reuse for both click and type.
-      const resolved = await primaryLocator.resolve();
-      if (!resolved) {
-        throw new Error(`No widget found matching selector: ${primaryLocator.selectorString}`);
-      }
-      await this.applyFieldValue(field, primarySelector, generatedValue, resolved);
+      await this.applyFieldValue(field, primarySelector, generatedValue);
       return;
     } catch (primaryError) {
       const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
@@ -287,13 +290,7 @@ export class FormHelper {
       }
 
       try {
-        // Fallback uses a fresh locator since the primary selector failed.
-        const fallbackLocator = new Locator(fallbackSelector, this.sendRequest);
-        const resolved = await fallbackLocator.resolve();
-        if (!resolved) {
-          throw new Error(`No widget found matching selector: ${fallbackSelectorText}`);
-        }
-        await this.applyFieldValue(field, fallbackSelector, generatedValue, resolved);
+        await this.applyFieldValue(field, fallbackSelector, generatedValue);
       } catch (fallbackError) {
         const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
         throw new Error(
@@ -305,7 +302,7 @@ export class FormHelper {
 
   private async applyFieldValue(
     field: FormFieldMeta,
-    fieldSelector: SelectorInput,
+    fieldSelector: SelectorQuery,
     generatedValue: string,
     resolved?: WidgetInfo,
   ): Promise<void> {
@@ -341,7 +338,7 @@ export class FormHelper {
 
   private async applyCheckboxValue(
     field: FormFieldMeta,
-    fieldSelector: SelectorInput,
+    fieldSelector: SelectorQuery,
     generatedValue: string,
     resolved?: WidgetInfo,
   ): Promise<void> {
@@ -363,7 +360,7 @@ export class FormHelper {
 
   private async clickOption(
     field: FormFieldMeta,
-    fieldSelector: SelectorInput,
+    fieldSelector: SelectorQuery,
     generatedValue: string,
     options: { openFieldFirst: boolean },
   ): Promise<void> {
@@ -380,16 +377,16 @@ export class FormHelper {
     }
 
     if (option?.semanticsId) {
-      await new Locator(`semanticsId=${option.semanticsId}`, this.sendRequest).click();
+      await new Locator({ match: { semanticIdentifier: option.semanticsId } }, this.sendRequest).click();
       return;
     }
 
-    const scopedOptionSelector: SelectorInput = { text: optionLabel, ancestor: fieldSelector };
+    const scopedOptionSelector: SelectorQuery = { match: { text: optionLabel }, within: fieldSelector };
     try {
       await new Locator(scopedOptionSelector, this.sendRequest).click();
     } catch (scopedError) {
       if (!options.openFieldFirst) throw scopedError;
-      await new Locator({ text: optionLabel }, this.sendRequest).click();
+      await new Locator({ match: { text: optionLabel } }, this.sendRequest).click();
     }
   }
 
@@ -423,18 +420,44 @@ export class FormHelper {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private parseSelector(selectorStr: string): SelectorInput {
-    if (selectorStr.startsWith('text=')) return { text: selectorStr.slice(5) };
-    if (selectorStr.startsWith('key=')) return { key: selectorStr.slice(4) };
-    if (selectorStr.startsWith('byType=')) return { type: selectorStr.slice(7) };
-    return selectorStr;
+  private parseSelector(selectorStr: string): SelectorQuery {
+    if (selectorStr.trimStart().startsWith('{')) {
+      try {
+        return JSON.parse(selectorStr) as SelectorQuery;
+      } catch {
+        return { match: { text: selectorStr } };
+      }
+    }
+    if (selectorStr.startsWith('text=')) return { match: { text: selectorStr.slice(5) } };
+    if (selectorStr.startsWith('textContains=')) return { match: { textContains: selectorStr.slice(13) } };
+    if (selectorStr.startsWith('key=')) return { match: { key: selectorStr.slice(4) } };
+    if (selectorStr.startsWith('byType=')) return { match: { type: selectorStr.slice(7) } };
+    if (selectorStr.startsWith('id=')) return { match: { id: selectorStr.slice(3) } };
+    if (selectorStr.startsWith('name=')) return { match: { name: selectorStr.slice(5) } };
+    if (selectorStr.startsWith('ancestorKey=')) return { match: { ancestorKey: selectorStr.slice(12) } };
+    if (selectorStr.startsWith('semanticsId=')) return { match: { semanticIdentifier: selectorStr.slice(12) } };
+    if (selectorStr.startsWith('semantics=')) return { match: { semanticsLabel: selectorStr.slice(10) } };
+    if (selectorStr.startsWith('role=')) return { match: { role: selectorStr.slice(5) } };
+    return { match: { text: selectorStr } };
   }
 
-  private selectorForFill(field: FormFieldMeta): SelectorInput {
-    if (field.semanticsId) return `semanticsId=${field.semanticsId}`;
-    if (field.name) return `name=${field.name}`;
-    if (field.key) return { key: field.key };
-    if (field.ancestorKey) return `ancestorKey=${field.ancestorKey}`;
-    return field.id ? `id=${field.id}` : this.parseSelector(field.selector);
+  private selectorForFill(field: FormFieldMeta): SelectorQuery {
+    if (field.semanticsId) return { match: { semanticIdentifier: field.semanticsId } };
+    if (field.name) return { match: { name: field.name } };
+    if (field.key) return { match: { key: field.key } };
+    if (field.ancestorKey) {
+      return {
+        match: { type: field.type },
+        within: { match: { key: field.ancestorKey } },
+      };
+    }
+    if (field.id) return { match: { id: field.id } };
+    if (field.hintText) {
+      return { match: { textContains: field.hintText }, fallback: { hintText: field.hintText } };
+    }
+    if (field.label) {
+      return { match: { textContains: field.label }, fallback: { semanticsLabel: field.label } };
+    }
+    return this.parseSelector(field.selector);
   }
 }

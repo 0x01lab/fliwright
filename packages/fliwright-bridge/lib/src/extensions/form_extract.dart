@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'inspect.dart';
@@ -540,23 +542,50 @@ class FormExtractExtension {
   }) {
     final semanticsId = info['semanticsId'];
     if (semanticsId is String && semanticsId.isNotEmpty) {
-      return 'semanticsId=$semanticsId';
+      return jsonEncode({
+        'match': {'semanticIdentifier': semanticsId},
+      });
     }
 
     final name = info['name'];
-    if (name is String && name.isNotEmpty) return 'name=$name';
+    if (name is String && name.isNotEmpty) {
+      return jsonEncode({
+        'match': {'name': name},
+      });
+    }
 
     final key = info['key'];
-    if (key is String && key.isNotEmpty) return 'key=$key';
+    if (key is String && key.isNotEmpty) {
+      return jsonEncode({
+        'match': {'key': key},
+      });
+    }
 
     final ancestorKey = info['ancestorKey'];
     if (ancestorKey is String && ancestorKey.isNotEmpty) {
-      return 'ancestorKey=$ancestorKey';
+      return jsonEncode({
+        'match': {'type': fallbackType ?? info['type']},
+        'within': {
+          'match': {'key': ancestorKey},
+        },
+      });
     }
 
-    if (hintText != null && hintText.isNotEmpty) return 'text=$hintText';
-    if (label != null && label.isNotEmpty) return 'text=$label';
-    return 'byType=${fallbackType ?? info['type']}';
+    if (hintText != null && hintText.isNotEmpty) {
+      return jsonEncode({
+        'match': {'textContains': hintText},
+        'fallback': {'hintText': hintText},
+      });
+    }
+    if (label != null && label.isNotEmpty) {
+      return jsonEncode({
+        'match': {'textContains': label},
+        'fallback': {'semanticsLabel': label},
+      });
+    }
+    return jsonEncode({
+      'match': {'type': fallbackType ?? info['type']},
+    });
   }
 
   /// Walk descendants of a TextField to find the inner EditableText

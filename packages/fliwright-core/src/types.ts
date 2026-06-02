@@ -1,11 +1,95 @@
 /** Function signature for sending VM Service JSON-RPC requests. */
 export type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
+export type TextMatchMode = 'exact' | 'contains' | 'regex';
+
+export interface MatchCriteria {
+  type?: string;
+  key?: string;
+  id?: string;
+  name?: string;
+  ancestorKey?: string;
+  text?: string;
+  textContains?: string;
+  textRegex?: string;
+  semanticIdentifier?: string;
+  semanticsLabel?: string;
+  semanticsHint?: string;
+  role?: string;
+}
+
+export interface FallbackCriteria {
+  semanticsLabel?: string;
+  semanticsHint?: string;
+  hintText?: string;
+  textContains?: string;
+}
+
+export interface PositionFilter {
+  nth?: number;
+  first?: boolean;
+  last?: boolean;
+  visible?: boolean;
+}
+
+export interface SelectorQuery {
+  match?: MatchCriteria;
+  within?: SelectorQuery;
+  fallback?: FallbackCriteria;
+  position?: PositionFilter;
+}
+
+export type SelectorAst =
+  | {
+      kind: 'text';
+      value: string;
+      match?: TextMatchMode;
+      caseSensitive?: boolean;
+    }
+  | { kind: 'key'; value: string }
+  | { kind: 'type'; value: string }
+  | { kind: 'id'; value: string }
+  | { kind: 'name'; value: string }
+  | { kind: 'ancestorKey'; value: string }
+  | {
+      kind: 'semantics';
+      identifier?: string;
+      label?: string;
+      hint?: string;
+      role?: string;
+      match?: TextMatchMode;
+      caseSensitive?: boolean;
+    }
+  | { kind: 'icon'; codePoint: number; fontFamily?: string }
+  | { kind: 'descendant'; of: SelectorAst; matching: SelectorAst; matchRoot?: boolean }
+  | { kind: 'ancestor'; of: SelectorAst; matching: SelectorAst; matchRoot?: boolean }
+  | { kind: 'and'; selectors: SelectorAst[] }
+  | { kind: 'or'; selectors: SelectorAst[] }
+  | { kind: 'nth'; selector: SelectorAst; index: number };
+
 export type SelectorInput =
   | string
-  | { text: string; ancestor?: SelectorInput }
+  | RegExp
+  | SelectorQuery
+  | SelectorAst
+  | { text: string | RegExp; match?: TextMatchMode; exact?: boolean; caseSensitive?: boolean; ancestor?: SelectorInput }
   | { key: string; ancestor?: SelectorInput }
-  | { type: string; ancestor?: SelectorInput };
+  | { type: string; ancestor?: SelectorInput }
+  | { id: string; ancestor?: SelectorInput }
+  | { name: string; ancestor?: SelectorInput }
+  | { ancestorKey: string; ancestor?: SelectorInput }
+  | {
+      semantics: {
+        identifier?: string;
+        label?: string;
+        hint?: string;
+        role?: string;
+        match?: TextMatchMode;
+        caseSensitive?: boolean;
+      };
+      ancestor?: SelectorInput;
+    }
+  | { icon: { codePoint: number; fontFamily?: string }; ancestor?: SelectorInput };
 
 export interface ProviderInfo {
   name: string;
@@ -18,7 +102,14 @@ export interface WidgetInfo {
   type: string;
   text?: string;
   key?: string;
-  rect: { x: number; y: number; width: number; height: number };
+  name?: string;
+  ancestorKey?: string;
+  semanticsId?: string;
+  semanticsLabel?: string;
+  semanticsHint?: string;
+  role?: string;
+  rect?: { x: number; y: number; width: number; height: number };
+  hitTestable?: boolean;
   properties: Record<string, unknown>;
 }
 
@@ -251,12 +342,14 @@ export interface FormHelperOptions {
 export interface FormSkill {
   name: string;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
+  find?: SelectorQuery;
   match: (field: FormFieldMeta) => boolean;
   generate: (field: FormFieldMeta, locale: string) => string;
 }
 
 export interface FormRule {
-  match: Record<string, string>;
+  find?: SelectorQuery;
+  match?: Record<string, string>;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
   data?: string[];
   pattern?: string;

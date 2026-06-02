@@ -118,6 +118,23 @@ describe('JsonRuleLoader', () => {
     } as any)).toBe(false);
   });
 
+  it('loads find query rules and matches by semantic identifier', () => {
+    writeRuleFile('rules.json', {
+      version: 1,
+      rules: [
+        {
+          find: { match: { semanticIdentifier: 'login.email' } },
+          type: 'PRESET_SKILL',
+          data: ['test@example.com'],
+        },
+      ],
+    });
+    const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'));
+    expect(skills[0].find).toEqual({ match: { semanticIdentifier: 'login.email' } });
+    expect(skills[0].match({ semanticsId: 'login.email' } as any)).toBe(true);
+    expect(skills[0].match({ semanticsId: 'login.password' } as any)).toBe(false);
+  });
+
   it('does not match unknown rule keys', () => {
     writeRuleFile('rules.json', {
       version: 1,

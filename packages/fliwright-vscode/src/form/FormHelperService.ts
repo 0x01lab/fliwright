@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
-import type { FliwrightDriver, FormAnalyzeResult, FormFillResult, FormHelperOptions } from '@fliwright/core';
+import type { FliwrightDriver, FormAnalyzeResult, FormFillResult, FormHelperOptions, SelectorQuery } from '@fliwright/core';
 import { loadConfig, resolveWorkspacePath } from '../config.js';
 import type { FormRulesEntry, FormRunSummary } from '../types.js';
 
@@ -13,7 +13,7 @@ export interface PreviewField {
 }
 
 export interface FormRuleSnippet {
-  match: Record<string, string>;
+  find: SelectorQuery;
   type: 'PRESET_SKILL';
   data: string[];
 }
@@ -135,20 +135,25 @@ export function formRulesFileName(entry?: FormRulesEntry): string {
 
 export function formRuleSnippetForField(field: FormAnalyzeResult['fields'][number]): FormRuleSnippet {
   return {
-    match: bestMatchForField(field),
+    find: bestFindForField(field),
     type: 'PRESET_SKILL',
     data: field.generatedValue ? [field.generatedValue] : [],
   };
 }
 
-function bestMatchForField(field: FormAnalyzeResult['fields'][number]): Record<string, string> {
-  if (field.semanticsId) return { semanticsId: field.semanticsId };
-  if (field.name) return { name: field.name };
-  if (field.key) return { key: field.key };
-  if (field.ancestorKey) return { ancestorKey: field.ancestorKey };
-  if (field.label) return { label: field.label };
-  if (field.hintText) return { hintText: field.hintText };
-  return { selector: field.selector };
+function bestFindForField(field: FormAnalyzeResult['fields'][number]): SelectorQuery {
+  if (field.semanticsId) return { match: { semanticIdentifier: field.semanticsId } };
+  if (field.name) return { match: { name: field.name } };
+  if (field.key) return { match: { key: field.key } };
+  if (field.ancestorKey) {
+    return {
+      match: { textContains: field.label ?? field.hintText ?? field.name ?? field.key ?? field.id },
+      within: { match: { key: field.ancestorKey } },
+    };
+  }
+  if (field.label) return { match: { textContains: field.label }, fallback: { semanticsLabel: field.label } };
+  if (field.hintText) return { match: { textContains: field.hintText }, fallback: { hintText: field.hintText } };
+  return { match: { id: field.id } };
 }
 
 export function formatFormFillDebug(result: FormFillResult): string[] {

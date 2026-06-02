@@ -18,29 +18,38 @@ class ScrollExtension {
     final alignment = double.tryParse(params['alignment'] ?? '0.5') ?? 0.5;
     final durationMs = int.tryParse(params['duration'] ?? '300') ?? 300;
 
-    // Step 1: Inspect to find the widget.
-    final inspectResult = await FliwrightBridge.registry.invoke(
-      'ext.fliwright.inspect',
-      {'selector': selector},
-    );
+    // Step 1: Use pre-resolved target id when action already resolved it,
+    // otherwise resolve the selector.
+    var targetId = params['targetId'];
+    if (targetId == null || targetId.isEmpty) {
+      final inspectResult = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.resolve',
+        {
+          'selector': selector,
+          'limit': '1',
+          'strict': 'false',
+          'visible': 'any'
+        },
+      );
 
-    if (inspectResult.containsKey('error')) {
-      return {
-        'error': 'Inspect failed: ${inspectResult['error']}',
-        'success': false,
-      };
+      if (inspectResult.containsKey('error')) {
+        return {
+          'error': 'Inspect failed: ${inspectResult['error']}',
+          'success': false,
+        };
+      }
+
+      final widgets = inspectResult['matches'] ?? inspectResult['widgets'];
+      if (widgets is! List || widgets.isEmpty) {
+        return {
+          'error': 'No widget found for selector: $selector',
+          'success': false,
+        };
+      }
+
+      final target = widgets.first;
+      targetId = target['id']?.toString();
     }
-
-    final widgets = inspectResult['widgets'];
-    if (widgets is! List || widgets.isEmpty) {
-      return {
-        'error': 'No widget found for selector: $selector',
-        'success': false,
-      };
-    }
-
-    final target = widgets.first;
-    final targetId = target['id'];
     if (targetId == null) {
       return {
         'error': 'Widget has no element id',

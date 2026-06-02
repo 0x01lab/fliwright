@@ -77,7 +77,7 @@ describe('Failure Context Pipeline Integration', () => {
     const mock = createProtocolMock();
     const driver = new FliwrightDriver();
 
-    mock.mockExtension('ext.fliwright.inspect', () => ({ widgets: [SUBMIT_WIDGET] }));
+    mock.mockExtension('ext.fliwright.resolve', () => ({ matches: [SUBMIT_WIDGET], widgets: [SUBMIT_WIDGET], count: 1 }));
     mock.mockExtension('ext.fliwright.snapshot', () => ({ widgets: [SUBMIT_SNAPSHOT] }));
 
     await driver.attachMockConnector(mock.ws);
