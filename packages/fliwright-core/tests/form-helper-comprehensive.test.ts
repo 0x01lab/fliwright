@@ -309,16 +309,16 @@ describe('SemanticInferrer: inference priority', () => {
 // ---------------------------------------------------------------------------
 
 describe('FormHelper: selector type parsing', () => {
-  it('handles text= selector', async () => {
+  it('fills by extracted field id while preserving the reported selector', async () => {
     const fields = [field({ id: 'f1', hintText: 'Name', selector: 'text=姓名' })];
     const send = createMockSendRequest({
       'ext.fliwright.extractForm': { fields },
       ...DEFAULT_MOCK_RESPONSES,
     });
-    await new FormHelper(send).fill();
-    // Verify inspect is called with the correct text selector
+    const result = await new FormHelper(send).fill();
     const inspectCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.inspect');
-    expect(inspectCalls.some(c => (c[1] as any).selector === 'text=姓名')).toBe(true);
+    expect(inspectCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
+    expect(result.fields[0].selector).toBe('text=姓名');
   });
 
   it('handles key= selector', async () => {
@@ -329,7 +329,7 @@ describe('FormHelper: selector type parsing', () => {
     });
     await new FormHelper(send).fill();
     const inspectCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.inspect');
-    expect(inspectCalls.some(c => (c[1] as any).selector === 'key=name_field')).toBe(true);
+    expect(inspectCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
   });
 
   it('handles byType= selector', async () => {
@@ -340,7 +340,7 @@ describe('FormHelper: selector type parsing', () => {
     });
     await new FormHelper(send).fill();
     const inspectCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.inspect');
-    expect(inspectCalls.some(c => (c[1] as any).selector === 'byType=TextFormField')).toBe(true);
+    expect(inspectCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
   });
 
   it('handles bare text selector (no prefix)', async () => {
@@ -351,8 +351,7 @@ describe('FormHelper: selector type parsing', () => {
     });
     await new FormHelper(send).fill();
     const inspectCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.inspect');
-    // Bare text without prefix → treated as { text: '姓名' } → wire format 'text=姓名'
-    expect(inspectCalls.some(c => (c[1] as any).selector === 'text=姓名')).toBe(true);
+    expect(inspectCalls.some(c => (c[1] as any).selector === 'id=f1')).toBe(true);
   });
 });
 
@@ -466,13 +465,14 @@ describe('FormHelper: large form with all semantic types', () => {
       expect(f.generatedValue.length).toBeGreaterThan(0);
     }
 
-    // Verify protocol calls: 1 extract + 9*2 (inspect+click, then type) = at least 19
+    // Verify protocol calls: FormHelper delegates focus and value replacement to ext.fliwright.type.
     const extractCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.extractForm');
     expect(extractCalls).toHaveLength(1);
     const clickCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.click');
-    expect(clickCalls.length).toBe(9);
+    expect(clickCalls.length).toBe(0);
     const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
     expect(typeCalls.length).toBe(9);
+    expect(typeCalls.every(c => (c[1] as Record<string, unknown>).replaceAll === 'true')).toBe(true);
   });
 });
 
@@ -625,13 +625,13 @@ describe('FormHelper: error handling', () => {
       field({ id: 'f1', hintText: 'Name', selector: 'text=Name' }),
       field({ id: 'f2', hintText: 'Phone', selector: 'text=Phone' }),
     ];
-    let inspectCallCount = 0;
-    const send = vi.fn().mockImplementation((method: string) => {
+    const send = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
       if (method === 'ext.fliwright.extractForm') return Promise.resolve({ fields });
       if (method === 'ext.fliwright.inspect') {
-        inspectCallCount++;
-        // First field fails, second succeeds
-        if (inspectCallCount === 1) return Promise.resolve({ widgets: [] });
+        // First field fails on both id and fallback selector, second succeeds.
+        if (params?.selector === 'id=f1' || params?.selector === 'text=Name') {
+          return Promise.resolve({ widgets: [] });
+        }
         return Promise.resolve({ widgets: [GENERIC_WIDGET] });
       }
       if (method === 'ext.fliwright.click') return Promise.resolve({ status: 'ok' });

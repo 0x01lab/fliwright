@@ -16,6 +16,7 @@ export interface ExtensionConfig {
   formRulesFile: string | null;
   formLocale: string;
   formPreviewBeforeFill: boolean;
+  codeLensEnabled: boolean;
 }
 
 export interface MockIndexFile {

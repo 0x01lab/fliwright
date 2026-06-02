@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Uri } from 'vscode';
-import { FormHelperService } from '../src/form/FormHelperService.js';
+import { FormHelperService, formatFormFillDebug } from '../src/form/FormHelperService.js';
 
 describe('FormHelperService', () => {
   it('masks sensitive preview values', () => {
@@ -76,5 +76,36 @@ describe('FormHelperService', () => {
 
     expect(result.filled).toBe(1);
     expect(service.getLastSummary()).toMatchObject({ action: 'fill', filled: 1, skipped: 1 });
+  });
+
+  it('formats fill debug lines with field errors', () => {
+    const lines = formatFormFillDebug({
+      filled: 0,
+      skipped: 1,
+      errors: [{ fieldId: 'username', error: 'No widget found debug={"selector":"id=username"}' }],
+      fields: [
+        {
+          id: 'username',
+          semanticType: 'email',
+          generatedValue: 'test@example.com',
+          selector: 'text=Username / Email',
+          status: 'error',
+        },
+        {
+          id: 'password',
+          semanticType: 'password',
+          generatedValue: '',
+          selector: 'text=Login password',
+          status: 'skipped',
+        },
+      ],
+    });
+
+    expect(lines[0]).toBe('Form fill debug:');
+    expect(lines[1]).toContain('id=username');
+    expect(lines[1]).toContain('selector=text=Username / Email');
+    expect(lines[1]).toContain('status=error');
+    expect(lines[1]).toContain('No widget found');
+    expect(lines[2]).toContain('status=skipped');
   });
 });

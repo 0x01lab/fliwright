@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
+import type { FormAnalyzeResult, FormFillResult } from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
 import { FailureContextStore } from './failure/FailureContextStore.js';
-import { formRulesFileName, FormHelperService } from './form/FormHelperService.js';
+import { formRulesFileName, FormHelperService, formatFormFillDebug } from './form/FormHelperService.js';
 import { FormRuleService } from './form/FormRuleService.js';
 import { RecorderService } from './recording/RecorderService.js';
+import { FliwrightCodeLensProvider } from './runner/FliwrightCodeLensProvider.js';
 import { TestDiscoveryService } from './runner/TestDiscoveryService.js';
 import { VitestRunner } from './runner/VitestRunner.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
@@ -62,6 +64,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerTreeDataProvider('fliwright.tests', testsTree),
     vscode.window.registerTreeDataProvider('fliwright.runs', runsTree),
     vscode.window.registerTreeDataProvider('fliwright.state', stateTree),
+    vscode.languages.registerCodeLensProvider(
+      [{ language: 'typescript', scheme: 'file' }, { language: 'typescriptreact', scheme: 'file' }],
+      new FliwrightCodeLensProvider(),
+    ),
   );
 
   context.subscriptions.push(
@@ -110,6 +116,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           const state = await session.connect(url);
           if (state.status === 'error') throw new Error(state.message);
         }
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.configureMcp', async () => {
+      await runCommand('Configure MCP', async () => {
+        const document = await vscode.workspace.openTextDocument({
+          language: 'markdown',
+          content: mcpInstructions(),
+        });
+        await vscode.window.showTextDocument(document);
       });
     }),
     vscode.commands.registerCommand('fliwright.createMockConfig', async () => {
@@ -287,12 +302,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const result = await formHelperService.fillSelected(session.connectedDriver, root, selectedHints, node);
         formTree.setLastSummary(formHelperService.getLastSummary());
         output.appendLine(`Filled selected form fields with ${formRulesFileName(node)}: ${result.filled} filled, ${result.skipped} skipped, ${result.errors.length} errors.`);
+        appendFormFillDebug(result);
         vscode.window.showInformationMessage(`Filled ${result.filled} field(s), skipped ${result.skipped}, errors ${result.errors.length}.`);
         return;
       }
       const result = await formHelperService.fill(session.connectedDriver, root, node);
       formTree.setLastSummary(formHelperService.getLastSummary());
       output.appendLine(`Filled form with ${formRulesFileName(node)}: ${result.filled} filled, ${result.skipped} skipped, ${result.errors.length} errors.`);
+      appendFormFillDebug(result);
       vscode.window.showInformationMessage(`Filled ${result.filled} field(s), skipped ${result.skipped}, errors ${result.errors.length}.`);
     });
   }
@@ -333,6 +350,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 }
 
+function mcpInstructions(): string {
+  return `# Fliwright MCP Setup
+
+Add the Fliwright MCP server to your AI coding tool configuration:
+
+\`\`\`json
+{
+  "mcpServers": {
+    "fliwright": {
+      "command": "pnpm",
+      "args": ["--filter", "@fliwright/mcp", "start"]
+    }
+  }
+}
+\`\`\`
+
+Available tools:
+
+- \`fliwright_run\`: run a Fliwright test file.
+- \`fliwright_get_failure\`: inspect structured failure context.
+- \`fliwright_generate_test\`: generate tests from Flutter source.
+- \`fliwright_record\`: record interactions and generate test code.
+- \`fliwright_mock_list\`: list loaded mock endpoints and active rules.
+- \`fliwright_mock_switch\`: switch an endpoint's active mock rule.
+
+Use \`FLIWRIGHT_VM_URL\` or the VS Code connection command to point Fliwright at a running Flutter VM Service.
+`;
+}
+
 export function deactivate(): void {
   output?.dispose();
 }
@@ -348,7 +394,7 @@ function formRulesNode(node?: FormRulesEntry): FormRulesEntry | undefined {
 
 async function showFormPreview(
   service: FormHelperService,
-  result: import('@fliwright/core').FormAnalyzeResult,
+  result: FormAnalyzeResult,
   title: string,
   canPickMany = false,
 ): Promise<string[] | undefined> {
@@ -384,6 +430,10 @@ function requireWorkspaceRoot(): vscode.Uri {
     throw new Error('Open a workspace to use Fliwright.');
   }
   return root;
+}
+
+function appendFormFillDebug(result: FormFillResult): void {
+  for (const line of formatFormFillDebug(result)) output.appendLine(line);
 }
 
 async function runCommand(label: string, action: () => Promise<void>): Promise<void> {

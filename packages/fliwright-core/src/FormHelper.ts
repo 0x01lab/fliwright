@@ -158,10 +158,7 @@ export class FormHelper {
       : generator.generate(semanticType, field.maxLength);
 
     try {
-      const selectorInput = this.parseSelector(field.selector);
-      const locator = new Locator(selectorInput, this.sendRequest);
-      await locator.click();
-      await locator.type(generatedValue);
+      await this.fillWithFallback(field, generatedValue);
       result.fields.push({
         id: field.id,
         semanticType,
@@ -183,10 +180,42 @@ export class FormHelper {
     }
   }
 
+  private async fillWithFallback(field: FormFieldMeta, generatedValue: string): Promise<void> {
+    const primarySelector = this.selectorForFill(field);
+    try {
+      await new Locator(primarySelector, this.sendRequest).fill(generatedValue);
+      return;
+    } catch (primaryError) {
+      const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
+      const fallbackSelector = this.parseSelector(field.selector);
+      const primarySelectorText = typeof primarySelector === 'string'
+        ? primarySelector
+        : new Locator(primarySelector, this.sendRequest).selectorString;
+      const fallbackSelectorText = new Locator(fallbackSelector, this.sendRequest).selectorString;
+
+      if (primarySelectorText === fallbackSelectorText) {
+        throw primaryError;
+      }
+
+      try {
+        await new Locator(fallbackSelector, this.sendRequest).fill(generatedValue);
+      } catch (fallbackError) {
+        const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        throw new Error(
+          `Fill failed. primary=${primarySelectorText}: ${primaryMessage}; fallback=${fallbackSelectorText}: ${fallbackMessage}`,
+        );
+      }
+    }
+  }
+
   private parseSelector(selectorStr: string): SelectorInput {
     if (selectorStr.startsWith('text=')) return { text: selectorStr.slice(5) };
     if (selectorStr.startsWith('key=')) return { key: selectorStr.slice(4) };
     if (selectorStr.startsWith('byType=')) return { type: selectorStr.slice(7) };
     return { text: selectorStr };
+  }
+
+  private selectorForFill(field: FormFieldMeta): SelectorInput {
+    return field.id ? `id=${field.id}` : this.parseSelector(field.selector);
   }
 }

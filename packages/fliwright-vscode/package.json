@@ -43,8 +43,13 @@
     "onCommand:fliwright.connect",
     "onCommand:fliwright.disconnect",
     "onCommand:fliwright.discoverVmService",
+    "onCommand:fliwright.configureMcp",
     "onCommand:fliwright.createMockConfig",
+    "onCommand:fliwright.openMockConfig",
+    "onCommand:fliwright.copyMockEndpoint",
+    "onCommand:fliwright.copyMockRuleJson",
     "onCommand:fliwright.createFormRules",
+    "onCommand:fliwright.openFormRules",
     "onCommand:fliwright.applyMockRule",
     "onCommand:fliwright.applyDefaultMocks",
     "onCommand:fliwright.stopSandbox",
@@ -114,6 +119,11 @@
         "command": "fliwright.discoverVmService",
         "title": "Fliwright: Discover VM Service",
         "icon": "$(search)"
+      },
+      {
+        "command": "fliwright.configureMcp",
+        "title": "Fliwright: Configure MCP",
+        "icon": "$(server-environment)"
       },
       {
         "command": "fliwright.reloadMocks",
@@ -243,6 +253,11 @@
           "command": "fliwright.discoverVmService",
           "when": "view == fliwright.devices",
           "group": "navigation@3"
+        },
+        {
+          "command": "fliwright.configureMcp",
+          "when": "view == fliwright.devices",
+          "group": "navigation@4"
         },
         {
           "command": "fliwright.reloadMocks",
@@ -455,6 +470,11 @@
           "type": "boolean",
           "default": true,
           "description": "Preview generated form data before filling the current screen."
+        },
+        "fliwright.codeLensEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Fliwright CodeLens actions in TypeScript test files."
         }
       }
     }

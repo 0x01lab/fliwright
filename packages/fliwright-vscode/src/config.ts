@@ -22,6 +22,7 @@ export function loadConfig(): ExtensionConfig {
     formRulesFile: config.get<string | null>('formRulesFile', null),
     formLocale: config.get<string>('formLocale', 'zh_CN'),
     formPreviewBeforeFill: config.get<boolean>('formPreviewBeforeFill', true),
+    codeLensEnabled: config.get<boolean>('codeLensEnabled', true),
   };
 }
 

@@ -90,6 +90,13 @@ export class Range {
 
 export class Selection extends Range {}
 
+export class CodeLens {
+  constructor(
+    public readonly range: Range,
+    public command?: Command,
+  ) {}
+}
+
 export interface Command {
   command: string;
   title: string;
@@ -145,8 +152,14 @@ export const workspace = {
       .filter((entry) => entry.endsWith(suffix ?? ''))
       .map((entry) => Uri.file(path.join(dir, entry)));
   },
-  async openTextDocument(uri: Uri): Promise<{ uri: Uri }> {
-    return { uri };
+  async openTextDocument(input: Uri | { language?: string; content?: string }): Promise<{ uri?: Uri; languageId?: string; getText(): string }> {
+    if (input instanceof Uri) {
+      return { uri: input, getText: () => '' };
+    }
+    return {
+      languageId: input.language,
+      getText: () => input.content ?? '',
+    };
   },
 };
 
@@ -196,6 +209,12 @@ export const commands = {
     return { dispose() {} };
   },
   executeCommand: async () => undefined,
+};
+
+export const languages = {
+  registerCodeLensProvider() {
+    return { dispose() {} };
+  },
 };
 
 export const env = {

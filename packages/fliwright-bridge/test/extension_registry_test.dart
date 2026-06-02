@@ -1,43 +1,56 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
+import 'package:fliwright_bridge/src/extensions/inspect.dart';
+import 'package:fliwright_bridge/src/extensions/type_extension.dart';
 
 void main() {
   group('ExtensionRegistry', () {
     late ExtensionRegistry registry;
 
-    setUp(() { registry = ExtensionRegistry(); });
+    setUp(() {
+      registry = ExtensionRegistry();
+    });
 
     test('registers and invokes a handler', () async {
       registry.register('ext.test.ping', (params) async {
         return {'echo': params['message'] ?? 'none'};
       });
       expect(registry.isRegistered('ext.test.ping'), isTrue);
-      final result = await registry.invoke('ext.test.ping', {'message': 'hello'});
+      final result =
+          await registry.invoke('ext.test.ping', {'message': 'hello'});
       expect(result, equals({'echo': 'hello'}));
     });
 
     test('throws when registering non-ext method', () {
-      expect(() => registry.register('bad.method', (_) async => {}), throwsA(isA<ArgumentError>()));
+      expect(() => registry.register('bad.method', (_) async => {}),
+          throwsA(isA<ArgumentError>()));
     });
 
     test('throws when registering duplicate method', () {
       registry.register('ext.test.dup', (_) async => {});
-      expect(() => registry.register('ext.test.dup', (_) async => {}), throwsA(isA<StateError>()));
+      expect(() => registry.register('ext.test.dup', (_) async => {}),
+          throwsA(isA<StateError>()));
     });
 
     test('throws when invoking unregistered method', () {
-      expect(() => registry.invoke('ext.test.missing', {}), throwsA(isA<StateError>()));
+      expect(() => registry.invoke('ext.test.missing', {}),
+          throwsA(isA<StateError>()));
     });
 
     test('lists registered methods', () {
       registry.register('ext.test.a', (_) async => {});
       registry.register('ext.test.b', (_) async => {});
-      expect(registry.registeredMethods, containsAll(['ext.test.a', 'ext.test.b']));
+      expect(registry.registeredMethods,
+          containsAll(['ext.test.a', 'ext.test.b']));
     });
   });
 
   group('FliwrightBridge', () {
-    setUp(() async { await FliwrightBridge.reset(); });
+    setUp(() async {
+      await FliwrightBridge.reset();
+    });
 
     test('init registers core extensions', () async {
       await FliwrightBridge.init();
@@ -48,7 +61,9 @@ void main() {
   });
 
   group('RiverpodExtension', () {
-    setUp(() async { await FliwrightBridge.reset(); });
+    setUp(() async {
+      await FliwrightBridge.reset();
+    });
 
     test('registers riverpod extensions on init', () async {
       await FliwrightBridge.init();
@@ -62,19 +77,23 @@ void main() {
 
     test('read returns error when provider name is missing', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.riverpod.read', {});
+      final result = await FliwrightBridge.registry
+          .invoke('ext.fliwright.riverpod.read', {});
       expect(result, contains('error'));
     });
 
     test('watch returns error when provider name is missing', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.riverpod.watch', {});
+      final result = await FliwrightBridge.registry
+          .invoke('ext.fliwright.riverpod.watch', {});
       expect(result, contains('error'));
     });
   });
 
   group('GestureExtension', () {
-    setUp(() async { await FliwrightBridge.reset(); });
+    setUp(() async {
+      await FliwrightBridge.reset();
+    });
 
     test('registers click extension on init', () async {
       await FliwrightBridge.init();
@@ -84,7 +103,8 @@ void main() {
 
     test('click returns error when x or y is missing', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.click', {});
+      final result =
+          await FliwrightBridge.registry.invoke('ext.fliwright.click', {});
       expect(result, contains('error'));
     });
 
@@ -96,7 +116,8 @@ void main() {
 
     test('gesture returns error when gesture type is missing', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
+      final result =
+          await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
         'selector': 'text=Hello',
       });
       expect(result, contains('error'));
@@ -108,7 +129,8 @@ void main() {
       await FliwrightBridge.init();
       // Override inspect to return a widget so the gesture type check is reached
       FliwrightBridge.registry.reset();
-      FliwrightBridge.registry.register('ext.fliwright.inspect', (params) async {
+      FliwrightBridge.registry.register('ext.fliwright.inspect',
+          (params) async {
         return {
           'widgets': [
             {
@@ -122,7 +144,8 @@ void main() {
       });
       GestureExtension.register(FliwrightBridge.registry);
 
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
+      final result =
+          await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
         'gesture': 'swipe',
         'selector': 'text=Hello',
       });
@@ -132,7 +155,8 @@ void main() {
 
     test('gesture returns error when selector is missing', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
+      final result =
+          await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
         'gesture': 'longPress',
       });
       expect(result, contains('error'));
@@ -141,7 +165,9 @@ void main() {
   });
 
   group('InspectExtension', () {
-    setUp(() async { await FliwrightBridge.reset(); });
+    setUp(() async {
+      await FliwrightBridge.reset();
+    });
 
     test('registers inspect extension on init', () async {
       await FliwrightBridge.init();
@@ -161,10 +187,39 @@ void main() {
       // processed without throwing.
       expect(result, contains('widgets'));
     });
+
+    testWidgets('inspect supports id selector', (tester) async {
+      InspectExtension.register(FliwrightBridge.registry);
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text('Login'),
+        ),
+      );
+
+      final textResult = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.inspect',
+        {'selector': 'text=Login'},
+      );
+      final widgets = textResult['widgets'] as List;
+      expect(widgets, isNotEmpty);
+      final id = widgets.first['id'] as String;
+
+      final idResult = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.inspect',
+        {'selector': 'id=$id'},
+      );
+      final idWidgets = idResult['widgets'] as List;
+      expect(idWidgets, hasLength(1));
+      expect(idWidgets.first['id'], id);
+      expect(idWidgets.first['text'], 'Login');
+    });
   });
 
   group('ScrollExtension', () {
-    setUp(() async { await FliwrightBridge.reset(); });
+    setUp(() async {
+      await FliwrightBridge.reset();
+    });
 
     test('registers scrollIntoView extension on init', () async {
       await FliwrightBridge.init();
@@ -195,7 +250,9 @@ void main() {
   });
 
   group('TypeExtension', () {
-    setUp(() async { await FliwrightBridge.reset(); });
+    setUp(() async {
+      await FliwrightBridge.reset();
+    });
 
     test('registers type extension on init', () async {
       await FliwrightBridge.init();
@@ -205,7 +262,8 @@ void main() {
 
     test('type returns error when selector is missing', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry.invoke('ext.fliwright.type', {});
+      final result =
+          await FliwrightBridge.registry.invoke('ext.fliwright.type', {});
       expect(result, contains('error'));
       expect(result['error'], contains('selector'));
     });
@@ -229,6 +287,52 @@ void main() {
       );
       expect(result, contains('error'));
       expect(result['success'], isFalse);
+    });
+
+    testWidgets('type fills a TextField when selector matches label text',
+        (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+
+      InspectExtension.register(FliwrightBridge.registry);
+      FliwrightBridge.registry.register('ext.fliwright.click', (_) async {
+        return {'success': true};
+      });
+      TypeExtension.register(FliwrightBridge.registry);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 320,
+                child: TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Username / Email',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final result = await tester.runAsync(() {
+        return FliwrightBridge.registry.invoke(
+          'ext.fliwright.type',
+          {
+            'selector': 'text=Username / Email',
+            'text': 'user@example.com',
+            'replaceAll': 'true',
+          },
+        );
+      });
+
+      expect(result, isNotNull);
+      final typeResult = result!;
+      expect(typeResult['success'], isTrue);
+      expect(controller.text, 'user@example.com');
     });
   });
 }

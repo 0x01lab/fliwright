@@ -98,8 +98,9 @@ describe('FormHelper', () => {
       const clickCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.click');
       const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
       expect(extractCalls).toHaveLength(1);
-      expect(clickCalls).toHaveLength(2);
+      expect(clickCalls).toHaveLength(0);
       expect(typeCalls).toHaveLength(2);
+      expect(typeCalls.every((call) => (call[1] as Record<string, unknown>).replaceAll === 'true')).toBe(true);
     });
 
     it('scopes extraction when scope option is provided', async () => {
@@ -131,9 +132,9 @@ describe('FormHelper', () => {
 
       const clickCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.click');
       const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
-      expect(clickCalls).toHaveLength(1);
+      expect(clickCalls).toHaveLength(0);
       expect(typeCalls).toHaveLength(1);
-      expect(typeCalls[0][1]).toMatchObject({ selector: 'text=请输入手机号' });
+      expect(typeCalls[0][1]).toMatchObject({ selector: 'id=w1', replaceAll: 'true' });
     });
 
     it('matches by hintText substring', async () => {
@@ -144,7 +145,7 @@ describe('FormHelper', () => {
 
       const typeCalls = sendRequest.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
       expect(typeCalls).toHaveLength(1);
-      expect(typeCalls[0][1]).toMatchObject({ selector: 'text=邮箱地址' });
+      expect(typeCalls[0][1]).toMatchObject({ selector: 'id=w3', replaceAll: 'true' });
     });
   });
 
@@ -169,6 +170,71 @@ describe('FormHelper', () => {
       const result = await errorHelper.fill({ skipObscureFields: true });
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.fields.some(f => f.status === 'error')).toBe(true);
+    });
+
+    it('reports error when type extension returns success false', async () => {
+      const errorSend = vi.fn().mockImplementation((method: string) => {
+        if (method === 'ext.fliwright.extractForm') {
+          return Promise.resolve(sampleFields['ext.fliwright.extractForm']);
+        }
+        if (method === 'ext.fliwright.inspect') {
+          return Promise.resolve(sampleFields['ext.fliwright.inspect']);
+        }
+        if (method === 'ext.fliwright.type') {
+          return Promise.resolve({ success: false, error: 'No focused EditableText found after click' });
+        }
+        return Promise.resolve({});
+      });
+      const errorHelper = new FormHelper(errorSend);
+      const result = await errorHelper.fill({ skipObscureFields: true });
+      expect(result.filled).toBe(0);
+      expect(result.errors).toHaveLength(2);
+      expect(result.errors[0].error).toContain('No focused EditableText');
+      expect(result.fields.every(f => f.status !== 'filled')).toBe(true);
+    });
+
+    it('falls back to the extracted selector when id lookup fails', async () => {
+      const send = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
+        if (method === 'ext.fliwright.extractForm') {
+          return Promise.resolve(sampleFields['ext.fliwright.extractForm']);
+        }
+        if (method === 'ext.fliwright.inspect') {
+          return Promise.resolve(
+            params?.selector === 'id=w1'
+              ? { widgets: [], count: 0 }
+              : sampleFields['ext.fliwright.inspect'],
+          );
+        }
+        if (method === 'ext.fliwright.type') {
+          return Promise.resolve({ success: true });
+        }
+        return Promise.resolve({});
+      });
+
+      const result = await new FormHelper(send).fillFields(['手机号']);
+      expect(result.filled).toBe(1);
+      const inspectSelectors = send.mock.calls
+        .filter((call) => call[0] === 'ext.fliwright.inspect')
+        .map((call) => (call[1] as Record<string, unknown>).selector);
+      expect(inspectSelectors).toContain('id=w1');
+      expect(inspectSelectors).toContain('text=请输入手机号');
+    });
+
+    it('reports both primary and fallback errors when both lookups fail', async () => {
+      const send = vi.fn().mockImplementation((method: string) => {
+        if (method === 'ext.fliwright.extractForm') {
+          return Promise.resolve(sampleFields['ext.fliwright.extractForm']);
+        }
+        if (method === 'ext.fliwright.inspect') {
+          return Promise.resolve({ widgets: [], count: 0 });
+        }
+        return Promise.resolve({});
+      });
+
+      const result = await new FormHelper(send).fillFields(['手机号']);
+      expect(result.filled).toBe(0);
+      expect(result.errors[0].error).toContain('primary=id=w1');
+      expect(result.errors[0].error).toContain('fallback=text=请输入手机号');
     });
 
     it('handles empty form gracefully', async () => {

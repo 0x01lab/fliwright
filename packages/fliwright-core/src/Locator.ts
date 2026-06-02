@@ -104,7 +104,20 @@ export class Locator {
     if (options?.replaceAll === true) {
       params.replaceAll = 'true';
     }
-    await this.sendRequest('ext.fliwright.type', params);
+    const response = await this.sendRequest('ext.fliwright.type', params);
+    this.assertSuccessResponse(response, 'type');
+  }
+
+  private assertSuccessResponse(response: unknown, action: string): void {
+    if (!response || typeof response !== 'object') return;
+
+    const result = response as { success?: unknown; error?: unknown; debug?: unknown };
+    if (result.success === false) {
+      const message = typeof result.error === 'string' ? result.error : `${action} failed`;
+      const debug = result.debug === undefined ? '' : ` debug=${JSON.stringify(result.debug)}`;
+      const error = `${message}${debug}`;
+      throw new Error(error);
+    }
   }
 
   async scrollIntoView(options?: { alignment?: number; duration?: number }): Promise<void> {

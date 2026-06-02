@@ -7,7 +7,8 @@ class InspectExtension {
     registry.register('ext.fliwright.inspect', _inspect);
   }
 
-  static Future<Map<String, dynamic>> _inspect(Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _inspect(
+      Map<String, String> params) async {
     final selector = params['selector'] ?? '';
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
@@ -48,6 +49,9 @@ class InspectExtension {
     }
     if (selector.startsWith('byType=')) {
       return ParsedSelector(field: 'type', value: selector.substring(7));
+    }
+    if (selector.startsWith('id=')) {
+      return ParsedSelector(field: 'id', value: selector.substring(3));
     }
     return ParsedSelector(field: 'text', value: selector);
   }

@@ -10,6 +10,9 @@ This implementation slice provides native sidebar workflows for local Flutter te
 - `Devices`: connects and disconnects a running Flutter VM Service through `@fliwright/core`.
 - `Mock APIs`: applies a selected rule, applies default rules, and clears runtime mock routes through `driver.mock`.
 - `Form Data`: scans `.fliwright/forms/*.json`, previews generated values, and fills selected fields through `FormHelper`.
+- `Tests` / `Runs`: discovers Fliwright test files, runs Vitest, and opens persisted failure context.
+- `State`: lists, reads, and overrides state providers exposed by the bridge.
+- Editor CodeLens: adds run and record actions for TypeScript Fliwright tests.
 
 Mock files are JSON-only. Legacy YAML mock files are intentionally unsupported.
 
@@ -43,3 +46,12 @@ Publish to the VS Code Marketplace with a configured `VSCE_PAT`:
 ```bash
 pnpm --filter @fliwright/vscode publish:vsce
 ```
+
+Release checklist:
+
+- Run `pnpm --filter @fliwright/vscode lint`.
+- Run `pnpm --filter @fliwright/vscode test`.
+- Run `pnpm --filter @fliwright/vscode build`.
+- Run `pnpm --filter @fliwright/vscode test:integration` in a local VS Code-capable environment.
+- Run `pnpm --filter @fliwright/vscode package` and install the generated VSIX in an Extension Development Host.
+- Publish only after Marketplace metadata, publisher credentials, and manual smoke testing are complete.

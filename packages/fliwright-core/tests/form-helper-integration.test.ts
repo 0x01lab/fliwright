@@ -68,8 +68,8 @@ describe('FormHelper Integration', () => {
 
     // Mock inspect for each locator
     mock.mockExtension('ext.fliwright.inspect', (params: any) => {
-      if (params.selector === 'text=Email address') return { widgets: [EMAIL_WIDGET] };
-      if (params.selector === 'text=Submit') return { widgets: [SUBMIT_WIDGET] };
+      if (params.selector === 'id=field-email') return { widgets: [EMAIL_WIDGET] };
+      if (params.selector === 'id=field-submit') return { widgets: [SUBMIT_WIDGET] };
       return { widgets: [] };
     });
 
@@ -121,7 +121,7 @@ describe('FormHelper Integration', () => {
     }));
 
     mock.mockExtension('ext.fliwright.inspect', (params: any) => {
-      if (params.selector === 'text=Email address') return { widgets: [EMAIL_WIDGET] };
+      if (params.selector === 'id=field-email') return { widgets: [EMAIL_WIDGET] };
       return { widgets: [] };
     });
 

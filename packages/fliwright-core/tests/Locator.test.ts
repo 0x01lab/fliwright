@@ -212,6 +212,18 @@ describe('Locator', () => {
       );
     });
 
+    it('throws when the type extension returns success false', async () => {
+      const sendRequest = createMockSendRequest({
+        inspect: { widgets: [testWidget], count: 1 },
+        type: { success: false, error: 'No focused EditableText found after click' },
+      });
+
+      const locator = new Locator({ text: 'Input' }, sendRequest);
+      await expect(locator.type('hello')).rejects.toThrow(
+        'No focused EditableText found after click',
+      );
+    });
+
     it('sends type with ancestorSelector when ancestor present', async () => {
       const sendRequest = createMockSendRequest({
         inspect: { widgets: [testWidget], count: 1 },

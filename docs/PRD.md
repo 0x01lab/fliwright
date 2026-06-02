@@ -174,15 +174,16 @@ Fliwright 是一个面向 Flutter 应用的跨语言（TypeScript/JavaScript + D
 | **CLI** | ✅ 已实现 | `fliwright run/init/doctor/record` 四个命令 |
 | **MCP Server** | ✅ 已实现 | 6 个工具 + 1 个资源端点 |
 | **Vitest 集成** | ✅ 已实现 | `@fliwright/vitest` 开箱即用 |
-| **VS Code 插件** | 🔄 部分实现 | 侧栏三视图 + 19 个命令已实现，待发布验证 |
+| **VS Code 插件** | 🔄 部分实现 | 6 个侧栏视图 + 27 个命令 + CodeLens 已实现，待发布验证 |
 | **Electron 桌面应用** | 📋 规划中 | V2.0 范围 |
 
 **VS Code 插件已实现能力**：
-- 三个侧栏视图：设备连接管理、Mock API 管理、表单规则管理
-- 19 个命令：VM Service 连接/发现、Mock 配置加载/应用/停止、表单规则分析/填充
+- 6 个侧栏视图：设备连接管理、Mock API 管理、表单规则管理、测试发现、运行结果、状态注入
+- 27 个命令：VM Service 连接/发现、MCP 配置说明、Mock 配置加载/应用/停止、表单规则分析/填充、测试运行、失败上下文查看、录制/插入、状态 Provider 读取/覆盖
 - 自动扫描 `.fliwright/mocks/api/*.json` 和 `.fliwright/forms/*.json`
-- 7 个可配置项（路径、URL、行为设置）
-- 剩余工作：VSIX 打包发布、Marketplace 上架、用户测试与反馈
+- 14 个可配置项（路径、URL、Runner、失败上下文、表单行为、CodeLens 开关等）
+- TypeScript 测试文件 CodeLens：运行当前 Fliwright 测试、带失败上下文运行、录制后续交互
+- 剩余工作：VSIX 发布包验证、Marketplace 上架、真实 VS Code Extension Host 用户测试与反馈
 
 **VS Code 插件本地资产约定**：
 - 插件读取项目根目录 `.fliwright/` 作为本地测试资产目录
@@ -548,7 +549,7 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 - ✅ 集成表单助手核心层与 TS 适配器
 - ✅ 自愈引擎基本功能
 - ✅ MCP Server 对接 Cursor/Claude Code
-- 🔄 **VS Code 插件**（核心功能已实现：三视图 + 19 命令，待 VSIX 打包发布）
+- 🔄 **VS Code 插件**（核心功能已实现：6 视图 + 27 命令 + CodeLens，待 VSIX 打包发布和 Marketplace 上架）
 - 📋 **性能帧率断言** (`performanceJankRateLessThan`)
 - 📋 **路由断言** (`toContainRoute`)
 
@@ -592,6 +593,6 @@ fliwright/
 ---
 
 ## 12. 结论
-Fliwright 已完成 MVP 阶段全部功能和 V1.0 阶段大部分功能。核心架构（零侵入桥接、自愈引擎、表单助手、MCP 集成、Vitest 集成、插件系统）均已实现并通过测试验证。VS Code 插件已实现核心功能（三视图 + 19 命令），待 VSIX 打包发布。下一步重点为 VS Code 插件发布、性能断言完善，随后进入 V2.0 规划（Skill 市场、Trace Viewer、原生硬件 Mock）。
+Fliwright 已完成 MVP 阶段全部功能和 V1.0 阶段大部分功能。核心架构（零侵入桥接、自愈引擎、表单助手、MCP 集成、Vitest 集成、插件系统）均已实现并通过测试验证。VS Code 插件已实现核心功能（6 视图 + 27 命令 + CodeLens），待 VSIX 打包发布、Marketplace 上架和真实用户验证。下一步重点为 VS Code 插件发布、性能断言完善，随后进入 V2.0 规划（Skill 市场、Trace Viewer、原生硬件 Mock）。
 
 ---

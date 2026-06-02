@@ -117,3 +117,16 @@ function maskValue(value: string): string {
 export function formRulesFileName(entry?: FormRulesEntry): string {
   return entry ? path.basename(entry.uri.fsPath) : 'configured rules';
 }
+
+export function formatFormFillDebug(result: FormFillResult): string[] {
+  const lines = ['Form fill debug:'];
+  for (const field of result.fields) {
+    const error = result.errors.find((entry) => entry.fieldId === field.id)?.error;
+    const value = field.generatedValue ? ` value=${JSON.stringify(field.generatedValue)}` : '';
+    const errorText = error ? ` error=${error}` : '';
+    lines.push(
+      `  - id=${field.id} selector=${field.selector} type=${field.semanticType} status=${field.status}${value}${errorText}`,
+    );
+  }
+  return lines;
+}
