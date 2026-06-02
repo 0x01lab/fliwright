@@ -7,6 +7,7 @@ import type {
   SemanticType,
   SelectorInput,
   SendRequest,
+  WidgetInfo,
 } from './types.js';
 import { SemanticInferrer } from './SemanticInferrer.js';
 import { FakerGenerator } from './FakerGenerator.js';
@@ -76,8 +77,8 @@ export class FormHelper {
     const matchingIds = new Set(
       fields
         .filter((field) => {
-          const text = field.hintText ?? field.label ?? '';
-          return fieldHints.some((hint) => text.includes(hint));
+          const candidates = this.fieldSelectionCandidates(field);
+          return fieldHints.some((hint) => candidates.some((candidate) => candidate.includes(hint)));
         })
         .map((f) => f.id),
     );
@@ -226,6 +227,21 @@ export class FormHelper {
     };
   }
 
+  private fieldSelectionCandidates(field: FormFieldMeta): string[] {
+    return [
+      field.hintText,
+      field.label,
+      field.name,
+      field.selector,
+      field.key,
+      field.ancestorKey,
+      field.semanticsId,
+      field.semanticsLabel,
+      field.semanticsHint,
+      field.id,
+    ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+  }
+
   private generateFieldValue(
     field: FormFieldMeta,
     semanticType: SemanticType,
@@ -250,15 +266,20 @@ export class FormHelper {
 
   private async fillWithFallback(field: FormFieldMeta, generatedValue: string): Promise<void> {
     const primarySelector = this.selectorForFill(field);
+    const primaryLocator = new Locator(primarySelector, this.sendRequest);
+
     try {
-      await this.applyFieldValue(field, primarySelector, generatedValue);
+      // Resolve once and reuse for both click and type.
+      const resolved = await primaryLocator.resolve();
+      if (!resolved) {
+        throw new Error(`No widget found matching selector: ${primaryLocator.selectorString}`);
+      }
+      await this.applyFieldValue(field, primarySelector, generatedValue, resolved);
       return;
     } catch (primaryError) {
       const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
       const fallbackSelector = this.parseSelector(field.selector);
-      const primarySelectorText = typeof primarySelector === 'string'
-        ? primarySelector
-        : new Locator(primarySelector, this.sendRequest).selectorString;
+      const primarySelectorText = primaryLocator.selectorString;
       const fallbackSelectorText = new Locator(fallbackSelector, this.sendRequest).selectorString;
 
       if (primarySelectorText === fallbackSelectorText) {
@@ -266,7 +287,13 @@ export class FormHelper {
       }
 
       try {
-        await this.applyFieldValue(field, fallbackSelector, generatedValue);
+        // Fallback uses a fresh locator since the primary selector failed.
+        const fallbackLocator = new Locator(fallbackSelector, this.sendRequest);
+        const resolved = await fallbackLocator.resolve();
+        if (!resolved) {
+          throw new Error(`No widget found matching selector: ${fallbackSelectorText}`);
+        }
+        await this.applyFieldValue(field, fallbackSelector, generatedValue, resolved);
       } catch (fallbackError) {
         const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
         throw new Error(
@@ -280,15 +307,21 @@ export class FormHelper {
     field: FormFieldMeta,
     fieldSelector: SelectorInput,
     generatedValue: string,
+    resolved?: WidgetInfo,
   ): Promise<void> {
     if (!field.controlType || field.controlType === 'textInput') {
-      await new Locator(fieldSelector, this.sendRequest).fill(generatedValue);
+      const locator = new Locator(fieldSelector, this.sendRequest);
+      if (resolved) {
+        await locator.fillWithResolved(generatedValue, resolved);
+      } else {
+        await locator.fill(generatedValue);
+      }
       return;
     }
 
     switch (field.controlType) {
       case 'checkbox':
-        await this.applyCheckboxValue(field, fieldSelector, generatedValue);
+        await this.applyCheckboxValue(field, fieldSelector, generatedValue, resolved);
         return;
       case 'radio':
         await this.clickOption(field, fieldSelector, generatedValue, { openFieldFirst: false });
@@ -297,7 +330,12 @@ export class FormHelper {
         await this.clickOption(field, fieldSelector, generatedValue, { openFieldFirst: true });
         return;
       default:
-        await new Locator(fieldSelector, this.sendRequest).fill(generatedValue);
+        const locator = new Locator(fieldSelector, this.sendRequest);
+        if (resolved) {
+          await locator.fillWithResolved(generatedValue, resolved);
+        } else {
+          await locator.fill(generatedValue);
+        }
     }
   }
 
@@ -305,6 +343,7 @@ export class FormHelper {
     field: FormFieldMeta,
     fieldSelector: SelectorInput,
     generatedValue: string,
+    resolved?: WidgetInfo,
   ): Promise<void> {
     const hasMultipleOptions = (field.options?.length ?? 0) > 1;
     if (hasMultipleOptions) {

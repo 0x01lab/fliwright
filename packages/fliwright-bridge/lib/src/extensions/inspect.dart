@@ -105,7 +105,12 @@ class InspectExtension {
     return keepGoing;
   }
 
-  static Map<String, dynamic>? extractWidgetInfo(Element element) {
+  static Map<String, dynamic>? extractWidgetInfo(
+    Element element, {
+    bool includeAncestorKey = true,
+    bool includeName = true,
+    bool includeSemantics = true,
+  }) {
     final widget = element.widget;
     final renderObject = element.findRenderObject();
 
@@ -121,9 +126,15 @@ class InspectExtension {
     }
 
     widgetKey = extractKeyValue(widget.key);
-    final ancestorKey = findAncestorKey(element);
-    final name = extractName(widget) ?? findAncestorName(element);
-    final semantics = extractSemantics(element);
+
+    // Expensive fields: only compute when requested.
+    final ancestorKey =
+        includeAncestorKey ? findAncestorKey(element) : null;
+    final name = includeName
+        ? (extractName(widget) ?? findAncestorName(element))
+        : null;
+    final semantics =
+        includeSemantics ? extractSemantics(element) : const ExtractedSemantics();
 
     Map<String, dynamic>? rect;
     if (renderObject is RenderBox && renderObject.hasSize) {
@@ -324,7 +335,14 @@ class InspectExtension {
         final text = extractText(widget);
         return text != null && text.contains(selector.value);
       default:
-        final info = extractWidgetInfo(element);
+        final info = extractWidgetInfo(
+          element,
+          includeAncestorKey: selector.field == 'ancestorKey',
+          includeName: selector.field == 'name',
+          includeSemantics: selector.field == 'semanticsId' ||
+              selector.field == 'semanticsLabel' ||
+              selector.field == 'role',
+        );
         return info != null && _matches(info, selector);
     }
   }

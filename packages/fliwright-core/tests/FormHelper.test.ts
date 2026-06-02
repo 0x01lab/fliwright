@@ -378,6 +378,39 @@ describe('FormHelper', () => {
       expect(typeCalls).toHaveLength(1);
       expect(typeCalls[0][1]).toMatchObject({ selector: 'name=email', replaceAll: 'true' });
     });
+
+    it('matches selected fields by stable name when label and hint are absent', async () => {
+      const send = vi.fn().mockImplementation((method: string) => {
+        if (method === 'ext.fliwright.extractForm') {
+          return Promise.resolve({
+            fields: [
+              {
+                id: 'position',
+                type: 'EditableText',
+                rect: { x: 20, y: 100, width: 360, height: 48 },
+                name: 'jobPosition',
+                obscureText: false,
+                enabled: true,
+                selector: 'name=jobPosition',
+              },
+            ],
+            count: 1,
+          });
+        }
+        if (method === 'ext.fliwright.type') {
+          return Promise.resolve({ success: true });
+        }
+        return Promise.resolve({});
+      });
+
+      const result = await new FormHelper(send).fillFields(['jobPosition']);
+
+      expect(result.filled).toBe(1);
+      expect(result.skipped).toBe(0);
+      const typeCalls = send.mock.calls.filter(c => c[0] === 'ext.fliwright.type');
+      expect(typeCalls).toHaveLength(1);
+      expect(typeCalls[0][1]).toMatchObject({ selector: 'name=jobPosition', replaceAll: 'true' });
+    });
   });
 
   describe('error handling', () => {

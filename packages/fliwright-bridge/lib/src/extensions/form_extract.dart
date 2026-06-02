@@ -21,22 +21,9 @@ class FormExtractExtension {
     final seenEditableKeys = <String>{};
     final seenNamedFields = <String>{};
 
-    InspectExtension.walkTree(root, (Element element) {
-      // Scope filtering: only extract fields inside the specified widget type.
-      // e.g. scope='RegisterPage' only extracts fields under a RegisterPage widget.
-      if (scope != null && scope.isNotEmpty) {
-        bool inScope = false;
-        element.visitAncestorElements((ancestor) {
-          if (ancestor.widget.runtimeType.toString() == scope) {
-            inScope = true;
-            return false;
-          }
-          // Stop at logical boundaries to avoid matching across pages.
-          if (ancestor.widget is Scaffold) return false;
-          return true;
-        });
-        if (!inScope) return;
-      }
+    // Use depth-tracking walk for O(N) scope filtering instead of
+    // per-element O(depth) ancestor walks.
+    _walkTreeInScope(root, scope, (Element element) {
       final widget = element.widget;
 
       // Extract from Material TextField widgets.
@@ -106,6 +93,47 @@ class FormExtractExtension {
     });
 
     return {'fields': fields, 'count': fields.length};
+  }
+
+  /// Walk the widget tree, only visiting elements inside [scope].
+  /// Uses an integer depth counter instead of per-element ancestor walks,
+  /// reducing scope checking from O(depth × N) to O(N).
+  static void _walkTreeInScope(
+    Element root,
+    String? scope,
+    void Function(Element element) visitor,
+  ) {
+    if (scope == null || scope.isEmpty) {
+      // No scope — visit everything.
+      InspectExtension.walkTree(root, visitor);
+      return;
+    }
+
+    int scopeDepth = 0;
+
+    void walk(Element element) {
+      final typeName = element.widget.runtimeType.toString();
+
+      if (typeName == scope) {
+        scopeDepth++;
+      }
+
+      // Only invoke visitor when inside the scope.
+      if (scopeDepth > 0) {
+        visitor(element);
+      }
+
+      // Recurse into children when inside scope or still searching for it.
+      element.debugVisitOnstageChildren((child) {
+        walk(child);
+      });
+
+      if (typeName == scope) {
+        scopeDepth--;
+      }
+    }
+
+    walk(root);
   }
 
   /// Check whether this element has a TextFormField ancestor, and if so

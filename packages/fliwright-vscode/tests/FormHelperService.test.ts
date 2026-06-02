@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Uri } from 'vscode';
-import { FormHelperService, formatFormFillDebug } from '../src/form/FormHelperService.js';
+import { FormHelperService, formRuleSnippetForField, formatFormFillDebug } from '../src/form/FormHelperService.js';
 
 describe('FormHelperService', () => {
   it('masks sensitive preview values', () => {
@@ -52,6 +52,24 @@ describe('FormHelperService', () => {
     expect(service.getLastAnalyze()).toBe(result);
   });
 
+  it('uses stable field names for preview labels when text labels are absent', () => {
+    const service = new FormHelperService();
+
+    const fields = service.previewFields({
+      fields: [
+        {
+          id: 'position',
+          semanticType: 'text',
+          generatedValue: 'Engineer',
+          selector: 'name=jobPosition',
+          name: 'jobPosition',
+        },
+      ],
+    });
+
+    expect(fields[0]).toMatchObject({ label: 'jobPosition' });
+  });
+
   it('fills selected fields through FormHelper.fillFields', async () => {
     const service = new FormHelperService();
     let receivedOptions: Record<string, unknown> | undefined;
@@ -88,6 +106,29 @@ describe('FormHelperService', () => {
     expect(receivedOptions).toMatchObject({ requireRuleMatch: true });
     expect(service.getLastSummary()).toMatchObject({ action: 'fill', filled: 1, skipped: 1 });
     expect(service.getLastAnalyze()).toBeUndefined();
+  });
+
+  it('creates rule snippets with structured match keys before raw selector', () => {
+    expect(formRuleSnippetForField({
+      id: 'country',
+      semanticType: 'text',
+      generatedValue: 'CN',
+      selector: 'name=resAddrCountry',
+      name: 'resAddrCountry',
+    })).toEqual({
+      match: { name: 'resAddrCountry' },
+      type: 'PRESET_SKILL',
+      data: ['CN'],
+    });
+
+    expect(formRuleSnippetForField({
+      id: 'fallback',
+      semanticType: 'text',
+      generatedValue: 'value',
+      selector: 'byType=TextFormField',
+    })).toMatchObject({
+      match: { selector: 'byType=TextFormField' },
+    });
   });
 
   it('formats fill debug lines with field errors', () => {

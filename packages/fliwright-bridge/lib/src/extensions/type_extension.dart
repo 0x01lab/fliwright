@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/widgets.dart';
 
 import '../bridge.dart';
@@ -21,44 +23,63 @@ class TypeExtension {
     final replaceAll = (params['replaceAll'] ?? 'false') == 'true';
     final charDelayMs = int.tryParse(params['charDelay'] ?? '0') ?? 0;
 
-    // Step 1: Inspect to find the widget.
-    final inspectResult = await FliwrightBridge.registry.invoke(
-      'ext.fliwright.inspect',
-      {'selector': selector, 'limit': '1'},
-    );
+    // Pre-computed values from the caller (TypeScript Locator).
+    final precomputedId = params['targetId'];
+    final precomputedRectJson = params['targetRect'];
 
-    if (inspectResult.containsKey('error')) {
-      return {
-        'error': 'Inspect failed: ${inspectResult['error']}',
-        'success': false,
-      };
+    // Step 1: Resolve target widget — use pre-computed info when available,
+    // otherwise fall back to inspect (backward compatible).
+    String? targetId;
+    String? targetType;
+    Map<String, dynamic>? rect;
+    int matchedCount = 0;
+
+    if (precomputedId != null && precomputedRectJson != null) {
+      // Fast path: caller already resolved the widget via inspect.
+      targetId = precomputedId;
+      rect = _parseRectJson(precomputedRectJson);
+      matchedCount = 1;
+    } else {
+      // Slow path: inspect to find the widget.
+      final inspectResult = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.inspect',
+        {'selector': selector, 'limit': '20'},
+      );
+
+      if (inspectResult.containsKey('error')) {
+        return {
+          'error': 'Inspect failed: ${inspectResult['error']}',
+          'success': false,
+        };
+      }
+
+      final widgets = inspectResult['widgets'];
+      if (widgets is! List || widgets.isEmpty) {
+        return {
+          'error': 'No widget found for selector: $selector',
+          'success': false,
+          'debug': {
+            'selector': selector,
+            'inspectResult': inspectResult,
+          },
+        };
+      }
+
+      final target = _bestTypeTarget(widgets);
+      targetId = target is Map ? target['id'] : null;
+      targetType = target is Map ? target['type'] : null;
+      rect = target['rect'] as Map<String, dynamic>?;
+      matchedCount = widgets.length;
     }
 
-    final widgets = inspectResult['widgets'];
-    if (widgets is! List || widgets.isEmpty) {
-      return {
-        'error': 'No widget found for selector: $selector',
-        'success': false,
-        'debug': {
-          'selector': selector,
-          'inspectResult': inspectResult,
-        },
-      };
-    }
-
-    final target = widgets.first;
-    final targetId = target is Map ? target['id'] : null;
-    final targetType = target is Map ? target['type'] : null;
-    final rect = target['rect'];
-    if (rect is! Map<String, dynamic>) {
+    if (rect == null) {
       return {
         'error':
             'Widget has no render geometry (no rect): selector=$selector targetType=$targetType targetId=$targetId',
         'success': false,
         'debug': {
           'selector': selector,
-          'matchedCount': widgets.length,
-          'target': target,
+          'matchedCount': matchedCount,
         },
       };
     }
@@ -76,8 +97,7 @@ class TypeExtension {
         'success': false,
         'debug': {
           'selector': selector,
-          'matchedCount': widgets.length,
-          'target': target,
+          'matchedCount': matchedCount,
         },
       };
     }
@@ -115,79 +135,99 @@ class TypeExtension {
       };
     }
 
-    // Strategy A: look for the focused EditableText (works for standard
-    // TextField / TextFormField / FormBuilderTextField).
     EditableText? focusedEditable;
     String? focusedEditableId;
-    _walkTree(root, (Element element) {
-      if (focusedEditable != null) return;
-      final widget = element.widget;
-      if (widget is EditableText && widget.focusNode.hasFocus) {
-        focusedEditable = widget;
-        focusedEditableId = '${element.hashCode}';
-      }
-    });
+    Element? editableElement; // Track the element for _notifyFormField.
 
-    // Strategy B: if no focused widget was found (e.g. FormBuilder may
-    // intercept focus), fall back to locating the EditableText that is a
-    // descendant of the inspected element.
-    Element? targetElement;
-    if (focusedEditable == null) {
-      if (targetId is String) {
-        _walkTree(root, (Element element) {
-          if (targetElement != null) return;
-          if ('${element.hashCode}' == targetId) {
-            targetElement = element;
-          }
-        });
-        if (targetElement != null) {
-          _walkTree(targetElement!, (Element element) {
+    // Strategy B (PROMOTED): if we have targetId, locate the element directly
+    // and search its subtree for EditableText. This is O(depth) instead of
+    // O(N) and works even when focus is intercepted (e.g. FormBuilder).
+    if (targetId != null) {
+      Element? targetEl;
+      _walkTree(root, (Element element) {
+        if (targetEl != null) return;
+        if ('${element.hashCode}' == targetId) {
+          targetEl = element;
+        }
+      });
+      if (targetEl != null) {
+        // The target element itself might be the EditableText.
+        if (targetEl!.widget is EditableText) {
+          focusedEditable = targetEl!.widget as EditableText;
+          focusedEditableId = '${targetEl!.hashCode}';
+          editableElement = targetEl;
+        } else {
+          // Search subtree for an EditableText descendant.
+          _walkTree(targetEl!, (Element element) {
             if (focusedEditable != null) return;
             if (element.widget is EditableText) {
               focusedEditable = element.widget as EditableText;
               focusedEditableId = '${element.hashCode}';
+              editableElement = element;
             }
           });
         }
       }
+
+      // If Strategy B found nothing by targetId, save targetEl for Strategy C.
+      if (focusedEditable == null && targetEl != null) {
+        // Keep targetEl reference for Strategy C below.
+        // (Reuse via the targetEl local which is still in scope.)
+      }
+
+      // Strategy C (moved up): if targetId lookup found the element but no
+      // EditableText descendant, walk ancestors to find the nearest
+      // EditableText in the same local container.
+      if (focusedEditable == null && targetEl != null) {
+        final targetCenter =
+            Offset(centerX.toDouble(), centerY.toDouble());
+        targetEl!.visitAncestorElements((ancestor) {
+          if (focusedEditable != null) return false;
+          if (ancestor.widget.runtimeType.toString() == 'Scaffold' ||
+              ancestor.widget.runtimeType.toString() == 'MaterialApp') {
+            return false;
+          }
+
+          Element? nearestEditableEl;
+          double nearestDistance = double.infinity;
+          _walkTree(ancestor, (Element element) {
+            if (element.widget is! EditableText) return;
+
+            final renderObject = element.findRenderObject();
+            if (renderObject is! RenderBox || !renderObject.hasSize) return;
+
+            final topLeft = renderObject.localToGlobal(Offset.zero);
+            final ancestorRect = topLeft & renderObject.size;
+            final center = ancestorRect.center;
+            final distance = (center - targetCenter).distance;
+            if (distance < nearestDistance) {
+              nearestDistance = distance;
+              nearestEditableEl = element;
+            }
+          });
+
+          if (nearestEditableEl != null) {
+            focusedEditable = nearestEditableEl!.widget as EditableText;
+            focusedEditableId = '${nearestEditableEl!.hashCode}';
+            editableElement = nearestEditableEl;
+            return false;
+          }
+          return true;
+        });
+      }
     }
 
-    // Strategy C: label selectors may match a sibling Text near a
-    // FormBuilderTextField/TextField. Walk closest ancestors first and pick
-    // the nearest EditableText inside the same local container.
-    if (focusedEditable == null && targetElement != null) {
-      final targetCenter = Offset(centerX.toDouble(), centerY.toDouble());
-      targetElement!.visitAncestorElements((ancestor) {
-        if (focusedEditable != null) return false;
-        if (ancestor.widget.runtimeType.toString() == 'Scaffold' ||
-            ancestor.widget.runtimeType.toString() == 'MaterialApp') {
-          return false;
+    // Strategy A: look for the focused EditableText (works for standard
+    // TextField / TextFormField / FormBuilderTextField).
+    if (focusedEditable == null) {
+      _walkTree(root, (Element element) {
+        if (focusedEditable != null) return;
+        final widget = element.widget;
+        if (widget is EditableText && widget.focusNode.hasFocus) {
+          focusedEditable = widget;
+          focusedEditableId = '${element.hashCode}';
+          editableElement = element;
         }
-
-        Element? nearestEditableElement;
-        double nearestDistance = double.infinity;
-        _walkTree(ancestor, (Element element) {
-          if (element.widget is! EditableText) return;
-
-          final renderObject = element.findRenderObject();
-          if (renderObject is! RenderBox || !renderObject.hasSize) return;
-
-          final topLeft = renderObject.localToGlobal(Offset.zero);
-          final rect = topLeft & renderObject.size;
-          final center = rect.center;
-          final distance = (center - targetCenter).distance;
-          if (distance < nearestDistance) {
-            nearestDistance = distance;
-            nearestEditableElement = element;
-          }
-        });
-
-        if (nearestEditableElement != null) {
-          focusedEditable = nearestEditableElement!.widget as EditableText;
-          focusedEditableId = '${nearestEditableElement!.hashCode}';
-          return false;
-        }
-        return true;
       });
     }
 
@@ -195,20 +235,19 @@ class TypeExtension {
     // inside the input decoration, not the editable itself. In that case,
     // locate the EditableText whose render bounds contain the click point.
     if (focusedEditable == null) {
-      Element? pointEditableElement;
       _walkTree(root, (Element element) {
-        if (pointEditableElement != null) return;
+        if (editableElement != null) return;
         if (element.widget is! EditableText) return;
 
         final renderObject = element.findRenderObject();
         if (renderObject is! RenderBox || !renderObject.hasSize) return;
 
         final topLeft = renderObject.localToGlobal(Offset.zero);
-        final rect = topLeft & renderObject.size;
-        if (rect
+        final elementRect = topLeft & renderObject.size;
+        if (elementRect
             .inflate(12)
             .contains(Offset(centerX.toDouble(), centerY.toDouble()))) {
-          pointEditableElement = element;
+          editableElement = element;
           focusedEditable = element.widget as EditableText;
           focusedEditableId = '${element.hashCode}';
         }
@@ -218,11 +257,11 @@ class TypeExtension {
     if (focusedEditable == null) {
       return {
         'error':
-            'No EditableText found after click: selector=$selector targetType=$targetType targetId=$targetId matchedCount=${widgets.length}',
+            'No EditableText found after click: selector=$selector targetType=$targetType targetId=$targetId matchedCount=$matchedCount',
         'success': false,
         'debug': {
           'selector': selector,
-          'matchedCount': widgets.length,
+          'matchedCount': matchedCount,
           'targetId': targetId,
           'targetType': targetType,
           'targetRect': rect,
@@ -271,14 +310,16 @@ class TypeExtension {
     // changed.  This is critical for flutter_form_builder and other
     // form libraries that track state via FormField.didChange rather
     // than only through the TextEditingController.
-    _notifyFormField(root, focusedEditable!, newText);
+    if (editableElement != null) {
+      _notifyFormField(editableElement!, newText);
+    }
 
     return {
       'success': true,
       'currentText': newText,
       'debug': {
         'selector': selector,
-        'matchedCount': widgets.length,
+        'matchedCount': matchedCount,
         'targetId': targetId,
         'targetType': targetType,
         'editableId': focusedEditableId,
@@ -287,26 +328,15 @@ class TypeExtension {
     };
   }
 
-  /// Walk up from the [editableElement] to find a [FormField] ancestor
+  /// Walk up from [editableElement] to find a [FormField] ancestor
   /// and call [FormFieldState.didChange] so that form libraries
   /// (flutter_form_builder, etc.) correctly sync their internal state.
-  static void _notifyFormField(
-    Element root,
-    EditableText editableWidget,
-    String value,
-  ) {
-    // Find the Element that hosts the EditableText widget.
-    Element? editableElement;
-    _walkTree(root, (Element element) {
-      if (editableElement != null) return;
-      if (element.widget == editableWidget) {
-        editableElement = element;
-      }
-    });
-    if (editableElement == null) return;
-
+  ///
+  /// Receives the [editableElement] directly instead of walking the
+  /// entire tree to rediscover it.
+  static void _notifyFormField(Element editableElement, String value) {
     // Walk ancestors looking for a FormFieldState.
-    editableElement!.visitAncestorElements((ancestor) {
+    editableElement.visitAncestorElements((ancestor) {
       // The ancestor's State might be a FormFieldState subclass.
       final state = ancestor is StatefulElement ? ancestor.state : null;
       if (state != null) {
@@ -333,5 +363,27 @@ class TypeExtension {
     root.debugVisitOnstageChildren((Element child) {
       _walkTree(child, visitor);
     });
+  }
+
+  static Map<String, dynamic>? _parseRectJson(String json) {
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {}
+    return null;
+  }
+
+  static dynamic _bestTypeTarget(List<dynamic> widgets) {
+    for (final widget in widgets) {
+      if (widget is Map && widget['type'] == 'EditableText') {
+        return widget;
+      }
+    }
+    for (final widget in widgets) {
+      if (widget is Map && widget['rect'] is Map<String, dynamic>) {
+        return widget;
+      }
+    }
+    return widgets.first;
   }
 }

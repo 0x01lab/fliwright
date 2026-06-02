@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { FormAnalyzeResult, FormFillResult } from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
 import { FailureContextStore } from './failure/FailureContextStore.js';
-import { formRulesFileName, FormHelperService, formatFormFillDebug } from './form/FormHelperService.js';
+import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug } from './form/FormHelperService.js';
 import { FormRuleService } from './form/FormRuleService.js';
 import { RecorderService } from './recording/RecorderService.js';
 import { FliwrightCodeLensProvider } from './runner/FliwrightCodeLensProvider.js';
@@ -484,26 +484,12 @@ async function insertFormFieldRuleAtCursor(node: FormAnalyzeFieldEntry): Promise
   const active = vscode.window.activeTextEditor;
   if (!active) throw new Error('Open a form rules JSON file and place the cursor where the selector should be inserted.');
 
-  const snippet = JSON.stringify(formRuleSnippet(node.field), null, 2);
+  const snippet = JSON.stringify(formRuleSnippetForField(node.field), null, 2);
   const selection = active.selection;
   await active.edit((builder) => {
     builder.insert(selection.active, snippet);
   });
   vscode.window.showInformationMessage(`Inserted selector ${node.field.selector}`);
-}
-
-function formRuleSnippet(field: FormAnalyzeResult['fields'][number]): {
-  match: { selector: string };
-  type: 'PRESET_SKILL';
-  data: string[];
-} {
-  return {
-    match: {
-      selector: field.selector,
-    },
-    type: 'PRESET_SKILL',
-    data: field.generatedValue ? [field.generatedValue] : [],
-  };
 }
 
 async function showFormPreview(

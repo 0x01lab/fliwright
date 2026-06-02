@@ -12,6 +12,12 @@ export interface PreviewField {
   masked: boolean;
 }
 
+export interface FormRuleSnippet {
+  match: Record<string, string>;
+  type: 'PRESET_SKILL';
+  data: string[];
+}
+
 export class FormHelperService {
   private lastSummary: FormRunSummary | undefined;
   private lastAnalyze: FormAnalyzeResult | undefined;
@@ -76,7 +82,7 @@ export class FormHelperService {
 
   previewFields(result: FormAnalyzeResult): PreviewField[] {
     return result.fields.map((field) => {
-      const label = field.label ?? field.hintText ?? field.selector;
+      const label = field.label ?? field.hintText ?? field.name ?? field.key ?? field.semanticsId ?? field.selector;
       const masked = isSensitiveField(label, field.semanticType, field.generatedValue);
       return {
         id: field.id,
@@ -125,6 +131,24 @@ function maskValue(value: string): string {
 
 export function formRulesFileName(entry?: FormRulesEntry): string {
   return entry ? path.basename(entry.uri.fsPath) : 'configured rules';
+}
+
+export function formRuleSnippetForField(field: FormAnalyzeResult['fields'][number]): FormRuleSnippet {
+  return {
+    match: bestMatchForField(field),
+    type: 'PRESET_SKILL',
+    data: field.generatedValue ? [field.generatedValue] : [],
+  };
+}
+
+function bestMatchForField(field: FormAnalyzeResult['fields'][number]): Record<string, string> {
+  if (field.semanticsId) return { semanticsId: field.semanticsId };
+  if (field.name) return { name: field.name };
+  if (field.key) return { key: field.key };
+  if (field.ancestorKey) return { ancestorKey: field.ancestorKey };
+  if (field.label) return { label: field.label };
+  if (field.hintText) return { hintText: field.hintText };
+  return { selector: field.selector };
 }
 
 export function formatFormFillDebug(result: FormFillResult): string[] {

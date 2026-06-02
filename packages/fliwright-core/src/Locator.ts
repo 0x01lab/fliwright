@@ -78,21 +78,37 @@ export class Locator {
   }
 
   async type(text: string, options?: { delay?: number; charDelay?: number }): Promise<void> {
-    await this.sendType(text, options);
+    const widgets = await this._resolve();
+    if (widgets.length === 0) {
+      throw new Error(`No widget found matching selector: ${this.selectorString}`);
+    }
+    await this.sendType(text, options, widgets[0]);
   }
 
   async fill(text: string, options?: { delay?: number; charDelay?: number }): Promise<void> {
-    await this.sendType(text, { ...options, replaceAll: true });
+    const widgets = await this._resolve();
+    if (widgets.length === 0) {
+      throw new Error(`No widget found matching selector: ${this.selectorString}`);
+    }
+    await this.sendType(text, { ...options, replaceAll: true }, widgets[0]);
   }
 
   private async sendType(
     text: string,
     options?: { delay?: number; charDelay?: number; replaceAll?: boolean },
+    resolvedWidget?: WidgetInfo,
   ): Promise<void> {
     const params: Record<string, unknown> = {
       ...this.selector.toWireParams(),
       text,
     };
+    // Pass pre-computed widget info so the Dart side can skip its internal inspect.
+    if (resolvedWidget) {
+      params.targetId = resolvedWidget.id;
+      if (resolvedWidget.rect) {
+        params.targetRect = JSON.stringify(resolvedWidget.rect);
+      }
+    }
     const charDelay = options?.charDelay ?? options?.delay;
     if (charDelay != null) {
       params.charDelay = String(charDelay);
@@ -136,6 +152,31 @@ export class Locator {
   async isVisible(): Promise<boolean> {
     const widgets = await this._resolve();
     return widgets.length > 0 && widgets[0].rect != null;
+  }
+
+  /** Resolve the first matching widget without performing any action. */
+  async resolve(): Promise<WidgetInfo | undefined> {
+    const widgets = await this._resolve();
+    return widgets[0];
+  }
+
+  /** Fill text using a pre-resolved widget, avoiding a redundant inspect call. */
+  async fillWithResolved(
+    text: string,
+    resolved: WidgetInfo,
+    options?: { charDelay?: number },
+  ): Promise<void> {
+    await this.sendType(text, { ...options, replaceAll: true }, resolved);
+  }
+
+  /** Click using a pre-resolved widget, avoiding a redundant inspect call. */
+  async clickResolved(resolved: WidgetInfo): Promise<void> {
+    if (!resolved.rect) {
+      throw new Error(`Widget matching ${this.selectorString} has no render bounds`);
+    }
+    const x = resolved.rect.x + resolved.rect.width / 2;
+    const y = resolved.rect.y + resolved.rect.height / 2;
+    await this.sendRequest('ext.fliwright.click', { x, y });
   }
 
   private async _resolve(): Promise<WidgetInfo[]> {

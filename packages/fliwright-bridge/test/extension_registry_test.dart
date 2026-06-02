@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 import 'package:fliwright_bridge/src/extensions/inspect.dart';
@@ -334,5 +333,82 @@ void main() {
       expect(typeResult['success'], isTrue);
       expect(controller.text, 'user@example.com');
     });
+
+    testWidgets('type fills custom editable text by ancestor name',
+        (tester) async {
+      final controller = TextEditingController();
+      final focusNode = FocusNode(debugLabel: 'jobPosition');
+      addTearDown(controller.dispose);
+      addTearDown(focusNode.dispose);
+
+      InspectExtension.register(FliwrightBridge.registry);
+      FliwrightBridge.registry.register('ext.fliwright.click', (_) async {
+        focusNode.requestFocus();
+        await tester.pump();
+        return {'success': true};
+      });
+      TypeExtension.register(FliwrightBridge.registry);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: _NamedField<String>(
+              name: 'jobPosition',
+              child: Center(
+                child: SizedBox(
+                  width: 320,
+                  height: 48,
+                  child: EditableText(
+                    controller: controller,
+                    focusNode: focusNode,
+                    style: const TextStyle(color: Colors.black),
+                    cursorColor: Colors.black,
+                    backgroundCursorColor: Colors.transparent,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final result = await tester.runAsync(() {
+        return FliwrightBridge.registry.invoke(
+          'ext.fliwright.type',
+          {
+            'selector': 'name=jobPosition',
+            'text': 'Delectatio carpo vivo benevolentia solus.',
+            'replaceAll': 'true',
+          },
+        );
+      });
+
+      expect(result, isNotNull);
+      final typeResult = result!;
+      expect(typeResult['success'], isTrue);
+      expect(
+        controller.text,
+        'Delectatio carpo vivo benevolentia solus.',
+      );
+      expect(typeResult['debug']['targetType'], 'EditableText');
+    });
   });
+}
+
+class _NamedField<T> extends StatefulWidget {
+  const _NamedField({
+    required this.name,
+    required this.child,
+  });
+
+  final String name;
+  final Widget child;
+
+  @override
+  State<_NamedField<T>> createState() => _NamedFieldState<T>();
+}
+
+class _NamedFieldState<T> extends State<_NamedField<T>> {
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
