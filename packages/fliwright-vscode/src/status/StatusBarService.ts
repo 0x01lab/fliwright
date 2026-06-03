@@ -55,6 +55,11 @@ export class StatusBarService implements vscode.Disposable {
       this.item.text = '$(sync~spin) Fliwright: Connecting';
       return;
     }
+    if (this.state.status === 'scanning') {
+      this.item.text = '$(search~spin) Fliwright: Scanning';
+      this.item.command = 'fliwright.discoverVmService';
+      return;
+    }
     this.item.text = '$(circle-slash) Fliwright: Disconnected';
     this.item.command = 'fliwright.connect';
   }

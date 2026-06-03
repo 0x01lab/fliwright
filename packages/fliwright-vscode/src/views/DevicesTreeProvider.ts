@@ -81,6 +81,7 @@ function statusLabel(state: DeviceConnectionState): string {
   if (state.status === 'connected') return 'Connected';
   if (state.status === 'recording') return 'Recording';
   if (state.status === 'running') return 'Running Tests';
+  if (state.status === 'scanning') return 'Scanning';
   if (state.status === 'connecting') return 'Connecting';
   if (state.status === 'error') return 'Connection Error';
   return 'No VM Service';
@@ -89,6 +90,7 @@ function statusLabel(state: DeviceConnectionState): string {
 function statusDescription(state: DeviceConnectionState): string | undefined {
   if (state.status === 'connected' || state.status === 'connecting' || state.status === 'recording') return state.url;
   if (state.status === 'running') return state.label;
+  if (state.status === 'scanning') return state.label ?? 'Searching for VM Service';
   if (state.status === 'error') return state.message;
   return 'Click to connect';
 }
@@ -97,6 +99,7 @@ function statusTooltip(state: DeviceConnectionState): string | undefined {
   if (state.status === 'connected') return `${state.url}\nConnected ${new Date(state.connectedAt).toLocaleString()}`;
   if (state.status === 'recording') return `${state.url}\nRecording since ${new Date(state.startedAt).toLocaleString()}`;
   if (state.status === 'running') return `${state.label}\nStarted ${new Date(state.startedAt).toLocaleString()}`;
+  if (state.status === 'scanning') return state.label ?? 'Searching local Flutter debug sessions and VM Service ports';
   if (state.status === 'connecting') return state.url;
   if (state.status === 'error') return `${state.url ? `${state.url}\n` : ''}${state.message}`;
   return undefined;
@@ -106,6 +109,7 @@ function statusIcon(state: DeviceConnectionState): string {
   if (state.status === 'connected') return 'vm-active';
   if (state.status === 'recording') return 'record';
   if (state.status === 'running') return 'run';
+  if (state.status === 'scanning') return 'search~spin';
   if (state.status === 'connecting') return 'sync~spin';
   if (state.status === 'error') return 'error';
   return 'circle-outline';

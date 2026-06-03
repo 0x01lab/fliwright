@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { FliwrightDriver } from '@fliwright/core';
+import { riverpodPlugin } from '@fliwright/plugin-riverpod';
 import type { DeviceConnectionState } from '../types.js';
 import { resolveVmServiceUrl } from './VmServiceDiscovery.js';
 
@@ -21,7 +22,7 @@ export class FliwrightSession implements vscode.Disposable {
   }
 
   get connectedDriver(): FliwrightDriver {
-    if (!this.driver || this.stateValue.status !== 'connected') {
+    if (!this.driver || !isActiveConnectionState(this.stateValue)) {
       throw new Error('Connect to a Flutter VM Service before using this command.');
     }
     return this.driver;
@@ -39,6 +40,12 @@ export class FliwrightSession implements vscode.Disposable {
     const url = this.currentUrl;
     if (url) {
       this.setState({ status: 'recording', url, startedAt: Date.now() });
+    }
+  }
+
+  setScanning(label?: string, force = false): void {
+    if (force || !isActiveConnectionState(this.stateValue)) {
+      this.setState({ status: 'scanning', label });
     }
   }
 
@@ -63,7 +70,7 @@ export class FliwrightSession implements vscode.Disposable {
     await this.disconnect(false);
     this.setState({ status: 'connecting', url });
 
-    const driver = this.options.createDriver?.() ?? new FliwrightDriver();
+    const driver = this.options.createDriver?.() ?? new FliwrightDriver({ plugins: [riverpodPlugin()] });
     try {
       await driver.connect(url);
       this.driver = driver;
@@ -94,6 +101,23 @@ export class FliwrightSession implements vscode.Disposable {
     }
   }
 
+  async verifyConnection(): Promise<boolean> {
+    if (!this.driver || !isActiveConnectionState(this.stateValue)) return false;
+
+    try {
+      await this.driver.sendRequest('getVM');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async markConnectionLost(message: string): Promise<void> {
+    const url = this.currentUrl;
+    await this.disconnect(false);
+    this.setState({ status: 'error', url, message });
+  }
+
   dispose(): void {
     void this.disconnect(false);
     this.onDidChangeStateEmitter.dispose();
@@ -103,4 +127,8 @@ export class FliwrightSession implements vscode.Disposable {
     this.stateValue = state;
     this.onDidChangeStateEmitter.fire(state);
   }
+}
+
+function isActiveConnectionState(state: DeviceConnectionState): boolean {
+  return state.status === 'connected' || state.status === 'recording' || state.status === 'running';
 }

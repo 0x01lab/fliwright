@@ -9,7 +9,7 @@ import { FliwrightCodeLensProvider } from './runner/FliwrightCodeLensProvider.js
 import { TestDiscoveryService } from './runner/TestDiscoveryService.js';
 import { VitestRunner } from './runner/VitestRunner.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
-import { discoverVmServiceUrl } from './session/VmServiceDiscovery.js';
+import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
 import { formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
@@ -25,6 +25,9 @@ import { FailurePanel } from './webview/FailurePanel.js';
 import { RecordingPanel } from './webview/RecordingPanel.js';
 
 let output: vscode.OutputChannel;
+const LAST_VM_SERVICE_URL_KEY = 'fliwright.vmServiceUrl.lastSuccess';
+const DEBUG_LOG_BUFFER_LIMIT = 20000;
+const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 5000;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel('Fliwright');
@@ -57,6 +60,92 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     statusBar.setConnectionState(state);
   }));
 
+  let debugLogBuffer = '';
+  let autoConnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
+  let healthCheckInFlight = false;
+  const stateProviderWatches = new Map<string, () => void>();
+
+  const rememberDebugOutput = (text: string) => {
+    debugLogBuffer = `${debugLogBuffer}${text}`.slice(-DEBUG_LOG_BUFFER_LIMIT);
+    const urls = extractVmServiceUrls(debugLogBuffer);
+    const latestUrl = urls.at(-1);
+    if (!latestUrl) return;
+
+    scheduleAutoConnect('Flutter debug output', 100, {
+      forceReconnect: Boolean(session.currentUrl && session.currentUrl !== latestUrl),
+    });
+  };
+
+  const scheduleAutoConnect = (reason: string, delayMs = 0, options: { forceReconnect?: boolean } = {}) => {
+    if (!loadConfig().autoDiscoverVmService) return;
+    if (autoConnectTimer) clearTimeout(autoConnectTimer);
+    autoConnectTimer = setTimeout(() => {
+      autoConnectTimer = undefined;
+      void discoverAndConnect({ reason, interactive: false, forceReconnect: options.forceReconnect });
+    }, delayMs);
+  };
+
+  const stopHealthCheck = () => {
+    if (!healthCheckTimer) return;
+    clearInterval(healthCheckTimer);
+    healthCheckTimer = undefined;
+  };
+
+  const startHealthCheck = () => {
+    stopHealthCheck();
+    healthCheckTimer = setInterval(() => {
+      if (healthCheckInFlight) return;
+      if (!isActiveSessionState(session.state.status)) {
+        stopHealthCheck();
+        return;
+      }
+
+      healthCheckInFlight = true;
+      void session.verifyConnection().then(async (healthy) => {
+        if (healthy) return;
+        const staleUrl = session.currentUrl;
+        const message = 'VM Service connection lost. Searching for a new Flutter VM Service...';
+        output.appendLine(`${message}${staleUrl ? ` (${staleUrl})` : ''}`);
+        clearStateProviderWatches();
+        sandboxService.resetController();
+        await session.markConnectionLost(message);
+        scheduleAutoConnect('VM Service connection lost', 100, { forceReconnect: true });
+      }).finally(() => {
+        healthCheckInFlight = false;
+      });
+    }, CONNECTION_HEALTH_CHECK_INTERVAL_MS);
+  };
+
+  context.subscriptions.push(
+    vscode.debug.registerDebugAdapterTrackerFactory('*', {
+      createDebugAdapterTracker(debugSession) {
+        const sessionIdentity = `${debugSession.type} ${debugSession.name}`;
+        const isFlutterOrDart = /flutter|dart/i.test(sessionIdentity);
+        return {
+          onDidSendMessage(message: unknown) {
+            if (!isFlutterOrDart || typeof message !== 'object' || message === null) return;
+            const event = message as { type?: string; event?: string; body?: { output?: unknown } };
+            if (event.type !== 'event' || event.event !== 'output' || typeof event.body?.output !== 'string') return;
+            rememberDebugOutput(event.body.output);
+          },
+        };
+      },
+    }),
+    vscode.debug.onDidStartDebugSession((debugSession) => {
+      if (/flutter|dart/i.test(`${debugSession.type} ${debugSession.name}`)) {
+        scheduleAutoConnect('Flutter debug session', 500);
+      }
+    }),
+    {
+      dispose() {
+        if (autoConnectTimer) clearTimeout(autoConnectTimer);
+        stopHealthCheck();
+        clearStateProviderWatches();
+      },
+    },
+  );
+
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('fliwright.devices', devicesTree),
     vscode.window.registerTreeDataProvider('fliwright.mockApis', mockTree),
@@ -69,6 +158,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       new FliwrightCodeLensProvider(),
     ),
   );
+
+  scheduleAutoConnect('Extension activation', 500);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('fliwright.reloadMocks', async () => {
@@ -92,8 +183,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (url === undefined) return;
         const state = await session.connect(url);
         if (state.status === 'connected') {
-          await configureMocksAfterConnect();
-          vscode.window.showInformationMessage(`Connected to ${state.url}`);
+          await onConnected(state.url, true);
         } else if (state.status === 'error') {
           throw new Error(state.message);
         }
@@ -101,22 +191,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.disconnect', async () => {
       await runCommand('Disconnect VM Service', async () => {
+        stopHealthCheck();
+        clearStateProviderWatches();
+        sandboxService.resetController();
         await session.disconnect();
         vscode.window.showInformationMessage('Disconnected from VM Service');
       });
     }),
     vscode.commands.registerCommand('fliwright.discoverVmService', async () => {
       await runCommand('Discover VM Service', async () => {
-        const url = await discoverVmServiceUrl();
-        if (!url) {
+        const connected = await discoverAndConnect({ reason: 'Manual scan', interactive: true, forceReconnect: true });
+        if (!connected) {
           vscode.window.showWarningMessage('No local Flutter VM Service found.');
-          return;
-        }
-        const selection = await vscode.window.showInformationMessage(`Found ${url}`, 'Connect');
-        if (selection === 'Connect') {
-          const state = await session.connect(url);
-          if (state.status === 'error') throw new Error(state.message);
-          if (state.status === 'connected') await configureMocksAfterConnect();
         }
       });
     }),
@@ -303,7 +389,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.refreshStateProviders', async () => {
       await runCommand('Refresh State Providers', async () => {
         const providers = await stateService.listProviders(session.connectedDriver);
-        stateTree.setProviders(providers);
+        if (providers.length === 0) {
+          const status = await stateService.status(session.connectedDriver).catch(() => undefined);
+          stateTree.setMessage(stateProvidersEmptyMessage(status));
+        } else {
+          stateTree.setProviders(markActiveWatches(providers));
+        }
         vscode.window.showInformationMessage(`Loaded ${providers.length} provider(s).`);
       });
     }),
@@ -311,7 +402,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Read State Provider', async () => {
         if (!node || node.kind !== 'stateProvider') throw new Error('Select a state provider to read.');
         const value = await stateService.read(session.connectedDriver, node.key);
-        stateTree.setProviders([{ ...node, value }]);
+        stateTree.updateProvider({ ...node, value, watching: stateProviderWatches.has(node.key) });
         output.appendLine(`${node.key}: ${JSON.stringify(value)}`);
         vscode.window.showInformationMessage(`${node.key}: ${JSON.stringify(value)}`);
       });
@@ -325,10 +416,69 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           value: JSON.stringify(node.value ?? null),
         });
         if (raw === undefined) return;
-        await stateService.override(session.connectedDriver, node.key, JSON.parse(raw));
-        const providers = await stateService.listProviders(session.connectedDriver).catch(() => [{ ...node, value: JSON.parse(raw) }]);
-        stateTree.setProviders(providers);
+        const parsed = JSON.parse(raw);
+        const overrideResult = await stateService.override(session.connectedDriver, node.key, parsed);
+        const providers = await stateService.listProviders(session.connectedDriver).catch(() => [{ ...node, value: parsed }]);
+        stateTree.setProviders(markActiveWatches(providers));
+        if (!overrideResult.overridden) {
+          vscode.window.showWarningMessage(overrideResult.message ?? `Provider is not registered as overridable: ${node.key}`);
+          return;
+        }
         vscode.window.showInformationMessage(`Overrode ${node.key}.`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.watchStateProvider', async (node?: StateProviderEntry) => {
+      await runCommand('Watch State Provider', async () => {
+        if (!node || node.kind !== 'stateProvider') throw new Error('Select a state provider to watch.');
+        if (stateProviderWatches.has(node.key)) {
+          vscode.window.showInformationMessage(`Already watching ${node.key}.`);
+          return;
+        }
+        const unsubscribe = await stateService.watch(session.connectedDriver, node.key, (oldValue, newValue) => {
+          output.appendLine(`${node.key}: ${JSON.stringify(oldValue)} -> ${JSON.stringify(newValue)}`);
+          stateTree.updateProvider({
+            ...node,
+            value: newValue,
+            watching: true,
+          });
+        });
+        stateProviderWatches.set(node.key, unsubscribe);
+        stateTree.updateProvider({ ...node, watching: true });
+        vscode.window.showInformationMessage(`Watching ${node.key}.`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.unwatchStateProvider', async (node?: StateProviderEntry) => {
+      await runCommand('Unwatch State Provider', async () => {
+        if (!node || node.kind !== 'stateProvider') throw new Error('Select a state provider to unwatch.');
+        const unsubscribe = stateProviderWatches.get(node.key);
+        if (!unsubscribe) {
+          vscode.window.showInformationMessage(`Not watching ${node.key}.`);
+          return;
+        }
+        unsubscribe();
+        stateProviderWatches.delete(node.key);
+        stateTree.updateProvider({ ...node, watching: false });
+        vscode.window.showInformationMessage(`Stopped watching ${node.key}.`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.copyStateProviderValue', async (node?: StateProviderEntry) => {
+      await runCommand('Copy State Provider Value', async () => {
+        if (!node || node.kind !== 'stateProvider') throw new Error('Select a state provider to copy.');
+        const value = node.value === undefined
+          ? await stateService.read(session.connectedDriver, node.key)
+          : node.value;
+        await vscode.env.clipboard.writeText(formatStateValue(value));
+        stateTree.updateProvider({ ...node, value, watching: stateProviderWatches.has(node.key) });
+        vscode.window.showInformationMessage(`Copied ${node.key}.`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.openRiverpodSetupHelp', async () => {
+      await runCommand('Open Riverpod Setup Help', async () => {
+        const document = await vscode.workspace.openTextDocument({
+          language: 'markdown',
+          content: riverpodSetupInstructions(),
+        });
+        await vscode.window.showTextDocument(document);
       });
     }),
   );
@@ -366,6 +516,83 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       appendFormFillDebug(result);
       vscode.window.showInformationMessage(`Filled ${result.filled} field(s), skipped ${result.skipped}, errors ${result.errors.length}.`);
     });
+  }
+
+  async function discoverAndConnect(options: { reason: string; interactive: boolean; forceReconnect?: boolean }): Promise<boolean> {
+    if (isActiveSessionState(session.state.status) && !options.forceReconnect) {
+      return true;
+    }
+
+    if (options.forceReconnect) {
+      stopHealthCheck();
+      clearStateProviderWatches();
+      sandboxService.resetController();
+      await session.disconnect(false);
+    }
+
+    session.setScanning(options.reason, options.forceReconnect);
+    const candidates = await discoverVmServiceCandidates({
+      cachedUrl: context.workspaceState.get<string>(LAST_VM_SERVICE_URL_KEY),
+      logText: debugLogBuffer,
+    });
+
+    if (candidates.length === 0) {
+      await session.disconnect();
+      sandboxService.resetController();
+      output.appendLine(`VM Service discovery found no candidates (${options.reason}).`);
+      return false;
+    }
+
+    let orderedCandidates = candidates;
+    if (options.interactive && candidates.length > 1) {
+      const items = candidates.map((candidate) => ({
+        label: candidate.url,
+        description: candidate.label,
+        detail: `Source: ${candidate.source}, confidence: ${candidate.confidence}`,
+        candidate,
+      }));
+      const picked = await vscode.window.showQuickPick(items, {
+        title: 'Select Flutter VM Service',
+        placeHolder: 'Choose a VM Service URL to connect',
+      });
+      if (!picked) {
+        await session.disconnect();
+        sandboxService.resetController();
+        return false;
+      }
+      orderedCandidates = [picked.candidate];
+    }
+
+    let lastError: string | undefined;
+    for (const candidate of orderedCandidates) {
+      output.appendLine(`Trying VM Service candidate from ${candidate.source}: ${candidate.url}`);
+      const state = await session.connect(candidate.url);
+      if (state.status === 'connected') {
+        await onConnected(state.url, options.interactive);
+        return true;
+      }
+      if (state.status === 'error') {
+        lastError = state.message;
+        output.appendLine(`VM Service candidate failed: ${candidate.url} (${state.message})`);
+      }
+    }
+
+    if (options.interactive && lastError) {
+      throw new Error(lastError);
+    }
+    await session.disconnect();
+    sandboxService.resetController();
+    return false;
+  }
+
+  async function onConnected(url: string, notify: boolean): Promise<void> {
+    await context.workspaceState.update(LAST_VM_SERVICE_URL_KEY, url);
+    startHealthCheck();
+    await configureMocksAfterConnect();
+    output.appendLine(`Connected to VM Service: ${url}`);
+    if (notify) {
+      vscode.window.showInformationMessage(`Connected to ${url}`);
+    }
   }
 
   async function configureMocksAfterConnect(): Promise<void> {
@@ -436,6 +663,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     });
   }
+
+  function markActiveWatches(providers: StateProviderEntry[]): StateProviderEntry[] {
+    return providers.map((provider) => ({
+      ...provider,
+      watching: provider.watching || stateProviderWatches.has(provider.key),
+    }));
+  }
+
+  function clearStateProviderWatches(): void {
+    if (stateProviderWatches.size === 0) return;
+    for (const unsubscribe of stateProviderWatches.values()) {
+      try {
+        unsubscribe();
+      } catch (error) {
+        output.appendLine(`Failed to unwatch state provider: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    stateProviderWatches.clear();
+    stateTree.setProviders(stateTree.getProviders().map((provider) => ({
+      ...provider,
+      watching: false,
+    })));
+  }
+}
+
+function stateProvidersEmptyMessage(status?: { observerInstalled: boolean; containerReady: boolean; providerCount: number }): string {
+  if (!status) return 'No state providers found';
+  if (!status.observerInstalled) return 'Riverpod observer is not installed';
+  if (status.providerCount === 0) return 'No Riverpod providers observed yet';
+  if (!status.containerReady) return 'Riverpod container is not marked ready';
+  return 'No state providers found';
 }
 
 function mcpInstructions(): string {
@@ -464,6 +722,44 @@ Available tools:
 - \`fliwright_mock_switch\`: switch an endpoint's active mock rule.
 
 Use \`FLIWRIGHT_VM_URL\` or the VS Code connection command to point Fliwright at a running Flutter VM Service.
+`;
+}
+
+function riverpodSetupInstructions(): string {
+  return `# Fliwright Riverpod Setup
+
+Use the Riverpod observer adapter in your debug or test entrypoint:
+
+\`\`\`dart
+import 'package:fliwright_bridge/fliwright_bridge.dart';
+import 'package:fliwright_bridge_riverpod/fliwright_bridge_riverpod.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+void main() {
+  FliwrightBridge.init();
+
+  runApp(ProviderScope(
+    observers: kDebugMode ? const [FliwrightRiverpodObserver()] : const [],
+    child: const MyApp(),
+  ));
+}
+\`\`\`
+
+For writable providers, register an explicit debug write handler:
+
+\`\`\`dart
+registerFliwrightWritableProvider(
+  'counterProvider',
+  (value) {
+    final next = value as int;
+    ref.read(counterProvider.notifier).state = next;
+    return next;
+  },
+);
+\`\`\`
+
+Observer-only providers support list, read, and watch. Override requires a writable provider registration.
 `;
 }
 
@@ -536,6 +832,10 @@ function appendFormFillDebug(result: FormFillResult): void {
   for (const line of formatFormFillDebug(result)) output.appendLine(line);
 }
 
+function formatStateValue(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+
 async function runCommand(label: string, action: () => Promise<void>): Promise<void> {
   try {
     output.appendLine(`[${new Date().toISOString()}] ${label}`);
@@ -547,6 +847,10 @@ async function runCommand(label: string, action: () => Promise<void>): Promise<v
       if (selection === 'Open Output') output.show();
     });
   }
+}
+
+function isActiveSessionState(status: string): boolean {
+  return status === 'connected' || status === 'recording' || status === 'running';
 }
 
 async function withWindowProgress<T>(title: string, task: () => Promise<T>): Promise<T> {

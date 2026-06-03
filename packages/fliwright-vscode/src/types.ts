@@ -137,6 +137,7 @@ export interface FormAnalyzeFieldEntry {
 
 export type DeviceConnectionState =
   | { status: 'disconnected' }
+  | { status: 'scanning'; label?: string }
   | { status: 'connecting'; url: string }
   | { status: 'connected'; url: string; connectedAt: number }
   | { status: 'recording'; url: string; startedAt: number }
@@ -221,6 +222,10 @@ export interface StateProviderEntry {
   key: string;
   value?: unknown;
   type?: string;
+  readable?: boolean;
+  overridable?: boolean;
+  watching?: boolean;
+  error?: string;
 }
 
 export type DeviceTreeNode =

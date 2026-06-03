@@ -10,6 +10,8 @@ import type {
 export class SandboxService {
   private readonly applied = new Map<string, AppliedMockRule>();
   private controllerUrl: string | undefined;
+  private controllerDriver: FliwrightDriver | undefined;
+  private configuredControllerUrl: string | undefined;
 
   getAppliedRules(): AppliedMockRule[] {
     return Array.from(this.applied.values()).sort((a, b) => b.appliedAt - a.appliedAt);
@@ -25,8 +27,15 @@ export class SandboxService {
   }
 
   async ensureController(driver: FliwrightDriver): Promise<string> {
-    this.controllerUrl = await driver.mock.startServer();
-    await driver.mock.configureFlutterController(this.controllerUrl);
+    if (this.controllerDriver !== driver || !this.controllerUrl) {
+      this.controllerUrl = await driver.mock.startServer();
+      this.controllerDriver = driver;
+      this.configuredControllerUrl = undefined;
+    }
+    if (this.configuredControllerUrl !== this.controllerUrl) {
+      await driver.mock.configureFlutterController(this.controllerUrl);
+      this.configuredControllerUrl = this.controllerUrl;
+    }
     return this.controllerUrl;
   }
 
@@ -74,7 +83,17 @@ export class SandboxService {
         rule,
         isDefault: true,
       };
-      applied.push(await this.applyRule(driver, entry));
+      await this.ensureController(driver);
+      await routeRule(driver, entry.endpoint, entry.method, entry.rule);
+      const appliedRule: AppliedMockRule = {
+        endpoint: entry.endpoint,
+        method: entry.method,
+        ruleName: entry.rule.name,
+        filePath: entry.uri.fsPath,
+        appliedAt: Date.now(),
+      };
+      this.applied.set(appliedKey(entry.method, entry.endpoint), appliedRule);
+      applied.push(appliedRule);
     }
 
     return { applied, skipped };
@@ -85,6 +104,12 @@ export class SandboxService {
     await driver.mock.clear();
     this.applied.clear();
     return count;
+  }
+
+  resetController(): void {
+    this.controllerUrl = undefined;
+    this.controllerDriver = undefined;
+    this.configuredControllerUrl = undefined;
   }
 }
 

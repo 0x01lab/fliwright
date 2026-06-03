@@ -11,10 +11,46 @@ This implementation slice provides native sidebar workflows for local Flutter te
 - `Mock APIs`: applies a selected rule, applies default rules, and clears runtime mock routes through `driver.mock`.
 - `Form Data`: scans `.fliwright/forms/*.json`, previews generated values, and fills selected fields through `FormHelper`.
 - `Tests` / `Runs`: discovers Fliwright test files, runs Vitest, and opens persisted failure context.
-- `State`: lists, reads, and overrides state providers exposed by the bridge.
+- `State`: lists, reads, watches, copies, and overrides Riverpod state providers exposed by the bridge.
 - Editor CodeLens: adds run and record actions for TypeScript Fliwright tests.
 
 Mock files are JSON-only. Legacy YAML mock files are intentionally unsupported.
+
+## Riverpod Setup
+
+Use the Riverpod observer adapter in a debug or test entrypoint. This keeps
+business provider definitions unchanged and avoids a hard Riverpod dependency in
+the base bridge package.
+
+```dart
+import 'package:fliwright_bridge/fliwright_bridge.dart';
+import 'package:fliwright_bridge_riverpod/fliwright_bridge_riverpod.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+void main() {
+  FliwrightBridge.init();
+
+  runApp(ProviderScope(
+    observers: kDebugMode ? const [FliwrightRiverpodObserver()] : const [],
+    child: const MyApp(),
+  ));
+}
+```
+
+Observer-only providers support list, read, and watch. Override requires an
+explicit writable registration:
+
+```dart
+registerFliwrightWritableProvider(
+  'counterProvider',
+  (value) {
+    final next = value as int;
+    ref.read(counterProvider.notifier).state = next;
+    return next;
+  },
+);
+```
 
 ## Development
 
@@ -54,4 +90,5 @@ Release checklist:
 - Run `pnpm --filter @fliwright/vscode build`.
 - Run `pnpm --filter @fliwright/vscode test:integration` in a local VS Code-capable environment.
 - Run `pnpm --filter @fliwright/vscode package` and install the generated VSIX in an Extension Development Host.
+- Start `examples/riverpod_demo` through a Fliwright bridge entrypoint, connect from VS Code, refresh State, read `counterProvider`, watch it, tap Increment, verify the value updates, then override `counterProvider` with `2`.
 - Publish only after Marketplace metadata, publisher credentials, and manual smoke testing are complete.

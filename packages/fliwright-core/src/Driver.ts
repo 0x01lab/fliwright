@@ -93,7 +93,14 @@ export class FliwrightDriver {
   async notifyTestEnd(testName: string, result: TestResult): Promise<void> { await this.registry.notifyTestEnd(testName, result); }
 
   async dispose(): Promise<void> {
-    await this.registry.disposeAll();
-    this.connector.disconnect();
+    try {
+      await this.registry.disposeAll();
+    } finally {
+      try {
+        await this._mock?.stopServer();
+      } finally {
+        this.connector.disconnect();
+      }
+    }
   }
 }

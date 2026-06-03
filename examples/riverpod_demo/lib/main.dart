@@ -1,11 +1,17 @@
+import 'package:fliwright_bridge_riverpod/fliwright_bridge_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final counterProvider = StateProvider<int>((ref) => 0);
-final userProvider = StateProvider<Map<String, dynamic>?>((ref) => null);
+final counterProvider = StateProvider<int>((ref) => 0, name: 'counterProvider');
+final userProvider =
+    StateProvider<Map<String, dynamic>?>((ref) => null, name: 'userProvider');
 
 void main() {
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(ProviderScope(
+    observers: kDebugMode ? const [FliwrightRiverpodObserver()] : const [],
+    child: const MyApp(),
+  ));
 }
 
 class MyApp extends StatelessWidget {
@@ -25,6 +31,17 @@ class HomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    registerFliwrightWritableProvider(
+      'counterProvider',
+      (value) {
+        final next = value is int ? value : int.parse('$value');
+        ref.read(counterProvider.notifier).state = next;
+        return next;
+      },
+      displayName: 'counterProvider',
+      providerType: 'StateProvider<int>',
+    );
+
     final count = ref.watch(counterProvider);
     final user = ref.watch(userProvider);
 

@@ -44,6 +44,25 @@ describe('SandboxService', () => {
     expect(service.isApplied(error)).toBeDefined();
   });
 
+  it('reuses one controller when applying multiple rules to the same driver', async () => {
+    const route = vi.fn().mockResolvedValue(undefined);
+    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:1234');
+    const configureFlutterController = vi.fn().mockResolvedValue(undefined);
+    const service = new SandboxService();
+    const driver = { mock: { route, startServer, configureFlutterController } } as any;
+    const first = mockRule('success');
+    const second = mockRule('error');
+    second.endpoint = '/v1/profile';
+
+    await service.applyRule(driver, first);
+    await service.applyRule(driver, second);
+
+    expect(startServer).toHaveBeenCalledOnce();
+    expect(configureFlutterController).toHaveBeenCalledOnce();
+    expect(configureFlutterController).toHaveBeenCalledWith('http://127.0.0.1:1234');
+    expect(route).toHaveBeenCalledTimes(2);
+  });
+
   it('stops only the currently active rule for an endpoint', async () => {
     const route = vi.fn().mockResolvedValue(undefined);
     const removeRoute = vi.fn().mockResolvedValue(undefined);
@@ -76,6 +95,34 @@ describe('SandboxService', () => {
     expect(result.applied[0]?.ruleName).toBe('error');
     expect(result.skipped).toBe(1);
     expect(route).toHaveBeenCalledWith('/v1/token', expect.objectContaining({ status: 500 }));
+  });
+
+  it('starts and configures one controller when applying default mocks in bulk', async () => {
+    const route = vi.fn().mockResolvedValue(undefined);
+    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:1234');
+    const configureFlutterController = vi.fn().mockResolvedValue(undefined);
+    const service = new SandboxService();
+    const result = discovery();
+    result.endpoints.push({
+      kind: 'endpoint',
+      uri: Uri.file('/tmp/profile.json'),
+      indexed: true,
+      endpointFile: {
+        version: 1,
+        name: 'Profile',
+        method: 'POST',
+        endpoint: '/v1/profile',
+        rules: [
+          { name: 'success', status: 201 },
+        ],
+      },
+    });
+
+    await service.applyDefaultMocks({ mock: { route, startServer, configureFlutterController } } as any, result);
+
+    expect(startServer).toHaveBeenCalledOnce();
+    expect(configureFlutterController).toHaveBeenCalledOnce();
+    expect(route).toHaveBeenCalledTimes(2);
   });
 
   it('clears routes and tracked state', async () => {

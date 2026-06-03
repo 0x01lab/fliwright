@@ -1,12 +1,26 @@
 import { loadConfig } from '../config.js';
 
 const SCAN_PORTS = [8181, 9189, 54321];
+const TRAILING_URL_PUNCTUATION = /[),.;\]}]+$/;
 
 export interface ResolveVmServiceOptions {
   userInput?: string;
   configUrl?: string | null;
   envUrl?: string;
   autoDiscover?: boolean;
+}
+
+export interface VmServiceCandidate {
+  url: string;
+  source: 'cache' | 'log' | 'port-scan';
+  label: string;
+  confidence: number;
+}
+
+export interface DiscoverVmServiceOptions {
+  cachedUrl?: string | null;
+  logText?: string;
+  ports?: number[];
 }
 
 export async function resolveVmServiceUrl(options: ResolveVmServiceOptions = {}): Promise<string | null> {
@@ -24,20 +38,104 @@ export async function resolveVmServiceUrl(options: ResolveVmServiceOptions = {})
 }
 
 export async function discoverVmServiceUrl(ports = SCAN_PORTS): Promise<string | null> {
+  return (await discoverVmServiceCandidates({ ports }))[0]?.url ?? null;
+}
+
+export async function discoverVmServiceCandidates(options: DiscoverVmServiceOptions = {}): Promise<VmServiceCandidate[]> {
+  const candidates: VmServiceCandidate[] = [];
+  const seen = new Set<string>();
+
+  const add = (candidate: VmServiceCandidate) => {
+    if (seen.has(candidate.url)) return;
+    seen.add(candidate.url);
+    candidates.push(candidate);
+  };
+
+  const cached = normalizeVmServiceUrl(options.cachedUrl);
+  if (cached) {
+    add({
+      url: cached,
+      source: 'cache',
+      label: 'Last successful connection',
+      confidence: 80,
+    });
+  }
+
+  for (const url of extractVmServiceUrls(options.logText ?? '')) {
+    add({
+      url,
+      source: 'log',
+      label: 'Flutter debug output',
+      confidence: 100,
+    });
+  }
+
+  const ports = options.ports ?? SCAN_PORTS;
   for (const port of ports) {
     const url = await discoverOnPort(port);
-    if (url) return url;
+    if (url) {
+      add({
+        url,
+        source: 'port-scan',
+        label: `Local port ${port}`,
+        confidence: 50,
+      });
+    }
   }
-  return null;
+
+  return candidates.sort((a, b) => b.confidence - a.confidence);
+}
+
+export function extractVmServiceUrls(text: string): string[] {
+  const urls = new Set<string>();
+
+  for (const line of text.split(/\r?\n/)) {
+    const matches = line.matchAll(/\b(?:https?|wss?):\/\/[^\s<>"'`]+/g);
+    for (const match of matches) {
+      const raw = cleanRawUrl(match[0]);
+      const expanded = expandPossibleVmServiceUrls(raw);
+      if (expanded.length === 1 && expanded[0] === raw && !isLikelyVmServiceLogLine(line)) {
+        continue;
+      }
+      for (const value of expanded) {
+        const normalized = normalizeVmServiceUrl(value);
+        if (normalized) urls.add(normalized);
+      }
+    }
+  }
+
+  return [...urls];
 }
 
 export function normalizeVmServiceUrl(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) return trimmed;
-  if (trimmed.startsWith('http://')) return `${trimmed.replace(/^http:\/\//, 'ws://').replace(/\/$/, '')}/ws`;
-  if (trimmed.startsWith('https://')) return `${trimmed.replace(/^https:\/\//, 'wss://').replace(/\/$/, '')}/ws`;
+
+  try {
+    const url = new URL(cleanRawUrl(trimmed));
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
+      appendWebSocketPath(url);
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    }
+    if (url.protocol === 'ws:' || url.protocol === 'wss:') {
+      if (url.pathname === '' || url.pathname === '/') {
+        appendWebSocketPath(url);
+      }
+      url.hash = '';
+      return url.toString();
+    }
+  } catch {
+    // Fall through to the historical behavior for non-standard inputs.
+  }
+
   return trimmed;
+}
+
+function isLikelyVmServiceLogLine(line: string): boolean {
+  return /\b(?:dart\s+)?vm service\b|\bdebug service\b|\bobservatory\b|\bdds\b/i.test(line);
 }
 
 async function discoverOnPort(port: number): Promise<string | null> {
@@ -47,8 +145,29 @@ async function discoverOnPort(port: number): Promise<string | null> {
     });
     if (!response.ok) return null;
     const body = await response.json() as { webSocketDebuggerUrl?: string };
-    return body.webSocketDebuggerUrl ?? `ws://127.0.0.1:${port}/ws`;
+    return normalizeVmServiceUrl(body.webSocketDebuggerUrl ?? `ws://127.0.0.1:${port}/ws`);
   } catch {
     return null;
   }
+}
+
+function cleanRawUrl(value: string): string {
+  return value.replace(TRAILING_URL_PUNCTUATION, '');
+}
+
+function expandPossibleVmServiceUrls(raw: string): string[] {
+  try {
+    const url = new URL(raw);
+    const embedded = url.searchParams.get('uri') ?? url.searchParams.get('vmServiceUri');
+    if (embedded) return [embedded];
+  } catch {
+    // Ignore unparsable log fragments.
+  }
+
+  return [raw];
+}
+
+function appendWebSocketPath(url: URL): void {
+  const path = url.pathname.replace(/\/+$/, '');
+  url.pathname = path.endsWith('/ws') ? path : `${path || ''}/ws`;
 }

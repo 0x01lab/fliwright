@@ -28,18 +28,6 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@25.9.1)
 
-  packages/fliwright-ai-plugin:
-    devDependencies:
-      '@types/node':
-        specifier: ^25.9.1
-        version: 25.9.1
-      typescript:
-        specifier: ^5.5.0
-        version: 5.9.3
-      vitest:
-        specifier: ^2.0.0
-        version: 2.1.9(@types/node@25.9.1)
-
   packages/fliwright-cli:
     dependencies:
       '@fliwright/core':
@@ -146,6 +134,9 @@ importers:
       '@fliwright/core':
         specifier: workspace:*
         version: link:../fliwright-core
+      '@fliwright/plugin-riverpod':
+        specifier: workspace:*
+        version: link:../fliwright-plugin-riverpod
       '@types/node':
         specifier: ^20.14.0
         version: 20.19.41

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Uri } from 'vscode';
 import { MockApiTreeProvider } from '../src/views/MockApiTreeProvider.js';
 import { FormDataTreeProvider } from '../src/views/FormDataTreeProvider.js';
+import { StateTreeProvider } from '../src/views/StateTreeProvider.js';
 import type { FormRuleService } from '../src/form/FormRuleService.js';
 import type { MockConfigService } from '../src/sandbox/MockConfigService.js';
 import { createWorkspace } from './helpers/workspace.js';
@@ -178,5 +179,33 @@ describe('tree providers', () => {
     const item = provider.getTreeItem(fields[0]!);
     expect(item.contextValue).toBe('formAnalyzeField');
     expect(item.command).toMatchObject({ command: 'fliwright.insertFormFieldSelector' });
+  });
+
+  it('updates state provider rows without replacing the whole tree', () => {
+    const provider = new StateTreeProvider();
+
+    provider.setProviders([
+      {
+        kind: 'stateProvider',
+        key: 'counterProvider',
+        type: 'int',
+        value: 0,
+        readable: true,
+        overridable: false,
+      },
+    ]);
+    provider.updateProvider({
+      kind: 'stateProvider',
+      key: 'counterProvider',
+      value: 1,
+      watching: true,
+    });
+
+    const [node] = provider.getChildren();
+    expect(node).toMatchObject({ key: 'counterProvider', value: 1, type: 'int', watching: true });
+
+    const item = provider.getTreeItem(node!);
+    expect(item.iconPath).toMatchObject({ id: 'eye' });
+    expect(item.tooltip).toContain('Watching: true');
   });
 });

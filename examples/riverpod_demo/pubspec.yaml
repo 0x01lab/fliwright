@@ -1,5 +1,6 @@
 name: riverpod_demo
 description: Demo Flutter app for validating Fliwright architecture with Riverpod.
+publish_to: none
 version: 0.1.0
 
 environment:
@@ -11,6 +12,8 @@ dependencies:
   flutter_riverpod: ^2.5.0
   fliwright_bridge:
     path: ../../packages/fliwright-bridge
+  fliwright_bridge_riverpod:
+    path: ../../packages/fliwright-bridge-riverpod
 
 dev_dependencies:
   flutter_test:

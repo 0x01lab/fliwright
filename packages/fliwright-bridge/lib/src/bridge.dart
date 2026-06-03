@@ -32,6 +32,7 @@ class FliwrightBridge {
     _router = null;
     await RecordingExtension.reset();
     await MockServerExtension.reset();
+    RiverpodExtension.reset();
     DioMockExtension.reset();
     FliwrightHttpOverrides.uninstall();
   }

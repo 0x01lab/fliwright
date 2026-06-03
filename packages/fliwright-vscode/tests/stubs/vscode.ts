@@ -222,6 +222,15 @@ export const languages = {
   },
 };
 
+export const debug = {
+  registerDebugAdapterTrackerFactory() {
+    return { dispose() {} };
+  },
+  onDidStartDebugSession() {
+    return { dispose() {} };
+  },
+};
+
 export const env = {
   clipboard: {
     writeText: async () => undefined,

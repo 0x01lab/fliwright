@@ -34,6 +34,13 @@ describe('VS Code manifest', () => {
       'fliwright.createFormRules',
       'fliwright.insertFormFieldSelector',
       'fliwright.configureMcp',
+      'fliwright.refreshStateProviders',
+      'fliwright.readStateProvider',
+      'fliwright.overrideStateProvider',
+      'fliwright.watchStateProvider',
+      'fliwright.unwatchStateProvider',
+      'fliwright.copyStateProviderValue',
+      'fliwright.openRiverpodSetupHelp',
     ]) {
       expect(commands.has(command), command).toBe(true);
     }

@@ -67,6 +67,16 @@ describe('FliwrightDriver', () => {
     expect(mock).toBeInstanceOf(MockManager);
   });
 
+  it('stops the tool mock server on dispose', async () => {
+    const driver = new FliwrightDriver();
+    await driver.attachMockConnector(createMockWSForDriver());
+    const stopServer = vi.spyOn(driver.mock, 'stopServer').mockResolvedValue(undefined);
+
+    await driver.dispose();
+
+    expect(stopServer).toHaveBeenCalledOnce();
+  });
+
   it('provides state adapter via convenience getter', async () => {
     const fakeAdapter: StateAdapter = {
       read: vi.fn().mockResolvedValue(null),

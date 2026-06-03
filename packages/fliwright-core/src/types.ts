@@ -93,8 +93,13 @@ export type SelectorInput =
 
 export interface ProviderInfo {
   name: string;
-  type: string;
+  key?: string;
+  type?: string;
   value: unknown;
+  readable?: boolean;
+  overridable?: boolean;
+  watching?: boolean;
+  error?: string;
 }
 
 export interface WidgetInfo {

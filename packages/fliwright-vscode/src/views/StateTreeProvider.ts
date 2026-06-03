@@ -13,6 +13,25 @@ export class StateTreeProvider implements vscode.TreeDataProvider<StateTreeNode>
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
+  getProviders(): StateProviderEntry[] {
+    return [...this.providers];
+  }
+
+  updateProvider(provider: StateProviderEntry): void {
+    const index = this.providers.findIndex((entry) => entry.key === provider.key);
+    if (index >= 0) {
+      this.providers = [
+        ...this.providers.slice(0, index),
+        { ...this.providers[index], ...provider },
+        ...this.providers.slice(index + 1),
+      ];
+    } else {
+      this.providers = [...this.providers, provider];
+    }
+    this.message = this.providers.length > 0 ? '' : this.message;
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
   setMessage(message: string): void {
     this.providers = [];
     this.message = message;
@@ -28,9 +47,10 @@ export class StateTreeProvider implements vscode.TreeDataProvider<StateTreeNode>
     }
 
     const item = new vscode.TreeItem(element.key, vscode.TreeItemCollapsibleState.None);
-    item.description = element.type ?? previewValue(element.value);
+    item.description = element.error ?? element.type ?? previewValue(element.value);
     item.contextValue = 'stateProvider';
-    item.iconPath = new vscode.ThemeIcon('symbol-variable');
+    item.iconPath = new vscode.ThemeIcon(element.error ? 'warning' : element.watching ? 'eye' : 'symbol-variable');
+    item.tooltip = stateProviderTooltip(element);
     return item;
   }
 
@@ -40,8 +60,25 @@ export class StateTreeProvider implements vscode.TreeDataProvider<StateTreeNode>
   }
 }
 
+function stateProviderTooltip(provider: StateProviderEntry): string {
+  const lines = [
+    provider.key,
+    provider.type ? `Type: ${provider.type}` : undefined,
+    `Readable: ${provider.readable !== false}`,
+    `Overridable: ${provider.overridable === true}`,
+    provider.watching ? 'Watching: true' : undefined,
+    provider.error ? `Error: ${provider.error}` : undefined,
+    provider.value !== undefined ? `Value: ${formatValue(provider.value)}` : undefined,
+  ].filter((line): line is string => Boolean(line));
+  return lines.join('\n');
+}
+
 function previewValue(value: unknown): string | undefined {
   if (value === undefined) return undefined;
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  const text = formatValue(value);
   return text.length > 48 ? `${text.slice(0, 45)}...` : text;
+}
+
+function formatValue(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value);
 }

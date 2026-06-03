@@ -66,7 +66,11 @@
     "onCommand:fliwright.insertRecordedTest",
     "onCommand:fliwright.refreshStateProviders",
     "onCommand:fliwright.readStateProvider",
-    "onCommand:fliwright.overrideStateProvider"
+    "onCommand:fliwright.overrideStateProvider",
+    "onCommand:fliwright.watchStateProvider",
+    "onCommand:fliwright.unwatchStateProvider",
+    "onCommand:fliwright.copyStateProviderValue",
+    "onCommand:fliwright.openRiverpodSetupHelp"
   ],
   "contributes": {
     "viewsContainers": {
@@ -119,7 +123,7 @@
       },
       {
         "command": "fliwright.discoverVmService",
-        "title": "Fliwright: Discover VM Service",
+        "title": "Fliwright: Refresh / Discover VM Service",
         "icon": "$(search)"
       },
       {
@@ -246,6 +250,26 @@
         "command": "fliwright.overrideStateProvider",
         "title": "Fliwright: Override State Provider",
         "icon": "$(replace)"
+      },
+      {
+        "command": "fliwright.watchStateProvider",
+        "title": "Fliwright: Watch State Provider",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "fliwright.unwatchStateProvider",
+        "title": "Fliwright: Unwatch State Provider",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "fliwright.copyStateProviderValue",
+        "title": "Fliwright: Copy State Provider Value",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "fliwright.openRiverpodSetupHelp",
+        "title": "Fliwright: Open Riverpod Setup Help",
+        "icon": "$(question)"
       }
     ],
     "menus": {
@@ -339,6 +363,11 @@
           "command": "fliwright.refreshStateProviders",
           "when": "view == fliwright.state",
           "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.openRiverpodSetupHelp",
+          "when": "view == fliwright.state",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -401,6 +430,21 @@
           "command": "fliwright.overrideStateProvider",
           "when": "view == fliwright.state && viewItem == stateProvider",
           "group": "inline@2"
+        },
+        {
+          "command": "fliwright.watchStateProvider",
+          "when": "view == fliwright.state && viewItem == stateProvider",
+          "group": "inline@3"
+        },
+        {
+          "command": "fliwright.unwatchStateProvider",
+          "when": "view == fliwright.state && viewItem == stateProvider",
+          "group": "inline@4"
+        },
+        {
+          "command": "fliwright.copyStateProviderValue",
+          "when": "view == fliwright.state && viewItem == stateProvider",
+          "group": "2_copy@1"
         }
       ]
     },
@@ -507,6 +551,7 @@
   },
   "devDependencies": {
     "@fliwright/core": "workspace:*",
+    "@fliwright/plugin-riverpod": "workspace:*",
     "@types/node": "^20.14.0",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.4.1",

@@ -68,6 +68,7 @@ void main() {
       await FliwrightBridge.init();
       final methods = FliwrightBridge.registry.registeredMethods;
       expect(methods, contains('ext.fliwright.riverpod.list'));
+      expect(methods, contains('ext.fliwright.riverpod.status'));
       expect(methods, contains('ext.fliwright.riverpod.read'));
       expect(methods, contains('ext.fliwright.riverpod.override'));
       expect(methods, contains('ext.fliwright.riverpod.watch'));
@@ -79,6 +80,16 @@ void main() {
       final result = await FliwrightBridge.registry
           .invoke('ext.fliwright.riverpod.read', {});
       expect(result, contains('error'));
+    });
+
+    test('status reports observer readiness before provider observation',
+        () async {
+      await FliwrightBridge.init();
+      final result = await FliwrightBridge.registry
+          .invoke('ext.fliwright.riverpod.status', {});
+      expect(result['observerInstalled'], isFalse);
+      expect(result['providerCount'], 0);
+      expect(result['watching'], isEmpty);
     });
 
     test('watch returns error when provider name is missing', () async {

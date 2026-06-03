@@ -45,6 +45,34 @@ describe('RiverpodStateAdapter', () => {
     expect(providers[0].name).toBe('counter');
   });
 
+  it('returns riverpod bridge status', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.riverpod.status': {
+        observerInstalled: true,
+        containerReady: false,
+        providerCount: 2,
+        watching: ['counter'],
+      },
+    });
+    const adapter = new RiverpodStateAdapter(sendRequest);
+
+    await expect(adapter.status()).resolves.toEqual({
+      observerInstalled: true,
+      containerReady: false,
+      providerCount: 2,
+      watching: ['counter'],
+    });
+  });
+
+  it('throws bridge errors instead of returning false success', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.riverpod.read': { error: 'ProviderObserver not installed' },
+    });
+    const adapter = new RiverpodStateAdapter(sendRequest);
+
+    await expect(adapter.read('counter')).rejects.toThrow('ProviderObserver not installed');
+  });
+
   it('overrides a provider', async () => {
     const sendRequest = createMockSendRequest({
       'ext.fliwright.riverpod.override': { provider: 'user', overridden: true },
