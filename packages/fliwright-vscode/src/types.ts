@@ -215,6 +215,7 @@ export interface RecordingSession {
   operationCount: number;
   generatedCode?: string;
   targetFile?: string;
+  testName?: string;
 }
 
 export interface StateProviderEntry {

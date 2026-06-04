@@ -206,6 +206,7 @@ export const window = {
   showQuickPick: async (items: unknown[], options?: { canPickMany?: boolean }) => (
     options?.canPickMany ? items : items[0]
   ),
+  showSaveDialog: async () => undefined,
   withProgress: async (_options: unknown, task: () => Promise<unknown>) => task(),
 };
 

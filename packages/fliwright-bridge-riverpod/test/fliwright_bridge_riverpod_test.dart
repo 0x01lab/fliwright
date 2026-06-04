@@ -31,6 +31,11 @@ final asyncBaseObjectProvider = Provider<AsyncValue<_BaseConfig>>(
   name: 'asyncBaseObjectProvider',
 );
 
+final loadingConfigProvider = Provider<AsyncValue<_JsonConfig>>(
+  (ref) => const AsyncLoading<_JsonConfig>(),
+  name: 'loadingConfigProvider',
+);
+
 final futureBaseObjectProvider = FutureProvider<_BaseConfig>(
   (ref) async => const _JsonConfig('https://future.example.test'),
   name: 'futureBaseObjectProvider',
@@ -225,6 +230,62 @@ void main() {
           'baseUrl': 'https://base.example.test',
         },
       },
+    });
+  });
+
+  test('async loading providers expose loading state instead of null',
+      () async {
+    final container = ProviderContainer(
+      observers: const [FliwrightRiverpodObserver()],
+    );
+    addTearDown(container.dispose);
+
+    expect(container.read(loadingConfigProvider).isLoading, isTrue);
+
+    final read = await FliwrightBridge.registry.invoke(
+      'ext.fliwright.riverpod.read',
+      {'provider': 'loadingConfigProvider'},
+    );
+    expect(read['found'], isTrue);
+    expect(read['readable'], isTrue);
+    expect(read['value'], {
+      r'$kind': 'AsyncLoading<_JsonConfig>',
+      r'$type': 'AsyncLoading<_JsonConfig>',
+      r'$encodedBy': 'riverpod.AsyncValue',
+      'isLoading': true,
+      'isRefreshing': false,
+      'isReloading': false,
+      'hasValue': false,
+      'hasError': false,
+      'retrying': false,
+    });
+  });
+
+  test('disposed providers keep their last encoded value for inspection',
+      () async {
+    final container = ProviderContainer(
+      observers: const [FliwrightRiverpodObserver()],
+    );
+
+    expect(container.read(loadingConfigProvider).isLoading, isTrue);
+    container.dispose();
+
+    final read = await FliwrightBridge.registry.invoke(
+      'ext.fliwright.riverpod.read',
+      {'provider': 'loadingConfigProvider'},
+    );
+    expect(read['found'], isTrue);
+    expect(read['readable'], isFalse);
+    expect(read['value'], {
+      r'$kind': 'AsyncLoading<_JsonConfig>',
+      r'$type': 'AsyncLoading<_JsonConfig>',
+      r'$encodedBy': 'riverpod.AsyncValue',
+      'isLoading': true,
+      'isRefreshing': false,
+      'isReloading': false,
+      'hasValue': false,
+      'hasError': false,
+      'retrying': false,
     });
   });
 

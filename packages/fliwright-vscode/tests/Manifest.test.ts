@@ -59,4 +59,18 @@ describe('VS Code manifest', () => {
       default: true,
     });
   });
+
+  it('guards recording commands with VS Code context keys', () => {
+    const commands = new Map(manifest.contributes.commands.map((entry: { command: string }) => [entry.command, entry]));
+
+    expect(commands.get('fliwright.startRecording')).toMatchObject({
+      enablement: '!fliwright.recording.isRecording',
+    });
+    expect(commands.get('fliwright.stopRecording')).toMatchObject({
+      enablement: 'fliwright.recording.isRecording',
+    });
+    expect(commands.get('fliwright.insertRecordedTest')).toMatchObject({
+      enablement: 'fliwright.recording.hasPreview',
+    });
+  });
 });

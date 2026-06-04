@@ -224,17 +224,20 @@
       {
         "command": "fliwright.startRecording",
         "title": "Fliwright: Start Recording",
-        "icon": "$(record)"
+        "icon": "$(record)",
+        "enablement": "!fliwright.recording.isRecording"
       },
       {
         "command": "fliwright.stopRecording",
         "title": "Fliwright: Stop Recording",
-        "icon": "$(debug-stop)"
+        "icon": "$(debug-stop)",
+        "enablement": "fliwright.recording.isRecording"
       },
       {
         "command": "fliwright.insertRecordedTest",
         "title": "Fliwright: Insert Recorded Test",
-        "icon": "$(insert)"
+        "icon": "$(insert)",
+        "enablement": "fliwright.recording.hasPreview"
       },
       {
         "command": "fliwright.refreshStateProviders",
@@ -346,17 +349,17 @@
         },
         {
           "command": "fliwright.startRecording",
-          "when": "view == fliwright.runs",
+          "when": "view == fliwright.runs && !fliwright.recording.isRecording",
           "group": "navigation@1"
         },
         {
           "command": "fliwright.stopRecording",
-          "when": "view == fliwright.runs",
+          "when": "view == fliwright.runs && fliwright.recording.isRecording",
           "group": "navigation@2"
         },
         {
           "command": "fliwright.insertRecordedTest",
-          "when": "view == fliwright.runs",
+          "when": "view == fliwright.runs && fliwright.recording.hasPreview",
           "group": "navigation@3"
         },
         {

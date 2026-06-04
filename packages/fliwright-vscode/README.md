@@ -12,9 +12,20 @@ This implementation slice provides native sidebar workflows for local Flutter te
 - `Form Data`: scans `.fliwright/forms/*.json`, previews generated values, and fills selected fields through `FormHelper`.
 - `Tests` / `Runs`: discovers Fliwright test files, runs Vitest, and opens persisted failure context.
 - `State`: lists, reads, watches, copies, and overrides Riverpod state providers exposed by the bridge.
+- Recording: starts/stops device interaction recording, previews generated TypeScript test code, and inserts it into an active editor or saves it as a new `*.test.ts` file.
 - Editor CodeLens: adds run and record actions for TypeScript Fliwright tests.
 
 Mock files are JSON-only. Legacy YAML mock files are intentionally unsupported.
+
+## Recording Tests
+
+1. Start the Flutter app with `FliwrightBridge.init()` enabled and connect the extension to the VM Service.
+2. Run `Fliwright: Start Recording` from the Command Palette, Runs view, status bar, or CodeLens, then enter a generated test name.
+3. Interact with the app on the device or simulator.
+4. Run `Fliwright: Stop Recording` to preview the generated TypeScript test.
+5. Choose `Insert Test`, then save the result as a new test file or insert it at the active editor cursor.
+
+Recording requires the running app to expose the bridge recording extensions (`ext.fliwright.startRecording`, `ext.fliwright.stopRecording`, and `ext.fliwright.hitTest`). If those extensions are unavailable, the command returns to the connected idle state and shows the VM Service error in the Fliwright output channel.
 
 ## Riverpod Setup
 

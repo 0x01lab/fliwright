@@ -270,7 +270,7 @@ class RiverpodExtension {
     final providerName = params['provider'];
     if (providerName == null) return {'error': 'Missing parameter: provider'};
     final provider = _providers[providerName];
-    if (provider == null || provider.disposed) {
+    if (provider == null) {
       return {'provider': providerName, 'value': null, 'found': false};
     }
     if (provider.error != null) {
@@ -278,6 +278,7 @@ class RiverpodExtension {
         'provider': providerName,
         'value': _jsonSafe(provider.currentValue),
         'found': true,
+        'readable': !provider.disposed,
         'error': provider.error.toString(),
       };
     }
@@ -285,6 +286,7 @@ class RiverpodExtension {
       'provider': providerName,
       'value': _jsonSafe(provider.currentValue),
       'found': true,
+      'readable': !provider.disposed,
       'overridable': provider.overridable,
     };
   }

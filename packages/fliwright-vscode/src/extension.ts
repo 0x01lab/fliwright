@@ -54,6 +54,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const statusBar = new StatusBarService();
   const failurePanel = new FailurePanel(context.extensionUri);
   const recordingPanel = new RecordingPanel();
+  void updateRecordingContext(recorderService.getSession());
 
   context.subscriptions.push(session);
   context.subscriptions.push(statusBar);
@@ -367,29 +368,77 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.startRecording', async () => {
       await runCommand('Start Recording', async () => {
-        session.setRecording();
-        const recording = await recorderService.start(session.connectedDriver);
-        statusBar.setRecording(recording);
-        recordingPanel.open(recording);
-        vscode.window.showInformationMessage('Fliwright recording started.');
+        const testName = await vscode.window.showInputBox({
+          title: 'Start Fliwright Recording',
+          prompt: 'Generated test name',
+          value: 'recorded test',
+        });
+        if (testName === undefined) return;
+
+        try {
+          session.setRecording();
+          const recording = await recorderService.start(session.connectedDriver, {
+            testName: testName.trim() || 'recorded test',
+            onDidChange: updateRecordingViews,
+          });
+          updateRecordingViews(recording);
+          recordingPanel.open(recording);
+          vscode.window.showInformationMessage('Fliwright recording started.');
+        } catch (error) {
+          session.setConnectedIdle();
+          updateRecordingViews(recorderService.reset());
+          throw error;
+        }
       });
     }),
     vscode.commands.registerCommand('fliwright.stopRecording', async () => {
       await runCommand('Stop Recording', async () => {
-        const recording = await recorderService.stop(session.connectedDriver, vscode.window.activeTextEditor?.document.uri);
-        statusBar.setRecording(recording);
-        recordingPanel.open(recording);
-        session.setConnectedIdle();
-        output.appendLine(`Recorded ${recording.operationCount} operation(s).`);
-        vscode.window.showInformationMessage(`Recorded ${recording.operationCount} operation(s).`, 'Insert Test').then((selection) => {
-          if (selection === 'Insert Test') void vscode.commands.executeCommand('fliwright.insertRecordedTest');
-        });
+        try {
+          const recording = await recorderService.stop(session.connectedDriver, vscode.window.activeTextEditor?.document.uri);
+          updateRecordingViews(recording);
+          recordingPanel.open(recording);
+          session.setConnectedIdle();
+          output.appendLine(`Recorded ${recording.operationCount} operation(s).`);
+          vscode.window.showInformationMessage(`Recorded ${recording.operationCount} operation(s).`, 'Insert Test').then((selection) => {
+            if (selection === 'Insert Test') void vscode.commands.executeCommand('fliwright.insertRecordedTest');
+          });
+        } catch (error) {
+          session.setConnectedIdle();
+          updateRecordingViews(recorderService.reset());
+          throw error;
+        }
       });
     }),
     vscode.commands.registerCommand('fliwright.insertRecordedTest', async () => {
       await runCommand('Insert Recorded Test', async () => {
-        const uri = await recorderService.insertGeneratedCode(requireWorkspaceRoot());
-        vscode.window.showInformationMessage(`Inserted recorded test into ${uri.fsPath}`);
+        const root = requireWorkspaceRoot();
+        const target = await vscode.window.showQuickPick([
+          { label: 'Save as New Test File', action: 'save' as const },
+          { label: 'Insert at Active Editor Cursor', action: 'insert' as const },
+        ], {
+          title: 'Insert Recorded Test',
+          placeHolder: 'Choose where to put the generated test',
+        });
+        if (!target) return;
+
+        if (target.action === 'insert') {
+          const uri = await recorderService.insertGeneratedCode();
+          updateRecordingViews(recorderService.getSession());
+          vscode.window.showInformationMessage(`Inserted recorded test into ${uri.fsPath}`);
+          return;
+        }
+
+        const defaultUri = resolveWorkspacePath(root, `tests/recorded-${Date.now()}.test.ts`);
+        const uri = await vscode.window.showSaveDialog({
+          title: 'Save Recorded Test',
+          defaultUri,
+          filters: { 'TypeScript Test': ['ts'] },
+        });
+        if (!uri) return;
+
+        const saved = await recorderService.saveGeneratedCode(root, uri);
+        updateRecordingViews(recorderService.getSession());
+        vscode.window.showInformationMessage(`Saved recorded test to ${saved.fsPath}`);
       });
     }),
     vscode.commands.registerCommand('fliwright.refreshStateProviders', async () => {
@@ -531,6 +580,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       appendFormFillDebug(result);
       vscode.window.showInformationMessage(`Filled ${result.filled} field(s), skipped ${result.skipped}, errors ${result.errors.length}.`);
     });
+  }
+
+  function updateRecordingViews(recording: ReturnType<RecorderService['getSession']>): void {
+    statusBar.setRecording(recording);
+    recordingPanel.update(recording);
+    void updateRecordingContext(recording);
+  }
+
+  async function updateRecordingContext(recording: ReturnType<RecorderService['getSession']>): Promise<void> {
+    await Promise.all([
+      vscode.commands.executeCommand('setContext', 'fliwright.recording.isRecording', recording.status === 'recording'),
+      vscode.commands.executeCommand('setContext', 'fliwright.recording.hasPreview', recording.status === 'preview' && Boolean(recording.generatedCode)),
+    ]);
   }
 
   async function discoverAndConnect(options: { reason: string; interactive: boolean; forceReconnect?: boolean }): Promise<boolean> {
