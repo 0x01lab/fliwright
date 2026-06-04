@@ -119,6 +119,9 @@ export interface TreeDataProvider<T> {
 
 let workspaceFoldersValue: Array<{ uri: Uri }> | undefined;
 let configValue: Record<string, unknown> = {};
+let showInputBoxResult: string | undefined = undefined;
+let showQuickPickResultProvider: ((items: unknown[], options?: { canPickMany?: boolean }) => unknown) | undefined;
+let showSaveDialogResult: Uri | undefined = undefined;
 
 export const workspace = {
   get workspaceFolders() {
@@ -193,7 +196,7 @@ export const window = {
     return { dispose() {} };
   },
   activeTextEditor: undefined as any,
-  showInputBox: async () => undefined,
+  showInputBox: async () => showInputBoxResult,
   showTextDocument: async (documentOrUri?: unknown) => ({
     document: 'uri' in (documentOrUri as any ?? {}) ? documentOrUri : { uri: documentOrUri },
     selection: undefined,
@@ -204,9 +207,9 @@ export const window = {
   showWarningMessage: async () => undefined,
   showErrorMessage: async () => undefined,
   showQuickPick: async (items: unknown[], options?: { canPickMany?: boolean }) => (
-    options?.canPickMany ? items : items[0]
+    showQuickPickResultProvider ? showQuickPickResultProvider(items, options) : (options?.canPickMany ? items : items[0])
   ),
-  showSaveDialog: async () => undefined,
+  showSaveDialog: async () => showSaveDialogResult,
   withProgress: async (_options: unknown, task: () => Promise<unknown>) => task(),
 };
 
@@ -244,4 +247,16 @@ export function __setWorkspaceRoot(root: string | undefined): void {
 
 export function __setConfiguration(config: Record<string, unknown>): void {
   configValue = config;
+}
+
+export function __setShowInputBoxResult(result: string | undefined): void {
+  showInputBoxResult = result;
+}
+
+export function __setShowQuickPickResult(provider: ((items: unknown[], options?: { canPickMany?: boolean }) => unknown) | undefined): void {
+  showQuickPickResultProvider = provider;
+}
+
+export function __setShowSaveDialogResult(result: Uri | undefined): void {
+  showSaveDialogResult = result;
 }

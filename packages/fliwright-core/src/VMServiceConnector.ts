@@ -101,7 +101,14 @@ export class VMServiceConnector {
     }
     if (msg.method === 'streamNotify' && msg.params) {
       const params = msg.params as any;
-      const event: VMServiceEvent = { kind: params.event?.kind ?? 'unknown', timestamp: Date.now(), data: params.event?.data ?? {} };
+      // Dart VM Service Extension events use extensionKind / extensionData
+      // (not kind / data).  Fall back to kind / data for backward-compat and
+      // test mocks that use the simpler format.
+      const event: VMServiceEvent = {
+        kind: params.event?.extensionKind ?? params.event?.kind ?? 'unknown',
+        timestamp: Date.now(),
+        data: params.event?.extensionData ?? params.event?.data ?? {},
+      };
       this.eventListeners.forEach((cb) => cb(event));
     }
   }

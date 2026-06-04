@@ -89,7 +89,7 @@ export function createProtocolMock(isolateId = DEFAULT_ISOLATE_ID): ProtocolMock
       method: 'streamNotify',
       params: {
         streamId: 'Extension',
-        event: { kind, timestamp: Date.now(), data },
+        event: { type: 'Extension', extensionKind: kind, timestamp: Date.now(), extensionData: data },
       },
     });
     for (const fn of listeners['message'] ?? []) fn(json);

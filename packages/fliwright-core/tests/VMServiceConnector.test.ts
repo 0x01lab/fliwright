@@ -73,7 +73,7 @@ describe('VMServiceConnector', () => {
     connector.onEvent(onEvent);
     mockWS.emit('message', JSON.stringify({
       jsonrpc: '2.0', method: 'streamNotify',
-      params: { streamId: 'Extension', event: { kind: 'riverpod_changed', data: { key: 'counter', value: 5 } } },
+      params: { streamId: 'Extension', event: { type: 'Extension', extensionKind: 'riverpod_changed', extensionData: { key: 'counter', value: 5 } } },
     }));
     expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ kind: 'riverpod_changed', data: { key: 'counter', value: 5 } }));
   });
