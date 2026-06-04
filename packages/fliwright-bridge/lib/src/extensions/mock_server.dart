@@ -168,10 +168,14 @@ class MockServerExtension {
       return {'removed': removed != _routes.length};
     }
     if (path != null) {
+      final method = params['method'];
       final removed = _routes.length;
-      _routes.removeWhere((r) => r.pathPattern == path);
+      _routes.removeWhere((r) =>
+          r.pathPattern == path &&
+          (method == null ||
+              (r.method ?? '').toUpperCase() == method.toUpperCase()));
       _log(
-          'Removed route path=$path removed=${removed != _routes.length} routes=${_routes.length}');
+          'Removed route path=$path method=${method ?? '*'} removed=${removed != _routes.length} routes=${_routes.length}');
       return {'removed': removed != _routes.length};
     }
     return {'error': 'Missing parameter: id or path'};

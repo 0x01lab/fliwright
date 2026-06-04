@@ -2,6 +2,7 @@ import 'package:fliwright_bridge_riverpod/fliwright_bridge_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 final counterProvider = StateProvider<int>((ref) => 0, name: 'counterProvider');
 final userProvider =

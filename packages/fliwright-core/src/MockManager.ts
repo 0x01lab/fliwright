@@ -113,8 +113,11 @@ export class MockManager implements MockAdapter {
     await this._server.loadRules(dir);
     if (this.remoteControllerUrl) {
       for (const route of this._server.listRoutes()) {
-        const entry = this._server.ruleStore.listEndpoints().find((endpoint) => endpoint.endpoint === route.path);
-        const response = entry ? this._server.ruleStore.getActiveResponse(entry.endpoint) : null;
+        const entry = this._server.ruleStore.listEndpoints().find((endpoint) => (
+          endpoint.endpoint === route.path &&
+          (!route.method || endpoint.method.toUpperCase() === route.method.toUpperCase())
+        ));
+        const response = entry ? this._server.ruleStore.getActiveResponse(entry.endpoint, entry.method) : null;
         if (response) await this.route(route.path, { ...response, method: route.method });
       }
     }
@@ -137,8 +140,17 @@ export class MockManager implements MockAdapter {
    * Switch the active rule for an endpoint and apply it to the Flutter mock server.
    * Throws if the endpoint or rule name is not found.
    */
-  async switchRule(endpoint: string, ruleName: string): Promise<void> {
-    this._server.switchRule(endpoint, ruleName);
+  async switchRule(endpoint: string, ruleName: string, method?: string): Promise<void> {
+    this._server.switchRule(endpoint, ruleName, method);
+    if (this.remoteControllerUrl) {
+      const entry = this._server.ruleStore.listEndpoints().find((item) => (
+        item.endpoint === endpoint && (!method || item.method.toUpperCase() === method.toUpperCase())
+      ));
+      const response = entry ? this._server.ruleStore.getActiveResponse(endpoint, entry.method) : null;
+      if (response && entry) {
+        await this.route(endpoint, { ...response, method: entry.method });
+      }
+    }
   }
 
   async configureFlutterController(url?: string): Promise<void> {

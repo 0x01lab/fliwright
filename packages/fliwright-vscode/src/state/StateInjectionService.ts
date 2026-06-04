@@ -20,6 +20,7 @@ interface RiverpodProviderInfo {
   name?: string;
   type?: string;
   value?: unknown;
+  valueType?: string;
   readable?: boolean;
   overridable?: boolean;
   watching?: boolean;
@@ -56,6 +57,7 @@ export class StateInjectionService {
       key: String(provider.key ?? provider.name ?? 'unknown'),
       type: provider.type,
       value: provider.value,
+      valueType: provider.valueType,
       readable: provider.readable ?? true,
       overridable: provider.overridable ?? false,
       watching: provider.watching,

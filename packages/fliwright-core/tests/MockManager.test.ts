@@ -87,7 +87,7 @@ describe('MockManager', () => {
   it('switchRule() updates the active tool-side response', async () => {
     const mock = new MockManager(createMockSendRequest());
     const store = mock['_server'].ruleStore as any;
-    store.entries.set('/api/test', {
+    store.entries.set('GET /api/test', {
       endpoint: '/api/test',
       method: 'GET',
       activeRule: 'success',
@@ -106,6 +106,94 @@ describe('MockManager', () => {
 
     expect(result.status).toBe(500);
     expect(result.body).toEqual({ fail: true });
+  });
+
+  it('switchRule() forwards the selected rule to a configured remote controller', async () => {
+    const mock = new MockManager(createMockSendRequest());
+    const requests: Array<{ url: string; options?: unknown }> = [];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{}'),
+    } as Response);
+    fetchMock.mockImplementation(async (url: string | URL | Request, options?: RequestInit) => {
+      requests.push({ url: url.toString(), options });
+      return {
+        ok: true,
+        text: () => Promise.resolve('{}'),
+      } as Response;
+    });
+
+    try {
+      mock['_server'].ruleStore['entries'].set('GET /api/test', {
+        endpoint: '/api/test',
+        method: 'GET',
+        activeRule: 'success',
+        rules: new Map([
+          ['success', { name: 'success', status: 200, body: { ok: true } }],
+          ['error', { name: 'error', status: 500, body: { fail: true } }],
+        ]),
+      });
+      mock['remoteControllerUrl'] = 'http://127.0.0.1:18080';
+
+      await mock.switchRule('/api/test', 'error', 'GET');
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].url).toBe('http://127.0.0.1:18080/routes');
+      expect(JSON.parse((requests[0].options as RequestInit).body as string)).toEqual({
+        path: '/api/test',
+        method: 'GET',
+        response: {
+          status: 500,
+          body: { fail: true },
+          method: 'GET',
+        },
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('switchRule() targets the requested method for shared endpoint paths', async () => {
+    const mock = new MockManager(createMockSendRequest());
+    const store = mock['_server'].ruleStore as any;
+    store.entries.set('GET /api/user', {
+      endpoint: '/api/user',
+      method: 'GET',
+      activeRule: 'success',
+      rules: new Map([
+        ['success', { name: 'success', status: 200, body: { method: 'GET' } }],
+        ['error', { name: 'error', status: 500, body: { fail: 'get' } }],
+      ]),
+    });
+    store.entries.set('POST /api/user', {
+      endpoint: '/api/user',
+      method: 'POST',
+      activeRule: 'success',
+      rules: new Map([
+        ['success', { name: 'success', status: 201, body: { method: 'POST' } }],
+        ['error', { name: 'error', status: 422, body: { fail: 'post' } }],
+      ]),
+    });
+    await mock.route('/api/user', { method: 'GET', status: 200, body: { method: 'GET' } });
+    await mock.route('/api/user', { method: 'POST', status: 201, body: { method: 'POST' } });
+
+    await mock.switchRule('/api/user', 'error', 'POST');
+
+    const getResult = mock['_server'].handleMockRequest({
+      method: 'GET',
+      url: 'https://dev.ex.io/api/user',
+      path: '/api/user',
+    });
+    const postResult = mock['_server'].handleMockRequest({
+      method: 'POST',
+      url: 'https://dev.ex.io/api/user',
+      path: '/api/user',
+    });
+
+    expect(getResult.status).toBe(200);
+    expect(getResult.body).toEqual({ method: 'GET' });
+    expect(postResult.status).toBe(422);
+    expect(postResult.body).toEqual({ fail: 'post' });
   });
 
   it('configureFlutterController() sends provided controller URL to Flutter', async () => {

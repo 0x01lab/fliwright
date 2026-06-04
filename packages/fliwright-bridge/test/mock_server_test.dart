@@ -140,6 +140,46 @@ void main() {
       expect(routes[0]['id'], 'r2');
     });
 
+    test('removeRoute can remove only one method for a path', () async {
+      await FliwrightBridge.init();
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'get-user',
+            'method': 'GET',
+            'path': '/api/user',
+            'response': {}
+          })
+        },
+      );
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'post-user',
+            'method': 'POST',
+            'path': '/api/user',
+            'response': {}
+          })
+        },
+      );
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.removeRoute',
+        {'path': '/api/user', 'method': 'GET'},
+      );
+      expect(result['removed'], isTrue);
+
+      final listResult = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.listRoutes',
+        {},
+      );
+      final routes = listResult['routes'] as List<dynamic>;
+      expect(routes, hasLength(1));
+      expect(routes.single['id'], 'post-user');
+    });
+
     test('setPassthrough toggles behavior', () async {
       await FliwrightBridge.init();
       var result = await FliwrightBridge.registry.invoke(
@@ -472,6 +512,39 @@ void main() {
 
       expect(response.statusCode, 202);
       expect(response.data?['version'], 2);
+    });
+
+    test('removeRoute can remove only one Dio method for a path', () async {
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'dio-get-user',
+            'method': 'GET',
+            'path': '/api/user',
+            'response': {}
+          }),
+        },
+      );
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'dio-post-user',
+            'method': 'POST',
+            'path': '/api/user',
+            'response': {}
+          }),
+        },
+      );
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.removeRoute',
+        {'path': '/api/user', 'method': 'GET'},
+      );
+      expect(result['removed'], isTrue);
+      expect(interceptor.routes, hasLength(1));
+      expect(interceptor.routes.single.id, 'dio-post-user');
     });
 
     test('newly injected Dio interceptor inherits registered routes', () async {

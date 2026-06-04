@@ -5,6 +5,7 @@ import 'dart:developer';
 import '../bridge.dart';
 
 typedef RiverpodWriteHandler = FutureOr<Object?> Function(Object? value);
+typedef RiverpodValueSerializer = Object? Function(Object? value);
 
 class ObservedRiverpodProvider {
   ObservedRiverpodProvider({
@@ -27,6 +28,7 @@ class ObservedRiverpodProvider {
   String providerType;
   Object? currentValue;
   Object? previousValue;
+  String? valueType;
   final DateTime addedAt;
   DateTime updatedAt;
   DateTime? disposedAt;
@@ -40,6 +42,7 @@ class ObservedRiverpodProvider {
         'type': providerType,
         'value': _jsonSafe(currentValue),
         'previousValue': _jsonSafe(previousValue),
+        'valueType': valueType,
         'readable': !disposed,
         'overridable': overridable,
         'watching': watching,
@@ -58,6 +61,8 @@ class RiverpodExtension {
       <String, ObservedRiverpodProvider>{};
   static final Map<String, RiverpodWriteHandler> _writeHandlers =
       <String, RiverpodWriteHandler>{};
+  static final Map<String, RiverpodValueSerializer> _serializers =
+      <String, RiverpodValueSerializer>{};
   static final Set<String> _activeSubscriptions = {};
 
   /// Set the ProviderContainer for Riverpod state access.
@@ -82,6 +87,7 @@ class RiverpodExtension {
   }) {
     markObserverInstalled();
     final now = DateTime.now();
+    final serializedValue = _serializeValue(key, value);
     final provider = _providers[key] ??
         ObservedRiverpodProvider(
           key: key,
@@ -94,11 +100,12 @@ class RiverpodExtension {
       ..displayName = displayName ?? provider.displayName
       ..providerType = providerType ?? provider.providerType
       ..previousValue = provider.currentValue
-      ..currentValue = value
+      ..currentValue = serializedValue
+      ..valueType = _valueType(value)
       ..updatedAt = now
       ..disposed = false
       ..disposedAt = null
-      ..error = null;
+      ..error = value == null ? provider.error : null;
     _providers[key] = provider;
   }
 
@@ -111,6 +118,8 @@ class RiverpodExtension {
   }) {
     markObserverInstalled();
     final now = DateTime.now();
+    final serializedPreviousValue = _serializeValue(key, previousValue);
+    final serializedValue = _serializeValue(key, value);
     final provider = _providers[key] ??
         ObservedRiverpodProvider(
           key: key,
@@ -122,12 +131,13 @@ class RiverpodExtension {
     provider
       ..displayName = displayName ?? provider.displayName
       ..providerType = providerType ?? provider.providerType
-      ..previousValue = previousValue ?? provider.currentValue
-      ..currentValue = value
+      ..previousValue = serializedPreviousValue ?? provider.currentValue
+      ..currentValue = serializedValue
+      ..valueType = _valueType(value)
       ..updatedAt = now
       ..disposed = false
       ..disposedAt = null
-      ..error = null;
+      ..error = value == null ? provider.error : null;
     _providers[key] = provider;
 
     if (_activeSubscriptions.contains(key)) {
@@ -188,11 +198,27 @@ class RiverpodExtension {
     _providers[key] = provider;
   }
 
+  static void registerProviderSerializer(
+    String key,
+    RiverpodValueSerializer serializer,
+  ) {
+    _serializers[key] = serializer;
+    final provider = _providers[key];
+    if (provider != null) {
+      provider
+        ..currentValue = _serializeValue(key, provider.currentValue)
+        ..previousValue = _serializeValue(key, provider.previousValue)
+        ..valueType = _valueType(provider.currentValue)
+        ..updatedAt = DateTime.now();
+    }
+  }
+
   static void reset() {
     _providerContainer = null;
     _observerInstalled = false;
     _providers.clear();
     _writeHandlers.clear();
+    _serializers.clear();
     _activeSubscriptions.clear();
   }
 
@@ -243,6 +269,14 @@ class RiverpodExtension {
     final provider = _providers[providerName];
     if (provider == null || provider.disposed) {
       return {'provider': providerName, 'value': null, 'found': false};
+    }
+    if (provider.error != null) {
+      return {
+        'provider': providerName,
+        'value': _jsonSafe(provider.currentValue),
+        'found': true,
+        'error': provider.error.toString(),
+      };
     }
     return {
       'provider': providerName,
@@ -314,3 +348,19 @@ Object? _jsonSafe(Object? value) {
   }
   return value.toString();
 }
+
+Object? _serializeValue(String key, Object? value) {
+  final serializer = RiverpodExtension._serializers[key];
+  if (serializer == null) return value;
+  try {
+    return serializer(value);
+  } catch (error) {
+    return {
+      'serializerError': error.toString(),
+      'rawValue': value.toString(),
+    };
+  }
+}
+
+String _valueType(Object? value) =>
+    value == null ? 'Null' : value.runtimeType.toString();

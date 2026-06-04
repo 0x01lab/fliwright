@@ -134,10 +134,14 @@ class DioMockExtension {
       return {'removed': count != interceptor.routes.length};
     }
     if (path != null) {
+      final method = params['method'];
       final count = interceptor.routes.length;
-      interceptor.routes.removeWhere((r) => r.pathPattern == path);
+      interceptor.routes.removeWhere((r) =>
+          r.pathPattern == path &&
+          (method == null ||
+              (r.method ?? '').toUpperCase() == method.toUpperCase()));
       _log(
-          'Removed Dio route path=$path removed=${count != interceptor.routes.length} routes=${interceptor.routes.length}');
+          'Removed Dio route path=$path method=${method ?? '*'} removed=${count != interceptor.routes.length} routes=${interceptor.routes.length}');
       return {'removed': count != interceptor.routes.length};
     }
     return {'error': 'Missing parameter: id or path'};

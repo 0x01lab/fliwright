@@ -5,56 +5,50 @@ import 'dart:async';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class FliwrightRiverpodObserver extends ProviderObserver {
+final class FliwrightRiverpodObserver extends ProviderObserver {
   const FliwrightRiverpodObserver();
 
   @override
   void didAddProvider(
-    ProviderBase<Object?> provider,
+    ProviderObserverContext context,
     Object? value,
-    ProviderContainer container,
   ) {
     RiverpodExtension.recordProviderAdded(
-      key: _providerKey(provider),
-      displayName: _providerName(provider),
-      providerType: provider.runtimeType.toString(),
+      key: _providerKey(context),
+      displayName: _providerName(context),
+      providerType: context.provider.runtimeType.toString(),
       value: value,
     );
   }
 
   @override
   void didUpdateProvider(
-    ProviderBase<Object?> provider,
+    ProviderObserverContext context,
     Object? previousValue,
     Object? newValue,
-    ProviderContainer container,
   ) {
     RiverpodExtension.recordProviderUpdated(
-      key: _providerKey(provider),
-      displayName: _providerName(provider),
-      providerType: provider.runtimeType.toString(),
+      key: _providerKey(context),
+      displayName: _providerName(context),
+      providerType: context.provider.runtimeType.toString(),
       previousValue: previousValue,
       value: newValue,
     );
   }
 
   @override
-  void didDisposeProvider(
-    ProviderBase<Object?> provider,
-    ProviderContainer container,
-  ) {
-    RiverpodExtension.recordProviderDisposed(_providerKey(provider));
+  void didDisposeProvider(ProviderObserverContext context) {
+    RiverpodExtension.recordProviderDisposed(_providerKey(context));
   }
 
   @override
   void providerDidFail(
-    ProviderBase<Object?> provider,
+    ProviderObserverContext context,
     Object error,
     StackTrace stackTrace,
-    ProviderContainer container,
   ) {
     RiverpodExtension.recordProviderError(
-      key: _providerKey(provider),
+      key: _providerKey(context),
       error: error,
     );
   }
@@ -74,11 +68,18 @@ void registerFliwrightWritableProvider(
   );
 }
 
-String _providerKey(ProviderBase<Object?> provider) {
-  return _providerName(provider) ?? provider.toString();
+void registerFliwrightProviderSerializer(
+  String key,
+  Object? Function(Object? value) serialize,
+) {
+  RiverpodExtension.registerProviderSerializer(key, serialize);
 }
 
-String? _providerName(ProviderBase<Object?> provider) {
-  final name = provider.name;
+String _providerKey(ProviderObserverContext context) {
+  return _providerName(context) ?? context.provider.toString();
+}
+
+String? _providerName(ProviderObserverContext context) {
+  final name = context.provider.name;
   return name == null || name.isEmpty ? null : name;
 }

@@ -38,6 +38,19 @@ void main() {
 }
 ```
 
+If the app creates its own `ProviderContainer` and uses
+`UncontrolledProviderScope`, attach the observer to that container:
+
+```dart
+final container = ProviderContainer(
+  observers: kDebugMode ? const [FliwrightRiverpodObserver()] : const [],
+);
+
+runApp(
+  UncontrolledProviderScope(container: container, child: const MyApp()),
+);
+```
+
 Observer-only providers support list, read, and watch. Override requires an
 explicit writable registration:
 

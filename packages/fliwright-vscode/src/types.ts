@@ -222,6 +222,7 @@ export interface StateProviderEntry {
   key: string;
   value?: unknown;
   type?: string;
+  valueType?: string;
   readable?: boolean;
   overridable?: boolean;
   watching?: boolean;

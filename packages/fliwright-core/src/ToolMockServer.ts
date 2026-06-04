@@ -135,17 +135,19 @@ export class ToolMockServer {
   async loadRules(mockDir = '.fliwright/mocks'): Promise<void> {
     await this.ruleStore.loadFromDirectory(mockDir);
     for (const endpoint of this.ruleStore.listEndpoints()) {
-      const response = this.ruleStore.getActiveResponse(endpoint.endpoint);
+      const response = this.ruleStore.getActiveResponse(endpoint.endpoint, endpoint.method);
       if (response) {
         this.route(endpoint.endpoint, { ...response, method: endpoint.method });
       }
     }
   }
 
-  switchRule(endpoint: string, ruleName: string): void {
-    this.ruleStore.switchRule(endpoint, ruleName);
-    const response = this.ruleStore.getActiveResponse(endpoint);
-    const entry = this.ruleStore.listEndpoints().find((item) => item.endpoint === endpoint);
+  switchRule(endpoint: string, ruleName: string, method?: string): void {
+    this.ruleStore.switchRule(endpoint, ruleName, method);
+    const entry = this.ruleStore.listEndpoints().find((item) => (
+      item.endpoint === endpoint && (!method || item.method.toUpperCase() === method.toUpperCase())
+    ));
+    const response = entry ? this.ruleStore.getActiveResponse(endpoint, entry.method) : null;
     if (response) {
       this.route(endpoint, { ...response, method: entry?.method });
     }

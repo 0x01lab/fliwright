@@ -113,7 +113,7 @@ export class MockRuleStore {
 
     const activeRule = rules.has(defaultRule) ? defaultRule : config.rules[0]?.name ?? '';
 
-    this.entries.set(config.endpoint, {
+    this.entries.set(routeKey(config.endpoint, config.method), {
       endpoint: config.endpoint,
       method: config.method,
       rules,
@@ -142,8 +142,8 @@ export class MockRuleStore {
    * Get the active rule's response for an endpoint.
    * Returns null if the endpoint is not registered.
    */
-  getActiveResponse(endpoint: string): MockRouteResponse | null {
-    const entry = this.entries.get(endpoint);
+  getActiveResponse(endpoint: string, method?: string): MockRouteResponse | null {
+    const entry = this.findEntry(endpoint, method);
     if (!entry) return null;
 
     const rule = entry.rules.get(entry.activeRule);
@@ -156,12 +156,12 @@ export class MockRuleStore {
    * Switch the active rule for an endpoint.
    * Returns the new active rule's response, or throws if endpoint/rule not found.
    */
-  switchRule(endpoint: string, ruleName: string): MockRouteResponse | null {
-    const entry = this.entries.get(endpoint);
+  switchRule(endpoint: string, ruleName: string, method?: string): MockRouteResponse | null {
+    const entry = this.findEntry(endpoint, method);
     if (!entry) {
-      const available = Array.from(this.entries.keys());
+      const available = this.listEndpoints().map((item) => `${item.method} ${item.endpoint}`);
       throw new Error(
-        `Endpoint "${endpoint}" not found. Registered endpoints: ${available.join(', ') || '(none)'}`,
+        `Endpoint "${formatRoute(endpoint, method)}" not found. Registered endpoints: ${available.join(', ') || '(none)'}`,
       );
     }
 
@@ -169,7 +169,7 @@ export class MockRuleStore {
     if (!rule) {
       const available = Array.from(entry.rules.keys());
       throw new Error(
-        `Rule "${ruleName}" not found for endpoint "${endpoint}". available: ${available.join(', ')}`,
+        `Rule "${ruleName}" not found for endpoint "${formatRoute(endpoint, entry.method)}". available: ${available.join(', ')}`,
       );
     }
 
@@ -184,4 +184,25 @@ export class MockRuleStore {
   get isLoaded(): boolean {
     return this.entries.size > 0;
   }
+
+  private findEntry(endpoint: string, method?: string): MockRuleEntry | undefined {
+    if (method) return this.entries.get(routeKey(endpoint, method));
+
+    const matches = Array.from(this.entries.values()).filter((entry) => entry.endpoint === endpoint);
+    if (matches.length <= 1) return matches[0];
+
+    throw new Error(
+      `Endpoint "${endpoint}" is ambiguous. Specify method. Available: ${
+        matches.map((entry) => `${entry.method} ${entry.endpoint}`).join(', ')
+      }`,
+    );
+  }
+}
+
+function routeKey(endpoint: string, method: string): string {
+  return `${method.toUpperCase()} ${endpoint}`;
+}
+
+function formatRoute(endpoint: string, method?: string): string {
+  return method ? `${method.toUpperCase()} ${endpoint}` : endpoint;
 }

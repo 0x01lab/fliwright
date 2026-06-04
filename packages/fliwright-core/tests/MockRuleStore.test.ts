@@ -57,6 +57,57 @@ describe('MockRuleStore', () => {
       expect(endpoints[0].activeRule).toBe('success');
     });
 
+    it('keeps entries separate by method and endpoint', async () => {
+      const mockIndex: MockIndex = {
+        version: 1,
+        defaultRule: 'success',
+        files: ['api/get-user.json', 'api/post-user.json'],
+      };
+      const getEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'Get User',
+        method: 'GET',
+        endpoint: '/api/user',
+        rules: [
+          { name: 'success', status: 200, body: { method: 'GET' } },
+          { name: 'error', status: 500, body: { fail: true } },
+        ],
+      };
+      const postEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'Create User',
+        method: 'POST',
+        endpoint: '/api/user',
+        rules: [
+          { name: 'success', status: 201, body: { method: 'POST' } },
+          { name: 'error', status: 422, body: { invalid: true } },
+        ],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) return JSON.stringify(mockIndex);
+        if (p.endsWith('get-user.json')) return JSON.stringify(getEndpoint);
+        if (p.endsWith('post-user.json')) return JSON.stringify(postEndpoint);
+        throw new Error(`Unexpected read: ${p}`);
+      });
+
+      await store.loadFromDirectory('/project/.fliwright/mocks');
+
+      expect(store.listEndpoints()).toEqual([
+        expect.objectContaining({ endpoint: '/api/user', method: 'GET' }),
+        expect.objectContaining({ endpoint: '/api/user', method: 'POST' }),
+      ]);
+      expect(store.getActiveResponse('/api/user', 'GET')).toEqual({
+        status: 200,
+        body: { method: 'GET' },
+      });
+      expect(store.getActiveResponse('/api/user', 'POST')).toEqual({
+        status: 201,
+        body: { method: 'POST' },
+      });
+    });
+
     it('auto-loads api/*.json when mock-index.json does not exist', async () => {
       const instrumentEndpoint: MockEndpointConfig = {
         version: 1,
@@ -245,6 +296,82 @@ describe('MockRuleStore', () => {
 
       expect(response).toEqual({ status: 500, body: { fail: true } });
       expect(store.listEndpoints()[0].activeRule).toBe('error');
+    });
+
+    it('switches by method when endpoint path is shared', async () => {
+      const mockIndex: MockIndex = {
+        version: 1,
+        defaultRule: 'success',
+        files: ['api/get-user.json', 'api/post-user.json'],
+      };
+      const getEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'Get User',
+        method: 'GET',
+        endpoint: '/api/user',
+        rules: [
+          { name: 'success', status: 200, body: { method: 'GET' } },
+          { name: 'error', status: 500, body: { fail: 'get' } },
+        ],
+      };
+      const postEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'Create User',
+        method: 'POST',
+        endpoint: '/api/user',
+        rules: [
+          { name: 'success', status: 201, body: { method: 'POST' } },
+          { name: 'error', status: 422, body: { fail: 'post' } },
+        ],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) return JSON.stringify(mockIndex);
+        if (p.endsWith('get-user.json')) return JSON.stringify(getEndpoint);
+        if (p.endsWith('post-user.json')) return JSON.stringify(postEndpoint);
+        throw new Error(`Unexpected read: ${p}`);
+      });
+
+      await store.loadFromDirectory('/project/.fliwright/mocks');
+
+      const response = store.switchRule('/api/user', 'error', 'POST');
+
+      expect(response).toEqual({ status: 422, body: { fail: 'post' } });
+      expect(store.getActiveResponse('/api/user', 'GET')).toEqual({
+        status: 200,
+        body: { method: 'GET' },
+      });
+      expect(store.getActiveResponse('/api/user', 'POST')).toEqual({
+        status: 422,
+        body: { fail: 'post' },
+      });
+    });
+
+    it('throws when switching a shared endpoint without method', async () => {
+      const mockIndex: MockIndex = {
+        version: 1,
+        defaultRule: 'success',
+        files: ['api/get-user.json', 'api/post-user.json'],
+      };
+      const baseEndpoint = {
+        version: 1,
+        name: 'User',
+        endpoint: '/api/user',
+        rules: [{ name: 'success', status: 200, body: {} }],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) return JSON.stringify(mockIndex);
+        if (p.endsWith('get-user.json')) return JSON.stringify({ ...baseEndpoint, method: 'GET' });
+        if (p.endsWith('post-user.json')) return JSON.stringify({ ...baseEndpoint, method: 'POST' });
+        throw new Error(`Unexpected read: ${p}`);
+      });
+
+      await store.loadFromDirectory('/project/.fliwright/mocks');
+
+      expect(() => store.switchRule('/api/user', 'success')).toThrow(/ambiguous.*specify method/i);
     });
 
     it('throws if endpoint not found', () => {

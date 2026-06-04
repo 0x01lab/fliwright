@@ -73,6 +73,15 @@ describe('RiverpodStateAdapter', () => {
     await expect(adapter.read('counter')).rejects.toThrow('ProviderObserver not installed');
   });
 
+  it('throws provider read errors even when the provider was observed', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.riverpod.read': { provider: 'accountDataSourceProvider', value: null, found: true, error: 'Provider failed during initialization' },
+    });
+    const adapter = new RiverpodStateAdapter(sendRequest);
+
+    await expect(adapter.read('accountDataSourceProvider')).rejects.toThrow('Provider failed during initialization');
+  });
+
   it('overrides a provider', async () => {
     const sendRequest = createMockSendRequest({
       'ext.fliwright.riverpod.override': { provider: 'user', overridden: true },

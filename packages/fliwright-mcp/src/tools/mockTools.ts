@@ -7,6 +7,7 @@ export const MockListParamsSchema = z.object({});
 export const MockSwitchParamsSchema = z.object({
   mockDir: z.string().optional().describe('Path to .fliwright/mocks directory. Defaults to .fliwright/mocks.'),
   endpoint: z.string().describe('API endpoint path, e.g. "/v1/public/token"'),
+  method: z.string().optional().describe('HTTP method for endpoints that share the same path, e.g. "GET"'),
   ruleName: z.string().describe('Name of the rule to activate, e.g. "success", "empty", "server_error"'),
 });
 
@@ -54,10 +55,13 @@ export function registerMockSwitchTool(server: McpServer, state: ServerState): v
       }
 
       try {
-        store.switchRule(params.endpoint, params.ruleName);
+        store.switchRule(params.endpoint, params.ruleName, params.method);
 
         const endpoints = store.listEndpoints();
-        const ep = endpoints.find((e) => e.endpoint === params.endpoint);
+        const ep = endpoints.find((e) => (
+          e.endpoint === params.endpoint &&
+          (!params.method || e.method.toUpperCase() === params.method.toUpperCase())
+        ));
         const summary = ep
           ? `${ep.method} ${ep.endpoint} → ${ep.activeRule}`
           : `${params.endpoint} → ${params.ruleName}`;

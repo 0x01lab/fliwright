@@ -11,9 +11,12 @@ export class RiverpodStateAdapter implements StateAdapter {
   ) {}
 
   async read(key: string): Promise<unknown> {
-    const result = normalizeResult(await this.sendRequest('ext.fliwright.riverpod.read', { provider: key })) as { value: unknown; found?: boolean };
+    const result = normalizeResult(await this.sendRequest('ext.fliwright.riverpod.read', { provider: key })) as { value: unknown; found?: boolean; error?: string };
     if (result.found === false) {
       throw new Error(`Riverpod provider not found: ${key}`);
+    }
+    if (typeof result.error === 'string' && result.error.length > 0) {
+      throw new Error(result.error);
     }
     return result.value;
   }

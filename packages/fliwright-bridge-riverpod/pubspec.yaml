@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_riverpod: ^2.5.0
+  flutter_riverpod: ^3.0.0
   fliwright_bridge:
     path: ../fliwright-bridge
 

@@ -12,6 +12,7 @@ import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
 import { formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js';
+import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
 import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunEntry, StateProviderEntry, TestFileEntry } from './types.js';
@@ -43,6 +44,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const failureStore = new FailureContextStore();
   const recorderService = new RecorderService();
   const stateService = new StateInjectionService();
+  const stateProviderDocuments = new StateProviderDocumentProvider();
   const devicesTree = new DevicesTreeProvider();
   const mockTree = new MockApiTreeProvider(mockService);
   const formTree = new FormDataTreeProvider(formService);
@@ -55,6 +57,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(session);
   context.subscriptions.push(statusBar);
+  context.subscriptions.push(
+    stateProviderDocuments,
+    vscode.workspace.registerTextDocumentContentProvider(STATE_PROVIDER_DOCUMENT_SCHEME, stateProviderDocuments),
+  );
   context.subscriptions.push(session.onDidChangeState((state) => {
     devicesTree.setState(state);
     statusBar.setConnectionState(state);
@@ -391,7 +397,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const providers = await stateService.listProviders(session.connectedDriver);
         if (providers.length === 0) {
           const status = await stateService.status(session.connectedDriver).catch(() => undefined);
-          stateTree.setMessage(stateProvidersEmptyMessage(status));
+          const message = stateProvidersEmptyMessage(status);
+          stateTree.setMessage(message);
+          output.appendLine(`State providers empty: ${message}`);
+          if (status) output.appendLine(`Riverpod status: ${JSON.stringify(status)}`);
+          vscode.window.showInformationMessage(`Loaded 0 provider(s): ${message}`);
+          return;
         } else {
           stateTree.setProviders(markActiveWatches(providers));
         }
@@ -402,9 +413,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Read State Provider', async () => {
         if (!node || node.kind !== 'stateProvider') throw new Error('Select a state provider to read.');
         const value = await stateService.read(session.connectedDriver, node.key);
-        stateTree.updateProvider({ ...node, value, watching: stateProviderWatches.has(node.key) });
+        const provider = { ...node, value, watching: stateProviderWatches.has(node.key) };
+        stateTree.updateProvider(provider);
         output.appendLine(`${node.key}: ${JSON.stringify(value)}`);
-        vscode.window.showInformationMessage(`${node.key}: ${JSON.stringify(value)}`);
+        await openStateProviderDocument(stateProviderDocuments, provider, value);
+        vscode.window.showInformationMessage(`Opened ${node.key} value.`);
       });
     }),
     vscode.commands.registerCommand('fliwright.overrideStateProvider', async (node?: StateProviderEntry) => {
@@ -436,11 +449,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
         const unsubscribe = await stateService.watch(session.connectedDriver, node.key, (oldValue, newValue) => {
           output.appendLine(`${node.key}: ${JSON.stringify(oldValue)} -> ${JSON.stringify(newValue)}`);
-          stateTree.updateProvider({
+          const provider = {
             ...node,
             value: newValue,
             watching: true,
-          });
+          };
+          stateTree.updateProvider(provider);
+          void openStateProviderDocument(stateProviderDocuments, provider, newValue, { preserveFocus: true });
         });
         stateProviderWatches.set(node.key, unsubscribe);
         stateTree.updateProvider({ ...node, watching: true });
@@ -834,6 +849,25 @@ function appendFormFillDebug(result: FormFillResult): void {
 
 function formatStateValue(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+
+async function openStateProviderDocument(
+  providerDocuments: StateProviderDocumentProvider,
+  provider: StateProviderEntry,
+  value: unknown,
+  options: { preserveFocus?: boolean } = {},
+): Promise<void> {
+  const uri = providerDocuments.update({
+    provider,
+    value,
+    readAt: new Date().toISOString(),
+  });
+  const document = await vscode.workspace.openTextDocument(uri);
+  await vscode.window.showTextDocument(document, {
+    preview: false,
+    preserveFocus: options.preserveFocus ?? false,
+    viewColumn: vscode.ViewColumn.Beside,
+  });
 }
 
 async function runCommand(label: string, action: () => Promise<void>): Promise<void> {
