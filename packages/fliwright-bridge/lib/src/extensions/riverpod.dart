@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer';
 
 import '../bridge.dart';
+import '../debug_value_encoder.dart';
 
 typedef RiverpodWriteHandler = FutureOr<Object?> Function(Object? value);
 typedef RiverpodValueSerializer = Object? Function(Object? value);
@@ -84,6 +85,7 @@ class RiverpodExtension {
     String? displayName,
     String? providerType,
     Object? value,
+    String? valueType,
   }) {
     markObserverInstalled();
     final now = DateTime.now();
@@ -101,7 +103,7 @@ class RiverpodExtension {
       ..providerType = providerType ?? provider.providerType
       ..previousValue = provider.currentValue
       ..currentValue = serializedValue
-      ..valueType = _valueType(value)
+      ..valueType = valueType ?? _valueType(value)
       ..updatedAt = now
       ..disposed = false
       ..disposedAt = null
@@ -115,6 +117,7 @@ class RiverpodExtension {
     String? providerType,
     Object? previousValue,
     Object? value,
+    String? valueType,
   }) {
     markObserverInstalled();
     final now = DateTime.now();
@@ -133,7 +136,7 @@ class RiverpodExtension {
       ..providerType = providerType ?? provider.providerType
       ..previousValue = serializedPreviousValue ?? provider.currentValue
       ..currentValue = serializedValue
-      ..valueType = _valueType(value)
+      ..valueType = valueType ?? _valueType(value)
       ..updatedAt = now
       ..disposed = false
       ..disposedAt = null
@@ -337,16 +340,7 @@ class RiverpodExtension {
 }
 
 Object? _jsonSafe(Object? value) {
-  if (value == null || value is bool || value is num || value is String) {
-    return value;
-  }
-  if (value is DateTime) return value.toIso8601String();
-  if (value is Iterable) return value.map(_jsonSafe).toList();
-  if (value is Map) {
-    return value
-        .map((key, child) => MapEntry(key.toString(), _jsonSafe(child)));
-  }
-  return value.toString();
+  return const DebugValueEncoder().encode(value);
 }
 
 Object? _serializeValue(String key, Object? value) {

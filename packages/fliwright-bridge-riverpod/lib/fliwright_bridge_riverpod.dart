@@ -17,7 +17,8 @@ final class FliwrightRiverpodObserver extends ProviderObserver {
       key: _providerKey(context),
       displayName: _providerName(context),
       providerType: context.provider.runtimeType.toString(),
-      value: value,
+      value: _debugValue(value),
+      valueType: value.runtimeType.toString(),
     );
   }
 
@@ -31,8 +32,9 @@ final class FliwrightRiverpodObserver extends ProviderObserver {
       key: _providerKey(context),
       displayName: _providerName(context),
       providerType: context.provider.runtimeType.toString(),
-      previousValue: previousValue,
-      value: newValue,
+      previousValue: _debugValue(previousValue),
+      value: _debugValue(newValue),
+      valueType: newValue.runtimeType.toString(),
     );
   }
 
@@ -73,6 +75,40 @@ void registerFliwrightProviderSerializer(
   Object? Function(Object? value) serialize,
 ) {
   RiverpodExtension.registerProviderSerializer(key, serialize);
+}
+
+Object? _debugValue(Object? value) {
+  if (value is AsyncValue) {
+    return _debugAsyncValue(value);
+  }
+  return value;
+}
+
+Map<String, Object?> _debugAsyncValue(AsyncValue<Object?> value) {
+  return {
+    '\$kind': value.runtimeType.toString(),
+    '\$type': value.runtimeType.toString(),
+    '\$encodedBy': 'riverpod.AsyncValue',
+    'isLoading': value.isLoading,
+    'isRefreshing': value.isRefreshing,
+    'isReloading': value.isReloading,
+    'hasValue': value.hasValue,
+    'hasError': value.hasError,
+    'retrying': value.retrying,
+    if (value.progress != null) 'progress': value.progress,
+    if (value.hasValue)
+      'value': const DebugValueEncoder().encode(_asyncValue(value)),
+    if (value.hasError) 'error': value.error.toString(),
+    if (value.stackTrace != null) 'stackTrace': value.stackTrace.toString(),
+  };
+}
+
+Object? _asyncValue(AsyncValue<Object?> value) {
+  try {
+    return value.requireValue;
+  } catch (_) {
+    return value.value;
+  }
 }
 
 String _providerKey(ProviderObserverContext context) {

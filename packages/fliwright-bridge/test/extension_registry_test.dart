@@ -5,6 +5,34 @@ import 'package:fliwright_bridge/src/extensions/inspect.dart';
 import 'package:fliwright_bridge/src/extensions/type_extension.dart';
 
 void main() {
+  group('DebugValueEncoder', () {
+    test('uses toJson for inspectable models and redacts sensitive fields', () {
+      final encoded = const DebugValueEncoder().encode(
+        _JsonModel(
+          label: 'alpha',
+          token: 'secret-token',
+          child: const _PlainModel('nested'),
+        ),
+      );
+
+      expect(encoded, {
+        r'$type': '_JsonModel',
+        r'$encodedBy': 'toJson',
+        'value': {
+          'label': 'alpha',
+          'token': {r'$redacted': true},
+          'child': {
+            r'$type': '_PlainModel',
+            r'$display': "Instance of '_PlainModel'",
+            r'$inspectable': false,
+            r'$reason':
+                'No JSON-compatible structure or toJson() method found.',
+          },
+        },
+      });
+    });
+  });
+
   group('ExtensionRegistry', () {
     late ExtensionRegistry registry;
 
@@ -437,6 +465,30 @@ void main() {
       expect(typeResult['debug']['targetType'], 'EditableText');
     });
   });
+}
+
+class _JsonModel {
+  const _JsonModel({
+    required this.label,
+    required this.token,
+    required this.child,
+  });
+
+  final String label;
+  final String token;
+  final _PlainModel child;
+
+  Map<String, Object?> toJson() => {
+        'label': label,
+        'token': token,
+        'child': child,
+      };
+}
+
+class _PlainModel {
+  const _PlainModel(this.label);
+
+  final String label;
 }
 
 class _NamedField<T> extends StatefulWidget {
