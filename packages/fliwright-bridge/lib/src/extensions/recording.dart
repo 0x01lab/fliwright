@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -20,6 +21,7 @@ class RecordingExtension {
 
   static Future<Map<String, dynamic>> _startRecording(
       Map<String, String> params) async {
+    debugPrint('[fliwright] startRecording called, _recording=$_recording');
     if (_recording) return {'recording': true};
     _recording = true;
     _lastTextByElement.clear();
@@ -35,6 +37,7 @@ class RecordingExtension {
       } else {
         return;
       }
+      debugPrint('[fliwright] pointerEvent: kind=$kind ptr=${event.pointer} pos=(${event.position.dx.toStringAsFixed(1)}, ${event.position.dy.toStringAsFixed(1)})');
       postEvent('FliwrightRecording', {
         'type': 'pointerEvent',
         'kind': kind,
@@ -45,6 +48,7 @@ class RecordingExtension {
       });
     };
     GestureBinding.instance.pointerRouter.addGlobalRoute(_pointerRoute!);
+    debugPrint('[fliwright] pointer route added, recording started');
     _textPollingTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       _pollFocusedTextInput();
     });
@@ -53,6 +57,7 @@ class RecordingExtension {
 
   static Future<Map<String, dynamic>> _stopRecording(
       Map<String, String> params) async {
+    debugPrint('[fliwright] stopRecording called, _recording=$_recording');
     _textPollingTimer?.cancel();
     _textPollingTimer = null;
     if (_pointerRoute != null) {

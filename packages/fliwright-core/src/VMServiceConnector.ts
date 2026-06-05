@@ -109,6 +109,7 @@ export class VMServiceConnector {
         timestamp: Date.now(),
         data: params.event?.extensionData ?? params.event?.data ?? {},
       };
+      console.log(`[fliwright] streamNotify: kind=${event.kind} dataKeys=${Object.keys(event.data).join(',')}`);
       this.eventListeners.forEach((cb) => cb(event));
     }
   }

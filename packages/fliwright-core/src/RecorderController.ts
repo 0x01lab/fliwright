@@ -23,23 +23,30 @@ export class RecorderController {
     this.rawEvents = [];
     this.operations = [];
 
+    console.log('[fliwright] RecorderController.start() — subscribing to Extension stream');
     await this.ensureExtensionStream();
     this.unsubscribe = this.onEvent((event) => {
+      console.log(`[fliwright] RecorderController received event: kind=${event.kind}`);
       if (event.kind === 'FliwrightRecording') {
         const prevCount = this.operations.length;
         this.rawEvents.push(event.data as unknown as RawInputEvent);
         this.operations = new EventAggregator().aggregate(this.rawEvents);
+        console.log(`[fliwright] rawEvents=${this.rawEvents.length} operations=${this.operations.length}`);
         for (let i = prevCount; i < this.operations.length; i++) {
           options?.onOperation?.(this.operations[i], i);
         }
       }
     });
 
+    console.log('[fliwright] calling ext.fliwright.startRecording');
     await this.sendRequest('ext.fliwright.startRecording', {});
+    console.log('[fliwright] recording started on Dart side');
   }
 
   async stop(options?: CodegenOptions): Promise<string> {
+    console.log('[fliwright] RecorderController.stop() — stopping recording');
     await this.sendRequest('ext.fliwright.stopRecording', {});
+    console.log(`[fliwright] stopped: rawEvents=${this.rawEvents.length} operations=${this.operations.length}`);
 
     if (this.unsubscribe) {
       this.unsubscribe();
