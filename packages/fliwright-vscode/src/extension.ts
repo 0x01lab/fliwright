@@ -377,14 +377,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         try {
           session.setRecording();
+          output.appendLine(`[debug] session state: ${session.state.status}`);
+          output.appendLine(`[debug] calling recorderService.start()...`);
           const recording = await recorderService.start(session.connectedDriver, {
             testName: testName.trim() || 'recorded test',
             onDidChange: updateRecordingViews,
           });
+          output.appendLine(`[debug] start returned: status=${recording.status} rawEvents=${recording.rawEventCount} operations=${recording.operationCount}`);
           updateRecordingViews(recording);
           recordingPanel.open(recording);
           vscode.window.showInformationMessage('Fliwright recording started.');
         } catch (error) {
+          output.appendLine(`[debug] start FAILED: ${error instanceof Error ? error.message : String(error)}`);
           session.setConnectedIdle();
           updateRecordingViews(recorderService.reset());
           throw error;
@@ -394,7 +398,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.stopRecording', async () => {
       await runCommand('Stop Recording', async () => {
         try {
+          output.appendLine(`[debug] calling recorderService.stop()...`);
           const recording = await recorderService.stop(session.connectedDriver, vscode.window.activeTextEditor?.document.uri);
+          output.appendLine(`[debug] stop returned: status=${recording.status} rawEvents=${recording.rawEventCount} operations=${recording.operationCount}`);
           updateRecordingViews(recording);
           recordingPanel.open(recording);
           session.setConnectedIdle();
@@ -403,6 +409,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             if (selection === 'Insert Test') void vscode.commands.executeCommand('fliwright.insertRecordedTest');
           });
         } catch (error) {
+          output.appendLine(`[debug] stop FAILED: ${error instanceof Error ? error.message : String(error)}`);
           session.setConnectedIdle();
           updateRecordingViews(recorderService.reset());
           throw error;
