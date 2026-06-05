@@ -1,8 +1,10 @@
 import type { RawInputEvent, RecordedOperation } from './types.js';
 
-const TAP_MAX_DURATION = 500;
+// Dart sends timestamps in microseconds (event.timeStamp.inMicroseconds).
+// 500ms = 500,000µs.  A press held ≥500ms is a longPress.
+const TAP_MAX_DURATION = 500_000;
 const TAP_MAX_DISPLACEMENT = 10;
-const TYPE_INPUT_WINDOW = 1000;
+const TYPE_INPUT_WINDOW = 1_000_000;
 
 export class EventAggregator {
   aggregate(events: RawInputEvent[]): RecordedOperation[] {

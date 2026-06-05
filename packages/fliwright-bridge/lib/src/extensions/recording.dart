@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -80,31 +81,107 @@ class RecordingExtension {
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) return {'widget': <String, dynamic>{}};
 
-    // Find the most specific element at (x,y) that isn't a basic text/render widget.
+    final point = Offset(x, y);
+
+    // Score candidates: prefer interactive widgets, penalise pure layout.
     Element? best;
+    int bestScore = -1;
+
     InspectExtension.walkTree(root, (Element element) {
       final renderObject = element.findRenderObject();
-      if (renderObject is RenderBox && renderObject.hasSize) {
-        final topLeft = renderObject.localToGlobal(Offset.zero);
-        final size = renderObject.size;
-        final rect =
-            Rect.fromLTWH(topLeft.dx, topLeft.dy, size.width, size.height);
-        if (rect.contains(Offset(x, y))) {
-          final widget = element.widget;
-          // Skip pure text/render widgets, prefer interactive ones.
-          if (widget is! RichText &&
-              widget is! Text &&
-              widget is! Semantics &&
-              widget is! RepaintBoundary) {
-            best = element;
-          }
-        }
+      if (renderObject is! RenderBox || !renderObject.hasSize) return;
+      final topLeft = renderObject.localToGlobal(Offset.zero);
+      final rect = topLeft & renderObject.size;
+      if (!rect.contains(point)) return;
+
+      final widget = element.widget;
+      // Skip render-level noise.
+      if (widget is RichText ||
+          widget is Text ||
+          widget is RepaintBoundary) return;
+
+      final int score = _widgetScore(widget);
+      debugPrint('[fliwright] hitTest candidate: ${widget.runtimeType} score=$score');
+      // Prefer the most specific (deepest) widget; break ties by score.
+      if (score > bestScore || (score == bestScore)) {
+        best = element;
+        bestScore = score;
       }
     });
 
     if (best == null) return {'widget': <String, dynamic>{}};
+    final widget = best!.widget;
+    debugPrint('[fliwright] hitTest selected: ${widget.runtimeType}');
     final info = InspectExtension.extractWidgetInfo(best!);
     return {'widget': info};
+  }
+
+  /// Higher score = more useful for test selectors.
+  static int _widgetScore(Widget widget) {
+    // Buttons / interactive controls
+    if (widget is ElevatedButton ||
+        widget is TextButton ||
+        widget is OutlinedButton ||
+        widget is IconButton ||
+        widget is FloatingActionButton ||
+        widget is CupertinoButton) {
+      return 100;
+    }
+    // Input fields
+    if (widget is TextField ||
+        widget is TextFormField ||
+        widget is CupertinoTextField) {
+      return 100;
+    }
+    // Gesture detectors
+    if (widget is GestureDetector) return 90;
+    if (widget is InkWell) return 90;
+    if (widget is InkResponse) return 90;
+    // Semantics wrapping an interactive widget
+    if (widget is Semantics) return 70;
+    // Switch / Checkbox / Slider etc.
+    if (widget is Switch ||
+        widget is Checkbox ||
+        widget is Radio ||
+        widget is Slider ||
+        widget is CupertinoSwitch ||
+        widget is CupertinoSlider) {
+      return 100;
+    }
+    // Chip family
+    if (widget is Chip ||
+        widget is ActionChip ||
+        widget is FilterChip ||
+        widget is ChoiceChip) {
+      return 90;
+    }
+    // List / Card / BottomNavigationBar items
+    if (widget is ListTile) return 80;
+    if (widget is Card) return 60;
+    // Scrollable
+    if (widget is ScrollView ||
+        widget is ListView ||
+        widget is GridView) {
+      return 40;
+    }
+    // Layout containers (least useful)
+    if (widget is Column ||
+        widget is Row ||
+        widget is Stack ||
+        widget is Container ||
+        widget is Padding ||
+        widget is Center ||
+        widget is Align ||
+        widget is Flexible ||
+        widget is Expanded ||
+        widget is Positioned ||
+        widget is SizedBox ||
+        widget is ConstrainedBox ||
+        widget is Listener) {
+      return 10;
+    }
+    // Default: medium priority
+    return 50;
   }
 
   static void _pollFocusedTextInput() {
