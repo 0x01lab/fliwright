@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { FormAnalyzeResult, FormFillResult } from '@fliwright/core';
+import { setConnectorDebugLog } from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
 import { FailureContextStore } from './failure/FailureContextStore.js';
 import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug } from './form/FormHelperService.js';
@@ -33,6 +34,9 @@ const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 5000;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel('Fliwright');
   context.subscriptions.push(output);
+
+  // Route VM Service debug logs to the output channel
+  setConnectorDebugLog((message) => output.appendLine(message));
 
   const mockService = new MockConfigService();
   const formService = new FormRuleService();

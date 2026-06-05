@@ -4,6 +4,13 @@ import type { VMServiceEvent, ProtocolMessage } from './types.js';
 
 type EventCallback = (event: VMServiceEvent) => void;
 
+/** Global debug logger — set by the host application (e.g. VS Code extension). */
+let _debugLog: ((message: string) => void) | undefined;
+
+export function setConnectorDebugLog(fn: ((message: string) => void) | undefined): void {
+  _debugLog = fn;
+}
+
 export interface MockWebSocket {
   on(event: string, fn: (...args: any[]) => void): void;
   send(data: string): void;
@@ -109,8 +116,12 @@ export class VMServiceConnector {
         timestamp: Date.now(),
         data: params.event?.extensionData ?? params.event?.data ?? {},
       };
-      console.log(`[fliwright] streamNotify: kind=${event.kind} dataKeys=${Object.keys(event.data).join(',')}`);
+      const rawKind = params.event?.kind;
+      const rawExtKind = params.event?.extensionKind;
+      _debugLog?.(`[VM] streamNotify: event.kind=${rawKind} event.extensionKind=${rawExtKind} → resolved=${event.kind} dataKeys=${Object.keys(event.data).join(',')}`);
       this.eventListeners.forEach((cb) => cb(event));
+    } else if (msg.method) {
+      _debugLog?.(`[VM] received: method=${msg.method}`);
     }
   }
 
