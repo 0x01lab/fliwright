@@ -61,6 +61,84 @@ export class Page {
     return this._formHelper;
   }
 
+  // ── Raw Coordinates ──────────────────────────────────────────
+
+  /**
+   * Click at an arbitrary (x, y) coordinate on the screen.
+   * Useful for interacting with WebView overlays (e.g. captcha sliders)
+   * that are not part of the Flutter widget tree.
+   */
+  async clickAt(x: number, y: number): Promise<void> {
+    const result = (await this.sendRequest('ext.fliwright.click', {
+      x: x.toString(),
+      y: y.toString(),
+    })) as { success?: boolean; error?: string };
+
+    if (result.success === false || result.error) {
+      throw new Error(`clickAt(${x}, ${y}) failed: ${result.error ?? 'unknown error'}`);
+    }
+  }
+
+  /**
+   * Perform a drag gesture from an arbitrary (x, y) coordinate.
+   * Useful for WebView captcha sliders that are not part of the Flutter widget tree.
+   *
+   * @param x - Start X coordinate
+   * @param y - Start Y coordinate
+   * @param deltaX - Horizontal drag distance (positive = right)
+   * @param deltaY - Vertical drag distance (positive = down)
+   * @param options.steps - Number of interpolation steps (default: 20, smoother motion)
+   */
+  async dragFrom(
+    x: number,
+    y: number,
+    deltaX: number,
+    deltaY: number,
+    options?: { steps?: number },
+  ): Promise<void> {
+    const steps = options?.steps ?? 20;
+    // We use the gesture extension's drag via raw coordinates by sending
+    // the click extension with simulated pointer events through sendRequest
+    const result = (await this.sendRequest('ext.fliwright.dragFrom', {
+      x: x.toString(),
+      y: y.toString(),
+      deltaX: deltaX.toString(),
+      deltaY: deltaY.toString(),
+      steps: steps.toString(),
+    })) as { success?: boolean; error?: string };
+
+    if (result.success === false || result.error) {
+      throw new Error(`dragFrom(${x}, ${y}, ${deltaX}, ${deltaY}) failed: ${result.error ?? 'unknown error'}`);
+    }
+  }
+
+  // ── Screenshot ──────────────────────────────────────────────
+
+  /**
+   * Take a screenshot of the current Flutter app screen.
+   *
+   * @param options.pixelRatio - Device pixel ratio for the screenshot (default: 1.0)
+   * @returns A Buffer containing the PNG image data
+   */
+  async screenshot(options?: { pixelRatio?: number }): Promise<Buffer> {
+    const result = (await this.sendRequest('ext.fliwright.screenshot', {
+      pixelRatio: options?.pixelRatio?.toString() ?? '1.0',
+    })) as {
+      success: boolean;
+      format?: string;
+      screenshot?: string;
+      width?: number;
+      height?: number;
+      error?: string;
+    };
+
+    if (!result.success || !result.screenshot) {
+      throw new Error(`Screenshot failed: ${result.error ?? 'unknown error'}`);
+    }
+
+    return Buffer.from(result.screenshot, 'base64');
+  }
+
   // ── Navigation ──────────────────────────────────────────────
 
   /**

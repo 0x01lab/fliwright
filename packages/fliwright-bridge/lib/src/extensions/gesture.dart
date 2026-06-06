@@ -14,6 +14,7 @@ class GestureExtension {
     _registry = registry;
     registry.register('ext.fliwright.click', _click);
     registry.register('ext.fliwright.gesture', _gesture);
+    registry.register('ext.fliwright.dragFrom', _dragFrom);
   }
 
   static Future<Map<String, dynamic>> _click(Map<String, String> params) async {
@@ -287,5 +288,65 @@ class GestureExtension {
     );
 
     return {'success': true, 'gesture': 'pinch'};
+  }
+
+  /// Drag from an arbitrary (x, y) coordinate without needing a Flutter widget.
+  /// Used for WebView overlays (e.g. captcha sliders) that are not in the
+  /// Flutter widget tree.
+  static Future<Map<String, dynamic>> _dragFrom(
+      Map<String, String> params) async {
+    final x = double.tryParse(params['x'] ?? '');
+    final y = double.tryParse(params['y'] ?? '');
+    final deltaX = double.tryParse(params['deltaX'] ?? '');
+    final deltaY = double.tryParse(params['deltaY'] ?? '');
+
+    if (x == null || y == null || deltaX == null || deltaY == null) {
+      return {'error': 'Missing required parameters: x, y, deltaX, deltaY'};
+    }
+
+    final steps = int.tryParse(params['steps'] ?? '') ?? 20;
+
+    final pointer = _nextPointer++;
+    final view =
+        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
+    final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
+
+    // Pointer down at start position
+    GestureBinding.instance.handlePointerEvent(
+      PointerDownEvent(
+        pointer: pointer,
+        position: Offset(x, y),
+        kind: PointerDeviceKind.touch,
+        viewId: view,
+        timeStamp: now,
+      ),
+    );
+
+    // Interpolated move events
+    for (var i = 1; i <= steps; i++) {
+      final t = i / steps;
+      GestureBinding.instance.handlePointerEvent(
+        PointerMoveEvent(
+          pointer: pointer,
+          position: Offset(x + deltaX * t, y + deltaY * t),
+          kind: PointerDeviceKind.touch,
+          viewId: view,
+          timeStamp: now + Duration(milliseconds: (i * 16)),
+        ),
+      );
+    }
+
+    // Pointer up at end position
+    GestureBinding.instance.handlePointerEvent(
+      PointerUpEvent(
+        pointer: pointer,
+        position: Offset(x + deltaX, y + deltaY),
+        kind: PointerDeviceKind.touch,
+        viewId: view,
+        timeStamp: now + Duration(milliseconds: (steps * 16) + 16),
+      ),
+    );
+
+    return {'success': true, 'gesture': 'dragFrom'};
   }
 }

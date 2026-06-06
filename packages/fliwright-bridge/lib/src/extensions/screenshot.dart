@@ -14,6 +14,9 @@ class ScreenshotExtension {
   static Future<Map<String, dynamic>> _screenshot(
     Map<String, String> params,
   ) async {
+    // Ensure the frame is fully rendered before capturing
+    await _waitForFrame();
+
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
       return {'success': false, 'error': 'No widget tree available'};
@@ -60,5 +63,18 @@ class ScreenshotExtension {
 
     root.visitChildren(visitor);
     return found;
+  }
+
+  /// Wait for Flutter to finish rendering the current frame.
+  /// This prevents the `!debugNeedsPaint` assertion error when capturing
+  /// screenshots during active animations or layout changes.
+  static Future<void> _waitForFrame() async {
+    final binding = WidgetsBinding.instance;
+    // Schedule and wait for a frame to complete rendering
+    binding.addPostFrameCallback((_) {});
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    // Pump an extra frame to ensure paint is complete
+    binding.handleDrawFrame();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
   }
 }
