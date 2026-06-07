@@ -251,8 +251,17 @@ export type FormTreeNode =
   | InvalidFileEntry
   | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
 
+export interface TestStepEntry {
+  kind: 'step';
+  label: string;
+  status: string;
+  stepIndex: number;
+  fileUri: vscode.Uri;
+}
+
 export type TestTreeNode =
   | TestFileEntry
+  | TestStepEntry
   | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
 
 export type RunTreeNode =

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
+import { AnnotationParser } from '../editor/AnnotationParser.js';
 import type { TestDiscoveryService } from '../runner/TestDiscoveryService.js';
-import type { TestFileEntry, TestTreeNode } from '../types.js';
+import type { TestFileEntry, TestStepEntry, TestTreeNode } from '../types.js';
 
 export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<TestTreeNode | undefined>();
@@ -23,7 +24,23 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
       return item;
     }
 
-    const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+    if (element.kind === 'step') {
+      const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+      item.iconPath = new vscode.ThemeIcon(
+        element.status === 'pass' ? 'check' :
+        element.status === 'fail' ? 'error' :
+        'circle-outline',
+      );
+      item.contextValue = 'testStep';
+      item.command = {
+        command: 'fliwright.openVisualEditor',
+        arguments: [element.fileUri],
+        title: 'Open in Visual Editor',
+      };
+      return item;
+    }
+
+    const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
     item.resourceUri = element.uri;
     item.contextValue = 'testFile';
     item.iconPath = new vscode.ThemeIcon(element.lastResult?.passed === false ? 'error' : 'beaker');
@@ -36,7 +53,22 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   }
 
   async getChildren(element?: TestTreeNode): Promise<TestTreeNode[]> {
-    if (element) return [];
+    if (element?.kind === 'step') return [];
+
+    if (element?.kind === 'testFile') {
+      const content = await vscode.workspace.fs.readFile(element.uri);
+      const code = new TextDecoder().decode(content);
+      const parser = new AnnotationParser();
+      const result = parser.parse(code);
+      return result.steps.map((step, i) => ({
+        kind: 'step' as const,
+        label: step.annotation.name,
+        status: step.annotation.status ?? 'pending',
+        stepIndex: i,
+        fileUri: element.uri,
+      }));
+    }
+
     if (!this.tests) {
       const root = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (!root) {
@@ -44,8 +76,8 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
       }
       this.tests = await this.discovery.discover(root);
     }
-    return this.tests.length > 0
-      ? this.tests
+    return this.tests!.length > 0
+      ? this.tests!
       : [{ kind: 'empty', label: 'No Fliwright tests', description: 'Configure fliwright.testGlob' }];
   }
 }
