@@ -110,6 +110,17 @@
         }
       ]
     },
+    "customEditors": [
+      {
+        "viewType": "fliwright.testEditor",
+        "displayName": "Fliwright Test Editor",
+        "selector": [
+          { "filenamePattern": "**/*.test.ts" },
+          { "filenamePattern": "**/*.spec.ts" }
+        ],
+        "priority": "option"
+      }
+    ],
     "commands": [
       {
         "command": "fliwright.connect",
