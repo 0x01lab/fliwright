@@ -6,11 +6,14 @@ import type { RecordingSession } from '../types.js';
 export interface RecordingStartOptions {
   testName?: string;
   onDidChange?: (session: RecordingSession) => void;
+  /** 每录制一个操作时的回调 */
+  onStepRecorded?: (step: { action: string; selector: string; timestamp: number }) => void;
 }
 
 export class RecorderService {
   private session: RecordingSession = { status: 'idle', rawEventCount: 0, operationCount: 0 };
   private onDidChange: ((session: RecordingSession) => void) | undefined;
+  private onStepRecorded: ((step: { action: string; selector: string; timestamp: number }) => void) | undefined;
 
   getSession(): RecordingSession {
     return { ...this.session };
@@ -19,12 +22,14 @@ export class RecorderService {
   reset(): RecordingSession {
     this.session = { status: 'idle', rawEventCount: 0, operationCount: 0 };
     this.onDidChange = undefined;
+    this.onStepRecorded = undefined;
     return this.getSession();
   }
 
   async start(driver: FliwrightDriver, options: RecordingStartOptions = {}): Promise<RecordingSession> {
     const startedAt = Date.now();
     this.onDidChange = options.onDidChange;
+    this.onStepRecorded = options.onStepRecorded;
     this.setSession({
       status: 'recording',
       startedAt,
