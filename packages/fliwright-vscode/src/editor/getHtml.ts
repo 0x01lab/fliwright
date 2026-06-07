@@ -1,4 +1,4 @@
-import type { StepModel } from './types';
+import type { StepModel } from './types.js';
 
 export function getEditorHtml(
   steps: StepModel[],

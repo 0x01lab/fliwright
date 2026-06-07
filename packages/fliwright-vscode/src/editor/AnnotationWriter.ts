@@ -1,4 +1,4 @@
-import type { StepAnnotation } from './types';
+import type { StepAnnotation } from './types.js';
 
 const ANNOTATION_REGEX = /^(\s*)\/\/ @fliwright-step:\s*(.*)$/;
 

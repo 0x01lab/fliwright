@@ -284,6 +284,11 @@
         "command": "fliwright.openRiverpodSetupHelp",
         "title": "Fliwright: Open Riverpod Setup Help",
         "icon": "$(question)"
+      },
+      {
+        "command": "fliwright.openVisualEditor",
+        "title": "Fliwright: Open Visual Test Editor",
+        "icon": "$(eye)"
       }
     ],
     "menus": {

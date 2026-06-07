@@ -1,4 +1,4 @@
-import type { StepModel, ExtToWebview } from './types';
+import type { StepModel, ExtToWebview } from './types.js';
 
 export interface StepResult {
   status: 'pass' | 'fail';

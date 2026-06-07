@@ -1,11 +1,11 @@
 // packages/fliwright-vscode/src/editor/TestEditorPanel.ts
 import * as vscode from 'vscode';
-import { AnnotationParser } from './AnnotationParser';
-import { AnnotationWriter } from './AnnotationWriter';
-import { getEditorHtml } from './getHtml';
-import type { StepModel, WebviewToExt, ExtToWebview } from './types';
+import { AnnotationParser } from './AnnotationParser.js';
+import { AnnotationWriter } from './AnnotationWriter.js';
+import { getEditorHtml } from './getHtml.js';
+import type { StepModel, WebviewToExt, ExtToWebview } from './types.js';
 
-export class TestEditorPanel implements Disposable {
+export class TestEditorPanel implements vscode.Disposable {
   private readonly parser = new AnnotationParser();
   private readonly writer = new AnnotationWriter();
   private steps: StepModel[] = [];

@@ -1,4 +1,4 @@
-import type { StepModel, AtomicStep, StepAnnotation, ParseResult, ParseError } from './types';
+import type { StepModel, AtomicStep, StepAnnotation, ParseResult, ParseError } from './types.js';
 
 const ANNOTATION_REGEX = /^\s*\/\/ @fliwright-step:\s*(.*)$/;
 const TEST_NAME_REGEX = /test\s*\(\s*['"`](.+?)['"`]/;

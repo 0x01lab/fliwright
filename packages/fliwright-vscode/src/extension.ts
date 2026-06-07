@@ -25,6 +25,8 @@ import { RunsTreeProvider } from './views/RunsTreeProvider.js';
 import { StateTreeProvider } from './views/StateTreeProvider.js';
 import { TestsTreeProvider } from './views/TestsTreeProvider.js';
 import { FailurePanel } from './webview/FailurePanel.js';
+import { EditorBridge } from './editor/EditorBridge.js';
+import { TestEditorProvider } from './editor/TestEditorProvider.js';
 import { RecordingPanel } from './webview/RecordingPanel.js';
 
 let output: vscode.OutputChannel;
@@ -170,6 +172,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       [{ language: 'typescript', scheme: 'file' }, { language: 'typescriptreact', scheme: 'file' }],
       new FliwrightCodeLensProvider(),
     ),
+  );
+
+  // ── Visual Test Editor ──────────────────────────────
+  const editorProvider = new TestEditorProvider(context.extensionUri);
+  const editorBridge = new EditorBridge();
+
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      'fliwright.testEditor',
+      editorProvider,
+      { supportsMultipleEditorsPerDocument: false },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('fliwright.openVisualEditor', async (uri?: vscode.Uri) => {
+      if (!uri) {
+        const active = vscode.window.activeTextEditor;
+        if (active) {
+          uri = active.document.uri;
+        }
+      }
+      if (uri) {
+        await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+      }
+    }),
   );
 
   scheduleAutoConnect('Extension activation', 500);
