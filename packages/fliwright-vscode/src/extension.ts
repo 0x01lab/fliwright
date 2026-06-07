@@ -397,12 +397,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runTests(undefined, true);
     }),
     vscode.commands.registerCommand('fliwright.openFailure', async (node?: FailureTreeEntry) => {
-      if (!node || node.kind !== 'failure') {
-        const failure = runsTree.failuresList[0];
-        if (failure) failurePanel.open(failure);
-        return;
+      const failure = node?.kind === 'failure' ? node.failure : runsTree.failuresList[0];
+      if (!failure) return;
+
+      // Open visual editor if source file is available, otherwise fall back to FailurePanel
+      if (failure.source?.file) {
+        const uri = vscode.Uri.file(failure.source.file);
+        await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+      } else {
+        failurePanel.open(failure);
       }
-      failurePanel.open(node.failure);
     }),
     vscode.commands.registerCommand('fliwright.startRecording', async () => {
       await runCommand('Start Recording', async () => {
@@ -440,7 +444,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           const recording = await recorderService.stop(session.connectedDriver, vscode.window.activeTextEditor?.document.uri);
           output.appendLine(`[debug] stop returned: status=${recording.status} rawEvents=${recording.rawEventCount} operations=${recording.operationCount}`);
           updateRecordingViews(recording);
-          recordingPanel.open(recording);
+          // Open visual editor if target file is available, otherwise fall back to RecordingPanel
+          if (recording.targetFile) {
+            const uri = vscode.Uri.file(recording.targetFile);
+            await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+          } else {
+            recordingPanel.open(recording);
+          }
           session.setConnectedIdle();
           output.appendLine(`Recorded ${recording.operationCount} operation(s).`);
           vscode.window.showInformationMessage(`Recorded ${recording.operationCount} operation(s).`, 'Insert Test').then((selection) => {
@@ -631,6 +641,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     statusBar.setRecording(recording);
     recordingPanel.update(recording);
     void updateRecordingContext(recording);
+
+    // When recording completes, open visual editor instead of RecordingPanel
+    if (recording.status === 'preview' && recording.targetFile) {
+      const uri = vscode.Uri.file(recording.targetFile);
+      void vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+    }
   }
 
   async function updateRecordingContext(recording: ReturnType<RecorderService['getSession']>): Promise<void> {
@@ -815,8 +831,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       session.setConnectedIdle();
       output.appendLine(`Run complete: ${result.passedTests}/${result.totalTests} passed, ${result.failedTests} failed.`);
       if (result.failedTests > 0) {
-        vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, 'Open Failure').then((selection) => {
-          if (selection === 'Open Failure' && failures[0]) failurePanel.open(failures[0]);
+        vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, 'Open Failure').then(async (selection) => {
+          if (selection !== 'Open Failure' || !failures[0]) return;
+          const failure = failures[0];
+          // Open visual editor if source file is available, otherwise fall back to FailurePanel
+          if (failure.source?.file) {
+            const uri = vscode.Uri.file(failure.source.file);
+            await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+          } else {
+            failurePanel.open(failure);
+          }
         });
       } else {
         vscode.window.showInformationMessage(`Fliwright tests passed: ${result.passedTests}/${result.totalTests}`);
