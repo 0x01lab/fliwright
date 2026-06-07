@@ -18,8 +18,18 @@ export class CodeGenerator {
     const testName = options?.testName ?? DEFAULT_TEST_NAME;
 
     const lines: string[] = [];
-    lines.push(`import { test, expect } from '${escapeString(importSource)}';`);
+    const imports = options?.resetToHomeBeforeEach ? 'test, expect, beforeEach' : 'test, expect';
+    lines.push(`import { ${imports} } from '${escapeString(importSource)}';`);
     lines.push('');
+
+    if (options?.resetToHomeBeforeEach) {
+      const homeRoute = options.homeRoute ?? '/';
+      lines.push('beforeEach(async ({ page }) => {');
+      lines.push(`  await page.navigate('${escapeString(homeRoute)}');`);
+      lines.push('});');
+      lines.push('');
+    }
+
     lines.push(`test('${escapeString(testName)}', async ({ page }) => {`);
 
     for (let i = 0; i < operations.length; i++) {

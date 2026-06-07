@@ -18,8 +18,9 @@ export async function handleScreenshot(
   params: z.infer<typeof ScreenshotParamsSchema>,
   state: ServerState,
 ): Promise<{ success: boolean; base64: string; width?: number; height?: number }> {
+  const input = ScreenshotParamsSchema.parse(params);
   const driver = requireDriver(state);
-  const buffer = await driver.page.screenshot({ pixelRatio: params.pixelRatio });
+  const buffer = await driver.page.screenshot({ pixelRatio: input.pixelRatio });
   const base64 = buffer.toString('base64');
   return { success: true, base64 };
 }

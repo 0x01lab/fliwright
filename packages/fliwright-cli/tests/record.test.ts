@@ -46,6 +46,35 @@ describe('recordCommand', () => {
       stopSignal: Promise.resolve(),
     });
 
-    expect(stopFn).toHaveBeenCalledWith({ lang: 'dart', testName: 'dart test' });
+    expect(stopFn).toHaveBeenCalledWith(expect.objectContaining({
+      lang: 'dart',
+      testName: 'dart test',
+      resetToHomeBeforeEach: false,
+    }));
+  });
+
+  it('generates TS recordings with a home reset hook by default', async () => {
+    const stopFn = vi.fn().mockResolvedValue('code');
+    await recordCommand({
+      vmUrl: 'ws://mock:8181/ws',
+      lang: 'ts',
+      testName: 'home reset test',
+      homeRoute: '/dashboard',
+    }, {
+      resolveVmUrl: async () => 'ws://mock:8181/ws',
+      createRecorder: async () => ({
+        start: vi.fn(),
+        stop: stopFn,
+        getOperations: vi.fn().mockReturnValue([]),
+      }),
+      stopSignal: Promise.resolve(),
+    });
+
+    expect(stopFn).toHaveBeenCalledWith(expect.objectContaining({
+      lang: 'ts',
+      testName: 'home reset test',
+      resetToHomeBeforeEach: true,
+      homeRoute: '/dashboard',
+    }));
   });
 });

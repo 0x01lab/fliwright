@@ -10,6 +10,18 @@
   "exports": {
     ".": {
       "import": "./dist/config.js"
+    },
+    "./run": {
+      "import": "./dist/run.js",
+      "types": "./dist/run.d.ts"
+    },
+    "./capabilities/interaction": {
+      "import": "./dist/capabilities/interaction.js",
+      "types": "./dist/capabilities/interaction.d.ts"
+    },
+    "./capabilities/form": {
+      "import": "./dist/capabilities/form.js",
+      "types": "./dist/capabilities/form.d.ts"
     }
   },
   "scripts": {

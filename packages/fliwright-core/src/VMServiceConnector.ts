@@ -22,6 +22,8 @@ export class VMServiceConnector {
   private ws: WebSocket | MockWebSocket | null = null;
   private pendingRequests = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   private eventListeners: EventCallback[] = [];
+  private diagnosticEvents: VMServiceEvent[] = [];
+  private diagnosticLimit = 100;
   private mainIsolateId: string | null = null;
 
   constructor(protocol?: Protocol) {
@@ -43,6 +45,37 @@ export class VMServiceConnector {
       ? { ...(params ?? {}), isolateId: await this.getMainIsolateId() }
       : params;
     return this.sendProtocolRequest(method, resolvedParams);
+  }
+
+  async reloadSources(): Promise<unknown> {
+    return this.sendProtocolRequest('reloadSources', {
+      isolateId: await this.getMainIsolateId(),
+    });
+  }
+
+  async listenToStreams(streamIds: string[]): Promise<void> {
+    for (const streamId of streamIds) {
+      try {
+        await this.sendProtocolRequest('streamListen', { streamId });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/already/i.test(message)) throw error;
+      }
+    }
+  }
+
+  getDiagnostics(options: { limit?: number; kinds?: string[]; streams?: string[] } = {}): VMServiceEvent[] {
+    const limit = options.limit ?? this.diagnosticLimit;
+    const kinds = options.kinds == null ? null : new Set(options.kinds);
+    const streams = options.streams == null ? null : new Set(options.streams);
+    return this.diagnosticEvents
+      .filter((event) => kinds == null || kinds.has(event.kind))
+      .filter((event) => streams == null || (event.streamId != null && streams.has(event.streamId)))
+      .slice(-limit);
+  }
+
+  clearDiagnostics(): void {
+    this.diagnosticEvents.length = 0;
   }
 
   private sendProtocolRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
@@ -83,6 +116,7 @@ export class VMServiceConnector {
     }
     this.mainIsolateId = null;
     this.eventListeners.length = 0;
+    this.clearDiagnostics();
   }
 
   attachMock(mockWS: MockWebSocket): void {
@@ -114,8 +148,10 @@ export class VMServiceConnector {
       const event: VMServiceEvent = {
         kind: params.event?.extensionKind ?? params.event?.kind ?? 'unknown',
         timestamp: Date.now(),
-        data: params.event?.extensionData ?? params.event?.data ?? {},
+        data: params.event?.extensionData ?? params.event?.data ?? params.event ?? {},
+        streamId: params.streamId,
       };
+      this.recordDiagnostic(event);
       const rawKind = params.event?.kind;
       const rawExtKind = params.event?.extensionKind;
       _debugLog?.(`[VM] streamNotify: event.kind=${rawKind} event.extensionKind=${rawExtKind} → resolved=${event.kind} dataKeys=${Object.keys(event.data).join(',')}`);
@@ -128,5 +164,12 @@ export class VMServiceConnector {
   private rejectAllPending(error: Error): void {
     for (const { reject } of this.pendingRequests.values()) { reject(error); }
     this.pendingRequests.clear();
+  }
+
+  private recordDiagnostic(event: VMServiceEvent): void {
+    this.diagnosticEvents.push(event);
+    if (this.diagnosticEvents.length > this.diagnosticLimit) {
+      this.diagnosticEvents.splice(0, this.diagnosticEvents.length - this.diagnosticLimit);
+    }
   }
 }

@@ -18,17 +18,21 @@ async function main() {
     .command('run')
     .description('Run Fliwright tests')
     .option('--test <pattern>', 'Test file or glob pattern')
+    .option('--test-name <pattern>', 'Run only tests matching this name')
     .option('--vm-url <url>', 'Dart VM Service WebSocket URL')
-    .option('--reporter <format>', 'Output format: pretty, json, junit', 'pretty')
+    .option('--reporter <format>', 'Output format: pretty, json, ai-json, junit', 'pretty')
     .option('--timeout <ms>', 'Per-test timeout in milliseconds', '30000')
     .option('--screenshot <mode>', 'Screenshot mode: file, base64, off', 'file')
+    .option('--output <file>', 'Write the AI run report JSON to this file')
     .action(async (opts) => {
       const result = await runCommand({
         testPattern: opts.test,
+        testName: opts.testName,
         vmUrl: opts.vmUrl,
-        reporter: opts.reporter as 'pretty' | 'json' | 'junit',
+        reporter: opts.reporter as 'pretty' | 'json' | 'ai-json' | 'junit',
         timeout: Number(opts.timeout),
         screenshot: opts.screenshot as 'file' | 'base64' | 'off',
+        output: opts.output,
       });
 
       process.exit(result.passed ? 0 : 1);
@@ -44,8 +48,9 @@ async function main() {
   program
     .command('doctor')
     .description('Check your Fliwright environment')
-    .action(async () => {
-      await doctorCommand(process.cwd());
+    .option('--vm-url <url>', 'Dart VM Service URL for runtime bridge checks')
+    .action(async (opts) => {
+      await doctorCommand(process.cwd(), { vmServiceUrl: opts.vmUrl });
     });
 
   program
@@ -55,6 +60,8 @@ async function main() {
     .option('--output <file>', 'Output file path')
     .option('--lang <lang>', 'Output language: ts, dart', 'ts')
     .option('--name <name>', 'Test name', 'recorded test')
+    .option('--home-route <route>', 'Route to navigate to before each generated TS test', '/')
+    .option('--no-reset-home', 'Do not generate a beforeEach hook that navigates to the home route')
     .action(async (opts) => {
       try {
         await recordCommand({
@@ -62,6 +69,8 @@ async function main() {
           output: opts.output,
           lang: opts.lang as 'ts' | 'dart',
           testName: opts.name,
+          resetToHomeBeforeEach: opts.resetHome,
+          homeRoute: opts.homeRoute,
         });
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));

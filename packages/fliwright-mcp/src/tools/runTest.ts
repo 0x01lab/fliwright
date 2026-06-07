@@ -1,20 +1,17 @@
 import { z } from 'zod';
-import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { runCommand } from '@fliwright/cli/run';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ServerState } from '../state.js';
 import type { FailureEntry, RunResult } from '../types.js';
-
-const require = createRequire(import.meta.url);
 
 export const RunTestParamsSchema = z.object({
   testFile: z.string().describe('Path to the .test.ts file to run'),
   vmServiceUrl: z.string().optional().describe('Dart VM Service WebSocket URL'),
   testName: z.string().optional().describe('Run only the test matching this name'),
   cwd: z.string().optional().describe('Working directory to run Vitest from; defaults to the MCP server process cwd'),
+  timeout: z.number().optional().describe('Per-test timeout in milliseconds'),
+  screenshot: z.enum(['file', 'base64', 'off']).optional().describe('Screenshot mode for failure artifacts'),
+  output: z.string().optional().describe('Optional JSON report output path'),
 });
 
 export async function handleRunTest(
@@ -34,12 +31,14 @@ export async function handleRunTest(
     testName: params.testName,
     vmServiceUrl: vmUrl,
     cwd: params.cwd,
+    timeout: params.timeout,
+    screenshot: params.screenshot,
+    output: params.output,
   });
-  const { failures, ...result } = runnerResult;
 
-  state.setLastRunResult(result);
-  state.setLastFailures(failures ?? createFailureEntries(result));
-  return result;
+  state.setLastRunResult(runnerResult);
+  state.setLastFailures(runnerResult.failures ?? createFailureEntries(runnerResult));
+  return runnerResult;
 }
 
 export interface TestRunnerParams {
@@ -47,74 +46,29 @@ export interface TestRunnerParams {
   testName?: string;
   vmServiceUrl: string;
   cwd?: string;
+  timeout?: number;
+  screenshot?: 'file' | 'base64' | 'off';
+  output?: string;
 }
 
-export interface TestRunnerResult extends RunResult {
-  failures?: FailureEntry[];
-}
+export type TestRunnerResult = RunResult;
 
 export type TestRunner = (params: TestRunnerParams) => Promise<TestRunnerResult>;
 
-interface VitestJsonReport {
-  success?: boolean;
-  numTotalTests?: number;
-  numPassedTests?: number;
-  numFailedTests?: number;
-  startTime?: number;
-  testResults?: Array<{
-    assertionResults?: Array<{
-      fullName?: string;
-      title?: string;
-      status?: string;
-      duration?: number | null;
-      failureMessages?: string[];
-    }>;
-  }>;
-}
-
 export async function runVitest(params: TestRunnerParams): Promise<TestRunnerResult> {
-  const vitestCli = require.resolve('vitest/vitest.mjs');
-  const failureContextPath = await createFailureContextPath();
-  const args = [vitestCli, 'run', params.testFile, '--reporter=json'];
-  if (params.testName) {
-    args.push('--testNamePattern', params.testName);
-  }
-
-  try {
-    const { stdout, stderr } = await runNode(args, {
-      ...process.env,
-      FLIWRIGHT_VM_URL: params.vmServiceUrl,
-      FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: failureContextPath,
-    }, params.cwd ?? process.cwd());
-
-    const report = parseVitestJson(stdout);
-    if (!report) {
-      throw new Error(`Unable to parse Vitest JSON output: ${stderr || stdout}`);
-    }
-
-    const failures = await readFailureContext(failureContextPath);
-    return {
-      ...mapVitestReport(report),
-      ...(failures.length > 0 ? { failures } : {}),
-    };
-  } finally {
-    await rm(dirname(failureContextPath), { recursive: true, force: true });
-  }
-}
-
-async function createFailureContextPath(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'fliwright-mcp-failures-'));
-  return join(dir, 'failures.json');
-}
-
-async function readFailureContext(path: string): Promise<FailureEntry[]> {
-  try {
-    const parsed = JSON.parse(await readFile(path, 'utf8')) as FailureEntry[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
-  } catch {
-    return [];
-  }
+  return runCommand({
+    testPattern: params.testFile,
+    testName: params.testName,
+    vmUrl: params.vmServiceUrl,
+    cwd: params.cwd,
+    timeout: params.timeout,
+    screenshot: params.screenshot,
+    output: params.output,
+    reporter: 'ai-json',
+    print: false,
+  }, {
+    resolveVmUrl: async () => params.vmServiceUrl,
+  });
 }
 
 function createFailureEntries(result: RunResult): FailureEntry[] {
@@ -169,62 +123,6 @@ function parseSource(error: string | undefined): FailureEntry['source'] {
 
 function firstLine(value: string): string {
   return value.split('\n').find((line) => line.trim().length > 0)?.trim() ?? '';
-}
-
-function runNode(args: string[], env: NodeJS.ProcessEnv, cwd: string): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(process.execPath, args, {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.on('error', reject);
-    child.on('close', () => resolvePromise({ stdout, stderr }));
-  });
-}
-
-function parseVitestJson(output: string): VitestJsonReport | null {
-  const trimmed = output.trim();
-  if (!trimmed) return null;
-  const start = trimmed.indexOf('{');
-  const end = trimmed.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) return null;
-  try {
-    return JSON.parse(trimmed.slice(start, end + 1)) as VitestJsonReport;
-  } catch {
-    return null;
-  }
-}
-
-function mapVitestReport(report: VitestJsonReport): RunResult {
-  const results = (report.testResults ?? []).flatMap((fileResult) =>
-    (fileResult.assertionResults ?? []).map((assertion) => {
-      const passed = assertion.status === 'passed';
-      return {
-        name: assertion.fullName ?? assertion.title ?? '<unknown>',
-        passed,
-        duration: assertion.duration ?? 0,
-        ...(passed ? {} : { error: (assertion.failureMessages ?? []).join('\n') }),
-      };
-    }),
-  );
-
-  const duration = report.startTime ? Math.max(0, Date.now() - report.startTime) : 0;
-  return {
-    passed: report.success === true,
-    totalTests: report.numTotalTests ?? results.length,
-    passedTests: report.numPassedTests ?? results.filter((result) => result.passed).length,
-    failedTests: report.numFailedTests ?? results.filter((result) => !result.passed).length,
-    duration,
-    results,
-  };
 }
 
 export function registerRunTestTool(server: McpServer, state: ServerState): void {

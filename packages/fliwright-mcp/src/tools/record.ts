@@ -8,6 +8,10 @@ export const RecordParamsSchema = z.object({
   duration: z.number().optional().describe('Recording duration in seconds (default: 30)').default(30),
   testName: z.string().optional().describe('Test name for generated code').default('recorded test'),
   lang: z.enum(['ts', 'dart']).optional().describe('Output language').default('ts'),
+  resetToHomeBeforeEach: z.boolean().optional().default(true)
+    .describe('Whether generated TS code should navigate to the home route before each test'),
+  homeRoute: z.string().optional().default('/')
+    .describe('Route used by the generated beforeEach home reset hook'),
 });
 
 export interface RecordResult {
@@ -43,9 +47,13 @@ export async function handleRecord(
   const durationMs = (params.duration ?? 30) * 1000;
   await new Promise((resolve) => setTimeout(resolve, durationMs));
 
+  const lang = params.lang ?? 'ts';
+  const testName = params.testName ?? 'recorded test';
   const codegenOptions: CodegenOptions = {
-    lang: params.lang,
-    testName: params.testName,
+    lang,
+    testName,
+    resetToHomeBeforeEach: params.resetToHomeBeforeEach ?? lang === 'ts',
+    homeRoute: params.homeRoute ?? '/',
   };
 
   const testCode = await recorder.stop(codegenOptions);
@@ -53,7 +61,7 @@ export async function handleRecord(
 
   return {
     testCode,
-    testName: params.testName ?? 'recorded test',
+    testName,
     operationCount: operations.length,
   };
 }

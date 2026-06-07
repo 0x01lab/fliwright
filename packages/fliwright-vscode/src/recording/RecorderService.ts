@@ -48,6 +48,8 @@ export class RecorderService {
     const generatedCode = await driver.recorder.stop({
       lang: 'ts',
       testName: this.session.testName,
+      resetToHomeBeforeEach: true,
+      homeRoute: '/',
       ...options,
     });
     this.setSession({

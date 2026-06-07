@@ -1,22 +1,24 @@
 import { ToolMockServer } from '@fliwright/core';
 import { resolveVmUrl } from '../vm-discovery.js';
 import { loadConfig } from '../config.js';
-import { formatPretty, formatJson, formatJunit, type CliRunResult } from '../reporter.js';
+import { formatPretty, formatJson, formatJunit, type CliFailureEntry, type CliRunResult } from '../reporter.js';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
 
 export interface RunOptions {
   testPattern?: string;
+  testName?: string;
   vmUrl?: string;
-  reporter?: 'pretty' | 'json' | 'junit';
+  reporter?: 'pretty' | 'json' | 'junit' | 'ai-json';
   timeout?: number;
   screenshot?: 'file' | 'base64' | 'off';
+  output?: string;
   cwd?: string;
+  print?: boolean;
 }
 
 export interface RunDeps {
@@ -30,6 +32,11 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
 
   const reporter = options.reporter ?? config.reporter;
   const testPattern = options.testPattern ?? `${config.testDir}/**/*.test.ts`;
+  const timeout = options.timeout ?? config.timeout ?? 30000;
+  const screenshot = options.screenshot ?? 'file';
+  const runId = createRunId();
+  const outputDir = join(cwd, '.fliwright', 'runs', runId);
+  const reportPath = options.output ? resolve(cwd, options.output) : join(outputDir, 'report.json');
 
   const resolver = deps.resolveVmUrl ?? resolveVmUrl;
   const vmUrl = await resolver({
@@ -53,42 +60,71 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
   await mockServer.loadRules(join(cwd, '.fliwright/mocks'));
 
   try {
-    const vitestResult = await runVitest(testPattern, vmUrl, cwd, mockControllerUrl);
-    const formatted = formatOutput(vitestResult, reporter);
+    const vitestResult = await runVitest({
+      testPattern,
+      testName: options.testName,
+      vmUrl,
+      cwd,
+      mockControllerUrl,
+      failureContextPath: join(outputDir, 'failures.json'),
+      timeout,
+      screenshot,
+    });
+    const withArtifacts = await attachArtifacts(vitestResult, {
+      cwd,
+      outputDir,
+      reportPath,
+      runId,
+      screenshot,
+      testPattern,
+      testName: options.testName,
+    });
+    const formatted = formatOutput(withArtifacts, reporter);
 
-    console.log(formatted);
-    return vitestResult;
+    if (options.print !== false) {
+      console.log(formatted);
+    }
+    return withArtifacts;
   } finally {
     await mockServer.stop();
   }
 }
 
-async function runVitest(
+interface RunVitestOptions {
   testPattern: string,
-  vmUrl: string,
-  cwd: string,
-  mockControllerUrl: string,
-): Promise<CliRunResult> {
+  testName?: string;
+  vmUrl: string;
+  cwd: string;
+  mockControllerUrl: string;
+  failureContextPath: string;
+  timeout: number;
+  screenshot: 'file' | 'base64' | 'off';
+}
+
+export async function runVitest(options: RunVitestOptions): Promise<CliRunResult> {
   const vitestCli = require.resolve('vitest/vitest.mjs');
-  const failureContextDir = await mkdtemp(join(tmpdir(), 'fliwright-cli-failures-'));
-  const failureContextPath = join(failureContextDir, 'failures.json');
-
-  try {
-    const { stdout } = await execNode(
-      [vitestCli, 'run', testPattern, '--reporter=json'],
-      {
-        ...process.env,
-        FLIWRIGHT_VM_URL: vmUrl,
-        FLIWRIGHT_MOCK_CONTROLLER_URL: mockControllerUrl,
-        FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: failureContextPath,
-      },
-      cwd,
-    );
-
-    return parseVitestOutput(stdout);
-  } finally {
-    await rm(failureContextDir, { recursive: true, force: true });
+  const args = [vitestCli, 'run', options.testPattern, '--reporter=json', '--testTimeout', String(options.timeout)];
+  if (options.testName) {
+    args.push('--testNamePattern', options.testName);
   }
+
+  await mkdir(dirname(options.failureContextPath), { recursive: true });
+  const { stdout } = await execNode(
+    args,
+    {
+      ...process.env,
+      FLIWRIGHT_VM_URL: options.vmUrl,
+      FLIWRIGHT_MOCK_CONTROLLER_URL: options.mockControllerUrl,
+      FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: options.failureContextPath,
+      FLIWRIGHT_SCREENSHOT_MODE: options.screenshot,
+      FLIWRIGHT_FAILURE_TIMEOUT_MS: String(options.timeout),
+    },
+    options.cwd,
+  );
+
+  const result = parseVitestOutput(stdout);
+  const failures = await readFailureContext(options.failureContextPath);
+  return failures.length > 0 ? { ...result, failures } : result;
 }
 
 function execNode(
@@ -165,8 +201,101 @@ export function parseVitestOutput(raw: string): CliRunResult {
   };
 }
 
+async function readFailureContext(path: string): Promise<CliFailureEntry[]> {
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as CliFailureEntry[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function attachArtifacts(
+  result: CliRunResult,
+  options: {
+    cwd: string;
+    outputDir: string;
+    reportPath: string;
+    runId: string;
+    screenshot: 'file' | 'base64' | 'off';
+    testPattern: string;
+    testName?: string;
+  },
+): Promise<CliRunResult> {
+  await mkdir(options.outputDir, { recursive: true });
+  const screenshots: string[] = [];
+  const failures = await persistScreenshots(result.failures ?? [], options.outputDir, options.screenshot, screenshots);
+  const report: CliRunResult = {
+    ...result,
+    ...(failures.length > 0 ? { failures } : {}),
+    artifacts: {
+      runId: options.runId,
+      outputDir: options.outputDir,
+      reportPath: options.reportPath,
+      screenshots,
+    },
+    reproduceCommand: buildReproduceCommand(options.testPattern, options.testName),
+  };
+  await mkdir(dirname(options.reportPath), { recursive: true });
+  await writeFile(options.reportPath, JSON.stringify(report, null, 2), 'utf8');
+  return report;
+}
+
+async function persistScreenshots(
+  failures: CliFailureEntry[],
+  outputDir: string,
+  screenshotMode: 'file' | 'base64' | 'off',
+  screenshots: string[],
+): Promise<CliFailureEntry[]> {
+  if (screenshotMode !== 'file') return failures;
+
+  const screenshotDir = join(outputDir, 'screenshots');
+  await mkdir(screenshotDir, { recursive: true });
+  const persisted: CliFailureEntry[] = [];
+  for (let index = 0; index < failures.length; index++) {
+    const failure = failures[index];
+    const base64 = failure.screenshot?.base64;
+    if (!base64) {
+      persisted.push(failure);
+      continue;
+    }
+    const filename = `${index + 1}-${safeFilename(failure.testName)}.png`;
+    const path = join(screenshotDir, filename);
+    await writeFile(path, Buffer.from(base64, 'base64'));
+    screenshots.push(path);
+    persisted.push({
+      ...failure,
+      screenshot: {
+        mimeType: 'image/png',
+        path,
+      },
+    });
+  }
+  return persisted;
+}
+
+function createRunId(): string {
+  return `run-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+}
+
+function safeFilename(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'failure';
+}
+
+function buildReproduceCommand(testPattern: string, testName?: string): string {
+  const parts = ['fliwright run', '--test', shellQuote(testPattern)];
+  if (testName) parts.push('--test-name', shellQuote(testName));
+  return parts.join(' ');
+}
+
+function shellQuote(value: string): string {
+  if (/^[a-zA-Z0-9_./:@=-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 function formatOutput(result: CliRunResult, reporter: string): string {
   switch (reporter) {
+    case 'ai-json':
     case 'json':
       return formatJson(result);
     case 'junit':

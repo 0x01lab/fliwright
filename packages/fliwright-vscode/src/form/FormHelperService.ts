@@ -1,6 +1,11 @@
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import type { FliwrightDriver, FormAnalyzeResult, FormFillResult, FormHelperOptions, SelectorQuery } from '@fliwright/core';
+import {
+  analyzeFormCapability,
+  fillFormCapability,
+  fillFormFieldsCapability,
+} from '@fliwright/cli/capabilities/form';
 import { loadConfig, resolveWorkspacePath } from '../config.js';
 import type { FormRulesEntry, FormRunSummary } from '../types.js';
 
@@ -32,7 +37,7 @@ export class FormHelperService {
 
   async analyze(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry): Promise<FormAnalyzeResult> {
     const options = this.options(workspaceRoot, rulesFile);
-    const result = await driver.page.formHelper.analyze(options);
+    const result = await analyzeFormCapability(driver, options);
     this.lastAnalyze = result;
     this.lastSummary = {
       action: 'analyze',
@@ -45,7 +50,7 @@ export class FormHelperService {
 
   async fill(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry): Promise<FormFillResult> {
     const options = this.options(workspaceRoot, rulesFile);
-    const result = await driver.page.formHelper.fill(options);
+    const result = await fillFormCapability(driver, options);
     this.lastAnalyze = undefined;
     this.lastSummary = {
       action: 'fill',
@@ -66,7 +71,7 @@ export class FormHelperService {
     rulesFile?: FormRulesEntry,
   ): Promise<FormFillResult> {
     const options = this.options(workspaceRoot, rulesFile);
-    const result = await driver.page.formHelper.fillFields(fieldHints, options);
+    const result = await fillFormFieldsCapability(driver, fieldHints, options);
     this.lastAnalyze = undefined;
     this.lastSummary = {
       action: 'fill',

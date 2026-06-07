@@ -20,6 +20,9 @@ importers:
       '@fliwright/core':
         specifier: workspace:*
         version: link:../packages/fliwright-core
+      '@fliwright/vitest':
+        specifier: workspace:*
+        version: link:../packages/fliwright-vitest
     devDependencies:
       typescript:
         specifier: ^5.5.0
@@ -83,6 +86,9 @@ importers:
 
   packages/fliwright-mcp:
     dependencies:
+      '@fliwright/cli':
+        specifier: workspace:*
+        version: link:../fliwright-cli
       '@fliwright/core':
         specifier: workspace:*
         version: link:../fliwright-core
@@ -131,6 +137,9 @@ importers:
 
   packages/fliwright-vscode:
     devDependencies:
+      '@fliwright/cli':
+        specifier: workspace:*
+        version: link:../fliwright-cli
       '@fliwright/core':
         specifier: workspace:*
         version: link:../fliwright-core

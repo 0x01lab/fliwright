@@ -62,6 +62,19 @@ describe('CodeGenerator', () => {
     expect(code).toContain("test('login flow'");
   });
 
+  it('generates a beforeEach home reset hook when requested', () => {
+    const gen = new CodeGenerator();
+    const ops: RecordedOperation[] = [tap(100, 200, 1000)];
+    const selectors = new Map<number, string>([[0, "{ text: 'Start' }"]]);
+    const code = gen.generate(ops, selectors, {
+      resetToHomeBeforeEach: true,
+      homeRoute: '/home',
+    });
+    expect(code).toContain("import { test, expect, beforeEach } from '@fliwright/vitest'");
+    expect(code).toContain("beforeEach(async ({ page }) => {");
+    expect(code).toContain("await page.navigate('/home')");
+  });
+
   it('escapes string literals in generated code', () => {
     const gen = new CodeGenerator();
     const ops: RecordedOperation[] = [typeOp(100, 200, "line 1\nline '2'", 1000)];

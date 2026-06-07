@@ -77,7 +77,7 @@ describe('CLI + Core Integration', () => {
 
     const result = await recordCommand({ testName: 'tap test' }, deps);
 
-    expect(result.code).toContain("import { test, expect } from '@fliwright/vitest'");
+    expect(result.code).toContain("from '@fliwright/vitest'");
     expect(result.code).toContain("test('tap test'");
     expect(result.operations).toBeDefined();
   });

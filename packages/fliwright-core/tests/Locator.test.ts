@@ -130,6 +130,58 @@ describe('Locator', () => {
     });
   });
 
+  it('ref locator sends action payloads by ref without selector params', async () => {
+    const sendRequest = createMockSendRequest({ action: { success: true } });
+    const locator = new Locator({ ref: 'e4' }, sendRequest);
+
+    await locator.click();
+    await locator.fill('replacement');
+
+    expect(locator.selectorString).toBe('ref=e4');
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.action', {
+      action: 'tap',
+      ref: 'e4',
+      alignment: 'center',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.action', {
+      action: 'fill',
+      ref: 'e4',
+      text: 'replacement',
+      replaceAll: 'true',
+    });
+  });
+
+  it('does not allow selector chaining from a ref locator', () => {
+    const sendRequest = createMockSendRequest({});
+    const locator = new Locator({ ref: 'e4' }, sendRequest);
+
+    expect(() => locator.getByText('child')).toThrow(
+      'locator is not supported on ref locator e4',
+    );
+  });
+
+  it('fillWithResolved keeps the exact resolved widget target id', async () => {
+    const sendRequest = createMockSendRequest({ action: { success: true } });
+    const locator = new Locator({ text: '邮箱地址' }, sendRequest);
+
+    await locator.fillWithResolved('exact@example.com', {
+      id: 'address-email-field',
+      type: 'TextFormField',
+      rect: { x: 20, y: 100, width: 360, height: 48 },
+      properties: {},
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.action', {
+      action: 'fill',
+      selector: JSON.stringify({ match: { text: '邮箱地址' } }),
+      strict: 'true',
+      visible: 'hitTestable',
+      text: 'exact@example.com',
+      replaceAll: 'true',
+      targetId: 'address-email-field',
+    });
+  });
+
   it('gesture and scroll helpers use action extension', async () => {
     const sendRequest = createMockSendRequest({ action: { success: true } });
     const locator = new Locator('text=Increment', sendRequest);
@@ -145,5 +197,38 @@ describe('Locator', () => {
       ['ext.fliwright.action', 'pinch'],
       ['ext.fliwright.action', 'scrollIntoView'],
     ]);
+  });
+
+  it('extended pointer and focus helpers use action extension', async () => {
+    const sendRequest = createMockSendRequest({ action: { success: true } });
+    const locator = new Locator({ ref: 'e9' }, sendRequest);
+
+    await locator.doubleClick();
+    await locator.tripleClick();
+    await locator.rightClick();
+    await locator.hover();
+    await locator.focus();
+    await locator.blur();
+    await locator.clear();
+    await locator.pressKey('Backspace');
+    await locator.setCheckbox(true);
+    await locator.selectOption('US');
+
+    expect(sendRequest.mock.calls.map((call) => (call[1] as any).action)).toEqual([
+      'doubleClick',
+      'tripleClick',
+      'rightClick',
+      'hover',
+      'focus',
+      'blur',
+      'clear',
+      'pressKey',
+      'setCheckbox',
+      'selectOption',
+    ]);
+    expect(sendRequest.mock.calls.every((call) => (call[1] as any).ref === 'e9')).toBe(true);
+    expect(sendRequest.mock.calls[7][1]).toMatchObject({ key: 'Backspace' });
+    expect(sendRequest.mock.calls[8][1]).toMatchObject({ checked: 'true' });
+    expect(sendRequest.mock.calls[9][1]).toMatchObject({ value: 'US' });
   });
 });

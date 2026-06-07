@@ -11,21 +11,20 @@ class TypeExtension {
 
   static Future<Map<String, dynamic>> _type(Map<String, String> params) async {
     final selector = params['selector'] ?? '';
-    if (selector.isEmpty) {
+    final precomputedId = params['targetId'];
+    final precomputedRectJson = params['targetRect'];
+    if (selector.isEmpty &&
+        (precomputedId == null || precomputedRectJson == null)) {
       return {'error': 'Missing parameter: selector', 'success': false};
     }
 
+    final replaceAll = (params['replaceAll'] ?? 'false') == 'true';
     final text = params['text'] ?? '';
-    if (text.isEmpty) {
+    final key = params['key'];
+    if (text.isEmpty && key == null && !replaceAll) {
       return {'error': 'Missing parameter: text', 'success': false};
     }
-
-    final replaceAll = (params['replaceAll'] ?? 'false') == 'true';
     final charDelayMs = int.tryParse(params['charDelay'] ?? '0') ?? 0;
-
-    // Pre-computed values from the caller (TypeScript Locator).
-    final precomputedId = params['targetId'];
-    final precomputedRectJson = params['targetRect'];
 
     // Step 1: Resolve target widget — use pre-computed info when available,
     // otherwise fall back to inspect (backward compatible).
@@ -124,8 +123,11 @@ class TypeExtension {
     // Step 3: Find the target EditableText.
     // Always wait for focus to settle — focus is async (microtask) in Flutter
     // and without a delay the focus check races with the click.
-    final settleDelay = charDelayMs > 0 ? charDelayMs : 50;
-    await Future<void>.delayed(Duration(milliseconds: settleDelay));
+    final canResolveByPrecomputedTarget = targetId != null && key != null;
+    if (!canResolveByPrecomputedTarget) {
+      final settleDelay = charDelayMs > 0 ? charDelayMs : 50;
+      await Future<void>.delayed(Duration(milliseconds: settleDelay));
+    }
 
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
@@ -179,8 +181,7 @@ class TypeExtension {
       // EditableText descendant, walk ancestors to find the nearest
       // EditableText in the same local container.
       if (focusedEditable == null && targetEl != null) {
-        final targetCenter =
-            Offset(centerX.toDouble(), centerY.toDouble());
+        final targetCenter = Offset(centerX.toDouble(), centerY.toDouble());
         targetEl!.visitAncestorElements((ancestor) {
           if (focusedEditable != null) return false;
           if (ancestor.widget.runtimeType.toString() == 'Scaffold' ||
@@ -274,7 +275,13 @@ class TypeExtension {
     final currentText = controller.text;
     String newText;
 
-    if (replaceAll) {
+    if (key != null && key.isNotEmpty) {
+      try {
+        newText = _applyKey(controller, key);
+      } catch (error) {
+        return {'error': error.toString(), 'success': false};
+      }
+    } else if (replaceAll) {
       newText = text;
       // Use controller.value instead of controller.text to set everything
       // in a single notification.  controller.text creates a value with
@@ -324,6 +331,7 @@ class TypeExtension {
         'targetType': targetType,
         'editableId': focusedEditableId,
         'replaceAll': replaceAll,
+        if (key != null) 'key': key,
       },
     };
   }
@@ -385,5 +393,85 @@ class TypeExtension {
       }
     }
     return widgets.first;
+  }
+
+  static String _applyKey(TextEditingController controller, String key) {
+    final value = controller.value;
+    final text = value.text;
+    final selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: text.length);
+    final start =
+        selection.start < selection.end ? selection.start : selection.end;
+    final end =
+        selection.start < selection.end ? selection.end : selection.start;
+
+    TextEditingValue nextValue(String nextText, int offset) {
+      return TextEditingValue(
+        text: nextText,
+        selection:
+            TextSelection.collapsed(offset: offset.clamp(0, nextText.length)),
+        composing: TextRange.empty,
+      );
+    }
+
+    switch (key) {
+      case 'Backspace':
+        if (start != end) {
+          final next = text.replaceRange(start, end, '');
+          controller.value = nextValue(next, start);
+          return next;
+        }
+        if (start <= 0) return text;
+        final next = text.replaceRange(start - 1, start, '');
+        controller.value = nextValue(next, start - 1);
+        return next;
+      case 'Delete':
+        if (start != end) {
+          final next = text.replaceRange(start, end, '');
+          controller.value = nextValue(next, start);
+          return next;
+        }
+        if (start >= text.length) return text;
+        final next = text.replaceRange(start, start + 1, '');
+        controller.value = nextValue(next, start);
+        return next;
+      case 'Enter':
+        return _insertText(controller, '\n');
+      case 'Tab':
+        return _insertText(controller, '\t');
+      case 'Space':
+        return _insertText(controller, ' ');
+      case 'ArrowLeft':
+        controller.value = nextValue(text, start <= 0 ? 0 : start - 1);
+        return text;
+      case 'ArrowRight':
+        controller.value =
+            nextValue(text, end >= text.length ? text.length : end + 1);
+        return text;
+      default:
+        if (key.length == 1) return _insertText(controller, key);
+        throw ArgumentError('Unsupported key: $key');
+    }
+  }
+
+  static String _insertText(
+      TextEditingController controller, String insertion) {
+    final value = controller.value;
+    final text = value.text;
+    final selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: text.length);
+    final start =
+        selection.start < selection.end ? selection.start : selection.end;
+    final end =
+        selection.start < selection.end ? selection.end : selection.start;
+    final next = text.replaceRange(start, end, insertion);
+    controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: start + insertion.length),
+      composing: TextRange.empty,
+    );
+    return next;
   }
 }

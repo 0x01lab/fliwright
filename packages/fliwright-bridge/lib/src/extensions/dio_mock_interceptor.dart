@@ -37,21 +37,6 @@ class FliwrightDioMockInterceptor extends Interceptor {
     final requestPath =
         options.uri.path.isEmpty ? options.path : options.uri.path;
     _log('Incoming Dio ${options.method} $requestPath url=${options.uri}');
-    callLog.add(MockCallRecord(
-      method: options.method,
-      path: requestPath,
-      headers: _extractHeaders(options.headers),
-      body: _extractBody(options.data),
-      timestamp: DateTime.now(),
-    ));
-
-    final controller = controllerUrl;
-    if (controller != null && controller.isNotEmpty) {
-      _forwardToController(options, requestPath, controller, handler);
-      return;
-    }
-
-    // Try to match a registered route.
     final route = _matchRoute(options.method, requestPath);
     if (route == null) {
       if (passthrough) {
@@ -75,6 +60,20 @@ class FliwrightDioMockInterceptor extends Interceptor {
           ),
         );
       }
+      return;
+    }
+
+    callLog.add(MockCallRecord(
+      method: options.method,
+      path: requestPath,
+      headers: _extractHeaders(options.headers),
+      body: _extractBody(options.data),
+      timestamp: DateTime.now(),
+    ));
+
+    final controller = controllerUrl;
+    if (controller != null && controller.isNotEmpty) {
+      _forwardToController(options, requestPath, controller, handler);
       return;
     }
 

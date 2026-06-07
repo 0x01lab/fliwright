@@ -15,8 +15,9 @@ export async function handleDrag(
   params: z.infer<typeof DragParamsSchema>,
   state: ServerState,
 ): Promise<{ success: boolean }> {
+  const input = DragParamsSchema.parse(params);
   const driver = requireDriver(state);
-  await driver.page.dragFrom(params.x, params.y, params.deltaX, params.deltaY, { steps: params.steps });
+  await driver.page.dragFrom(input.x, input.y, input.deltaX, input.deltaY, { steps: input.steps });
   return { success: true };
 }
 

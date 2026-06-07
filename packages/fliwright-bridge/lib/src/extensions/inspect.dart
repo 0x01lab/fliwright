@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../actionability_gate.dart';
 import '../bridge.dart';
+import '../ref_registry.dart';
 
 class InspectExtension {
   static void register(ExtensionRegistry registry) {
@@ -79,6 +81,50 @@ class InspectExtension {
       return {'error': 'Missing required parameter: action', 'success': false};
     }
 
+    if (action == 'dismissModal') {
+      return _dismissModal();
+    }
+    if (action == 'waitForNetworkIdle') {
+      return _waitForNetworkIdle(params);
+    }
+
+    final ref = params['ref'];
+    if (ref != null && ref.isNotEmpty) {
+      final entry = RefRegistry.lookupEntry(ref) ?? _resolveQueryRef(ref);
+      if (entry == null) {
+        return {'error': 'Unknown or stale ref: $ref', 'success': false};
+      }
+      try {
+        await ensureActionable(
+          entry,
+          ref: ref,
+          checkStable: params['checkStable'] != 'false',
+          checkReceivesEvents: params['checkReceivesEvents'] == 'true',
+        );
+      } on ActionabilityException catch (error) {
+        return {
+          'error': error.reason,
+          'success': false,
+          'actionability': {'ref': ref, 'reason': error.reason},
+        };
+      }
+      final rect = {
+        'x': entry.rect.left,
+        'y': entry.rect.top,
+        'width': entry.rect.width,
+        'height': entry.rect.height,
+      };
+      return _actionWithResolvedTarget(
+        action: action,
+        rect: rect,
+        targetId: '${entry.element.hashCode}',
+        params: {
+          ...params,
+          'selector': params['selector'] ?? 'ref=$ref',
+        },
+      );
+    }
+
     final resolveParams = Map<String, String>.from(params);
     resolveParams['strict'] = params['strict'] ?? 'true';
     resolveParams['visible'] = params['visible'] ?? 'hitTestable';
@@ -106,9 +152,51 @@ class InspectExtension {
       };
     }
 
+    return _actionWithResolvedTarget(
+      action: action,
+      rect: rect,
+      targetId: target['id'].toString(),
+      params: params,
+    );
+  }
+
+  static Future<Map<String, dynamic>> _actionWithResolvedTarget({
+    required String action,
+    required Map<String, dynamic> rect,
+    required String targetId,
+    required Map<String, String> params,
+  }) async {
     switch (action) {
       case 'tap':
         return _tap(rect, params);
+      case 'doubleClick':
+        return _tapMultiple(rect, params, 2, 'doubleClick');
+      case 'tripleClick':
+        return _tapMultiple(rect, params, 3, 'tripleClick');
+      case 'rightClick':
+        return _tap(rect, {...params, 'button': 'right'});
+      case 'hover':
+        return _hover(rect, params);
+      case 'focus':
+        return _tap(rect, params);
+      case 'blur':
+        FocusManager.instance.primaryFocus?.unfocus();
+        return {'success': true, 'action': 'blur'};
+      case 'pressKey':
+        return FliwrightBridge.registry.invoke(
+          'ext.fliwright.type',
+          {
+            ...params,
+            'selector': params['selector'] ?? '',
+            'targetId': targetId,
+            'targetRect': jsonEncode(rect),
+            'key': params['key'] ?? params['value'] ?? '',
+          },
+        );
+      case 'setCheckbox':
+        return _setCheckbox(rect, targetId, params);
+      case 'selectOption':
+        return _selectOption(targetId, params);
       case 'longPress':
       case 'drag':
       case 'pinch':
@@ -123,15 +211,17 @@ class InspectExtension {
         );
       case 'type':
       case 'fill':
+      case 'clear':
         return FliwrightBridge.registry.invoke(
           'ext.fliwright.type',
           {
             ...params,
             'selector': params['selector'] ?? '',
-            'targetId': target['id'].toString(),
+            'targetId': targetId,
             'targetRect': jsonEncode(rect),
-            'replaceAll':
-                params['replaceAll'] ?? (action == 'fill' ? 'true' : 'false'),
+            'replaceAll': params['replaceAll'] ??
+                (action == 'fill' || action == 'clear' ? 'true' : 'false'),
+            if (action == 'clear') 'text': '',
           },
         );
       case 'scrollIntoView':
@@ -140,12 +230,82 @@ class InspectExtension {
           {
             ...params,
             'selector': params['selector'] ?? '',
-            'targetId': target['id'].toString(),
+            'targetId': targetId,
           },
         );
       default:
         return {'error': 'Unknown action: $action', 'success': false};
     }
+  }
+
+  static RefEntry? _resolveQueryRef(String ref) {
+    final query = RefRegistry.lookupQuery(ref);
+    if (query == null) return null;
+    final root = WidgetsBinding.instance.rootElement;
+    if (root == null) return null;
+
+    Element? match;
+    walkTreeUntil(root, (element) {
+      if (!_matchesQueryRef(element, query)) return true;
+      final renderObject = element.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.hasSize) return true;
+      match = element;
+      return false;
+    });
+    final element = match;
+    if (element == null) return null;
+    final renderObject = element.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
+    final rect = renderObject.localToGlobal(Offset.zero) & renderObject.size;
+    final info = extractWidgetInfo(element);
+    return RefEntry(
+      rect: rect,
+      element: element,
+      groupId: 'query:$ref',
+      isTextField: _roleForElement(element, info) == 'textbox',
+      renderObject: renderObject,
+      semanticsId: int.tryParse(info?['semanticsId']?.toString() ?? ''),
+      role: _roleForElement(element, info),
+      label: _labelForInfo(info),
+      enabled: _enabledForElement(element),
+      metadata: {
+        if (info?['type'] != null) 'type': info!['type'],
+        if (info?['key'] != null) 'key': info!['key'],
+      },
+    );
+  }
+
+  static bool _matchesQueryRef(Element element, QueryRef query) {
+    final info = extractWidgetInfo(element);
+    if (info == null) return false;
+
+    final text = info['text']?.toString();
+    final label = _labelForInfo(info);
+    final key = info['key']?.toString();
+    final semanticsLabel = info['semanticsLabel']?.toString();
+    final type =
+        info['type']?.toString() ?? element.widget.runtimeType.toString();
+    final role = _roleForElement(element, info);
+
+    if (query.text != null && text != query.text && label != query.text) {
+      return false;
+    }
+    if (query.containsText != null) {
+      final needle = query.containsText!;
+      if ((text == null || !text.contains(needle)) &&
+          (label == null || !label.contains(needle))) {
+        return false;
+      }
+    }
+    if (query.key != null && key != query.key) return false;
+    if (query.semanticsLabel != null &&
+        (semanticsLabel == null ||
+            !semanticsLabel.contains(query.semanticsLabel!))) {
+      return false;
+    }
+    if (query.role != null && role != query.role) return false;
+    if (query.type != null && type != query.type) return false;
+    return true;
   }
 
   static Future<Map<String, dynamic>> _inspect(
@@ -204,8 +364,180 @@ class InspectExtension {
     final point = _pointInRect(rect, alignment);
     return FliwrightBridge.registry.invoke(
       'ext.fliwright.click',
+      {
+        'x': point.dx.toString(),
+        'y': point.dy.toString(),
+        if (params['button'] != null) 'button': params['button']!,
+      },
+    );
+  }
+
+  static Future<Map<String, dynamic>> _tapMultiple(
+    Map<String, dynamic> rect,
+    Map<String, String> params,
+    int count,
+    String action,
+  ) async {
+    for (var i = 0; i < count; i++) {
+      final result = await _tap(rect, params);
+      if (result['success'] == false || result['error'] != null) return result;
+    }
+    return {'success': true, 'action': action, 'clickCount': count};
+  }
+
+  static Future<Map<String, dynamic>> _hover(
+    Map<String, dynamic> rect,
+    Map<String, String> params,
+  ) {
+    final alignment = _alignmentFromString(params['alignment'] ?? 'center');
+    final point = _pointInRect(rect, alignment);
+    return FliwrightBridge.registry.invoke(
+      'ext.fliwright.hover',
       {'x': point.dx.toString(), 'y': point.dy.toString()},
     );
+  }
+
+  static Future<Map<String, dynamic>> _setCheckbox(
+    Map<String, dynamic> rect,
+    String targetId,
+    Map<String, String> params,
+  ) async {
+    final expected = _parseBool(params['checked'] ?? params['value']);
+    if (expected == null) {
+      return {
+        'error': 'setCheckbox requires checked=true or checked=false',
+        'success': false,
+      };
+    }
+
+    final element = _findElementById(targetId);
+    if (element == null) {
+      return {'error': 'Target element not found: $targetId', 'success': false};
+    }
+    final current = _checkedValueOf(element.widget);
+    if (current == null) {
+      return {
+        'error': 'Target is not a Checkbox, Switch, or Radio: $targetId',
+        'success': false,
+      };
+    }
+    if (current == expected) {
+      return {'success': true, 'action': 'setCheckbox', 'checked': expected};
+    }
+
+    final tap = await _tap(rect, params);
+    if (tap['success'] == false || tap['error'] != null) return tap;
+    return {'success': true, 'action': 'setCheckbox', 'checked': expected};
+  }
+
+  static Future<Map<String, dynamic>> _selectOption(
+    String targetId,
+    Map<String, String> params,
+  ) async {
+    final desired = params['value'] ?? params['label'];
+    if (desired == null || desired.isEmpty) {
+      return {
+        'error': 'selectOption requires value or label',
+        'success': false,
+      };
+    }
+    final element = _findElementById(targetId);
+    if (element == null) {
+      return {'error': 'Target element not found: $targetId', 'success': false};
+    }
+
+    try {
+      final dynamic widget = element.widget;
+      final dynamic items = widget.items;
+      final dynamic onChanged = widget.onChanged;
+      if (items is! Iterable || onChanged == null) {
+        return {
+          'error': 'Target does not expose dropdown items/onChanged',
+          'success': false,
+        };
+      }
+
+      for (final dynamic item in items) {
+        final value = item.value;
+        final label = _dropdownItemLabel(item);
+        if (value?.toString() == desired || label == desired) {
+          onChanged(value);
+          return {
+            'success': true,
+            'action': 'selectOption',
+            'value': value?.toString(),
+            if (label != null) 'label': label,
+          };
+        }
+      }
+      return {
+        'error': 'No dropdown option matched: $desired',
+        'success': false
+      };
+    } catch (error) {
+      return {'error': 'selectOption failed: $error', 'success': false};
+    }
+  }
+
+  static Future<Map<String, dynamic>> _dismissModal() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final root = WidgetsBinding.instance.rootElement;
+    if (root == null) {
+      return {'error': 'No widget tree available', 'success': false};
+    }
+    final navigator = Navigator.maybeOf(root);
+    final popped = navigator == null ? false : await navigator.maybePop();
+    return {'success': true, 'action': 'dismissModal', 'popped': popped};
+  }
+
+  static Future<Map<String, dynamic>> _waitForNetworkIdle(
+    Map<String, String> params,
+  ) async {
+    final quietMs = int.tryParse(params['quietMs'] ?? '') ?? 500;
+    final timeoutMs = int.tryParse(params['timeout'] ?? '') ?? 5000;
+    final started = DateTime.now();
+
+    Future<int?> callCount() async {
+      try {
+        final state = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.debugState',
+          {},
+        );
+        final calls = state['calls'];
+        return calls is int ? calls : int.tryParse(calls?.toString() ?? '');
+      } catch (_) {
+        return null;
+      }
+    }
+
+    var previous = await callCount();
+    if (previous == null) {
+      return {
+        'error':
+            'Network idle requires the Fliwright mock debug extension to be registered',
+        'success': false,
+      };
+    }
+
+    while (DateTime.now().difference(started).inMilliseconds < timeoutMs) {
+      await Future<void>.delayed(Duration(milliseconds: quietMs));
+      final current = await callCount();
+      if (current == previous) {
+        return {
+          'success': true,
+          'action': 'waitForNetworkIdle',
+          'quietMs': quietMs,
+          'calls': current,
+        };
+      }
+      previous = current;
+    }
+    return {
+      'error': 'Timeout waiting for network idle',
+      'success': false,
+      'quietMs': quietMs,
+      'timeout': timeoutMs,
+    };
   }
 
   static ParsedSelectorAst _parseSelectorAst(String selector) {
@@ -954,6 +1286,107 @@ class InspectExtension {
     final width = (rect['width'] as num).toDouble();
     final height = (rect['height'] as num).toDouble();
     return alignment.withinRect(Rect.fromLTWH(x, y, width, height));
+  }
+
+  static Element? _findElementById(String id) {
+    final root = WidgetsBinding.instance.rootElement;
+    if (root == null) return null;
+    Element? match;
+    walkTreeUntil(root, (element) {
+      if ('${element.hashCode}' != id) return true;
+      match = element;
+      return false;
+    });
+    return match;
+  }
+
+  static bool? _parseBool(String? value) {
+    if (value == null) return null;
+    switch (value.toLowerCase()) {
+      case 'true':
+      case '1':
+      case 'yes':
+        return true;
+      case 'false':
+      case '0':
+      case 'no':
+        return false;
+      default:
+        return null;
+    }
+  }
+
+  static bool? _checkedValueOf(Widget widget) {
+    if (widget is Checkbox) return widget.value;
+    if (widget is Switch) return widget.value;
+    if (widget is Radio) {
+      final dynamic radio = widget;
+      return radio.value == radio.groupValue;
+    }
+    return null;
+  }
+
+  static String? _dropdownItemLabel(dynamic item) {
+    try {
+      final dynamic child = item.child;
+      if (child is Text) return child.data ?? child.textSpan?.toPlainText();
+      if (child is RichText) return child.text.toPlainText();
+      return child?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String? _labelForInfo(Map<String, dynamic>? info) {
+    if (info == null) return null;
+    return info['semanticsLabel']?.toString() ??
+        info['text']?.toString() ??
+        info['semanticsHint']?.toString() ??
+        info['key']?.toString() ??
+        info['name']?.toString();
+  }
+
+  static String? _roleForElement(Element element, Map<String, dynamic>? info) {
+    final semanticsRole = info?['role']?.toString();
+    if (semanticsRole == 'button') return 'button';
+    if (semanticsRole == 'link') return 'link';
+    if (semanticsRole == 'header') return 'heading';
+    if (semanticsRole == 'textField') return 'textbox';
+    if (semanticsRole == 'checkbox') return 'checkbox';
+
+    final widget = element.widget;
+    if (widget is TextField ||
+        widget is TextFormField ||
+        widget is EditableText) {
+      return 'textbox';
+    }
+    if (widget is Checkbox || widget is Switch || widget is Radio) {
+      return 'checkbox';
+    }
+    if (widget is ElevatedButton ||
+        widget is TextButton ||
+        widget is OutlinedButton ||
+        widget is IconButton ||
+        widget is FloatingActionButton ||
+        widget is InkWell ||
+        widget is GestureDetector) {
+      return 'button';
+    }
+    if (widget is Text || widget is RichText) return 'text';
+    return null;
+  }
+
+  static bool? _enabledForElement(Element element) {
+    final widget = element.widget;
+    if (widget is TextField) return widget.enabled;
+    if (widget is ElevatedButton) return widget.onPressed != null;
+    if (widget is TextButton) return widget.onPressed != null;
+    if (widget is OutlinedButton) return widget.onPressed != null;
+    if (widget is IconButton) return widget.onPressed != null;
+    if (widget is FloatingActionButton) return widget.onPressed != null;
+    if (widget is Checkbox) return widget.onChanged != null;
+    if (widget is Switch) return widget.onChanged != null;
+    return null;
   }
 }
 

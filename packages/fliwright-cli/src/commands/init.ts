@@ -51,6 +51,10 @@ export async function initCommand(projectDir: string): Promise<void> {
 
   console.log('');
   console.log('Next steps:');
-  console.log('  1. Start your Flutter app: flutter run');
-  console.log('  2. Run tests: npx fliwright run');
+  console.log('  1. Add the bridge to your Flutter app in debug mode only:');
+  console.log('     import "package:flutter/foundation.dart";');
+  console.log('     import "package:fliwright_bridge/fliwright_bridge.dart";');
+  console.log('     if (kDebugMode) { await FliwrightBridge.init(); }');
+  console.log('  2. Start your Flutter app: flutter run');
+  console.log('  3. Run tests: npx fliwright run');
 }

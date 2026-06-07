@@ -108,7 +108,7 @@ describe('FormHelperService', () => {
     expect(service.getLastAnalyze()).toBeUndefined();
   });
 
-  it('creates rule snippets with structured match keys before raw selector', () => {
+  it('creates rule snippets with find wrapper and structured match keys', () => {
     expect(formRuleSnippetForField({
       id: 'country',
       semanticType: 'text',
@@ -116,7 +116,7 @@ describe('FormHelperService', () => {
       selector: 'name=resAddrCountry',
       name: 'resAddrCountry',
     })).toEqual({
-      match: { name: 'resAddrCountry' },
+      find: { match: { name: 'resAddrCountry' } },
       type: 'PRESET_SKILL',
       data: ['CN'],
     });
@@ -127,7 +127,7 @@ describe('FormHelperService', () => {
       generatedValue: 'value',
       selector: 'byType=TextFormField',
     })).toMatchObject({
-      match: { selector: 'byType=TextFormField' },
+      find: { match: { id: 'fallback' } },
     });
   });
 

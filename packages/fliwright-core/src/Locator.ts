@@ -1,4 +1,11 @@
-import type { SelectorAst, SelectorInput, SelectorQuery, SendRequest, WidgetInfo } from './types.js';
+import type {
+  RefTarget,
+  SelectorAst,
+  SelectorInput,
+  SelectorQuery,
+  SendRequest,
+  WidgetInfo,
+} from './types.js';
 import { Selector } from './Selector.js';
 
 type ActionResponse = {
@@ -14,25 +21,33 @@ type ResolveResponse = {
 };
 
 export class Locator {
-  private readonly selector: Selector;
+  private readonly target: LocatorTarget;
 
   constructor(
-    input: SelectorInput | SelectorAst | Selector,
+    input: SelectorInput | SelectorAst | Selector | RefTarget,
     private sendRequest: SendRequest,
   ) {
-    this.selector = input instanceof Selector ? input : new Selector(input);
+    if (isRefTarget(input)) {
+      this.target = { kind: 'ref', ref: normalizeRef(input.ref) };
+    } else {
+      this.target = {
+        kind: 'selector',
+        selector: input instanceof Selector ? input : new Selector(input),
+      };
+    }
   }
 
   get selectorString(): string {
-    return selectorDisplay(this.selector.toQuery());
+    if (this.target.kind === 'ref') return `ref=${this.target.ref}`;
+    return selectorDisplay(this.target.selector.toQuery());
   }
 
   get selectorAst(): SelectorAst {
-    return this.selector.toJSON();
+    return this.requireSelector('selectorAst').toJSON();
   }
 
   locator(selector: SelectorInput): Locator {
-    return new Locator(this.selector.descendant(selector), this.sendRequest);
+    return new Locator(this.requireSelector('locator').descendant(selector), this.sendRequest);
   }
 
   getByText(
@@ -62,19 +77,19 @@ export class Locator {
   }
 
   ancestor(selector: SelectorInput): Locator {
-    return new Locator(this.selector.ancestor(selector), this.sendRequest);
+    return new Locator(this.requireSelector('ancestor').ancestor(selector), this.sendRequest);
   }
 
   and(...selectors: SelectorInput[]): Locator {
-    return new Locator(this.selector.and(...selectors), this.sendRequest);
+    return new Locator(this.requireSelector('and').and(...selectors), this.sendRequest);
   }
 
   or(...selectors: SelectorInput[]): Locator {
-    return new Locator(this.selector.or(...selectors), this.sendRequest);
+    return new Locator(this.requireSelector('or').or(...selectors), this.sendRequest);
   }
 
   nth(index: number): Locator {
-    return new Locator(this.selector.nth(index), this.sendRequest);
+    return new Locator(this.requireSelector('nth').nth(index), this.sendRequest);
   }
 
   first(): Locator {
@@ -87,6 +102,53 @@ export class Locator {
       timeout: options?.timeout,
     });
     this.assertSuccessResponse(response, 'click');
+  }
+
+  async doubleClick(options?: { alignment?: AlignmentOption; timeout?: number }): Promise<void> {
+    const response = await this.sendAction('doubleClick', {
+      alignment: options?.alignment ?? 'center',
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'doubleClick');
+  }
+
+  async tripleClick(options?: { alignment?: AlignmentOption; timeout?: number }): Promise<void> {
+    const response = await this.sendAction('tripleClick', {
+      alignment: options?.alignment ?? 'center',
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'tripleClick');
+  }
+
+  async rightClick(options?: { alignment?: AlignmentOption; timeout?: number }): Promise<void> {
+    const response = await this.sendAction('rightClick', {
+      alignment: options?.alignment ?? 'center',
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'rightClick');
+  }
+
+  async hover(options?: { alignment?: AlignmentOption; timeout?: number }): Promise<void> {
+    const response = await this.sendAction('hover', {
+      alignment: options?.alignment ?? 'center',
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'hover');
+  }
+
+  async focus(options?: { alignment?: AlignmentOption; timeout?: number }): Promise<void> {
+    const response = await this.sendAction('focus', {
+      alignment: options?.alignment ?? 'center',
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'focus');
+  }
+
+  async blur(options?: { timeout?: number }): Promise<void> {
+    const response = await this.sendAction('blur', {
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'blur');
   }
 
   async longPress(options?: {
@@ -151,6 +213,40 @@ export class Locator {
     this.assertSuccessResponse(response, 'fill');
   }
 
+  async clear(options?: { timeout?: number }): Promise<void> {
+    const response = await this.sendAction('clear', {
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'clear');
+  }
+
+  async pressKey(key: string, options?: { timeout?: number }): Promise<void> {
+    const response = await this.sendAction('pressKey', {
+      key,
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'pressKey');
+  }
+
+  async setCheckbox(checked: boolean, options?: { timeout?: number }): Promise<void> {
+    const response = await this.sendAction('setCheckbox', {
+      checked,
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'setCheckbox');
+  }
+
+  async selectOption(
+    value: string | number,
+    options?: { timeout?: number },
+  ): Promise<void> {
+    const response = await this.sendAction('selectOption', {
+      value,
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'selectOption');
+  }
+
   async scrollIntoView(options?: { alignment?: number; duration?: number; timeout?: number }): Promise<void> {
     const response = await this.sendAction('scrollIntoView', {
       alignment: options?.alignment ?? 0.5,
@@ -182,7 +278,7 @@ export class Locator {
     limit?: number;
   }): Promise<WidgetInfo[]> {
     const result = (await this.sendRequest('ext.fliwright.resolve', {
-      ...this.selector.toWireParams({
+      ...this.requireSelector('resolveAll').toWireParams({
         limit: options?.limit,
         strict: options?.strict ?? false,
         visible: options?.visible ?? 'any',
@@ -215,11 +311,23 @@ export class Locator {
   private async sendAction(action: string, params: Record<string, unknown>): Promise<ActionResponse> {
     return (await this.sendRequest('ext.fliwright.action', {
       action,
-      strict: 'true',
-      visible: 'hitTestable',
-      ...this.selector.toWireParams(),
+      ...this.targetWireParams(),
       ...stringifyDefined(params),
     })) as ActionResponse;
+  }
+
+  private targetWireParams(): Record<string, unknown> {
+    if (this.target.kind === 'ref') return { ref: this.target.ref };
+    return {
+      strict: 'true',
+      visible: 'hitTestable',
+      ...this.target.selector.toWireParams(),
+    };
+  }
+
+  private requireSelector(operation: string): Selector {
+    if (this.target.kind === 'selector') return this.target.selector;
+    throw new Error(`${operation} is not supported on ref locator ${this.target.ref}`);
   }
 
   private assertSuccessResponse(response: unknown, action: string): void {
@@ -233,6 +341,10 @@ export class Locator {
     }
   }
 }
+
+type LocatorTarget =
+  | { kind: 'selector'; selector: Selector }
+  | { kind: 'ref'; ref: string };
 
 export type AlignmentOption =
   | 'center'
@@ -273,4 +385,16 @@ function selectorDisplay(query: SelectorQuery): string {
     if (match.role) return `role=${match.role}`;
   }
   return `find=${JSON.stringify(query)}`;
+}
+
+function isRefTarget(input: unknown): input is RefTarget {
+  return typeof input === 'object' &&
+    input !== null &&
+    'ref' in input &&
+    typeof (input as { ref?: unknown }).ref === 'string';
+}
+
+function normalizeRef(ref: string): string {
+  if (ref.length === 0) throw new Error('Ref must not be empty');
+  return ref;
 }

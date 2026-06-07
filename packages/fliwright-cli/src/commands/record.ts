@@ -8,6 +8,8 @@ export interface RecordOptions {
   output?: string;
   lang?: 'ts' | 'dart';
   testName?: string;
+  resetToHomeBeforeEach?: boolean;
+  homeRoute?: string;
   cwd?: string;
 }
 
@@ -68,7 +70,12 @@ export async function recordCommand(
     await waitForSigint();
   }
 
-  const codegenOptions: CodegenOptions = { lang, testName };
+  const codegenOptions: CodegenOptions = {
+    lang,
+    testName,
+    resetToHomeBeforeEach: options.resetToHomeBeforeEach ?? lang === 'ts',
+    homeRoute: options.homeRoute,
+  };
   const code = await recorder.stop(codegenOptions);
 
   const suggester = new AssertionSuggester();

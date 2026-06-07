@@ -14,13 +14,13 @@ class ScreenshotExtension {
   static Future<Map<String, dynamic>> _screenshot(
     Map<String, String> params,
   ) async {
-    // Ensure the frame is fully rendered before capturing
-    await _waitForFrame();
-
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
       return {'success': false, 'error': 'No widget tree available'};
     }
+
+    // Ensure the frame is fully rendered before capturing.
+    await _waitForFrame();
 
     final renderObject = root.findRenderObject();
     final boundary = _findRepaintBoundary(renderObject);

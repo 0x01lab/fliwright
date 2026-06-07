@@ -13,6 +13,7 @@ export function loadConfig(): ExtensionConfig {
     mockIndex: config.get<string>('mockIndex', '.fliwright/mocks/mock-index.json'),
     autoStartMockController: config.get<boolean>('autoStartMockController', true),
     autoApplyDefaultMocksOnConnect: config.get<boolean>('autoApplyDefaultMocksOnConnect', true),
+    restoreSelectedMocksOnConnect: config.get<boolean>('restoreSelectedMocksOnConnect', true),
     vmServiceUrl: config.get<string | null>('vmServiceUrl', null),
     autoDiscoverVmService: config.get<boolean>('autoDiscoverVmService', true),
     testGlob: config.get<string>('testGlob', 'tests/**/*.test.ts'),

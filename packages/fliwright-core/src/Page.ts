@@ -1,5 +1,13 @@
 import { Locator } from './Locator.js';
-import type { SelectorInput, SelectorQuery, SendRequest } from './types.js';
+import type {
+  AgentFindQuery,
+  AgentSnapshotRef,
+  AgentSnapshotOptions,
+  AgentSnapshotResult,
+  SelectorInput,
+  SelectorQuery,
+  SendRequest,
+} from './types.js';
 import { Selector } from './Selector.js';
 import { FormHelper } from './FormHelper.js';
 
@@ -38,6 +46,55 @@ export class Page {
     caseSensitive?: boolean;
   }): Locator {
     return this.locator({ semantics });
+  }
+
+  ref(ref: string): Locator {
+    return new Locator({ ref }, this.sendRequest);
+  }
+
+  async findRef(query: AgentFindQuery): Promise<Locator> {
+    const snapshot = await this.snapshot();
+    const match = snapshot.refs.find((candidate) => matchesFindQuery(candidate, query));
+    if (!match) {
+      throw new Error(`No ref found for query: ${JSON.stringify(query)}`);
+    }
+    return this.ref(match.ref);
+  }
+
+  async snapshot(options?: AgentSnapshotOptions): Promise<AgentSnapshotResult> {
+    const params: Record<string, unknown> = {};
+    if (options?.depth != null) params.depth = options.depth.toString();
+    if (options?.includeRects != null) {
+      params.includeRects = options.includeRects.toString();
+    }
+    if (options?.includeProperties != null) {
+      params.includeProperties = options.includeProperties.toString();
+    }
+    return (await this.sendRequest('ext.fliwright.snap', params)) as AgentSnapshotResult;
+  }
+
+  async dismissModal(): Promise<void> {
+    const result = await this.sendRequest('ext.fliwright.action', {
+      action: 'dismissModal',
+    }) as { success?: boolean; error?: string };
+    if (result.success === false || result.error) {
+      throw new Error(`dismissModal failed: ${result.error ?? 'unknown error'}`);
+    }
+  }
+
+  async waitForNetworkIdle(options?: { quietMs?: number; timeout?: number }): Promise<void> {
+    const params: Record<string, unknown> = {
+      action: 'waitForNetworkIdle',
+    };
+    if (options?.quietMs != null) params.quietMs = options.quietMs.toString();
+    if (options?.timeout != null) params.timeout = options.timeout.toString();
+    const result = await this.sendRequest('ext.fliwright.action', params) as {
+      success?: boolean;
+      error?: string;
+    };
+    if (result.success === false || result.error) {
+      throw new Error(`waitForNetworkIdle failed: ${result.error ?? 'unknown error'}`);
+    }
   }
 
   async waitFor(selector: SelectorInput, timeoutMs = 5000): Promise<Locator> {
@@ -188,4 +245,18 @@ export class Page {
       throw new Error(`Go back failed: ${result.error ?? 'unknown error'}`);
     }
   }
+}
+
+function matchesFindQuery(candidate: AgentSnapshotRef, query: AgentFindQuery): boolean {
+  if (query.text != null && candidate.label !== query.text) return false;
+  if (query.containsText != null && !candidate.label.includes(query.containsText)) {
+    return false;
+  }
+  if (query.key != null && candidate.key !== query.key) return false;
+  if (query.semanticsLabel != null && candidate.label !== query.semanticsLabel) {
+    return false;
+  }
+  if (query.role != null && candidate.role !== query.role) return false;
+  if (query.type != null && candidate.type !== query.type) return false;
+  return Object.values(query).some((value) => value != null && value !== '');
 }

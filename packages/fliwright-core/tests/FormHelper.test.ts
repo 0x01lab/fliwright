@@ -352,6 +352,65 @@ describe('FormHelper', () => {
       expect(clickCalls).toHaveLength(0);
       expect(typeCalls).toHaveLength(0);
     });
+
+    it('preserves precise extracted metadata for field count, selector, key, labels, and controls', async () => {
+      const metadataSend = vi.fn().mockImplementation((method: string) => {
+        if (method === 'ext.fliwright.extractForm') {
+          return Promise.resolve({
+            fields: [
+              {
+                id: 'email-field',
+                type: 'TextFormField',
+                rect: { x: 20, y: 100, width: 360, height: 48 },
+                hintText: '邮箱地址',
+                label: '邮箱',
+                key: 'emailInput',
+                keyboardType: 'emailAddress',
+                controlType: 'textInput',
+                obscureText: false,
+                enabled: true,
+                selector: 'key=emailInput',
+              },
+              {
+                id: 'country-field',
+                type: 'FormBuilderField<String>',
+                rect: { x: 20, y: 200, width: 360, height: 48 },
+                label: '国家',
+                name: 'country',
+                controlType: 'select',
+                obscureText: false,
+                enabled: true,
+                selector: 'name=country',
+                options: [{ label: '中国', value: 'CN' }],
+              },
+            ],
+            count: 2,
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      const result = await new FormHelper(metadataSend).analyze();
+
+      expect(result.fields).toHaveLength(2);
+      expect(result.fields[0]).toMatchObject({
+        id: 'email-field',
+        semanticType: 'email',
+        selector: 'key=emailInput',
+        key: 'emailInput',
+        hintText: '邮箱地址',
+        label: '邮箱',
+        controlType: 'textInput',
+      });
+      expect(result.fields[1]).toMatchObject({
+        id: 'country-field',
+        semanticType: 'option',
+        selector: 'name=country',
+        label: '国家',
+        controlType: 'select',
+        options: [{ label: '中国', value: 'CN' }],
+      });
+    });
   });
 
   describe('fillFields()', () => {
@@ -380,6 +439,49 @@ describe('FormHelper', () => {
       expect(typeCalls).toHaveLength(1);
       expect(selectorAst(typeCalls[0][1])).toEqual({ match: { name: 'email' } });
       expect(typeCalls[0][1]).toMatchObject({ replaceAll: 'true' });
+    });
+
+    it('prefers exact field hint matches over substring collisions', async () => {
+      const collisionSend = vi.fn().mockImplementation((method: string) => {
+        if (method === 'ext.fliwright.extractForm') {
+          return Promise.resolve({
+            fields: [
+              {
+                id: 'email',
+                type: 'TextFormField',
+                rect: { x: 20, y: 100, width: 360, height: 48 },
+                hintText: '邮箱地址',
+                obscureText: false,
+                enabled: true,
+                selector: 'text=邮箱地址',
+              },
+              {
+                id: 'address',
+                type: 'TextFormField',
+                rect: { x: 20, y: 200, width: 360, height: 48 },
+                hintText: '地址',
+                obscureText: false,
+                enabled: true,
+                selector: 'text=地址',
+              },
+            ],
+            count: 2,
+          });
+        }
+        if (method === 'ext.fliwright.action') {
+          return Promise.resolve({ success: true });
+        }
+        return Promise.resolve({});
+      });
+
+      const result = await new FormHelper(collisionSend).fillFields(['地址']);
+
+      expect(result.filled).toBe(1);
+      expect(result.fields.find(f => f.id === 'address')?.status).toBe('filled');
+      expect(result.fields.find(f => f.id === 'email')?.status).toBe('skipped');
+      const typeCalls = fillCalls(collisionSend as ReturnType<typeof createMockSendRequest>);
+      expect(typeCalls).toHaveLength(1);
+      expect(selectorAst(typeCalls[0][1])).toEqual({ match: { id: 'address' } });
     });
 
     it('matches selected fields by stable name when label and hint are absent', async () => {
@@ -473,6 +575,42 @@ describe('FormHelper', () => {
         .map((call) => selectorAst(call[1]));
       expect(typeSelectors).toContainEqual({ match: { id: 'w1' } });
       expect(typeSelectors).toContainEqual({ match: { text: '请输入手机号' } });
+    });
+
+    it('uses legacy type with extracted selector when action fill cannot resolve the field', async () => {
+      const fields = [{
+        id: 'login-username',
+        type: 'TextField',
+        rect: { x: 16, y: 214, width: 408, height: 48 },
+        controlType: 'textInput',
+        name: 'username',
+        semanticsId: 'login.username',
+        hintText: 'Username / Email',
+        obscureText: false,
+        enabled: true,
+        selector: '{"match":{"semanticIdentifier":"login.username"}}',
+      }];
+      const send = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
+        if (method === 'ext.fliwright.extractForm') {
+          return Promise.resolve({ fields, count: fields.length });
+        }
+        if (method === 'ext.fliwright.action') {
+          return Promise.resolve({ success: false, error: 'No widget found matching selector' });
+        }
+        if (method === 'ext.fliwright.type') {
+          expect(params).toMatchObject({
+            selector: fields[0].selector,
+            replaceAll: 'true',
+          });
+          return Promise.resolve({ success: true, currentText: params?.text });
+        }
+        return Promise.resolve({});
+      });
+
+      const result = await new FormHelper(send).fillFields(['Username / Email']);
+      expect(result.filled).toBe(1);
+      expect(result.errors).toHaveLength(0);
+      expect(send.mock.calls.some((call) => call[0] === 'ext.fliwright.type')).toBe(true);
     });
 
     it('reports both primary and fallback errors when both lookups fail', async () => {

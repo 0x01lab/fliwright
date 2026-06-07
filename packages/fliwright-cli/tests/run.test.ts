@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runCommand, parseVitestOutput, type RunOptions } from '../src/commands/run.js';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -38,6 +38,56 @@ describe('runCommand', () => {
     expect(capturedUrl).toBe('ws://mock-vm:8181/ws');
     expect(result.passed).toBe(true);
     expect(result.totalTests).toBe(1);
+    expect(result.artifacts?.reportPath).toBeDefined();
+    await expect(stat(result.artifacts!.reportPath!)).resolves.toBeDefined();
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('persists structured failure context and screenshots in the AI report', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'fliwright-cli-failure-artifacts-'));
+    await writeFile(join(tmpDir, 'sidecar.test.ts'), [
+      "import { writeFileSync } from 'node:fs';",
+      "import { describe, expect, it } from 'vitest';",
+      "describe('fixture', () => {",
+      "  it('writes failure context', () => {",
+      "    writeFileSync(process.env.FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH!, JSON.stringify([{",
+      "      testName: 'login failure',",
+      "      assertion: { matcher: 'toBeVisible', expected: 'visible', actual: 'missing', timeout: 5000 },",
+      "      widgetTree: { widgets: [{ type: 'Text' }] },",
+      "      diagnostics: [{ kind: 'Flutter.Error', timestamp: 1812345678901, streamId: 'Logging', data: { message: 'build failed' } }],",
+      "      source: { file: '/tmp/login.test.ts', line: 4, snippet: 'expect(locator).toBeVisible()' },",
+      "      screenshot: { mimeType: 'image/png', base64: Buffer.from('png-bytes').toString('base64') },",
+      "      timestamp: '2026-05-31T00:00:00.000Z'",
+      '    }]));',
+      '    expect(true).toBe(false);',
+      '  });',
+      '});',
+    ].join('\n'));
+
+    const result = await runCommand({
+      testPattern: 'sidecar.test.ts',
+      reporter: 'ai-json',
+      cwd: tmpDir,
+      print: false,
+    }, {
+      resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures![0].screenshot?.path).toBeDefined();
+    expect(result.failures![0].screenshot?.base64).toBeUndefined();
+    expect(result.artifacts?.screenshots).toHaveLength(1);
+    const report = JSON.parse(await readFile(result.artifacts!.reportPath!, 'utf8')) as typeof result;
+    expect(report.failures![0].widgetTree).toEqual({ widgets: [{ type: 'Text' }] });
+    expect(report.failures![0].diagnostics).toEqual([{
+      kind: 'Flutter.Error',
+      timestamp: 1812345678901,
+      streamId: 'Logging',
+      data: { message: 'build failed' },
+    }]);
+    await expect(stat(result.artifacts!.screenshots[0])).resolves.toBeDefined();
 
     await rm(tmpDir, { recursive: true, force: true });
   });

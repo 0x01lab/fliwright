@@ -8,57 +8,18 @@
  * Prerequisites:
  *   1. cd examples/form_demo && fvm flutter run -d macos --debug
  *   2. Copy the VM Service URL from output
- *   3. FLIWRIGHT_VM_SERVICE_URL="http://127.0.0.1:54321/.../" pnpm --filter @fliwright/e2e-tests test:mock-e2e
+ *   3. FLIWRIGHT_VM_URL="http://127.0.0.1:54321/.../" pnpm --filter @fliwright/e2e-tests test:mock-e2e
  *
- * 如果未设置 FLIWRIGHT_VM_SERVICE_URL 或连接失败，整个 suite 自动 skip。
+ * 如果未设置 FLIWRIGHT_VM_URL 或连接失败，整个 suite 自动 skip。
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { FliwrightDriver } from '@fliwright/core';
+import { describe, expect } from 'vitest';
+import { test } from '@fliwright/vitest';
 
-function toWsUrl(httpUrl: string): string {
-  return httpUrl
-    .replace('http://', 'ws://')
-    .replace('https://', 'wss://')
-    .replace(/\/?$/, '/ws');
-}
+const hasVmUrl = Boolean(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL);
+const liveTest = test.skipIf(!hasVmUrl);
 
-const vmServiceUrl = process.env.FLIWRIGHT_VM_SERVICE_URL;
-
-// Skip entire suite when env var is missing
-describe.skipIf(!vmServiceUrl)('Mock API E2E', () => {
-  let driver: FliwrightDriver;
-  let connected = false;
-
-  beforeAll(async () => {
-    try {
-      const wsUrl = toWsUrl(vmServiceUrl!);
-      driver = new FliwrightDriver();
-      await driver.connect(wsUrl);
-      connected = true;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.warn(
-        `⚠️  Cannot connect to VM Service at ${vmServiceUrl}\n` +
-        `   Error: ${msg}\n` +
-        `   Make sure the Flutter app is running in debug mode.\n` +
-        `   Run: cd examples/form_demo && fvm flutter run -d macos --debug`,
-      );
-      throw e;
-    }
-  }, 15_000);
-
-  afterAll(async () => {
-    await driver?.dispose();
-  });
-
-  function itIfConnected(name: string, fn: () => Promise<void>) {
-    it(name, async () => {
-      if (!connected) return;
-      await fn();
-    });
-  }
-
-  itIfConnected('registers mock route via MockManager', async () => {
+describe('Mock API E2E', () => {
+  liveTest('registers mock route via MockManager', async ({ driver, page: _page }) => {
     await driver.mock.clear();
     await driver.mock.clearCalls();
 
@@ -74,10 +35,10 @@ describe.skipIf(!vmServiceUrl)('Mock API E2E', () => {
     console.log('✅ Mock route registered: GET /api/ping');
   });
 
-  itIfConnected('intercepts HttpClient request through HttpOverrides proxy', async () => {
+  liveTest('intercepts HttpClient request through HttpOverrides proxy', async ({ driver, page: _page }) => {
     // Use the testRequest extension to make an HTTP request from the Dart side.
     // This goes through the normal HttpClient → HttpOverrides → mock server path.
-    const result = await (driver as any).connector.sendRequest(
+    const result = await driver.sendRequest(
       'ext.fliwright.mock.testRequest',
       { url: 'http://test.local/api/ping', method: 'GET' },
     ) as { status?: number; body?: string; error?: string };
@@ -95,7 +56,7 @@ describe.skipIf(!vmServiceUrl)('Mock API E2E', () => {
     console.log('✅ HttpOverrides proxy intercepted the request and mock server responded');
   });
 
-  itIfConnected('records the intercepted call', async () => {
+  liveTest('records the intercepted call', async ({ driver, page: _page }) => {
     const calls = await driver.mock.getCalls('/api/ping');
     expect(calls.length).toBeGreaterThanOrEqual(1);
 
@@ -106,7 +67,7 @@ describe.skipIf(!vmServiceUrl)('Mock API E2E', () => {
     console.log(`✅ Call recorded: ${lastCall.method} ${lastCall.path}`);
   });
 
-  itIfConnected('mocks POST with body and verifies request body in call record', async () => {
+  liveTest('mocks POST with body and verifies request body in call record', async ({ driver, page: _page }) => {
     await driver.mock.clear();
     await driver.mock.clearCalls();
 
@@ -117,7 +78,7 @@ describe.skipIf(!vmServiceUrl)('Mock API E2E', () => {
     });
 
     // Make a POST request through the test extension
-    const result = await (driver as any).connector.sendRequest(
+    const result = await driver.sendRequest(
       'ext.fliwright.mock.testRequest',
       {
         url: 'http://test.local/api/register',
@@ -146,7 +107,7 @@ describe.skipIf(!vmServiceUrl)('Mock API E2E', () => {
     console.log('✅ POST mock + body recording verified');
   });
 
-  itIfConnected('mocks error response', async () => {
+  liveTest('mocks error response', async ({ driver, page: _page }) => {
     await driver.mock.clear();
     await driver.mock.clearCalls();
 
@@ -156,7 +117,7 @@ describe.skipIf(!vmServiceUrl)('Mock API E2E', () => {
       body: { error: '服务器内部错误' },
     });
 
-    const result = await (driver as any).connector.sendRequest(
+    const result = await driver.sendRequest(
       'ext.fliwright.mock.testRequest',
       { url: 'http://test.local/api/fail', method: 'GET' },
     ) as { status?: number; body?: string; error?: string };
@@ -168,11 +129,11 @@ describe.skipIf(!vmServiceUrl)('Mock API E2E', () => {
     console.log('✅ Error mock (500) verified');
   });
 
-  itIfConnected('returns 404 for unmatched route (no passthrough)', async () => {
+  liveTest('returns 404 for unmatched route (no passthrough)', async ({ driver, page: _page }) => {
     await driver.mock.clear();
     await driver.mock.clearCalls();
 
-    const result = await (driver as any).connector.sendRequest(
+    const result = await driver.sendRequest(
       'ext.fliwright.mock.testRequest',
       { url: 'http://test.local/api/nonexistent', method: 'GET' },
     ) as { status?: number; body?: string; error?: string };

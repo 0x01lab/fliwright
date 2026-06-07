@@ -13,6 +13,7 @@ class GestureExtension {
   static void register(ExtensionRegistry registry) {
     _registry = registry;
     registry.register('ext.fliwright.click', _click);
+    registry.register('ext.fliwright.hover', _hover);
     registry.register('ext.fliwright.gesture', _gesture);
     registry.register('ext.fliwright.dragFrom', _dragFrom);
   }
@@ -29,12 +30,17 @@ class GestureExtension {
         WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
     final position = Offset(x, y);
     final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
+    final isRightClick = params['button'] == 'right';
+    final kind =
+        isRightClick ? PointerDeviceKind.mouse : PointerDeviceKind.touch;
+    final buttons = isRightClick ? kSecondaryMouseButton : kPrimaryButton;
 
     GestureBinding.instance.handlePointerEvent(
       PointerDownEvent(
         pointer: pointer,
         position: position,
-        kind: PointerDeviceKind.touch,
+        kind: kind,
+        buttons: buttons,
         viewId: view,
         timeStamp: now,
       ),
@@ -44,13 +50,38 @@ class GestureExtension {
       PointerUpEvent(
         pointer: pointer,
         position: position,
-        kind: PointerDeviceKind.touch,
+        kind: kind,
+        buttons: buttons,
         viewId: view,
         timeStamp: now + const Duration(milliseconds: 100),
       ),
     );
 
-    return {'success': true};
+    return {'success': true, if (isRightClick) 'button': 'right'};
+  }
+
+  static Future<Map<String, dynamic>> _hover(Map<String, String> params) async {
+    final x = double.tryParse(params['x'] ?? '');
+    final y = double.tryParse(params['y'] ?? '');
+    if (x == null || y == null) {
+      return {'error': 'Missing or invalid x, y coordinates'};
+    }
+
+    final pointer = _nextPointer++;
+    final view =
+        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
+    GestureBinding.instance.handlePointerEvent(
+      PointerHoverEvent(
+        pointer: pointer,
+        position: Offset(x, y),
+        kind: PointerDeviceKind.mouse,
+        viewId: view,
+        timeStamp:
+            Duration(milliseconds: DateTime.now().millisecondsSinceEpoch),
+      ),
+    );
+
+    return {'success': true, 'gesture': 'hover'};
   }
 
   static Future<Map<String, dynamic>> _gesture(

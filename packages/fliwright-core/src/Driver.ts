@@ -12,7 +12,7 @@ import { RecorderController } from './RecorderController.js';
 import { SelfHealingEngine } from './SelfHealingEngine.js';
 import { SnapshotStore } from './SnapshotStore.js';
 import { MultiDimensionalHealingStrategy } from './strategies/MultiDimensionalHealingStrategy.js';
-import type { TestResult } from './types.js';
+import type { TestResult, VMServiceEvent } from './types.js';
 
 export interface DriverOptions { plugins?: FliwrightPlugin[]; }
 
@@ -83,6 +83,18 @@ export class FliwrightDriver {
   }
 
   sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> { return this.connector.sendRequest(method, params); }
+
+  reloadSources(): Promise<unknown> { return this.connector.reloadSources(); }
+
+  listenToDiagnostics(streamIds = ['Logging', 'Stdout', 'Stderr', 'Isolate']): Promise<void> {
+    return this.connector.listenToStreams(streamIds);
+  }
+
+  getDiagnostics(options?: { limit?: number; kinds?: string[]; streams?: string[] }): VMServiceEvent[] {
+    return this.connector.getDiagnostics(options);
+  }
+
+  clearDiagnostics(): void { this.connector.clearDiagnostics(); }
 
   getStateAdapter(name: string): StateAdapter { return this.registry.getStateAdapter(name); }
   getMockAdapter(name: string): MockAdapter { return this.registry.getMockAdapter(name); }

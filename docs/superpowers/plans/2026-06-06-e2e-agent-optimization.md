@@ -10,6 +10,10 @@
 
 **Compatibility Constraint:** Do not replace or weaken the existing FormHelper element discovery path. `ext.fliwright.extractForm`, `FormHelper.analyze()`, `FormHelper.fill()`, and `FormHelper.fillFields()` are already precise and must remain the canonical form automation pipeline. New snapshot/ref/observe features may reuse FormHelper metadata as enrichment, but must not make FormHelper depend on the new ref registry or lower its selector accuracy.
 
+**Capability Ownership Constraint:** The CLI package is the shared capability owner for human and agent workflows. MCP Server and VS Code integration should be thin adapters over CLI capability modules/commands instead of duplicating core interaction logic. Current implementation exposes `packages/fliwright-cli/src/capabilities/interaction.ts` for live-app interaction workflows and `packages/fliwright-cli/src/capabilities/form.ts` for the existing precise FormHelper workflow; MCP interaction tools and VS Code FormHelper integration now route through those capability modules.
+
+**Semantics Constraint:** Semantics data is currently used as enrichment for labels, roles, stable `semanticsId` refs, and selector fallbacks. `ext.fliwright.snap` still walks the on-stage Element tree and extracts Semantics metadata from widgets; it is not yet a pure Semantics tree traversal. Treat Semantics as an important signal, not the only source of truth, until a later Semantics-first mapping can preserve action targets without weakening FormHelper.
+
 **Tech Stack:** Dart VM Service extensions, Flutter Semantics/RenderObject tree, TypeScript core SDK, MCP tools, Vitest, Dart tests
 
 ---
@@ -42,9 +46,9 @@
 - Cache `e<N>` by SemanticsNode id where possible so stable widgets keep stable refs across snapshots.
 
 **Steps:**
-- [ ] Define `RefEntry`, `QueryRef`, and `RefRegistry`.
-- [ ] Add tests for token generation, node-id dedupe, group disposal, q-ref persistence, and reset.
-- [ ] Ensure no production API depends on test-only helpers.
+- [x] Define `RefEntry`, `QueryRef`, and `RefRegistry`.
+- [x] Add tests for token generation, node-id dedupe, group disposal, q-ref persistence, and reset.
+- [x] Ensure no production API depends on test-only helpers.
 
 **Acceptance Criteria:**
 - `RefRegistry.registerEntry()` returns stable `e<N>` for repeated snapshots of the same SemanticsNode.
@@ -91,12 +95,12 @@
 - Keep this extension independent from `ext.fliwright.extractForm`. Snapshot is for agent observation and ref actions; FormHelper continues to use its existing extraction logic.
 
 **Steps:**
-- [ ] Build RenderObject to Element index.
-- [ ] Walk Semantics owners, including child pipeline owners.
-- [ ] Map Semantics flags to roles: button, textbox, checkbox, link, heading, image, text.
-- [ ] Register interactive nodes in `RefRegistry`.
-- [ ] Add `Page.snapshot(options?)` in TS.
-- [ ] Add unit/widget tests for buttons, text fields, nested widgets, empty tree, and depth filtering.
+- [x] Build candidate refs from on-stage Element/RenderObject metadata.
+- [x] Walk the on-stage widget tree and reuse extracted semantics/widget metadata.
+- [x] Map Semantics/widget flags to roles: button, textbox, checkbox, link, heading, text.
+- [x] Register interactive nodes in `RefRegistry`.
+- [x] Add `Page.snapshot(options?)` in TS.
+- [x] Add unit/widget tests for buttons, rect omission, empty tree registration, and ref action.
 
 **Acceptance Criteria:**
 - A running Flutter screen can be snapshotted without a test harness.
@@ -126,12 +130,12 @@
 6. Receives events: hit-test path includes the target or descendant.
 
 **Steps:**
-- [ ] Implement typed `ActionabilityError` with stable reason strings.
-- [ ] Add `ensureActionable(ref, entry, options)` for `e<N>` refs.
-- [ ] Add q-ref resolution path before the gate.
-- [ ] Route `tap`, `drag`, `type`, `fill`, `hover` future verbs through the gate.
-- [ ] Preserve the current FormHelper fast path: `fillWithResolved()` should keep accepting pre-resolved `WidgetInfo` and should not be forced through a less precise ref lookup.
-- [ ] Include gate diagnostics in RPC responses.
+- [x] Implement typed `ActionabilityException` with stable reason strings.
+- [x] Add `ensureActionable(entry, ref, options)` for `e<N>` refs.
+- [x] Add q-ref resolution path before the gate.
+- [x] Route ref-backed `tap`, `drag`, `type`, and `fill` through the gate.
+- [x] Preserve the current FormHelper fast path: `fillWithResolved()` keeps accepting pre-resolved `WidgetInfo` and is not forced through a less precise ref lookup.
+- [x] Include gate diagnostics in RPC responses.
 
 **Acceptance Criteria:**
 - Tapping a hidden, disabled, zero-size, animated, off-screen, or obscured widget fails with a specific reason.
@@ -161,11 +165,11 @@ await page.findRef({ text: '提交' }).click();
 ```
 
 **Steps:**
-- [ ] Add `RefTarget` type.
-- [ ] Add `Page.ref(ref: string): Locator`.
-- [ ] Add `Page.findRef(query): Promise<Locator>` using `ext.fliwright.find`.
-- [ ] Update `Locator` to serialize either selector input or ref target.
-- [ ] Add tests for ref locator actions and backwards-compatible selector locators.
+- [x] Add `RefTarget` type.
+- [x] Add `Page.ref(ref: string): Locator`.
+- [x] Add `Page.findRef(query): Promise<Locator>` using current `Page.snapshot()` refs.
+- [x] Update `Locator` to serialize either selector input or ref target.
+- [x] Add tests for ref locator actions and backwards-compatible selector locators.
 
 **Acceptance Criteria:**
 - `page.ref('e1').click()` calls bridge action by ref.
@@ -197,11 +201,13 @@ await page.findRef({ text: '提交' }).click();
 - `fliwright_wait({ ref?, text?, key?, type?, timeout? })`
 
 **Steps:**
-- [ ] Register new tools.
-- [ ] Make ref the preferred parameter in action tools.
-- [ ] Preserve existing key/text/type fallbacks.
-- [ ] Return post-action snapshot optionally via `includeSnapshot`.
-- [ ] Add unit tests with mocked driver/page.
+- [x] Register new tools.
+- [x] Route MCP handlers through CLI interaction capability functions.
+- [x] Validate MCP handler parameters with zod schemas, including object-level `ref/key/text/type` and action-specific requirements.
+- [x] Make ref the preferred parameter in action tools.
+- [x] Preserve existing key/text/type fallbacks.
+- [x] Return post-action snapshot optionally via `includeSnapshot`.
+- [x] Add unit tests with mocked driver/page.
 
 **Acceptance Criteria:**
 - An MCP agent can run: connect -> snap -> tap by ref -> snap.
@@ -236,12 +242,12 @@ interface ObserveCandidate {
 ```
 
 **Steps:**
-- [ ] Build candidates from current snapshot refs.
-- [ ] Filter by role and limit.
-- [ ] Include selector suggestions using existing `SelectorResolver`.
+- [x] Build candidates from current snapshot refs in MCP `fliwright_observe`.
+- [x] Filter by role and limit.
+- [x] Include selector suggestions already present in snapshot refs.
 - [ ] Optionally enrich form fields with semantic type from `FormHelper`.
 - [ ] Optionally include route and mock diagnostics when available.
-- [ ] Treat FormHelper enrichment as read-only metadata. Do not route FormHelper discovery through observe candidates.
+- [x] Treat FormHelper enrichment as read-only metadata. Do not route FormHelper discovery through observe candidates.
 
 **Acceptance Criteria:**
 - `fliwright_observe({ roles: 'button,textbox' })` returns a small ordered candidate list.
@@ -263,12 +269,12 @@ interface ObserveCandidate {
 - Modify: `e2e/form-mock-e2e.test.ts`
 
 **Steps:**
-- [ ] Add regression assertions for current form field count, semantic type, selector, key, hint, label, and control type.
-- [ ] Add a fixture with similar labels such as `邮箱地址` and `地址` to prevent substring collision regressions.
-- [ ] Verify `fillWithResolved()` still targets the exact field returned by `extractForm`.
-- [ ] Verify password/obscure field skip behavior remains unchanged.
-- [ ] Verify `fillFields(['手机号', '验证码'])` fills only requested fields.
-- [ ] Run FormHelper tests before and after every ref/actionability change touching locator or bridge action paths.
+- [x] Add regression assertions for current form field count, semantic type, selector, key, hint, label, and control type.
+- [x] Add a fixture with similar labels such as `邮箱地址` and `地址` to prevent substring collision regressions.
+- [x] Verify `fillWithResolved()` still targets the exact field returned by `extractForm`.
+- [x] Verify password/obscure field skip behavior remains unchanged.
+- [x] Verify `fillFields(['手机号', '验证码'])` fills only requested fields.
+- [x] Run FormHelper tests before and after every ref/actionability change touching locator or bridge action paths.
 
 **Acceptance Criteria:**
 - No FormHelper API changes are required for existing users.
@@ -304,9 +310,9 @@ interface ObserveCandidate {
 - If reload fails, return compile error and recent exceptions.
 
 **Steps:**
-- [ ] Add VM Service reload helper in core or MCP.
-- [ ] Chain reload -> snap -> screenshot -> exceptions.
-- [ ] Add tests around success, reload failure, screenshot failure.
+- [x] Add VM Service reload helper in core or MCP.
+- [x] Chain reload -> snap -> screenshot -> exceptions.
+- [x] Add tests around success, reload failure, screenshot failure.
 
 **Acceptance Criteria:**
 - Agent can edit code, call one MCP tool, and receive reload status plus visual/semantic verification data.
@@ -324,19 +330,19 @@ interface ObserveCandidate {
 - Add tests in relevant packages.
 
 **Actions:**
-- [ ] `hover`
-- [ ] `doubleClick`
-- [ ] `rightClick`
-- [ ] `tripleClick`
-- [ ] `focus`
-- [ ] `blur`
-- [ ] `clear`
-- [ ] `pressKey`
-- [ ] `setCheckbox`
-- [ ] `selectOption`
-- [ ] `dismissModal`
-- [ ] `waitForNetworkIdle`
-- [ ] `console` and `exceptions` diagnostics
+- [x] `hover`
+- [x] `doubleClick`
+- [x] `rightClick`
+- [x] `tripleClick`
+- [x] `focus`
+- [x] `blur`
+- [x] `clear`
+- [x] `pressKey`
+- [x] `setCheckbox`
+- [x] `selectOption`
+- [x] `dismissModal`
+- [x] `waitForNetworkIdle`
+- [x] `console` and `exceptions` diagnostics via buffered VM Service diagnostic events
 
 **Acceptance Criteria:**
 - Each action is available through SDK and MCP.
@@ -354,10 +360,11 @@ interface ObserveCandidate {
 - Create docs under `docs/superpowers/specs/` if behavior needs a design doc.
 
 **Steps:**
-- [ ] Add `fliwright doctor` checks: VM Service reachable, bridge installed, core extensions available, mock server status, Riverpod observer status.
-- [ ] Add installer guidance or command to patch `main.dart` with debug-only bridge setup.
-- [ ] Add runtime warning when bridge is initialized outside debug mode.
-- [ ] Add hot restart safe registration behavior for extensions.
+- [x] Add `fliwright doctor` checks: VM Service reachable, bridge installed, core extensions available, mock server status, Riverpod observer status.
+- [x] Add installer guidance or command to patch `main.dart` with debug-only bridge setup.
+- [x] Add runtime warning when bridge is initialized outside debug mode.
+- [x] Add hot restart safe registration behavior for extensions.
+- [x] Add CLI interaction/form capability modules as the shared ownership boundary for MCP and VS Code adapters.
 
 **Acceptance Criteria:**
 - New project setup failures are diagnosed before test execution.
@@ -376,11 +383,11 @@ interface ObserveCandidate {
 - Optional create: `.agents/skills/fliwright-e2e-agent/SKILL.md`
 
 **Steps:**
-- [ ] Document the ref grammar: `e<N>` snapshot refs and `q<N>` query refs.
-- [ ] Document actionability reason strings.
-- [ ] Add MCP tool quick reference.
-- [ ] Add typical agent workflow: connect -> snap -> observe -> act -> verify.
-- [ ] Regenerate `docs/features/` after code lands.
+- [x] Document the ref grammar: `e<N>` snapshot refs and `q<N>` query refs.
+- [x] Document actionability reason strings.
+- [x] Add MCP tool quick reference.
+- [x] Add typical agent workflow: connect -> snap -> observe -> act -> verify.
+- [x] Refresh affected `docs/features/` files after code lands.
 
 **Acceptance Criteria:**
 - A new agent can understand the tool workflow from docs alone.

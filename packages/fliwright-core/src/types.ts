@@ -130,6 +130,46 @@ export interface WidgetSnapshot {
   firstSeen?: string;
 }
 
+export interface AgentSnapshotRef {
+  ref: string;
+  role: 'button' | 'textbox' | 'checkbox' | 'link' | 'heading' | 'image' | 'text' | string;
+  label: string;
+  type: string;
+  key?: string;
+  selector?: string;
+  enabled?: boolean;
+  textField?: boolean;
+  rect?: { x: number; y: number; width: number; height: number };
+  properties?: Record<string, unknown>;
+}
+
+export interface AgentSnapshotResult {
+  snapshot: string;
+  groupId: string;
+  refs: AgentSnapshotRef[];
+  count: number;
+  error?: string;
+}
+
+export interface AgentSnapshotOptions {
+  depth?: number;
+  includeRects?: boolean;
+  includeProperties?: boolean;
+}
+
+export interface AgentFindQuery {
+  text?: string;
+  containsText?: string;
+  key?: string;
+  semanticsLabel?: string;
+  role?: string;
+  type?: string;
+}
+
+export interface RefTarget {
+  ref: string;
+}
+
 export interface HealingResult {
   originalSelector: string;
   suggestedSelector: string;
@@ -199,6 +239,7 @@ export interface VMServiceEvent {
   kind: string;
   timestamp: number;
   data: Record<string, unknown>;
+  streamId?: string;
 }
 
 export interface ProtocolMessage {
@@ -252,6 +293,8 @@ export interface CodegenOptions {
   testName?: string;
   imports?: string;
   lang?: 'ts' | 'dart';
+  resetToHomeBeforeEach?: boolean;
+  homeRoute?: string;
 }
 
 export interface FormFieldMeta {

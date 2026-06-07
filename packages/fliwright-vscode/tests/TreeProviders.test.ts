@@ -3,11 +3,34 @@ import { Uri } from 'vscode';
 import { MockApiTreeProvider } from '../src/views/MockApiTreeProvider.js';
 import { FormDataTreeProvider } from '../src/views/FormDataTreeProvider.js';
 import { StateTreeProvider } from '../src/views/StateTreeProvider.js';
+import { DevicesTreeProvider } from '../src/views/DevicesTreeProvider.js';
 import type { FormRuleService } from '../src/form/FormRuleService.js';
 import type { MockConfigService } from '../src/sandbox/MockConfigService.js';
 import { createWorkspace } from './helpers/workspace.js';
 
 describe('tree providers', () => {
+  it('nests connected device capabilities under the status row', () => {
+    const provider = new DevicesTreeProvider();
+    provider.setState({
+      status: 'connected',
+      url: 'ws://127.0.0.1:52215/A1QIwGccBzA=/ws',
+      connectedAt: 1,
+    });
+
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(1);
+    expect(roots[0]).toMatchObject({ kind: 'deviceStatus' });
+
+    const rootItem = provider.getTreeItem(roots[0]!);
+    expect(rootItem.collapsibleState).toBe(2);
+
+    const children = provider.getChildren(roots[0]);
+    expect(children).toMatchObject([
+      { kind: 'deviceCapability', label: 'Mock APIs' },
+      { kind: 'deviceCapability', label: 'Form Helper' },
+    ]);
+  });
+
   it('loads mock data on first getChildren without firing refresh events', async () => {
     const root = await createWorkspace();
     const discover = vi.fn<MockConfigService['discover']>().mockResolvedValue({

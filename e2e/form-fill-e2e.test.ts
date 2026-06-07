@@ -4,41 +4,13 @@
  * Prerequisites:
  *   1. cd examples/form_demo && fvm flutter run -d macos --debug
  *   2. Copy the VM Service URL from the output
- *   3. FLIWRIGHT_VM_SERVICE_URL="http://127.0.0.1:54321/.../" pnpm --filter @fliwright/e2e-tests test:form
+ *   3. FLIWRIGHT_VM_URL="http://127.0.0.1:54321/.../" pnpm --filter @fliwright/e2e-tests test:form
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { FliwrightDriver } from '@fliwright/core';
+import { expect } from 'vitest';
+import { test } from '@fliwright/vitest';
 
-function toWsUrl(httpUrl: string): string {
-  return httpUrl
-    .replace('http://', 'ws://')
-    .replace('https://', 'wss://')
-    .replace(/\/?$/, '/ws');
-}
-
-describe('E2E: Form Fill with Real Flutter App', () => {
-  let driver: FliwrightDriver;
-  const vmServiceUrl = process.env.FLIWRIGHT_VM_SERVICE_URL;
-
-  beforeAll(async () => {
-    if (!vmServiceUrl) {
-      throw new Error(
-        'Set FLIWRIGHT_VM_SERVICE_URL env var to the VM Service URI from `flutter run` output.\n' +
-        'Example: FLIWRIGHT_VM_SERVICE_URL="http://127.0.0.1:54321/xxxxxxxxxxxxxx/" pnpm --filter @fliwright/e2e-tests test:form',
-      );
-    }
-
-    const wsUrl = toWsUrl(vmServiceUrl);
-    driver = new FliwrightDriver();
-    await driver.connect(wsUrl);
-  });
-
-  afterAll(async () => {
-    await driver?.dispose();
-  });
-
-  it('extracts all form fields via bridge', async () => {
-    const analysis = await driver.page.formHelper.analyze();
+test('extracts all form fields via bridge', async ({ page }) => {
+    const analysis = await page.formHelper.analyze();
 
     console.log('\n📋 Extracted Fields:');
     for (const f of analysis.fields) {
@@ -83,10 +55,10 @@ describe('E2E: Form Fill with Real Flutter App', () => {
     expect(email!.generatedValue).toContain('@');
     expect(idCard!.generatedValue).toMatch(/^\d{17}[\dX]$/);
     expect(captcha!.generatedValue).toMatch(/^\d{4,6}$/);
-  });
+});
 
-  it('fills all non-obscure fields and skips password', async () => {
-    const result = await driver.page.formHelper.fill({ skipObscureFields: true });
+test('fills all non-obscure fields and skips password', async ({ page }) => {
+    const result = await page.formHelper.fill({ skipObscureFields: true });
 
     console.log('\n📝 Fill Results:');
     console.log(`  Filled: ${result.filled}, Skipped: ${result.skipped}, Errors: ${result.errors.length}`);
@@ -102,23 +74,23 @@ describe('E2E: Form Fill with Real Flutter App', () => {
     // All other fields should be filled (no errors)
     expect(result.errors).toHaveLength(0);
     expect(result.filled).toBeGreaterThanOrEqual(5);
-  });
+});
 
-  it('clicks submit and verifies success message', async () => {
+test('clicks submit and verifies success message', async ({ page }) => {
     // Click the submit button
-    const submitBtn = driver.page.locator({ text: '提交' });
+    const submitBtn = page.locator({ text: '提交' });
     await submitBtn.click();
 
     // Wait for success message
-    const success = await driver.page.waitFor('text=注册成功', 5000);
+    const success = await page.waitFor('text=注册成功', 5000);
     const visible = await success.isVisible();
     expect(visible).toBe(true);
 
     console.log('\n✅ Submit successful — "注册成功" is visible');
-  });
+});
 
-  it('fills specific fields only via fillFields()', async () => {
-    const result = await driver.page.formHelper.fillFields(
+test('fills specific fields only via fillFields()', async ({ page }) => {
+    const result = await page.formHelper.fillFields(
       ['手机号', '验证码'],
       { skipObscureFields: true },
     );
@@ -138,5 +110,4 @@ describe('E2E: Form Fill with Real Flutter App', () => {
 
     // Email should be skipped (not in the hints list)
     expect(email?.status).toBe('skipped');
-  });
 });

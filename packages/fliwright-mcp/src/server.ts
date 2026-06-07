@@ -9,10 +9,16 @@ import { registerTestReportResource } from './resources/testReport.js';
 // ── New interaction tools ──
 import { registerConnectTool } from './tools/connect.js';
 import { registerScreenshotTool } from './tools/screenshot.js';
+import { registerSnapTool } from './tools/snap.js';
+import { registerFindTool } from './tools/find.js';
+import { registerObserveTool } from './tools/observe.js';
+import { registerHotReloadAndSnapTool } from './tools/hotReloadAndSnap.js';
 import { registerTapTool } from './tools/tap.js';
 import { registerTypeTool } from './tools/type.js';
 import { registerDragTool } from './tools/drag.js';
 import { registerWaitTool } from './tools/wait.js';
+import { registerActionTool } from './tools/action.js';
+import { registerDiagnosticsTool } from './tools/diagnostics.js';
 
 export function createFliwrightServer() {
   const server = new McpServer({
@@ -34,10 +40,16 @@ export function createFliwrightServer() {
   // Interaction tools — direct app control via MCP
   registerConnectTool(server, state);
   registerScreenshotTool(server, state);
+  registerSnapTool(server, state);
+  registerFindTool(server, state);
+  registerObserveTool(server, state);
+  registerHotReloadAndSnapTool(server, state);
   registerTapTool(server, state);
   registerTypeTool(server, state);
   registerDragTool(server, state);
   registerWaitTool(server, state);
+  registerActionTool(server, state);
+  registerDiagnosticsTool(server, state);
 
   return { server, state };
 }

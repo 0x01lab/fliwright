@@ -5,6 +5,7 @@ import { ToolMockServer, type ToolMockServerOptions } from './ToolMockServer.js'
 export class MockManager implements MockAdapter {
   /** @internal */ _server = new ToolMockServer();
   private remoteControllerUrl: string | null = process.env.FLIWRIGHT_MOCK_CONTROLLER_URL ?? null;
+  private passthrough = true;
 
   constructor(private sendRequest: SendRequest) {}
 
@@ -35,6 +36,7 @@ export class MockManager implements MockAdapter {
         method: 'POST',
         body: { path, method: response.method, response },
       });
+      await this.syncFlutterRoute(path, response);
       return;
     }
     this._server.route(path, response);
@@ -45,6 +47,10 @@ export class MockManager implements MockAdapter {
       await requestJson(`${this.remoteControllerUrl}/routes`, {
         method: 'DELETE',
         body: { path, method },
+      });
+      await this.sendRequest('ext.fliwright.mock.removeRoute', {
+        path,
+        ...(method ? { method } : {}),
       });
       return;
     }
@@ -57,16 +63,21 @@ export class MockManager implements MockAdapter {
         method: 'DELETE',
         body: {},
       });
+      await this.sendRequest('ext.fliwright.mock.clearRoutes');
       return;
     }
     this._server.clear();
   }
 
   async setPassthrough(enabled: boolean): Promise<void> {
+    this.passthrough = enabled;
     if (this.remoteControllerUrl) {
       await requestJson(`${this.remoteControllerUrl}/passthrough`, {
         method: 'POST',
         body: { enabled },
+      });
+      await this.sendRequest('ext.fliwright.mock.setPassthrough', {
+        enabled: String(enabled),
       });
       return;
     }
@@ -155,7 +166,6 @@ export class MockManager implements MockAdapter {
 
   async configureFlutterController(url?: string): Promise<void> {
     const controllerUrl = url ?? this.controllerUrl ?? await this.startServer();
-    this.remoteControllerUrl = controllerUrl;
     const result = await this.sendRequest('ext.fliwright.mock.setController', { url: controllerUrl });
     if (
       result &&
@@ -165,6 +175,28 @@ export class MockManager implements MockAdapter {
     ) {
       throw new Error(`Fliwright mock set controller failed: ${(result as { error: string }).error}`);
     }
+    this.remoteControllerUrl = controllerUrl;
+    await this.sendRequest('ext.fliwright.mock.setPassthrough', {
+      enabled: String(this.passthrough),
+    });
+    for (const route of this._server.listRoutes()) {
+      await this.syncFlutterRoute(route.path, { method: route.method });
+    }
+  }
+
+  private async syncFlutterRoute(path: string, response: MockRouteResponse & { method?: string }): Promise<void> {
+    await this.sendRequest('ext.fliwright.mock.addRoute', {
+      route: JSON.stringify({
+        path,
+        method: response.method,
+        response: {
+          status: response.status,
+          headers: response.headers,
+          body: response.body,
+          delay: response.delay,
+        },
+      }),
+    });
   }
 }
 

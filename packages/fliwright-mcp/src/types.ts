@@ -1,45 +1,8 @@
-export interface RunResult {
-  passed: boolean;
-  totalTests: number;
-  passedTests: number;
-  failedTests: number;
-  duration: number;
-  results: Array<{
-    name: string;
-    passed: boolean;
-    duration: number;
-    error?: string;
-  }>;
-}
+import type { CliFailureEntry, CliRunResult } from '@fliwright/cli/run';
 
-export interface FailureEntry {
-  testName: string;
-  assertion: {
-    matcher: string;
-    expected: string;
-    actual: string;
-    timeout: number;
-  };
-  widgetTree: object;
-  source: {
-    file: string;
-    line: number;
-    snippet: string;
-  };
-  healingSuggestion?: {
-    originalSelector: string;
-    suggestedSelector: string;
-    confidence: number;
-    scores: {
-      position: number;
-      context: number;
-      codeBinding: number;
-      text: number;
-      weighted: number;
-    };
-  };
-  timestamp: string;
-}
+export type RunResult = CliRunResult;
+
+export type FailureEntry = CliFailureEntry;
 
 export interface GetFailureResult {
   failures: FailureEntry[];

@@ -153,6 +153,54 @@ describe('MockManager', () => {
     }
   });
 
+  it('route() syncs remote controller routes to Flutter for local request filtering', async () => {
+    const sendRequest = createMockSendRequest();
+    const mock = new MockManager(sendRequest);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{}'),
+    } as Response);
+
+    try {
+      mock['remoteControllerUrl'] = 'http://127.0.0.1:18080';
+
+      await mock.route('/api/test', {
+        method: 'POST',
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+        body: { ok: true },
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:18080/routes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: '/api/test',
+          method: 'POST',
+          response: {
+            method: 'POST',
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+            body: { ok: true },
+          },
+        }),
+      });
+      expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.addRoute', {
+        route: JSON.stringify({
+          path: '/api/test',
+          method: 'POST',
+          response: {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+            body: { ok: true },
+          },
+        }),
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it('switchRule() targets the requested method for shared endpoint paths', async () => {
     const mock = new MockManager(createMockSendRequest());
     const store = mock['_server'].ruleStore as any;
@@ -206,6 +254,27 @@ describe('MockManager', () => {
 
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.setController', {
       url: 'http://127.0.0.1:18080',
+    });
+  });
+
+  it('configureFlutterController() syncs existing tool-side routes to Flutter', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.setController': { controllerUrl: 'ok' },
+    });
+    const mock = new MockManager(sendRequest);
+    await mock.route('/api/users', { method: 'GET', status: 200, body: [] });
+
+    await mock.configureFlutterController('http://127.0.0.1:18080');
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.setPassthrough', {
+      enabled: 'true',
+    });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.addRoute', {
+      route: JSON.stringify({
+        path: '/api/users',
+        method: 'GET',
+        response: {},
+      }),
     });
   });
 });

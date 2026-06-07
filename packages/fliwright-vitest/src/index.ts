@@ -1,4 +1,11 @@
-import { test as vitestTest } from 'vitest';
+import {
+  afterAll,
+  afterEach as vitestAfterEach,
+  beforeAll,
+  beforeEach as vitestBeforeEach,
+  describe,
+  test as vitestTest,
+} from 'vitest';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { dirname } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -9,7 +16,7 @@ import {
   FliwrightDriver,
   createExpect,
 } from '@fliwright/core';
-import type { FailureContext, HealingReport, Locator, Page } from '@fliwright/core';
+import type { FailureContext, HealingReport, Locator, Page, VMServiceEvent } from '@fliwright/core';
 
 export interface FliwrightConfig {
   vmServiceUrl: string;
@@ -34,27 +41,30 @@ interface FliwrightTestContext {
 
 const testContext = new AsyncLocalStorage<FliwrightTestContext>();
 
+type FliwrightHookContext = {
+  page: Page;
+};
+
+type FliwrightHook = (context: FliwrightHookContext, suite: unknown) => unknown | Promise<unknown>;
+
 export function createFliwrightTest(config: FliwrightConfig) {
-  const fliwrightTest = vitestTest.extend<{ page: Page }>({
+  const fliwrightTest = vitestTest.extend<{ page: Page; driver: FliwrightDriver }>({
+    driver: async ({ task }, use) => {
+      const driver = await getSharedDriver(config);
+      const testName = getTestName(task);
+      await testContext.run({ driver, testName }, async () => {
+        await use(driver);
+      });
+    },
     page: async ({ task }, use) => {
-      if (!config.vmServiceUrl) {
-        throw new Error('No VM Service URL provided. Set FLIWRIGHT_VM_URL or use createFliwrightTest({ vmServiceUrl }).');
-      }
-      if (!sharedDriver) {
-        sharedDriver = new FliwrightDriver();
-        await sharedDriver.connect(config.vmServiceUrl);
-        const mockControllerUrl = process.env.FLIWRIGHT_MOCK_CONTROLLER_URL;
-        if (mockControllerUrl) {
-          await sharedDriver.mock.configureFlutterController(mockControllerUrl);
-        }
-      }
+      const driver = await getSharedDriver(config);
       const testName = getTestName(task);
       try {
-        await testContext.run({ driver: sharedDriver, testName }, async () => {
-          await use(sharedDriver!.page);
+        await testContext.run({ driver, testName }, async () => {
+          await use(driver.page);
         });
       } catch (error) {
-        await writeMcpFailureContext(error, sharedDriver, testName, config.timeout ?? 5000);
+        await writeMcpFailureContext(error, driver, testName, config.timeout ?? 5000, config.screenshot ?? 'file');
         throw error;
       }
     },
@@ -64,8 +74,20 @@ export function createFliwrightTest(config: FliwrightConfig) {
 }
 
 export const test = createFliwrightTest({
-  vmServiceUrl: process.env.FLIWRIGHT_VM_URL ?? '',
+  vmServiceUrl: toWebSocketUrl(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL ?? ''),
+  timeout: parsePositiveInt(process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS) ?? 5000,
+  screenshot: parseScreenshotMode(process.env.FLIWRIGHT_SCREENSHOT_MODE),
 });
+
+export function beforeEach(hook: FliwrightHook, timeout?: number): void {
+  vitestBeforeEach<FliwrightHookContext>(hook, timeout);
+}
+
+export function afterEach(hook: FliwrightHook, timeout?: number): void {
+  vitestAfterEach<FliwrightHookContext>(hook, timeout);
+}
+
+export { afterAll, beforeAll, describe };
 
 export function expect(locator: Locator): Assertion {
   const context = testContext.getStore();
@@ -84,7 +106,12 @@ interface McpFailureEntry {
   testName: string;
   assertion: FailureContext['assertion'];
   widgetTree: object;
+  diagnostics?: VMServiceEvent[];
   source: FailureContext['source'];
+  screenshot?: {
+    mimeType: 'image/png';
+    base64: string;
+  };
   healingSuggestion?: McpHealingSuggestion;
   timestamp: string;
 }
@@ -101,11 +128,12 @@ async function writeMcpFailureContext(
   driver: FliwrightDriver,
   testName: string,
   timeout: number,
+  screenshotMode: 'file' | 'base64' | 'off',
 ): Promise<void> {
   const outputPath = process.env.FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH;
   if (!outputPath) return;
 
-  const failure = await collectFailureEntry(error, driver, testName, timeout);
+  const failure = await collectFailureEntry(error, driver, testName, timeout, screenshotMode);
   await appendFailureEntry(outputPath, failure);
 }
 
@@ -114,6 +142,7 @@ async function collectFailureEntry(
   driver: FliwrightDriver,
   testName: string,
   timeout: number,
+  screenshotMode: 'file' | 'base64' | 'off',
 ): Promise<McpFailureEntry> {
   if (error instanceof AssertionError) {
     const collector = new FailureCollector((method, params) => driver.sendRequest(method, params));
@@ -122,13 +151,19 @@ async function collectFailureEntry(
       testName,
       assertion: context.assertion,
       widgetTree: context.widgetTree,
+      diagnostics: collectDiagnostics(driver),
       source: context.source,
+      screenshot: serializeScreenshot(context.screenshot, screenshotMode),
       healingSuggestion: latestHealingSuggestion(driver, testName),
       timestamp: context.timestamp,
     };
   }
 
   const message = error instanceof Error ? error.message : String(error);
+  const [screenshot, widgetTree] = await Promise.all([
+    takeScreenshot(driver, screenshotMode),
+    collectWidgetTree(driver),
+  ]);
   return {
     testName,
     assertion: {
@@ -137,15 +172,110 @@ async function collectFailureEntry(
       actual: message,
       timeout,
     },
-    widgetTree: {},
+    widgetTree,
+    diagnostics: collectDiagnostics(driver),
     source: {
       file: '<unknown>',
       line: 0,
       snippet: message,
     },
+    screenshot,
     healingSuggestion: latestHealingSuggestion(driver, testName),
     timestamp: new Date().toISOString(),
   };
+}
+
+async function getSharedDriver(config: FliwrightConfig): Promise<FliwrightDriver> {
+  const vmServiceUrl = toWebSocketUrl(config.vmServiceUrl);
+  if (!vmServiceUrl) {
+    throw new Error(
+      'No VM Service URL provided. Set FLIWRIGHT_VM_URL or FLIWRIGHT_VM_SERVICE_URL, or use createFliwrightTest({ vmServiceUrl }).',
+    );
+  }
+  if (!sharedDriver) {
+    sharedDriver = new FliwrightDriver();
+    await sharedDriver.connect(vmServiceUrl);
+    await listenToDiagnostics(sharedDriver);
+    const mockControllerUrl = process.env.FLIWRIGHT_MOCK_CONTROLLER_URL;
+    if (mockControllerUrl) {
+      await sharedDriver.mock.configureFlutterController(mockControllerUrl);
+    }
+  }
+  return sharedDriver;
+}
+
+async function listenToDiagnostics(driver: FliwrightDriver): Promise<void> {
+  try {
+    await driver.listenToDiagnostics();
+  } catch {
+    // Diagnostics are helpful for AI reports but should not prevent tests from running.
+  }
+}
+
+function serializeScreenshot(
+  screenshot: FailureContext['screenshot'],
+  screenshotMode: 'file' | 'base64' | 'off',
+): McpFailureEntry['screenshot'] | undefined {
+  if (!screenshot || screenshotMode === 'off') return undefined;
+  return {
+    mimeType: 'image/png',
+    base64: screenshot.toString('base64'),
+  };
+}
+
+async function takeScreenshot(
+  driver: FliwrightDriver,
+  screenshotMode: 'file' | 'base64' | 'off',
+): Promise<McpFailureEntry['screenshot'] | undefined> {
+  if (screenshotMode === 'off') return undefined;
+  try {
+    return {
+      mimeType: 'image/png',
+      base64: (await driver.page.screenshot()).toString('base64'),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function collectWidgetTree(driver: FliwrightDriver): Promise<object> {
+  try {
+    return await driver.sendRequest('ext.fliwright.snapshot', {}) as object;
+  } catch {
+    try {
+      return await driver.sendRequest('ext.fliwright.inspect', { selector: '' }) as object;
+    } catch {
+      return { error: 'Failed to collect widget tree' };
+    }
+  }
+}
+
+function collectDiagnostics(driver: FliwrightDriver): VMServiceEvent[] | undefined {
+  try {
+    const events = driver.getDiagnostics({ limit: 50 });
+    return events.length > 0 ? events : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseScreenshotMode(value: string | undefined): 'file' | 'base64' | 'off' {
+  if (value === 'base64' || value === 'off') return value;
+  return 'file';
+}
+
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function toWebSocketUrl(url: string): string {
+  if (!url) return '';
+  const converted = url
+    .replace('http://', 'ws://')
+    .replace('https://', 'wss://');
+  return converted.endsWith('/ws') ? converted : converted.replace(/\/?$/, '/ws');
 }
 
 function latestHealingSuggestion(

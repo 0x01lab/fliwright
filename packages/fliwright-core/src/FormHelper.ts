@@ -78,14 +78,7 @@ export class FormHelper {
     const fields = await this.extractFields(options?.scope);
     const { inferrer, generator, registry } = this.buildPipeline(options);
     const semanticTypes = inferrer.infer(fields);
-    const matchingIds = new Set(
-      fields
-        .filter((field) => {
-          const candidates = this.fieldSelectionCandidates(field);
-          return fieldHints.some((hint) => candidates.some((candidate) => candidate.includes(hint)));
-        })
-        .map((f) => f.id),
-    );
+    const matchingIds = this.resolveFieldHintMatches(fields, fieldHints);
 
     const result: FormFillResult = { filled: 0, skipped: 0, errors: [], fields: [] };
     for (const field of fields) {
@@ -246,6 +239,22 @@ export class FormHelper {
     ].filter((value): value is string => typeof value === 'string' && value.length > 0);
   }
 
+  private resolveFieldHintMatches(fields: FormFieldMeta[], fieldHints: string[]): Set<string> {
+    const matchingIds = new Set<string>();
+    for (const hint of fieldHints) {
+      const exactMatches = fields.filter((field) =>
+        this.fieldSelectionCandidates(field).some((candidate) => candidate === hint),
+      );
+      const selectedFields = exactMatches.length > 0
+        ? exactMatches
+        : fields.filter((field) =>
+            this.fieldSelectionCandidates(field).some((candidate) => candidate.includes(hint)),
+          );
+      for (const field of selectedFields) matchingIds.add(field.id);
+    }
+    return matchingIds;
+  }
+
   private generateFieldValue(
     field: FormFieldMeta,
     semanticType: SemanticType,
@@ -286,6 +295,17 @@ export class FormHelper {
       const fallbackSelectorText = new Locator(fallbackSelector, this.sendRequest).selectorString;
 
       if (primarySelectorText === fallbackSelectorText) {
+        if (this.isTextInputField(field)) {
+          try {
+            await this.applyLegacyTextInput(field, generatedValue);
+            return;
+          } catch (legacyError) {
+            const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError);
+            throw new Error(
+              `Fill failed. primary=${primarySelectorText}: ${primaryMessage}; legacyType=${field.selector}: ${legacyMessage}`,
+            );
+          }
+        }
         throw primaryError;
       }
 
@@ -293,6 +313,18 @@ export class FormHelper {
         await this.applyFieldValue(field, fallbackSelector, generatedValue);
       } catch (fallbackError) {
         const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        if (this.isTextInputField(field)) {
+          try {
+            await this.applyLegacyTextInput(field, generatedValue);
+            return;
+          } catch (legacyError) {
+            const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError);
+            throw new Error(
+              `Fill failed. primary=${primarySelectorText}: ${primaryMessage}; fallback=${fallbackSelectorText}: ${fallbackMessage}; legacyType=${field.selector}: ${legacyMessage}`,
+            );
+          }
+        }
+
         throw new Error(
           `Fill failed. primary=${primarySelectorText}: ${primaryMessage}; fallback=${fallbackSelectorText}: ${fallbackMessage}`,
         );
@@ -414,6 +446,25 @@ export class FormHelper {
 
   private normalizeOptionValue(value: unknown): string {
     return String(value ?? '').trim().toLowerCase();
+  }
+
+  private async applyLegacyTextInput(
+    field: FormFieldMeta,
+    generatedValue: string,
+  ): Promise<void> {
+    const result = await this.sendRequest('ext.fliwright.type', {
+      selector: field.selector,
+      text: generatedValue,
+      replaceAll: 'true',
+    }) as { success?: boolean; error?: string };
+
+    if (result.success !== true) {
+      throw new Error(result.error ?? 'ext.fliwright.type did not report success');
+    }
+  }
+
+  private isTextInputField(field: FormFieldMeta): boolean {
+    return !field.controlType || field.controlType === 'textInput';
   }
 
   private delay(ms: number): Promise<void> {

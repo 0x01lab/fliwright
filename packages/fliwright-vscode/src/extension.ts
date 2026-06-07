@@ -12,6 +12,7 @@ import { VitestRunner } from './runner/VitestRunner.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
+import { MockRuleSelectionStore } from './sandbox/MockRuleSelectionStore.js';
 import { formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js';
 import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
@@ -39,6 +40,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   setConnectorDebugLog((message) => output.appendLine(message));
 
   const mockService = new MockConfigService();
+  const mockSelectionStore = new MockRuleSelectionStore(context.workspaceState);
   const formService = new FormRuleService();
   const session = new FliwrightSession();
   const sandboxService = new SandboxService();
@@ -275,6 +277,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (!node || node.kind !== 'rule') throw new Error('Select a mock rule to apply.');
         output.appendLine(`Applying mock ${formatMockRuleDebug(node)}`);
         const applied = await sandboxService.applyRule(session.connectedDriver, node);
+        await mockSelectionStore.saveAppliedRule(applied);
         mockTree.setAppliedRules(sandboxService.getAppliedRules());
         output.appendLine(`Applied mock ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
         await appendMockControllerDebug();
@@ -291,6 +294,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           vscode.window.showWarningMessage(`Mock rule is not active: ${node.method} ${node.endpoint} -> ${node.rule.name}`);
           return;
         }
+        await mockSelectionStore.removeRule(node);
         output.appendLine(`Stopped mock ${node.method} ${node.endpoint} -> ${node.rule.name}`);
         await appendMockControllerDebug();
         vscode.window.showInformationMessage(`Stopped ${node.method} ${node.endpoint} -> ${node.rule.name}`);
@@ -317,6 +321,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           }
         }
         const result = await sandboxService.applyDefaultMocks(session.connectedDriver, discovery);
+        await mockSelectionStore.clear();
         mockTree.setAppliedRules(sandboxService.getAppliedRules());
         output.appendLine(`Applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);
         await appendMockControllerDebug();
@@ -326,6 +331,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.stopSandbox', async () => {
       await runCommand('Stop All Mock Routes', async () => {
         const count = await sandboxService.clear(session.connectedDriver);
+        await mockSelectionStore.clear();
         mockTree.setAppliedRules([]);
         output.appendLine(`Stopped all mock routes (${count} tracked route(s)).`);
         vscode.window.showInformationMessage('Stopped all mock routes.');
@@ -685,7 +691,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   async function configureMocksAfterConnect(): Promise<void> {
     const config = loadConfig();
-    if (!config.autoStartMockController && !config.autoApplyDefaultMocksOnConnect) return;
+    if (
+      !config.autoStartMockController &&
+      !config.autoApplyDefaultMocksOnConnect &&
+      !config.restoreSelectedMocksOnConnect
+    ) return;
 
     if (config.autoStartMockController) {
       const url = await sandboxService.ensureController(session.connectedDriver);
@@ -701,6 +711,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       output.appendLine(`Auto-applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);
       await appendMockControllerDebug();
     }
+
+    if (config.restoreSelectedMocksOnConnect) {
+      await restoreSelectedMocksAfterConnect();
+    }
+  }
+
+  async function restoreSelectedMocksAfterConnect(): Promise<void> {
+    const selections = mockSelectionStore.getSelections();
+    if (selections.length === 0) return;
+
+    if (!mockTree.currentResult) await mockTree.refresh();
+    const discovery = mockTree.currentResult;
+    if (!discovery) return;
+
+    let restored = 0;
+    let skipped = 0;
+    for (const resolved of mockSelectionStore.resolveSelections(discovery)) {
+      if (!resolved.entry) {
+        skipped++;
+        output.appendLine(
+          `Skipped restoring selected mock ${resolved.selection.method} ${resolved.selection.endpoint} -> ${resolved.selection.ruleName}: ${resolved.reason ?? 'unavailable'}`,
+        );
+        continue;
+      }
+
+      const applied = await sandboxService.applyRule(session.connectedDriver, resolved.entry);
+      await mockSelectionStore.saveAppliedRule(applied);
+      restored++;
+      output.appendLine(`Restored selected mock ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
+    }
+
+    mockTree.setAppliedRules(sandboxService.getAppliedRules());
+    output.appendLine(`Restored ${restored} selected mock route(s), skipped ${skipped}.`);
+    if (restored > 0) await appendMockControllerDebug();
   }
 
   async function appendMockControllerDebug(): Promise<void> {

@@ -474,6 +474,11 @@
           "default": true,
           "description": "Automatically apply default API mocks after connecting to a Flutter VM Service."
         },
+        "fliwright.restoreSelectedMocksOnConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Restore previously selected API mock rules after connecting to a Flutter VM Service. Restored selections override default mocks for the same endpoint."
+        },
         "fliwright.vmServiceUrl": {
           "type": [
             "string",
@@ -553,6 +558,7 @@
     }
   },
   "devDependencies": {
+    "@fliwright/cli": "workspace:*",
     "@fliwright/core": "workspace:*",
     "@fliwright/plugin-riverpod": "workspace:*",
     "@types/node": "^20.14.0",

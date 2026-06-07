@@ -11,4 +11,6 @@ export 'src/extensions/recording.dart';
 export 'src/extensions/riverpod.dart';
 export 'src/extensions/router_navigate.dart';
 export 'src/extensions/screenshot.dart';
+export 'src/extensions/snap.dart';
 export 'src/extensions/snapshot.dart';
+export 'src/ref_registry.dart';

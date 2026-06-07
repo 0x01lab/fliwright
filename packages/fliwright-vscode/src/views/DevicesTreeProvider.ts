@@ -37,10 +37,9 @@ export class DevicesTreeProvider implements vscode.TreeDataProvider<DeviceTreeNo
   }
 
   getChildren(element?: DeviceTreeNode): DeviceTreeNode[] {
-    if (element) return [];
-    const nodes: DeviceTreeNode[] = [{ kind: 'deviceStatus', state: this.state }];
-    if (this.state.status === 'connected' || this.state.status === 'recording' || this.state.status === 'running') {
-      nodes.push(
+    if (!element) return [{ kind: 'deviceStatus', state: this.state }];
+    if (element.kind === 'deviceStatus' && isActiveConnectionState(element.state)) {
+      return [
         {
           kind: 'deviceCapability',
           label: 'Mock APIs',
@@ -53,14 +52,14 @@ export class DevicesTreeProvider implements vscode.TreeDataProvider<DeviceTreeNo
           description: 'runtime commands available',
           available: true,
         },
-      );
+      ];
     }
-    return nodes;
+    return [];
   }
 
   private statusItem(state: DeviceConnectionState): vscode.TreeItem {
     const label = statusLabel(state);
-    const item = new vscode.TreeItem(label, state.status === 'connected' || state.status === 'recording' || state.status === 'running'
+    const item = new vscode.TreeItem(label, isActiveConnectionState(state)
       ? vscode.TreeItemCollapsibleState.Expanded
       : vscode.TreeItemCollapsibleState.None);
     item.description = statusDescription(state);
@@ -113,4 +112,8 @@ function statusIcon(state: DeviceConnectionState): string {
   if (state.status === 'connecting') return 'sync~spin';
   if (state.status === 'error') return 'error';
   return 'circle-outline';
+}
+
+function isActiveConnectionState(state: DeviceConnectionState): boolean {
+  return state.status === 'connected' || state.status === 'recording' || state.status === 'running';
 }

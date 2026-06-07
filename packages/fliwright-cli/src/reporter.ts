@@ -7,6 +7,53 @@ export interface CliTestResult {
   error?: string;
 }
 
+export interface CliFailureEntry {
+  testName: string;
+  assertion: {
+    matcher: string;
+    expected: string;
+    actual: string;
+    timeout: number;
+  };
+  widgetTree: object;
+  diagnostics?: Array<{
+    kind: string;
+    timestamp: number;
+    data: unknown;
+    streamId?: string;
+  }>;
+  source: {
+    file: string;
+    line: number;
+    snippet: string;
+  };
+  screenshot?: {
+    mimeType: 'image/png';
+    base64?: string;
+    path?: string;
+  };
+  healingSuggestion?: {
+    originalSelector: string;
+    suggestedSelector: string;
+    confidence: number;
+    scores: {
+      position: number;
+      context: number;
+      codeBinding: number;
+      text: number;
+      weighted: number;
+    };
+  };
+  timestamp: string;
+}
+
+export interface CliRunArtifacts {
+  runId: string;
+  outputDir: string;
+  reportPath?: string;
+  screenshots: string[];
+}
+
 export interface CliRunResult {
   passed: boolean;
   totalTests: number;
@@ -14,6 +61,9 @@ export interface CliRunResult {
   failedTests: number;
   duration: number;
   results: CliTestResult[];
+  failures?: CliFailureEntry[];
+  artifacts?: CliRunArtifacts;
+  reproduceCommand?: string;
 }
 
 export function formatPretty(result: CliRunResult): string {
@@ -35,6 +85,12 @@ export function formatPretty(result: CliRunResult): string {
   lines.push('');
   const summary = `Results: ${chalk.green(`${result.passedTests} passed`)}, ${chalk.red(`${result.failedTests} failed`)} (${result.duration}ms)`;
   lines.push(summary);
+  if (result.artifacts?.reportPath) {
+    lines.push(chalk.gray(`Report: ${result.artifacts.reportPath}`));
+  }
+  if (result.artifacts?.screenshots.length) {
+    lines.push(chalk.gray(`Screenshots: ${result.artifacts.screenshots.length}`));
+  }
 
   return lines.join('\n');
 }

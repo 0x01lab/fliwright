@@ -1,0 +1,130 @@
+<h2>方案 A 详细布局：时间轴式</h2>
+<p class="subtitle">双击 .test.ts 文件 → 编辑区打开可视化编辑器 Tab</p>
+
+<div class="mockup">
+  <div class="mockup-header">VS Code 编辑区 — Fliwright Test Editor</div>
+  <div class="mockup-body" style="display: flex; height: 520px; font-size: 13px;">
+    <!-- 左侧：工具栏 + 步骤时间轴 -->
+    <div style="width: 380px; border-right: 1px solid var(--vscode-panel-border); display: flex; flex-direction: column;">
+      <!-- 顶部工具栏 -->
+      <div style="padding: 8px 12px; border-bottom: 1px solid var(--vscode-panel-border); display: flex; gap: 6px; align-items: center;">
+        <button class="mock-button" style="font-size: 11px; padding: 2px 8px;">▶ Run</button>
+        <button class="mock-button" style="font-size: 11px; padding: 2px 8px;">⏺ Record</button>
+        <button class="mock-button" style="font-size: 11px; padding: 2px 8px;">🐛 Debug Last Run</button>
+        <span style="flex: 1;"></span>
+        <span style="color: var(--vscode-descriptionForeground); font-size: 11px;">12 steps · 2m 15s</span>
+      </div>
+
+      <!-- 步骤列表（可滚动） -->
+      <div style="flex: 1; overflow-y: auto; padding: 8px;">
+        <!-- 语义步骤 1（折叠态） -->
+        <div style="margin-bottom: 6px; border-radius: 6px; border: 1px solid var(--vscode-panel-border); overflow: hidden;">
+          <div style="padding: 10px 12px; display: flex; align-items: center; gap: 10px; background: var(--vscode-list-hoverBackground);">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: #4CAF50; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">✓</div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 600;">填写登录表单</div>
+              <div style="color: var(--vscode-descriptionForeground); font-size: 11px;">3 子操作 · 0:02.3</div>
+            </div>
+            <span style="color: var(--vscode-descriptionForeground); font-size: 10px;">▶</span>
+          </div>
+        </div>
+
+        <!-- 语义步骤 2（展开态） -->
+        <div style="margin-bottom: 6px; border-radius: 6px; border: 2px solid var(--vscode-focusBorder); overflow: hidden;">
+          <div style="padding: 10px 12px; display: flex; align-items: center; gap: 10px; background: var(--vscode-editor-selectionBackground);">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: #2196F3; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">2</div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 600;">浏览商品列表</div>
+              <div style="color: var(--vscode-descriptionForeground); font-size: 11px;">5 子操作 · 0:08.1</div>
+            </div>
+            <span style="color: var(--vscode-descriptionForeground); font-size: 10px;">▼</span>
+          </div>
+          <!-- 子步骤 -->
+          <div style="padding: 4px 12px 8px 50px; border-top: 1px dashed var(--vscode-panel-border);">
+            <div style="padding: 4px 0; display: flex; align-items: center; gap: 8px; font-size: 12px;">
+              <span style="color: #4CAF50;">●</span>
+              <code style="background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 3px; font-size: 11px;">scroll</code>
+              <span style="color: var(--vscode-descriptionForeground);">↓ 300px</span>
+            </div>
+            <div style="padding: 4px 0; display: flex; align-items: center; gap: 8px; font-size: 12px;">
+              <span style="color: #4CAF50;">●</span>
+              <code style="background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 3px; font-size: 11px;">tap</code>
+              <span style="color: var(--vscode-descriptionForeground);">text="商品卡片"</span>
+            </div>
+            <div style="padding: 4px 0; display: flex; align-items: center; gap: 8px; font-size: 12px;">
+              <span style="color: #FF9800;">●</span>
+              <code style="background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 3px; font-size: 11px;">assert</code>
+              <span style="color: var(--vscode-descriptionForeground);">toBeVisible "商品详情"</span>
+              <span style="color: #FF9800; font-size: 10px;">⚠ slow 1.2s</span>
+            </div>
+            <div style="padding: 4px 0; display: flex; align-items: center; gap: 8px; font-size: 12px;">
+              <span style="color: #4CAF50;">●</span>
+              <code style="background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 3px; font-size: 11px;">scroll</code>
+              <span style="color: var(--vscode-descriptionForeground);">↓ 500px</span>
+            </div>
+            <div style="padding: 4px 0; display: flex; align-items: center; gap: 8px; font-size: 12px;">
+              <span style="color: #4CAF50;">●</span>
+              <code style="background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 3px; font-size: 11px;">tap</code>
+              <span style="color: var(--vscode-descriptionForeground);">text="加入购物车"</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 语义步骤 3（失败态） -->
+        <div style="margin-bottom: 6px; border-radius: 6px; border: 1px solid #f44336; overflow: hidden;">
+          <div style="padding: 10px 12px; display: flex; align-items: center; gap: 10px; background: rgba(244,67,54,0.08);">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: #f44336; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">✗</div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 600; color: #f44336;">确认支付</div>
+              <div style="color: var(--vscode-descriptionForeground); font-size: 11px;">2 子操作 · FAILED</div>
+            </div>
+            <span style="color: var(--vscode-descriptionForeground); font-size: 10px;">▶</span>
+          </div>
+        </div>
+
+        <!-- 语义步骤 4 -->
+        <div style="margin-bottom: 6px; border-radius: 6px; border: 1px solid var(--vscode-panel-border); overflow: hidden;">
+          <div style="padding: 10px 12px; display: flex; align-items: center; gap: 10px;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--vscode-descriptionForeground); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">4</div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 600;">返回首页</div>
+              <div style="color: var(--vscode-descriptionForeground); font-size: 11px;">2 子操作 · 0:01.5</div>
+            </div>
+            <span style="color: var(--vscode-descriptionForeground); font-size: 10px;">▶</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧：截图 + 详情 -->
+    <div style="flex: 1; display: flex; flex-direction: column;">
+      <!-- 截图区 -->
+      <div style="flex: 1; display: flex; align-items: center; justify-content: center; background: var(--vscode-editor-background); padding: 16px;">
+        <div style="width: 220px; height: 400px; background: var(--vscode-textBlockQuote-background); border-radius: 12px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--vscode-panel-border);">
+          <div style="text-align: center; color: var(--vscode-descriptionForeground);">
+            <div style="font-size: 32px; margin-bottom: 8px;">📱</div>
+            <div style="font-size: 12px;">Flutter App 截图</div>
+            <div style="font-size: 11px; margin-top: 4px;">步骤 2: 浏览商品列表</div>
+            <div style="font-size: 10px; margin-top: 2px;">tap "加入购物车" 子步骤高亮</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部详情面板（tab 切换） -->
+      <div style="height: 140px; border-top: 1px solid var(--vscode-panel-border); display: flex; flex-direction: column;">
+        <div style="display: flex; border-bottom: 1px solid var(--vscode-panel-border); padding: 0 12px;">
+          <div style="padding: 6px 12px; font-size: 12px; border-bottom: 2px solid var(--vscode-focusBorder); font-weight: 600;">Code</div>
+          <div style="padding: 6px 12px; font-size: 12px; color: var(--vscode-descriptionForeground);">Network</div>
+          <div style="padding: 6px 12px; font-size: 12px; color: var(--vscode-descriptionForeground);">Assertions</div>
+          <div style="padding: 6px 12px; font-size: 12px; color: var(--vscode-descriptionForeground);">Healing</div>
+        </div>
+        <div style="flex: 1; padding: 8px 12px; font-family: monospace; font-size: 11px; overflow-y: auto;">
+          <div style="color: var(--vscode-descriptionForeground);">// @fliwright-step: {"semantic": "浏览商品列表", "idx": 2}</div>
+          <div><span style="color: #569CD6;">await</span> page.<span style="color: #DCDCAA;">locator</span>({ <span style="color: #9CDCFE;">text</span>: <span style="color: #CE9178;">'商品列表'</span> }).<span style="color: #DCDCAA;">scroll</span>({ <span style="color: #9CDCFE;">dy</span>: <span style="color: #B5CEA8;">300</span> });</div>
+          <div><span style="color: #569CD6;">await</span> page.<span style="color: #DCDCAA;">locator</span>({ <span style="color: #9CDCFE;">text</span>: <span style="color: #CE9178;">'商品卡片'</span> }).<span style="color: #DCDCAA;">tap</span>();</div>
+          <div><span style="color: #569CD6;">await</span> <span style="color: #DCDCAA;">expect</span>(page.<span style="color: #DCDCAA;">locator</span>({ <span style="color: #9CDCFE;">text</span>: <span style="color: #CE9178;">'商品详情'</span> })).<span style="color: #DCDCAA;">toBeVisible</span>();</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

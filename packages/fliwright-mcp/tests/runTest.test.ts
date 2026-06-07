@@ -77,7 +77,7 @@ describe('handleRunTest', () => {
       cwd: '/workspace/app',
     }, state, runner);
 
-    expect(received).toEqual({
+    expect(received).toMatchObject({
       testFile: 'tests/login.test.ts',
       testName: 'login flow',
       vmServiceUrl: 'ws://vm',
@@ -233,6 +233,8 @@ describe('runVitest', () => {
       scores: { position: 0.8, context: 0.9, codeBinding: 0.95, text: 0.99, weighted: 0.91 },
     });
     const sidecarDir = await readFile(join(cwd, 'sidecar-dir.txt'), 'utf8');
-    await expect(stat(sidecarDir)).rejects.toThrow();
+    await expect(stat(sidecarDir)).resolves.toBeDefined();
+    expect(result.artifacts?.reportPath).toBeDefined();
+    await expect(stat(result.artifacts!.reportPath!)).resolves.toBeDefined();
   });
 });

@@ -1,6 +1,8 @@
 import 'dart:developer' as developer;
 import 'dart:io';
 
+import 'mock_server.dart';
+
 /// HTTP interceptor that redirects all plain-HTTP traffic through the mock
 /// server via Dart's [HttpOverrides.findProxyFromEnvironment] mechanism.
 ///
@@ -58,6 +60,10 @@ class FliwrightHttpOverrides extends HttpOverrides {
     }
 
     if (url.scheme == 'http') {
+      if (!MockServerExtension.shouldProxy(url)) {
+        return _previous?.findProxyFromEnvironment(url, environment) ??
+            super.findProxyFromEnvironment(url, environment);
+      }
       _log('Proxying ${url.toString()} to 127.0.0.1:$mockPort');
       return 'PROXY 127.0.0.1:$mockPort';
     }

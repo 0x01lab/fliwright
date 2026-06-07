@@ -41,7 +41,12 @@ describe('RecorderService', () => {
       expect(stopped.testName).toBe('checkout flow');
       expect(stopped.generatedCode).toContain('recorded');
       expect(changes).toEqual(['recording:0', 'recording:1', 'preview:1']);
-      expect(recorder.stop).toHaveBeenCalledWith({ lang: 'ts', testName: 'checkout flow' });
+      expect(recorder.stop).toHaveBeenCalledWith(expect.objectContaining({
+        lang: 'ts',
+        testName: 'checkout flow',
+        resetToHomeBeforeEach: true,
+        homeRoute: '/',
+      }));
     });
 
     it('saves generated code to an explicit file', async () => {

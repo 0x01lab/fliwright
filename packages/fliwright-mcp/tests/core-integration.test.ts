@@ -64,7 +64,8 @@ describe('MCP + Core Integration', () => {
     const result = await recordPromise;
 
     expect(result.testName).toBe('test recording');
-    expect(result.testCode).toContain("import { test, expect } from '@fliwright/vitest'");
+    expect(result.testCode).toContain("import { test, expect, beforeEach } from '@fliwright/vitest'");
+    expect(result.testCode).toContain("await page.navigate('/')");
     expect(result.testCode).toContain('test recording');
     expect(result.operationCount).toBeGreaterThanOrEqual(0);
 
@@ -189,7 +190,8 @@ describe('MCP + Core Integration', () => {
       testName: 'login page',
     });
 
-    expect(result.testCode).toContain("import { test, expect } from '@fliwright/vitest'");
+    expect(result.testCode).toContain("import { test, expect, beforeEach } from '@fliwright/vitest'");
+    expect(result.testCode).toContain("await page.navigate('/')");
     expect(result.testCode).toContain("test('login page'");
     expect(result.testCode).toContain('page.locator(');
     expect(result.testCode).toContain('.click()');

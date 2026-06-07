@@ -7,7 +7,7 @@ export interface FliwrightCliConfig {
   timeout: number;
   screenshot: 'file' | 'base64' | 'off';
   testDir: string;
-  reporter: 'pretty' | 'json' | 'junit';
+  reporter: 'pretty' | 'json' | 'junit' | 'ai-json';
 }
 
 const DEFAULTS: FliwrightCliConfig = {

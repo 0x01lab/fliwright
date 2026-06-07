@@ -378,6 +378,48 @@ void main() {
       expect(calls.last['path'], '/api/override');
     });
 
+    test('HttpOverrides leaves unmocked app HttpClient requests direct',
+        () async {
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'enabled-route',
+            'method': 'GET',
+            'path': '/api/enabled',
+            'response': {},
+          }),
+        },
+      );
+
+      final target = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      target.listen((request) async {
+        request.response
+          ..statusCode = 204
+          ..headers.contentType = ContentType.json;
+        await request.response.close();
+      });
+
+      final client = HttpClient();
+      try {
+        final request = await client.getUrl(
+          Uri.parse('http://127.0.0.1:${target.port}/api/live'),
+        );
+        final response = await request.close();
+        expect(response.statusCode, 204);
+      } finally {
+        client.close();
+        await target.close(force: true);
+      }
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.getCalls',
+        {},
+      );
+      final calls = result['calls'] as List<dynamic>;
+      expect(calls, isEmpty);
+    });
+
     test('re-registering the same method and path replaces previous route',
         () async {
       final port = MockServerExtension.serverPort;
@@ -578,7 +620,7 @@ void main() {
       expect(response.data?['preserved'], isTrue);
     });
 
-    test('forwards Dio requests to tool mock controller', () async {
+    test('forwards mocked Dio requests to tool mock controller', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final requests = <Map<String, dynamic>>[];
       server.listen((request) async {
@@ -598,6 +640,17 @@ void main() {
 
       try {
         await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.addRoute',
+          {
+            'route': jsonEncode({
+              'id': 'tool-route',
+              'method': 'GET',
+              'path': '/api/tool',
+              'response': {},
+            }),
+          },
+        );
+        await FliwrightBridge.registry.invoke(
           'ext.fliwright.mock.setController',
           {'url': 'http://127.0.0.1:${server.port}'},
         );
@@ -614,6 +667,59 @@ void main() {
         expect(requests.single['path'], '/api/tool');
       } finally {
         await server.close(force: true);
+      }
+    });
+
+    test('does not forward unmocked Dio requests to tool mock controller',
+        () async {
+      final controller = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final controllerRequests = <Map<String, dynamic>>[];
+      controller.listen((request) async {
+        final body = await utf8.decoder.bind(request).join();
+        controllerRequests.add(jsonDecode(body) as Map<String, dynamic>);
+        request.response
+          ..statusCode = 500
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({'matched': false}));
+        await request.response.close();
+      });
+
+      final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      upstream.listen((request) async {
+        request.response
+          ..statusCode = 204
+          ..headers.contentType = ContentType.json;
+        await request.response.close();
+      });
+
+      try {
+        await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.addRoute',
+          {
+            'route': jsonEncode({
+              'id': 'only-enabled-route',
+              'method': 'GET',
+              'path': '/api/enabled',
+              'response': {},
+            }),
+          },
+        );
+        await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.setController',
+          {'url': 'http://127.0.0.1:${controller.port}'},
+        );
+
+        final dio = Dio()..interceptors.add(interceptor);
+        final response = await dio.get<void>(
+          'http://127.0.0.1:${upstream.port}/api/live',
+        );
+
+        expect(response.statusCode, 204);
+        expect(controllerRequests, isEmpty);
+        expect(interceptor.callLog, isEmpty);
+      } finally {
+        await controller.close(force: true);
+        await upstream.close(force: true);
       }
     });
   });

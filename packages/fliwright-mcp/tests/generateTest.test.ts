@@ -57,7 +57,22 @@ describe('handleGenerateTest', () => {
 
   it('generates import statement', () => {
     const result = handleGenerateTest({ source: "Text('test')" });
-    expect(result.testCode).toContain("import { test, expect } from '@fliwright/vitest'");
+    expect(result.testCode).toContain("import { test, expect, beforeEach } from '@fliwright/vitest'");
+  });
+
+  it('generates a beforeEach home reset hook by default', () => {
+    const result = handleGenerateTest({ source: "Text('test')" });
+    expect(result.testCode).toContain("beforeEach(async ({ page }) => {");
+    expect(result.testCode).toContain("await page.navigate('/')");
+  });
+
+  it('supports custom home route and disabling home reset', () => {
+    const custom = handleGenerateTest({ source: "Text('test')", homeRoute: '/dashboard' });
+    expect(custom.testCode).toContain("await page.navigate('/dashboard')");
+
+    const disabled = handleGenerateTest({ source: "Text('test')", resetToHomeBeforeEach: false });
+    expect(disabled.testCode).toContain("import { test, expect } from '@fliwright/vitest'");
+    expect(disabled.testCode).not.toContain('beforeEach(');
   });
 
   it('handles empty source gracefully', () => {
@@ -78,5 +93,33 @@ describe('handleGenerateTest', () => {
     `;
     const result = handleGenerateTest({ source });
     expect(result.testCode).toContain('toBeVisible');
+  });
+
+  it('generates ref-discovery steps from structured snapshot refs', () => {
+    const result = handleGenerateTest({
+      refs: [
+        { role: 'textbox', label: 'Email', type: 'TextField', textField: true },
+        { role: 'button', label: 'Sign in', type: 'ElevatedButton' },
+        { role: 'text', label: 'Dashboard' },
+      ],
+      testName: 'snapshot login',
+    });
+
+    expect(result.testCode).toContain("const fieldEmail = await page.findRef({ role: 'textbox', text: 'Email', type: 'TextField' })");
+    expect(result.testCode).toContain("await fieldEmail.fill('test_input')");
+    expect(result.testCode).toContain("const buttonSignIn = await page.findRef({ role: 'button', text: 'Sign in', type: 'ElevatedButton' })");
+    expect(result.testCode).toContain('await buttonSignIn.click()');
+    expect(result.testCode).toContain("page.locator({ text: 'Dashboard' })");
+  });
+
+  it('parses agent snapshot text when structured refs are not provided', () => {
+    const result = handleGenerateTest({
+      snapshot: '- textbox "Phone" [ref=e1]\n- button "Continue" [ref=e2]\n',
+      resetToHomeBeforeEach: false,
+    });
+
+    expect(result.testCode).toContain("page.findRef({ role: 'textbox', text: 'Phone' })");
+    expect(result.testCode).toContain("page.findRef({ role: 'button', text: 'Continue' })");
+    expect(result.testCode).not.toContain('ref=e1');
   });
 });

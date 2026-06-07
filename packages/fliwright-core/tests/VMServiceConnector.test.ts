@@ -68,6 +68,18 @@ describe('VMServiceConnector', () => {
     await expect(responsePromise).resolves.toEqual({ widgets: [] });
   });
 
+  it('reloadSources sends the main isolate id to the VM service', async () => {
+    const responsePromise = connector.reloadSources();
+    await resolveMainIsolate(mockWS);
+
+    const sent = JSON.parse(mockWS.sent[1]);
+    expect(sent.method).toBe('reloadSources');
+    expect(sent.params).toEqual({ isolateId: 'isolates/main' });
+
+    mockWS.emit('message', JSON.stringify({ jsonrpc: '2.0', id: sent.id, result: { type: 'Success' } }));
+    await expect(responsePromise).resolves.toEqual({ type: 'Success' });
+  });
+
   it('handles event stream notifications', async () => {
     const onEvent = vi.fn();
     connector.onEvent(onEvent);
@@ -76,6 +88,68 @@ describe('VMServiceConnector', () => {
       params: { streamId: 'Extension', event: { type: 'Extension', extensionKind: 'riverpod_changed', extensionData: { key: 'counter', value: 5 } } },
     }));
     expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ kind: 'riverpod_changed', data: { key: 'counter', value: 5 } }));
+  });
+
+  it('buffers diagnostics with stream ids and supports filters', () => {
+    mockWS.emit('message', JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'streamNotify',
+      params: {
+        streamId: 'Logging',
+        event: {
+          kind: 'Logging',
+          logRecord: { message: 'hello' },
+        },
+      },
+    }));
+    mockWS.emit('message', JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'streamNotify',
+      params: {
+        streamId: 'Isolate',
+        event: {
+          kind: 'UnhandledException',
+          data: { message: 'boom' },
+        },
+      },
+    }));
+
+    expect(connector.getDiagnostics()).toHaveLength(2);
+    expect(connector.getDiagnostics({ streams: ['Logging'] })).toEqual([
+      expect.objectContaining({
+        kind: 'Logging',
+        streamId: 'Logging',
+        data: expect.objectContaining({ logRecord: { message: 'hello' } }),
+      }),
+    ]);
+    expect(connector.getDiagnostics({ kinds: ['UnhandledException'] })).toEqual([
+      expect.objectContaining({
+        kind: 'UnhandledException',
+        streamId: 'Isolate',
+        data: { message: 'boom' },
+      }),
+    ]);
+
+    connector.clearDiagnostics();
+    expect(connector.getDiagnostics()).toEqual([]);
+  });
+
+  it('subscribes to diagnostic streams and ignores already subscribed errors', async () => {
+    const listenPromise = connector.listenToStreams(['Logging', 'Stderr']);
+    const first = JSON.parse(mockWS.sent[0]);
+    expect(first).toMatchObject({ method: 'streamListen', params: { streamId: 'Logging' } });
+    mockWS.emit('message', JSON.stringify({ jsonrpc: '2.0', id: first.id, result: { type: 'Success' } }));
+    await Promise.resolve();
+
+    const second = JSON.parse(mockWS.sent[1]);
+    expect(second).toMatchObject({ method: 'streamListen', params: { streamId: 'Stderr' } });
+    mockWS.emit('message', JSON.stringify({
+      jsonrpc: '2.0',
+      id: second.id,
+      error: { code: -32000, message: 'Stream already subscribed' },
+    }));
+
+    await expect(listenPromise).resolves.toBeUndefined();
   });
 
   it('attaches the mock WS for testing', () => {

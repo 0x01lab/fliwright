@@ -11,6 +11,9 @@ describe('doctorCommand', () => {
     expect(names).toContain('Flutter SDK');
     expect(names).toContain('@fliwright/core');
     expect(names).toContain('fliwright.config.ts');
+    expect(names).toContain('Bridge extensions');
+    expect(names).toContain('Mock server');
+    expect(names).toContain('Riverpod observer');
   });
 
   it('marks Node.js as passing (we are running on it)', async () => {
@@ -25,5 +28,19 @@ describe('doctorCommand', () => {
     const flutterCheck = results.find((r) => r.name === 'Flutter SDK')!;
     expect(typeof flutterCheck.passed).toBe('boolean');
     expect(typeof flutterCheck.message).toBe('string');
+  });
+
+  it('marks runtime bridge checks as skipped when no VM Service URL is available', async () => {
+    const results = await doctorCommand(process.cwd());
+    const runtimeChecks = results.filter((r) =>
+      ['Bridge extensions', 'Mock server', 'Riverpod observer'].includes(r.name),
+    );
+
+    expect(runtimeChecks).toHaveLength(3);
+    for (const check of runtimeChecks) {
+      if (!check.passed) {
+        expect(check.message).toMatch(/skipped|could not connect|VM Service/i);
+      }
+    }
   });
 });

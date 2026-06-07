@@ -1,0 +1,222 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  actionInteraction,
+  diagnosticsInteraction,
+  findInteraction,
+  hotReloadAndSnapInteraction,
+  observeInteraction,
+  snapInteraction,
+  tapInteraction,
+  typeInteraction,
+  waitInteraction,
+  type InteractionDriver,
+} from '../src/capabilities/interaction.js';
+
+const snapshot = {
+  snapshot: '- button "Submit" [ref=e1]\n- textbox "Email" [ref=e2]\n',
+  groupId: 'snapshot-1',
+  refs: [
+    {
+      ref: 'e1',
+      role: 'button',
+      label: 'Submit',
+      type: 'Semantics',
+      key: 'submitButton',
+      enabled: true,
+    },
+    {
+      ref: 'e2',
+      role: 'textbox',
+      label: 'Email',
+      type: 'TextField',
+      enabled: true,
+    },
+  ],
+  count: 2,
+};
+
+function createDriver(): {
+  driver: InteractionDriver;
+  sendRequest: ReturnType<typeof vi.fn>;
+  pageSnapshot: ReturnType<typeof vi.fn>;
+  click: ReturnType<typeof vi.fn>;
+  fill: ReturnType<typeof vi.fn>;
+  dismissModal: ReturnType<typeof vi.fn>;
+  waitForNetworkIdle: ReturnType<typeof vi.fn>;
+} {
+  const sendRequest = vi.fn().mockResolvedValue({ success: true });
+  const pageSnapshot = vi.fn().mockResolvedValue(snapshot);
+  const click = vi.fn().mockResolvedValue(undefined);
+  const fill = vi.fn().mockResolvedValue(undefined);
+  const dismissModal = vi.fn().mockResolvedValue(undefined);
+  const waitForNetworkIdle = vi.fn().mockResolvedValue(undefined);
+
+  return {
+    sendRequest,
+    pageSnapshot,
+    click,
+    fill,
+    dismissModal,
+    waitForNetworkIdle,
+    driver: {
+      sendRequest,
+      reloadSources: vi.fn().mockResolvedValue({ type: 'Success' }),
+      listenToDiagnostics: vi.fn().mockResolvedValue(undefined),
+      getDiagnostics: vi.fn(() => [
+        {
+          kind: 'Flutter.Error',
+          timestamp: 1,
+          streamId: 'Logging',
+          data: { message: 'boom' },
+        },
+      ]),
+      clearDiagnostics: vi.fn(),
+      page: {
+        snapshot: pageSnapshot,
+        screenshot: vi.fn().mockResolvedValue(Buffer.from('png')),
+        waitFor: vi.fn().mockResolvedValue(undefined),
+        dismissModal,
+        waitForNetworkIdle,
+        getByKey: vi.fn(() => ({ click, fill })),
+        getByText: vi.fn(() => ({ click, fill })),
+        getByType: vi.fn(() => ({ click, fill })),
+      },
+    },
+  };
+}
+
+describe('CLI interaction capabilities', () => {
+  it('captures snapshots through the CLI capability layer', async () => {
+    const { driver, pageSnapshot } = createDriver();
+
+    const result = await snapInteraction(driver, { depth: 2 });
+
+    expect(pageSnapshot).toHaveBeenCalledWith({ depth: 2 });
+    expect(result.refs[0].ref).toBe('e1');
+  });
+
+  it('finds and observes snapshot refs', async () => {
+    const { driver } = createDriver();
+
+    await expect(findInteraction(driver, { role: 'button' })).resolves.toEqual({
+      matches: [snapshot.refs[0]],
+      count: 1,
+    });
+
+    const observed = await observeInteraction(driver, {
+      roles: 'textbox',
+      includeDiagnostics: true,
+      intent: 'fill email',
+    });
+    expect(observed.count).toBe(1);
+    expect(observed.candidates[0]).toMatchObject({
+      ref: 'e2',
+      diagnostics: { intent: 'fill email', enabled: true },
+    });
+  });
+
+  it('routes ref interactions through ext.fliwright.action', async () => {
+    const { driver, sendRequest } = createDriver();
+
+    await tapInteraction(driver, { ref: 'e1' });
+    await typeInteraction(driver, { ref: 'e2', value: 'alice', replace: true });
+    await actionInteraction(driver, {
+      action: 'pressKey',
+      ref: 'e2',
+      keyboardKey: 'Backspace',
+    });
+
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.action', {
+      action: 'tap',
+      ref: 'e1',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.action', {
+      action: 'fill',
+      ref: 'e2',
+      text: 'alice',
+      replaceAll: 'true',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(3, 'ext.fliwright.action', {
+      action: 'pressKey',
+      ref: 'e2',
+      key: 'Backspace',
+    });
+  });
+
+  it('routes selector interactions through locators', async () => {
+    const { driver, click, fill } = createDriver();
+
+    await tapInteraction(driver, { text: 'Submit' });
+    await typeInteraction(driver, { key: 'email', value: 'alice' });
+
+    expect(click).toHaveBeenCalled();
+    expect(fill).toHaveBeenCalledWith('alice');
+  });
+
+  it('routes page-level actions through page APIs', async () => {
+    const { driver, dismissModal, waitForNetworkIdle } = createDriver();
+
+    await actionInteraction(driver, { action: 'dismissModal' });
+    await actionInteraction(driver, {
+      action: 'waitForNetworkIdle',
+      quietMs: 250,
+      timeout: 2000,
+    });
+
+    expect(dismissModal).toHaveBeenCalled();
+    expect(waitForNetworkIdle).toHaveBeenCalledWith({
+      quietMs: 250,
+      timeout: 2000,
+    });
+  });
+
+  it('waits for refs and performs hot reload snapshots', async () => {
+    const { driver } = createDriver();
+
+    await expect(waitInteraction(driver, { ref: 'e1', timeout: 100 }))
+      .resolves.toEqual({ found: true });
+
+    const result = await hotReloadAndSnapInteraction(driver, {
+      includeRects: false,
+      pixelRatio: 1,
+    });
+
+    expect(result.reloaded).toBe(true);
+    expect(result.snapshot?.refs).toHaveLength(2);
+    expect(result.screenshot).toBe(Buffer.from('png').toString('base64'));
+    expect(result.exceptions).toEqual([]);
+  });
+
+  it('retrieves diagnostics through the CLI capability layer', async () => {
+    const { driver } = createDriver();
+
+    const result = await diagnosticsInteraction(driver, {
+      listen: true,
+      clear: true,
+      streams: ['Logging'],
+      kinds: ['Flutter.Error'],
+      limit: 5,
+    });
+
+    expect(driver.clearDiagnostics).toHaveBeenCalled();
+    expect(driver.listenToDiagnostics).toHaveBeenCalledWith(['Logging']);
+    expect(driver.getDiagnostics).toHaveBeenCalledWith({
+      limit: 5,
+      kinds: ['Flutter.Error'],
+      streams: ['Logging'],
+    });
+    expect(result).toEqual({
+      listening: true,
+      cleared: true,
+      events: [
+        {
+          kind: 'Flutter.Error',
+          timestamp: 1,
+          streamId: 'Logging',
+          data: { message: 'boom' },
+        },
+      ],
+      count: 1,
+    });
+  });
+});

@@ -6,40 +6,16 @@
  * Prerequisites:
  *   1. cd examples/form_demo && fvm flutter run -d macos --debug
  *   2. Copy the VM Service URL from output
- *   3. FLIWRIGHT_VM_SERVICE_URL="http://127.0.0.1:54321/.../" pnpm --filter @fliwright/e2e-tests test:mock
+ *   3. FLIWRIGHT_VM_URL="http://127.0.0.1:54321/.../" pnpm --filter @fliwright/e2e-tests test:mock
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { FliwrightDriver } from '@fliwright/core';
+import { describe, expect } from 'vitest';
+import { test } from '@fliwright/vitest';
 
-function toWsUrl(httpUrl: string): string {
-  return httpUrl
-    .replace('http://', 'ws://')
-    .replace('https://', 'wss://')
-    .replace(/\/?$/, '/ws');
-}
+const hasVmUrl = Boolean(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL);
+const liveTest = test.skipIf(!hasVmUrl);
 
 describe('Mock API Demo', () => {
-  let driver: FliwrightDriver;
-  const vmServiceUrl = process.env.FLIWRIGHT_VM_SERVICE_URL;
-
-  beforeAll(async () => {
-    if (!vmServiceUrl) {
-      throw new Error(
-        'Set FLIWRIGHT_VM_SERVICE_URL env var.\n' +
-        'Example: FLIWRIGHT_VM_SERVICE_URL="http://127.0.0.1:54321/xxxxxxxxxxxxxx/" pnpm --filter @fliwright/e2e-tests test:mock',
-      );
-    }
-
-    const wsUrl = toWsUrl(vmServiceUrl);
-    driver = new FliwrightDriver();
-    await driver.connect(wsUrl);
-  });
-
-  afterAll(async () => {
-    await driver?.dispose();
-  });
-
-  it('registers a mock route', async () => {
+  liveTest('registers a mock route', async ({ driver, page: _page }) => {
     // 1️⃣ 注册 mock 路由 — 拦截 GET /api/users 返回假数据
     await driver.mock.route('/api/users', {
       method: 'GET',
@@ -55,7 +31,7 @@ describe('Mock API Demo', () => {
     console.log('✅ Mock route registered: GET /api/users → 200');
   });
 
-  it('registers multiple mock routes', async () => {
+  liveTest('registers multiple mock routes', async ({ driver, page: _page }) => {
     // 2️⃣ 注册登录接口 mock
     await driver.mock.route('/api/login', {
       method: 'POST',
@@ -84,7 +60,7 @@ describe('Mock API Demo', () => {
     console.log('✅ Multiple mock routes registered');
   });
 
-  it('lists all registered routes', async () => {
+  liveTest('lists all registered routes', async ({ driver, page: _page }) => {
     // 5️⃣ 查看当前所有已注册的路由
     const routes = await driver.mock.listRoutes();
 
@@ -96,7 +72,7 @@ describe('Mock API Demo', () => {
     expect(routes.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('removes a specific mock route', async () => {
+  liveTest('removes a specific mock route', async ({ driver, page: _page }) => {
     // 6️⃣ 移除单个路由
     await driver.mock.removeRoute('/api/error');
 
@@ -107,14 +83,14 @@ describe('Mock API Demo', () => {
     console.log('✅ Removed /api/error route');
   });
 
-  it('enables passthrough for unmatched requests', async () => {
+  liveTest('enables passthrough for unmatched requests', async ({ driver, page: _page }) => {
     // 7️⃣ 开启 passthrough — 未匹配的请求转发到真实服务器
     await driver.mock.setPassthrough(true);
 
     console.log('✅ Passthrough enabled — unmatched requests go to real server');
   });
 
-  it('clears all mock routes and call logs', async () => {
+  liveTest('clears all mock routes and call logs', async ({ driver, page: _page }) => {
     // 8️⃣ 清空所有路由和调用记录
     await driver.mock.clear();
     await driver.mock.clearCalls();
@@ -125,7 +101,7 @@ describe('Mock API Demo', () => {
     console.log('✅ All routes and call logs cleared');
   });
 
-  it('demonstrates full mock + verify workflow', async () => {
+  liveTest('demonstrates full mock + verify workflow', async ({ driver, page: _page }) => {
     // 清理之前的状态
     await driver.mock.clear();
     await driver.mock.clearCalls();

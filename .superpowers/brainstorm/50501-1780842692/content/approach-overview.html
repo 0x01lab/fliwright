@@ -1,0 +1,29 @@
+<h2>Fliwright 可视化编辑器 — 三种布局方案</h2>
+<p class="subtitle">基于 VS Code Webview Editor Tab，双击测试文件时打开</p>
+
+<div class="section">
+  <h3>方案 A：时间轴式（推荐）</h3>
+  <p>左侧纵向时间轴展示语义步骤，右侧截图预览。类似 Playwright Trace Viewer 的布局。</p>
+  <div class="pros-cons">
+    <div class="pros"><h4>优点</h4><ul><li>直觉强，从上到下就是操作顺序</li><li>截图始终可见，上下文清晰</li><li>展开/折叠子步骤天然适合纵向布局</li></ul></div>
+    <div class="cons"><h4>缺点</h4><ul><li>步骤多时需要滚动</li><li>水平空间利用不如分栏</li></ul></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>方案 B：分栏卡片式</h3>
+  <p>三栏布局：左侧步骤列表 → 中间截图/详情 → 右侧代码。类似 Chrome DevTools + Playwright Inspector 混合体。</p>
+  <div class="pros-cons">
+    <div class="pros"><h4>优点</h4><ul><li>信息密度高，一屏看全</li><li>代码实时联动，方便修改</li><li>VS Code 原生三栏体验</li></ul></div>
+    <div class="cons"><h4>缺点</h4><ul><li>空间紧张，截图小</li><li>复杂度高，实现成本大</li><li>信息过载，审核体验差</li></ul></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>方案 C：幻灯片式</h3>
+  <p>每一步占满整个编辑区，类似 PPT 放映。底部导航条切换步骤，左右切换。</p>
+  <div class="pros-cons">
+    <div class="pros"><h4>优点</h4><ul><li>截图最大，视觉沉浸</li><li>聚焦当前步骤，不分散注意力</li><li>简单直观</li></ul></div>
+    <div class="cons"><h4>缺点</h4><ul><li>无法纵览全局流程</li><li>定位特定步骤需要来回翻</li><li>不适合步骤多的场景</li></ul></div>
+  </div>
+</div>

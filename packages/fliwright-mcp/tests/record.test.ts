@@ -52,6 +52,11 @@ describe('handleRecord', () => {
     expect(result.testCode).toContain('@fliwright/vitest');
     expect(result.testName).toBe('my test');
     expect(result.operationCount).toBe(1);
-    expect(mockRecorder.stop).toHaveBeenCalledWith({ lang: 'ts', testName: 'my test' });
+    expect(mockRecorder.stop).toHaveBeenCalledWith(expect.objectContaining({
+      lang: 'ts',
+      testName: 'my test',
+      resetToHomeBeforeEach: true,
+      homeRoute: '/',
+    }));
   });
 });

@@ -85,6 +85,25 @@ void main() {
       expect(methods, contains('ext.fliwright.ping'));
       expect(methods, contains('ext.fliwright.handshake'));
     });
+
+    test('init is safe to call repeatedly and reports handshake status',
+        () async {
+      await FliwrightBridge.init();
+      final firstMethods = FliwrightBridge.registry.registeredMethods.toSet();
+
+      await FliwrightBridge.init();
+      final secondMethods = FliwrightBridge.registry.registeredMethods.toSet();
+
+      expect(secondMethods, firstMethods);
+      final handshake = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.handshake',
+        {'protocolVersion': '1'},
+      );
+      expect(handshake['status'], 'ok');
+      expect(handshake['compatible'], isTrue);
+      expect(handshake['initialized'], isTrue);
+      expect(handshake['debugMode'], isTrue);
+    });
   });
 
   group('RiverpodExtension', () {

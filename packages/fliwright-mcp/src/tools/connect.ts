@@ -12,6 +12,7 @@ export async function handleConnect(
   params: z.infer<typeof ConnectParamsSchema>,
   state: ServerState,
 ): Promise<{ connected: boolean; message: string }> {
+  const input = ConnectParamsSchema.parse(params);
   // Dispose previous driver if any
   const prev = state.getDriver();
   if (prev) {
@@ -22,21 +23,25 @@ export async function handleConnect(
   const { FliwrightDriver } = await import('@fliwright/core');
 
   // Convert http:// → ws:// for VM Service WebSocket
-  const wsUrl = params.vmServiceUrl
-    .replace('http://', 'ws://')
-    .replace('https://', 'wss://')
-    .replace(/\/?$/, '/ws');
+  const wsUrl = toWebSocketUrl(input.vmServiceUrl);
 
   const driver = new FliwrightDriver();
   await driver.connect(wsUrl);
 
   state.setDriver(driver);
-  state.setVmServiceUrl(params.vmServiceUrl);
+  state.setVmServiceUrl(input.vmServiceUrl);
 
   return {
     connected: true,
-    message: `Connected to Flutter app at ${params.vmServiceUrl}`,
+    message: `Connected to Flutter app at ${input.vmServiceUrl}`,
   };
+}
+
+function toWebSocketUrl(url: string): string {
+  const converted = url
+    .replace('http://', 'ws://')
+    .replace('https://', 'wss://');
+  return converted.endsWith('/ws') ? converted : converted.replace(/\/?$/, '/ws');
 }
 
 export function registerConnectTool(server: McpServer, state: ServerState): void {

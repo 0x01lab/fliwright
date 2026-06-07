@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'extension_registry.dart';
 import 'extensions/dio_mock_extension.dart';
 import 'extensions/form_extract.dart';
@@ -9,9 +11,11 @@ import 'extensions/recording.dart';
 import 'extensions/riverpod.dart';
 import 'extensions/router_navigate.dart';
 import 'extensions/screenshot.dart';
+import 'extensions/snap.dart';
 import 'extensions/scroll_extension.dart';
 import 'extensions/snapshot.dart';
 import 'extensions/type_extension.dart';
+import 'ref_registry.dart';
 
 export 'extension_registry.dart';
 
@@ -34,6 +38,7 @@ class FliwrightBridge {
     await MockServerExtension.reset();
     RiverpodExtension.reset();
     DioMockExtension.reset();
+    RefRegistry.disposeAll();
     FliwrightHttpOverrides.uninstall();
   }
 
@@ -47,6 +52,7 @@ class FliwrightBridge {
     _router = router;
     if (_initialized) return;
     _initialized = true;
+    _warnIfNotDebugMode();
 
     _registerPingAndHandshake();
 
@@ -56,6 +62,7 @@ class FliwrightBridge {
     ScrollExtension.register(_registry);
     SnapshotExtension.register(_registry);
     ScreenshotExtension.register(_registry);
+    SnapExtension.register(_registry);
     RecordingExtension.register(_registry);
     FormExtractExtension.register(_registry);
 
@@ -86,6 +93,7 @@ class FliwrightBridge {
     _router = router;
     if (_initialized) return;
     _initialized = true;
+    _warnIfNotDebugMode();
 
     _registerPingAndHandshake();
 
@@ -95,6 +103,7 @@ class FliwrightBridge {
     ScrollExtension.register(_registry);
     SnapshotExtension.register(_registry);
     ScreenshotExtension.register(_registry);
+    SnapExtension.register(_registry);
     RecordingExtension.register(_registry);
     FormExtractExtension.register(_registry);
 
@@ -117,7 +126,17 @@ class FliwrightBridge {
         'protocolVersion': 1,
         'clientVersion': clientVersion,
         'compatible': clientVersion <= 1,
+        'initialized': _initialized,
+        'debugMode': kDebugMode,
       };
     });
+  }
+
+  static void _warnIfNotDebugMode() {
+    if (kDebugMode) return;
+    debugPrint(
+      '[fliwright] Warning: FliwrightBridge was initialized outside debug mode. '
+      'Guard setup with kDebugMode so release builds can tree-shake it.',
+    );
   }
 }

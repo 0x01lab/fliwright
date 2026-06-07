@@ -28,6 +28,10 @@ class MockRoute {
         this.method!.toUpperCase() != method.toUpperCase()) {
       return false;
     }
+    return matchesPath(path);
+  }
+
+  bool matchesPath(String path) {
     if (pathPattern.endsWith('/*')) {
       // '/api/*' → prefix '/api', matches '/api', '/api/users', but NOT '/apiFoo'
       final prefix = pathPattern.substring(0, pathPattern.length - 2);
@@ -68,6 +72,10 @@ class MockServerExtension {
   static bool _passthrough = false;
 
   static int? get serverPort => _server?.port;
+
+  static bool shouldProxy(Uri uri) {
+    return _routes.any((route) => route.matchesPath(uri.path));
+  }
 
   static void _log(String message) {
     developer.log(message, name: 'fliwright.mock');
@@ -261,38 +269,31 @@ class MockServerExtension {
       'rawUri=${request.uri} originalUrl=${originalUrl ?? '-'}',
     );
 
-    // Read body once — HttpRequest is a single-subscription stream.
-    // contentLength is -1 when chunked transfer encoding is used (e.g. via
-    // HTTP proxy), so we must check != 0 rather than > 0.
-    String? requestBody;
-    if (request.contentLength != 0) {
-      requestBody = await utf8.decodeStream(request);
-      if (requestBody.isEmpty) requestBody = null;
-    }
-
-    final callHeaders = <String, String>{};
-    request.headers.forEach((name, values) {
-      callHeaders[name] = values.join(', ');
-    });
-
-    _callLog.add(MockCallRecord(
-      method: request.method,
-      path: uri.path,
-      headers: callHeaders,
-      body: requestBody,
-      timestamp: DateTime.now(),
-    ));
-
     final route = _routes.cast<MockRoute?>().firstWhere(
           (r) => r!.matches(request.method, uri.path),
           orElse: () => null,
         );
 
     if (route != null) {
+      final requestBody = await _readRequestBody(request);
+      final callHeaders = <String, String>{};
+      request.headers.forEach((name, values) {
+        callHeaders[name] = values.join(', ');
+      });
+
+      _callLog.add(MockCallRecord(
+        method: request.method,
+        path: uri.path,
+        headers: callHeaders,
+        body: requestBody,
+        timestamp: DateTime.now(),
+      ));
+
       _log(
           'Matched route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status}');
       await _respondWithRoute(request, route);
     } else if (_passthrough) {
+      final requestBody = await _readRequestBody(request);
       _log(
           'No route matched ${request.method} ${uri.path}; passthrough enabled');
       await _passthroughRequest(request, uri, requestBody);
@@ -307,6 +308,15 @@ class MockServerExtension {
         ..write(jsonEncode({'error': 'No matching route', 'path': uri.path}));
       await request.response.close();
     }
+  }
+
+  static Future<String?> _readRequestBody(HttpRequest request) async {
+    // Read body once — HttpRequest is a single-subscription stream.
+    // contentLength is -1 when chunked transfer encoding is used (e.g. via
+    // HTTP proxy), so check != 0 rather than > 0.
+    if (request.contentLength == 0) return null;
+    final body = await utf8.decodeStream(request);
+    return body.isEmpty ? null : body;
   }
 
   static Future<void> _respondWithRoute(
