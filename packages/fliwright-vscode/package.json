@@ -70,7 +70,8 @@
     "onCommand:fliwright.watchStateProvider",
     "onCommand:fliwright.unwatchStateProvider",
     "onCommand:fliwright.copyStateProviderValue",
-    "onCommand:fliwright.openRiverpodSetupHelp"
+    "onCommand:fliwright.openRiverpodSetupHelp",
+    "onCommand:fliwright.openVisualEditor"
   ],
   "contributes": {
     "viewsContainers": {
