@@ -84,11 +84,15 @@ export function getEditorHtml(
   <div class="editor" id="editor"></div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    let steps = [];
-    let selectedIdx = -1;
+    let steps = ${JSON.stringify(steps)};
+    let selectedIdx = steps.length > 0 ? 0 : -1;
     let expandedIdx = -1;
     let activeTab = 'code';
     let liveMode = ${liveMode ? 'true' : 'false'};
+    let testName = ${testName ? "'" + testName.replace(/'/g, "\\'") + "'" : 'null'};
+
+    // 首次渲染
+    render();
 
     function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 

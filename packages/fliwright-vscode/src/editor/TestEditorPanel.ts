@@ -49,19 +49,12 @@ export class TestEditorPanel implements vscode.Disposable {
   }
 
   private render(): void {
-    const code = this.document.getText();
+    // 初始数据直接嵌入 HTML，避免 postMessage 竞争条件
     this.panel.webview.html = getEditorHtml(this.steps, {
       testName: this.testName,
       cspSource: this.panel.webview.cspSource,
       nonce: getNonce(),
     });
-    // 初始化步骤数据
-    this.panel.webview.postMessage({
-      type: 'init',
-      steps: this.steps,
-      code,
-      testName: this.testName,
-    } satisfies ExtToWebview);
   }
 
   private async handleMessage(msg: WebviewToExt): Promise<void> {
