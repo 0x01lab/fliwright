@@ -1204,18 +1204,16 @@ class InspectExtension {
   /// Derives a role string from a SemanticsNode, matching _roleFromProperties.
   static String? _roleFromSemanticsNode(SemanticsNode node) {
     final data = node.getSemanticsData();
-    final flags = data.flags;
-    if (flags == 0) return null;
+    if (data.flags == 0) return null;
     // Check in the same order as _roleFromProperties.
-    // flags is an int bitfield; SemanticsFlag is an enum — use .value
-    // to get the int bitmask for bitwise AND.
-    if ((flags & SemanticsFlag.isButton.value) != 0) return 'button';
-    if ((flags & SemanticsFlag.isLink.value) != 0) return 'link';
-    if ((flags & SemanticsFlag.isHeader.value) != 0) return 'header';
-    if ((flags & SemanticsFlag.isTextField.value) != 0) return 'textField';
-    if ((flags & SemanticsFlag.isFocused.value) != 0) return 'focused';
-    if ((flags & SemanticsFlag.hasCheckedState.value) != 0) return 'checkbox';
-    if ((flags & SemanticsFlag.isSelected.value) != 0) return 'selected';
+    // SemanticsData.hasFlag handles the bitfield ↔ enum conversion.
+    if (data.hasFlag(SemanticsFlag.isButton)) return 'button';
+    if (data.hasFlag(SemanticsFlag.isLink)) return 'link';
+    if (data.hasFlag(SemanticsFlag.isHeader)) return 'header';
+    if (data.hasFlag(SemanticsFlag.isTextField)) return 'textField';
+    if (data.hasFlag(SemanticsFlag.isFocused)) return 'focused';
+    if (data.hasFlag(SemanticsFlag.hasCheckedState)) return 'checkbox';
+    if (data.hasFlag(SemanticsFlag.isSelected)) return 'selected';
     return null;
   }
 
