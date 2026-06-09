@@ -1205,15 +1205,15 @@ class InspectExtension {
   static String? _roleFromSemanticsNode(SemanticsNode node) {
     final data = node.getSemanticsData();
     final flags = data.flags;
-    if (flags.isEmpty) return null;
-    // Check in the same order as _roleFromProperties
-    if (flags.contains(SemanticsFlag.isButton)) return 'button';
-    if (flags.contains(SemanticsFlag.isLink)) return 'link';
-    if (flags.contains(SemanticsFlag.isHeader)) return 'header';
-    if (flags.contains(SemanticsFlag.isTextField)) return 'textField';
-    if (flags.contains(SemanticsFlag.isFocused)) return 'focused';
-    if (flags.contains(SemanticsFlag.hasCheckedState)) return 'checkbox';
-    if (flags.contains(SemanticsFlag.isSelected)) return 'selected';
+    if (flags == 0) return null;
+    // Check in the same order as _roleFromProperties (bitfield int)
+    if ((flags & SemanticsFlag.isButton) != 0) return 'button';
+    if ((flags & SemanticsFlag.isLink) != 0) return 'link';
+    if ((flags & SemanticsFlag.isHeader) != 0) return 'header';
+    if ((flags & SemanticsFlag.isTextField) != 0) return 'textField';
+    if ((flags & SemanticsFlag.isFocused) != 0) return 'focused';
+    if ((flags & SemanticsFlag.hasCheckedState) != 0) return 'checkbox';
+    if ((flags & SemanticsFlag.isSelected) != 0) return 'selected';
     return null;
   }
 
