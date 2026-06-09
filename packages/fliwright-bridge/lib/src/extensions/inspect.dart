@@ -1203,7 +1203,8 @@ class InspectExtension {
 
   /// Derives a role string from a SemanticsNode, matching _roleFromProperties.
   static String? _roleFromSemanticsNode(SemanticsNode node) {
-    final flags = node.flags;
+    final data = node.getSemanticsData();
+    final flags = data.flags;
     if (flags.isEmpty) return null;
     // Check in the same order as _roleFromProperties
     if (flags.contains(SemanticsFlag.isButton)) return 'button';
