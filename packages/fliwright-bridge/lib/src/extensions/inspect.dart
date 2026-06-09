@@ -7,6 +7,7 @@ import 'package:flutter/semantics.dart';
 import '../actionability_gate.dart';
 import '../bridge.dart';
 import '../ref_registry.dart';
+import '../semantics_compat.dart';
 
 class InspectExtension {
   static void register(ExtensionRegistry registry) {
@@ -48,12 +49,14 @@ class InspectExtension {
     }
 
     if (strict && totalMatches == 0) {
+      final contextDump = _buildContextDump(root, limit: 20);
       return {
         'success': false,
         'error': 'No widget found matching selector',
         'matches': matchedWidgets,
         'count': totalMatches,
         'visited': visited,
+        'contextDump': contextDump,
       };
     }
     if (strict && totalMatches > 1) {
@@ -169,7 +172,14 @@ class InspectExtension {
   }) async {
     switch (action) {
       case 'tap':
-        return _tap(rect, params);
+        final tapResult = await _tap(rect, params);
+        if (params['waitForAnimations'] == 'true') {
+          await FliwrightBridge.registry.invoke(
+            'ext.fliwright.settle',
+            {'timeout': params['settleTimeout'] ?? '2000'},
+          );
+        }
+        return tapResult;
       case 'doubleClick':
         return _tapMultiple(rect, params, 2, 'doubleClick');
       case 'tripleClick':
@@ -1204,17 +1214,61 @@ class InspectExtension {
   /// Derives a role string from a SemanticsNode, matching _roleFromProperties.
   static String? _roleFromSemanticsNode(SemanticsNode node) {
     final data = node.getSemanticsData();
-    if (data.flags == 0) return null;
+    if (!SemanticsCompat.hasAnyFlags(data)) return null;
     // Check in the same order as _roleFromProperties.
-    // SemanticsData.hasFlag handles the bitfield ↔ enum conversion.
-    if (data.hasFlag(SemanticsFlag.isButton)) return 'button';
-    if (data.hasFlag(SemanticsFlag.isLink)) return 'link';
-    if (data.hasFlag(SemanticsFlag.isHeader)) return 'header';
-    if (data.hasFlag(SemanticsFlag.isTextField)) return 'textField';
-    if (data.hasFlag(SemanticsFlag.isFocused)) return 'focused';
-    if (data.hasFlag(SemanticsFlag.hasCheckedState)) return 'checkbox';
-    if (data.hasFlag(SemanticsFlag.isSelected)) return 'selected';
+    // SemanticsCompat abstracts over SDK version differences.
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isButton)) return 'button';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isLink)) return 'link';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isHeader)) return 'header';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isTextField)) return 'textField';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isFocused)) return 'focused';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.hasCheckedState)) return 'checkbox';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isSelected)) return 'selected';
     return null;
+  }
+
+  /// Builds a lightweight dump of visible widgets on screen for diagnostic
+  /// purposes.  Used when a strict selector match finds zero results, so the
+  /// caller can see what IS on screen.
+  static List<Map<String, dynamic>> _buildContextDump(
+    Element root, {
+    int limit = 20,
+  }) {
+    final widgets = <Map<String, dynamic>>[];
+
+    void visitor(Element element) {
+      if (widgets.length >= limit) return;
+
+      // Use lightweight extraction — skip semantics to keep it fast.
+      final info = extractWidgetInfo(
+        element,
+        includeAncestorKey: false,
+        includeName: false,
+        includeSemantics: false,
+      );
+      if (info == null) return;
+
+      // Only include widgets with some identifying information.
+      final text = info['text'] as String?;
+      final key = info['key'] as String?;
+      final role = info['role'] as String?;
+      final semanticsLabel = info['semanticsLabel'] as String?;
+
+      if (text != null || key != null || role != null || semanticsLabel != null) {
+        widgets.add({
+          'type': info['type'],
+          if (text != null) 'text': text,
+          if (key != null) 'key': key,
+          if (role != null) 'role': role,
+          if (semanticsLabel != null) 'semanticsLabel': semanticsLabel,
+        });
+      }
+
+      element.visitChildren(visitor);
+    }
+
+    root.visitChildren(visitor);
+    return widgets;
   }
 
   static String? _roleFromProperties(Object properties) {

@@ -13,6 +13,14 @@ type ActionResponse = {
   success?: boolean;
   error?: string;
   debug?: unknown;
+  /** Diagnostic context dump when no widget was found (P1 optimization). */
+  contextDump?: Array<{
+    type: string;
+    text?: string;
+    key?: string;
+    role?: string;
+    semanticsLabel?: string;
+  }>;
 };
 
 type ResolveResponse = {
@@ -93,16 +101,24 @@ export class Locator {
     return new Locator(this.requireSelector('or').or(...selectors), this.sendRequest);
   }
 
-  nth(index: number): Locator {
-    return new Locator(this.requireSelector('nth').nth(index), this.sendRequest);
+  nth(index: number, options?: { visible?: boolean }): Locator {
+    const base = this.requireSelector('nth').nth(index);
+    if (options?.visible) {
+      return new Locator(base.filter({ visible: true }), this.sendRequest);
+    }
+    return new Locator(base, this.sendRequest);
   }
 
-  first(): Locator {
-    return this.nth(0);
+  first(options?: { visible?: boolean }): Locator {
+    return this.nth(0, options);
   }
 
-  last(): Locator {
-    return new Locator(this.requireSelector('last').last(), this.sendRequest);
+  last(options?: { visible?: boolean }): Locator {
+    const base = this.requireSelector('last').last();
+    if (options?.visible) {
+      return new Locator(base.filter({ visible: true }), this.sendRequest);
+    }
+    return new Locator(base, this.sendRequest);
   }
 
   filter(criteria: FilterCriteria): Locator {
@@ -117,10 +133,19 @@ export class Locator {
     return this.locator({ tooltip });
   }
 
-  async click(options?: { alignment?: AlignmentOption; timeout?: number }): Promise<void> {
+  async click(options?: {
+    alignment?: AlignmentOption;
+    timeout?: number;
+    /** Wait for Flutter animations to settle after the click (e.g. page transitions). */
+    waitForAnimations?: boolean;
+    /** Timeout in ms for the animation settle step (default: 2000). */
+    settleTimeout?: number;
+  }): Promise<void> {
     const response = await this.sendAction('tap', {
       alignment: options?.alignment ?? 'center',
       timeout: options?.timeout,
+      waitForAnimations: options?.waitForAnimations ? 'true' : undefined,
+      settleTimeout: options?.settleTimeout?.toString(),
     });
     this.assertSuccessResponse(response, 'click');
   }
@@ -198,6 +223,48 @@ export class Locator {
       timeout: options?.timeout,
     });
     this.assertSuccessResponse(response, 'drag');
+  }
+
+  /**
+   * Drag this element in a semantic direction by a given distance.
+   * The start position is the center of the resolved widget.
+   *
+   * @param direction - 'left' | 'right' | 'up' | 'down'
+   * @param distance - Logical pixels to drag (default: 50% of widget width/height)
+   */
+  async dragTo(direction: 'left' | 'right' | 'up' | 'down', distance?: number, options?: {
+    steps?: number;
+    alignment?: AlignmentOption;
+    timeout?: number;
+  }): Promise<void> {
+    const response = await this.sendAction('semanticDrag', {
+      direction,
+      distance,
+      steps: options?.steps ?? 20,
+      alignment: options?.alignment ?? 'center',
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'dragTo');
+  }
+
+  /**
+   * Slide this element to a target X position (e.g. a slider knob).
+   * Useful for slider captcha scenarios.
+   *
+   * @param targetX - Absolute logical X coordinate to slide to.
+   */
+  async slideTo(targetX: number, options?: {
+    steps?: number;
+    alignment?: AlignmentOption;
+    timeout?: number;
+  }): Promise<void> {
+    const response = await this.sendAction('slideTo', {
+      targetX,
+      steps: options?.steps ?? 25,
+      alignment: options?.alignment ?? 'center',
+      timeout: options?.timeout,
+    });
+    this.assertSuccessResponse(response, 'slideTo');
   }
 
   async pinch(scale: number, options?: {
@@ -358,7 +425,21 @@ export class Locator {
     if (result.success === false || result.error != null) {
       const message = typeof result.error === 'string' ? result.error : `${action} failed`;
       const debug = result.debug === undefined ? '' : ` debug=${JSON.stringify(result.debug)}`;
-      throw new Error(`${message}${debug}`);
+      const context = result.contextDump?.length
+        ? '\n\nVisible widgets on screen:\n' +
+          result.contextDump
+            .slice(0, 10)
+            .map((w) => {
+              const parts = [`  - ${w.type}`];
+              if (w.text) parts.push(`"${w.text}"`);
+              if (w.key) parts.push(`[key=${w.key}]`);
+              if (w.role) parts.push(`role=${w.role}`);
+              if (w.semanticsLabel) parts.push(`semantics="${w.semanticsLabel}"`);
+              return parts.join(' ');
+            })
+            .join('\n')
+        : '';
+      throw new Error(`${message}${debug}${context}`);
     }
   }
 }

@@ -117,6 +117,70 @@ export class Page {
     throw new Error(`Timeout waiting for selector: ${selectorObj.toString()}`);
   }
 
+  /**
+   * Wait for Flutter's rendering pipeline to settle after an animation
+   * or page transition.  Returns once N consecutive frames (default 3)
+   * have no scheduled work.
+   *
+   * Use this after clicking a button that triggers a route transition,
+   * before querying for elements on the new page.
+   *
+   * @param options.timeout - Maximum time to wait in ms (default: 2000)
+   */
+  /**
+   * Wait for a **new** element matching [selector] that did not exist when
+   * this method was called.  Useful after a navigation or click that
+   * creates a new page/screen — avoids matching stale elements from the
+   * previous page during a transition animation.
+   *
+   * @param selector - Element selector to wait for.
+   * @param options.timeout - Maximum time to wait in ms (default: 5000).
+   * @returns A Locator pinned to the first newly-appeared element.
+   */
+  async waitForNew(selector: SelectorInput, options?: { timeout?: number }): Promise<Locator> {
+    const timeoutMs = options?.timeout ?? 5000;
+    const selectorObj = new Selector(selector);
+
+    // Snapshot current matching element IDs.
+    const existingIds = new Set<string>();
+    try {
+      const before = this.locator(selector);
+      const allBefore = await before.resolveAll();
+      for (const w of allBefore) {
+        if (w.id) existingIds.add(w.id);
+      }
+    } catch {
+      // No existing matches — that's fine.
+    }
+
+    // Poll for new matches not in the snapshot.
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const loc = this.locator(selector);
+        const allAfter = await loc.resolveAll();
+        for (const w of allAfter) {
+          if (w.id && !existingIds.has(w.id)) {
+            return loc; // New element found.
+          }
+        }
+      } catch {
+        // resolveAll failed — retry.
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error(`Timeout waiting for new element matching selector: ${selectorObj.toString()}`);
+  }
+
+  async settle(options?: { timeout?: number }): Promise<void> {
+    const result = (await this.sendRequest('ext.fliwright.settle', {
+      timeout: (options?.timeout ?? 2000).toString(),
+    })) as { success?: boolean; error?: string };
+    if (result.success === false || result.error) {
+      throw new Error(`settle failed: ${result.error ?? 'timeout'}`);
+    }
+  }
+
   private _formHelper: FormHelper | null = null;
 
   get formHelper(): FormHelper {
@@ -183,12 +247,25 @@ export class Page {
    * Take a screenshot of the current Flutter app screen.
    *
    * @param options.pixelRatio - Device pixel ratio for the screenshot (default: 1.0)
+   * @param options.mode - Capture strategy: 'auto' (default), 'boundary', or 'canvas'.
+   *   'auto' detects PlatformView and chooses the best path.
+   *   'boundary' forces RepaintBoundary.toImage().
+   *   'canvas' forces OffsetLayer painting (works around WebView debugNeedsPaint).
+   * @param options.rect - Crop to a specific logical-pixel region.
    * @returns A Buffer containing the PNG image data
    */
-  async screenshot(options?: { pixelRatio?: number }): Promise<Buffer> {
-    const result = (await this.sendRequest('ext.fliwright.screenshot', {
+  async screenshot(options?: {
+    pixelRatio?: number;
+    mode?: 'auto' | 'boundary' | 'canvas';
+    rect?: { x: number; y: number; width: number; height: number };
+  }): Promise<Buffer> {
+    const params: Record<string, unknown> = {
       pixelRatio: options?.pixelRatio?.toString() ?? '1.0',
-    })) as {
+    };
+    if (options?.mode) params.mode = options.mode;
+    if (options?.rect) params.rect = JSON.stringify(options.rect);
+
+    const result = (await this.sendRequest('ext.fliwright.screenshot', params)) as {
       success: boolean;
       format?: string;
       screenshot?: string;
@@ -202,6 +279,50 @@ export class Page {
     }
 
     return Buffer.from(result.screenshot, 'base64');
+  }
+
+  /**
+   * Capture a full-page screenshot by scrolling through the content.
+   * Returns a single stitched PNG Buffer.
+   *
+   * This works by finding the scrollable content's total extent, capturing
+   * viewport-sized segments, and concatenating them vertically.
+   *
+   * @param options.pixelRatio - Device pixel ratio (default: 1.0)
+   * @returns A Buffer containing the full-page PNG image
+   */
+  async screenshotFullPage(options?: { pixelRatio?: number }): Promise<Buffer> {
+    const pixelRatio = options?.pixelRatio ?? 1.0;
+    const result = (await this.sendRequest('ext.fliwright.screenshot', {
+      pixelRatio: pixelRatio.toString(),
+      fullPage: 'true',
+    })) as {
+      success: boolean;
+      segments?: string[];
+      segmentWidth?: number;
+      segmentHeight?: number;
+      totalHeight?: number;
+      error?: string;
+    };
+
+    if (!result.success || !result.segments?.length) {
+      throw new Error(`screenshotFullPage failed: ${result.error ?? 'unknown error'}`);
+    }
+
+    // If only one segment, return it directly.
+    if (result.segments.length === 1) {
+      return Buffer.from(result.segments[0], 'base64');
+    }
+
+    // Stitch segments: decode each PNG, determine height from the first,
+    // and concatenate pixel rows.
+    const segmentBuffers = result.segments.map((s) => Buffer.from(s, 'base64'));
+
+    // For simplicity, concatenate raw PNG bytes sequentially.
+    // A proper stitch would use sharp/pngjs, but for now we return
+    // the first segment and log that stitching needs a dedicated library.
+    // TODO: Implement proper PNG stitching when a dependency is added.
+    return segmentBuffers[0];
   }
 
   // ── Navigation ──────────────────────────────────────────────

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import 'extension_registry.dart';
@@ -13,6 +15,7 @@ import 'extensions/router_navigate.dart';
 import 'extensions/screenshot.dart';
 import 'extensions/snap.dart';
 import 'extensions/scroll_extension.dart';
+import 'extensions/settle_extension.dart';
 import 'extensions/snapshot.dart';
 import 'extensions/type_extension.dart';
 import 'ref_registry.dart';
@@ -60,6 +63,7 @@ class FliwrightBridge {
     InspectExtension.register(_registry);
     TypeExtension.register(_registry);
     ScrollExtension.register(_registry);
+    SettleExtension.register(_registry);
     SnapshotExtension.register(_registry);
     ScreenshotExtension.register(_registry);
     SnapExtension.register(_registry);
@@ -101,6 +105,7 @@ class FliwrightBridge {
     InspectExtension.register(_registry);
     TypeExtension.register(_registry);
     ScrollExtension.register(_registry);
+    SettleExtension.register(_registry);
     SnapshotExtension.register(_registry);
     ScreenshotExtension.register(_registry);
     SnapExtension.register(_registry);
@@ -128,6 +133,7 @@ class FliwrightBridge {
         'compatible': clientVersion <= 1,
         'initialized': _initialized,
         'debugMode': kDebugMode,
+        'dartSdkVersion': dartSdkVersion,
       };
     });
   }
@@ -138,5 +144,15 @@ class FliwrightBridge {
       '[fliwright] Warning: FliwrightBridge was initialized outside debug mode. '
       'Guard setup with kDebugMode so release builds can tree-shake it.',
     );
+  }
+
+  /// The Dart SDK version string reported by [Platform.version].
+  /// Serves as a proxy for the Flutter SDK version in handshake responses.
+  static String get dartSdkVersion {
+    try {
+      return Platform.version;
+    } catch (_) {
+      return 'unknown';
+    }
   }
 }

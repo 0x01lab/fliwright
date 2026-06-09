@@ -131,6 +131,10 @@ class GestureExtension {
         return _longPress(cx, cy, params);
       case 'drag':
         return _drag(cx, cy, params);
+      case 'semanticDrag':
+        return _semanticDrag(cx, cy, rect, params);
+      case 'slideTo':
+        return _slideTo(cx, cy, rect, params);
       case 'pinch':
         return _pinch(cx, cy, rect, params);
       default:
@@ -220,6 +224,148 @@ class GestureExtension {
     );
 
     return {'success': true, 'gesture': 'drag'};
+  }
+
+  /// Drag from the widget center in a semantic direction by a given distance.
+  ///
+  /// Params:
+  ///   direction – 'left' | 'right' | 'up' | 'down' (default: 'right')
+  ///   distance  – logical pixels to drag (default: 50% of widget width/height)
+  ///   steps     – interpolation steps (default: 20)
+  static Future<Map<String, dynamic>> _semanticDrag(
+    double cx,
+    double cy,
+    Map<String, dynamic> rect,
+    Map<String, String> params,
+  ) async {
+    final direction = params['direction'] ?? 'right';
+    final defaultDist = direction == 'left' || direction == 'right'
+        ? (rect['width'] as num).toDouble() * 0.5
+        : (rect['height'] as num).toDouble() * 0.5;
+    final distance =
+        double.tryParse(params['distance'] ?? '') ?? defaultDist;
+    final steps = int.tryParse(params['steps'] ?? '') ?? 20;
+
+    double deltaX = 0, deltaY = 0;
+    switch (direction) {
+      case 'left':
+        deltaX = -distance;
+      case 'right':
+        deltaX = distance;
+      case 'up':
+        deltaY = -distance;
+      case 'down':
+        deltaY = distance;
+    }
+
+    final pointer = _nextPointer++;
+    final view =
+        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
+    final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
+
+    GestureBinding.instance.handlePointerEvent(
+      PointerDownEvent(
+        pointer: pointer,
+        position: Offset(cx, cy),
+        kind: PointerDeviceKind.touch,
+        viewId: view,
+        timeStamp: now,
+      ),
+    );
+
+    for (var i = 1; i <= steps; i++) {
+      final t = i / steps;
+      GestureBinding.instance.handlePointerEvent(
+        PointerMoveEvent(
+          pointer: pointer,
+          position: Offset(cx + deltaX * t, cy + deltaY * t),
+          kind: PointerDeviceKind.touch,
+          viewId: view,
+          timeStamp: now + Duration(milliseconds: (i * 16)),
+        ),
+      );
+    }
+
+    GestureBinding.instance.handlePointerEvent(
+      PointerUpEvent(
+        pointer: pointer,
+        position: Offset(cx + deltaX, cy + deltaY),
+        kind: PointerDeviceKind.touch,
+        viewId: view,
+        timeStamp: now + Duration(milliseconds: (steps * 16) + 16),
+      ),
+    );
+
+    return {
+      'success': true,
+      'gesture': 'semanticDrag',
+      'direction': direction,
+      'distance': distance,
+    };
+  }
+
+  /// Slide a widget (e.g. slider knob) to a target X position.
+  ///
+  /// Params:
+  ///   targetX – absolute logical X coordinate to slide to
+  ///   steps   – interpolation steps (default: 25, smoother for sliders)
+  static Future<Map<String, dynamic>> _slideTo(
+    double cx,
+    double cy,
+    Map<String, dynamic> rect,
+    Map<String, String> params,
+  ) async {
+    final targetX = double.tryParse(params['targetX'] ?? '');
+    if (targetX == null) {
+      return {'error': 'Missing required parameter: targetX'};
+    }
+    final deltaX = targetX - cx;
+    final steps = int.tryParse(params['steps'] ?? '') ?? 25;
+
+    final pointer = _nextPointer++;
+    final view =
+        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
+    final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
+
+    GestureBinding.instance.handlePointerEvent(
+      PointerDownEvent(
+        pointer: pointer,
+        position: Offset(cx, cy),
+        kind: PointerDeviceKind.touch,
+        viewId: view,
+        timeStamp: now,
+      ),
+    );
+
+    for (var i = 1; i <= steps; i++) {
+      final t = i / steps;
+      GestureBinding.instance.handlePointerEvent(
+        PointerMoveEvent(
+          pointer: pointer,
+          position: Offset(cx + deltaX * t, cy),
+          kind: PointerDeviceKind.touch,
+          viewId: view,
+          timeStamp: now + Duration(milliseconds: (i * 16)),
+        ),
+      );
+    }
+
+    GestureBinding.instance.handlePointerEvent(
+      PointerUpEvent(
+        pointer: pointer,
+        position: Offset(targetX, cy),
+        kind: PointerDeviceKind.touch,
+        viewId: view,
+        timeStamp: now + Duration(milliseconds: (steps * 16) + 16),
+      ),
+    );
+
+    return {
+      'success': true,
+      'gesture': 'slideTo',
+      'fromX': cx,
+      'toX': targetX,
+    };
   }
 
   static Future<Map<String, dynamic>> _pinch(double cx, double cy,

@@ -23,6 +23,10 @@ export class FliwrightDriver {
   private _mock: MockManager | null = null;
   private _healing: SelfHealingEngine | null = null;
   private _recorder: RecorderController | null = null;
+  private _sdkVersion: string | null = null;
+
+  /** Dart/Flutter SDK version reported by the bridge handshake, or null if not yet connected. */
+  get sdkVersion(): string | null { return this._sdkVersion; }
 
   get mock(): MockManager {
     if (!this._mock) {
@@ -72,6 +76,13 @@ export class FliwrightDriver {
       (method, params) => this.connector.sendRequest(method, params),
       this.connector,
     );
+    // Fetch SDK version from bridge handshake (non-critical).
+    try {
+      const handshake = await this.connector.sendRequest('ext.fliwright.handshake', {
+        protocolVersion: '1',
+      }) as { dartSdkVersion?: string };
+      this._sdkVersion = handshake?.dartSdkVersion ?? null;
+    } catch { /* handshake not supported by older bridges — ignore */ }
   }
 
   async attachMockConnector(mockWS: MockWebSocket): Promise<void> {
