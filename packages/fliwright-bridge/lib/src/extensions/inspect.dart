@@ -1206,14 +1206,16 @@ class InspectExtension {
     final data = node.getSemanticsData();
     final flags = data.flags;
     if (flags == 0) return null;
-    // Check in the same order as _roleFromProperties (bitfield int)
-    if ((flags & SemanticsFlag.isButton) != 0) return 'button';
-    if ((flags & SemanticsFlag.isLink) != 0) return 'link';
-    if ((flags & SemanticsFlag.isHeader) != 0) return 'header';
-    if ((flags & SemanticsFlag.isTextField) != 0) return 'textField';
-    if ((flags & SemanticsFlag.isFocused) != 0) return 'focused';
-    if ((flags & SemanticsFlag.hasCheckedState) != 0) return 'checkbox';
-    if ((flags & SemanticsFlag.isSelected) != 0) return 'selected';
+    // Check in the same order as _roleFromProperties.
+    // flags is an int bitfield; SemanticsFlag is an enum — use .value
+    // to get the int bitmask for bitwise AND.
+    if ((flags & SemanticsFlag.isButton.value) != 0) return 'button';
+    if ((flags & SemanticsFlag.isLink.value) != 0) return 'link';
+    if ((flags & SemanticsFlag.isHeader.value) != 0) return 'header';
+    if ((flags & SemanticsFlag.isTextField.value) != 0) return 'textField';
+    if ((flags & SemanticsFlag.isFocused.value) != 0) return 'focused';
+    if ((flags & SemanticsFlag.hasCheckedState.value) != 0) return 'checkbox';
+    if ((flags & SemanticsFlag.isSelected.value) != 0) return 'selected';
     return null;
   }
 
