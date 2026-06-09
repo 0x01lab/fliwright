@@ -37,6 +37,10 @@ export class Page {
     return this.locator({ type });
   }
 
+  getBySubtype(subtype: string): Locator {
+    return this.locator({ subtype });
+  }
+
   getBySemantics(semantics: {
     identifier?: string;
     label?: string;
@@ -46,6 +50,10 @@ export class Page {
     caseSensitive?: boolean;
   }): Locator {
     return this.locator({ semantics });
+  }
+
+  getByTooltip(tooltip: string): Locator {
+    return this.locator({ tooltip });
   }
 
   ref(ref: string): Locator {

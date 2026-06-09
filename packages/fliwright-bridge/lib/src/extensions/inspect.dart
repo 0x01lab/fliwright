@@ -561,6 +561,58 @@ class InspectExtension {
     final fallback = query['fallback'];
     final position = query['position'];
     final within = query['within'];
+    final andFields = query['and'];
+    final orFields = query['or'];
+    final filter = query['filter'];
+    final containing = query['containing'];
+
+    // Handle top-level and/or composition
+    if (andFields is List) {
+      var ast = <String, dynamic>{
+        'kind': 'and',
+        'selectors': andFields
+            .whereType<Map<String, dynamic>>()
+            .map(_queryToAst)
+            .toList(),
+      };
+      if (filter is Map<String, dynamic>) {
+        ast = {'kind': 'filter', 'selector': ast, 'filter': filter};
+      }
+      if (position is Map<String, dynamic>) {
+        final nth = position['nth'];
+        if (nth is int) {
+          ast = {'kind': 'nth', 'selector': ast, 'index': nth};
+        } else if (position['first'] == true) {
+          ast = {'kind': 'nth', 'selector': ast, 'index': 0};
+        } else if (position['last'] == true) {
+          ast = {'kind': 'last', 'selector': ast};
+        }
+      }
+      return ast;
+    }
+    if (orFields is List) {
+      var ast = <String, dynamic>{
+        'kind': 'or',
+        'selectors': orFields
+            .whereType<Map<String, dynamic>>()
+            .map(_queryToAst)
+            .toList(),
+      };
+      if (filter is Map<String, dynamic>) {
+        ast = {'kind': 'filter', 'selector': ast, 'filter': filter};
+      }
+      if (position is Map<String, dynamic>) {
+        final nth = position['nth'];
+        if (nth is int) {
+          ast = {'kind': 'nth', 'selector': ast, 'index': nth};
+        } else if (position['first'] == true) {
+          ast = {'kind': 'nth', 'selector': ast, 'index': 0};
+        } else if (position['last'] == true) {
+          ast = {'kind': 'last', 'selector': ast};
+        }
+      }
+      return ast;
+    }
 
     final fallbackAst = fallback is Map<String, dynamic>
         ? _fallbackCriteriaToAst(fallback)
@@ -583,12 +635,26 @@ class InspectExtension {
       };
     }
 
+    if (containing is Map<String, dynamic>) {
+      ast = {
+        'kind': 'containing',
+        'parent': ast,
+        'descendant': _queryToAst(containing),
+      };
+    }
+
+    if (filter is Map<String, dynamic>) {
+      ast = {'kind': 'filter', 'selector': ast, 'filter': filter};
+    }
+
     if (position is Map<String, dynamic>) {
       final nth = position['nth'];
       if (nth is int) {
         ast = {'kind': 'nth', 'selector': ast, 'index': nth};
       } else if (position['first'] == true) {
         ast = {'kind': 'nth', 'selector': ast, 'index': 0};
+      } else if (position['last'] == true) {
+        ast = {'kind': 'last', 'selector': ast};
       }
     }
 
@@ -609,10 +675,12 @@ class InspectExtension {
     }
 
     addValue('type', 'type');
+    addValue('subtype', 'subtype');
     addValue('key', 'key');
     addValue('id', 'id');
     addValue('name', 'name');
     addValue('ancestorKey', 'ancestorKey');
+    addValue('tooltip', 'tooltip');
 
     final text = match['text'];
     if (text is String && text.isNotEmpty) {
@@ -645,6 +713,15 @@ class InspectExtension {
         if (semanticsLabel is String || semanticsHint is String)
           'match': 'contains',
       });
+    }
+
+    final enabled = match['enabled'];
+    if (enabled is bool) {
+      selectors.add({'kind': 'state', 'property': 'enabled', 'value': enabled});
+    }
+    final checked = match['checked'];
+    if (checked is bool) {
+      selectors.add({'kind': 'state', 'property': 'checked', 'value': checked});
     }
 
     if (selectors.isEmpty) return null;
@@ -706,6 +783,8 @@ class InspectExtension {
         });
       case 'role':
         return ParsedSelectorAst({'kind': 'semantics', 'role': selector.value});
+      case 'tooltip':
+        return ParsedSelectorAst({'kind': 'tooltip', 'value': selector.value});
       default:
         return ParsedSelectorAst(
             {'kind': 'text', 'value': selector.value, 'match': 'exact'});
@@ -756,6 +835,34 @@ class InspectExtension {
         final index = selector.intValue('index') ?? -1;
         if (index < 0 || index >= candidates.length) return <Element>[];
         return <Element>[candidates[index]];
+      case 'last':
+        final candidates = _evaluateSelector(root, selector.child('selector'));
+        if (candidates.isEmpty) return <Element>[];
+        return <Element>[candidates.last];
+      case 'filter':
+        final candidates = _evaluateSelector(root, selector.child('selector'));
+        final filter = selector.value['filter'];
+        if (filter is! Map<String, dynamic>) return candidates;
+        return candidates
+            .where((element) => _passesFilter(element, filter))
+            .toList();
+      case 'containing':
+        final parents = _evaluateSelector(root, selector.child('parent'));
+        final descAst = selector.child('descendant');
+        final result = <Element>[];
+        for (final parent in parents) {
+          bool hasMatch = false;
+          _walkTreeCollect(parent, (element) {
+            if (identical(element, parent)) return false;
+            if (_matchesAst(element, descAst)) {
+              hasMatch = true;
+              return false;
+            }
+            return true;
+          }, []);
+          if (hasMatch) result.add(parent);
+        }
+        return _dedupeElements(result);
       case 'fallback':
         final primary = _evaluateSelector(root, selector.child('primary'));
         if (primary.isNotEmpty) return primary;
@@ -780,9 +887,14 @@ class InspectExtension {
           selector.boolValue('caseSensitive') ?? true,
         );
       case 'key':
-        return extractKeyValue(widget.key) == selector.stringValue('value');
+        return _keyMatches(widget.key, selector.stringValue('value')!);
       case 'type':
         return widget.runtimeType.toString() == selector.stringValue('value');
+      case 'subtype':
+        // Aligned with Flutter native find.bySubtype<T>() — uses 'is' check
+        final subtypeName = selector.stringValue('value') ?? '';
+        if (subtypeName.isEmpty) return false;
+        return _isSubtype(widget.runtimeType.toString(), subtypeName);
       case 'id':
         return '${element.hashCode}' == selector.stringValue('value');
       case 'name':
@@ -790,6 +902,14 @@ class InspectExtension {
             selector.stringValue('value');
       case 'ancestorKey':
         return findAncestorKey(element) == selector.stringValue('value');
+      case 'tooltip':
+        return _extractTooltip(element) == selector.stringValue('value');
+      case 'state':
+        final property = selector.stringValue('property');
+        final expected = selector.boolValue('value');
+        if (property == 'enabled') return _enabledForElement(element) == expected;
+        if (property == 'checked') return _checkedValueOf(widget) == expected;
+        return false;
       case 'semantics':
         final semantics = extractOwnSemantics(element);
         final identifier = selector.stringValue('identifier');
@@ -818,6 +938,9 @@ class InspectExtension {
       case 'and':
       case 'or':
       case 'nth':
+      case 'last':
+      case 'filter':
+      case 'containing':
         return _evaluateSelector(element, selector).contains(element);
       default:
         return false;
@@ -860,6 +983,9 @@ class InspectExtension {
     }
     if (selector.startsWith('role=')) {
       return ParsedSelector(field: 'role', value: selector.substring(5));
+    }
+    if (selector.startsWith('tooltip=')) {
+      return ParsedSelector(field: 'tooltip', value: selector.substring(8));
     }
     return ParsedSelector(field: 'text', value: selector);
   }
@@ -939,10 +1065,32 @@ class InspectExtension {
     };
   }
 
+  /// Extracts a string representation from a Key for wire-protocol comparison.
+  /// Supports ValueKey<String>, ValueKey<int>, and other ValueKey types via toString().
+  /// Aligned with Flutter native find.byKey() where possible.
   static String? extractKeyValue(Key? key) {
     if (key is ValueKey<String>) return key.value;
+    if (key is ValueKey<int>) return key.value.toString();
+    if (key is ValueKey<double>) return key.value.toString();
+    if (key is ValueKey<bool>) return key.value.toString();
     if (key is ValueKey) return key.value.toString();
     return null;
+  }
+
+  /// Checks if a widget's key matches the given string value.
+  /// Tries both String and numeric comparisons to handle ValueKey<int> etc.
+  static bool _keyMatches(Key? key, String expected) {
+    if (key == null) return false;
+    // Direct string match (ValueKey<String>)
+    if (key is ValueKey<String>) return key.value == expected;
+    // Numeric key match: try to compare as int or double
+    final intVal = int.tryParse(expected);
+    if (intVal != null && key is ValueKey<int>) return key.value == intVal;
+    final doubleVal = double.tryParse(expected);
+    if (doubleVal != null && key is ValueKey<double>) return key.value == doubleVal;
+    // Fallback: toString comparison for other ValueKey types
+    if (key is ValueKey) return key.value.toString() == expected;
+    return false;
   }
 
   static String? findAncestorKey(Element element) {
@@ -982,6 +1130,12 @@ class InspectExtension {
   }
 
   static ExtractedSemantics extractSemantics(Element element) {
+    // Priority 1: Try RenderObject's debugSemantics (aligned with Flutter native)
+    // This captures the final computed semantics after merge/propagation.
+    final roResult = _extractSemanticsFromRenderObject(element);
+    if (roResult.hasAnyValue) return roResult;
+
+    // Priority 2: Walk the widget tree for Semantics widgets
     ExtractedSemantics? result;
 
     void inspect(Element candidate) {
@@ -1013,7 +1167,28 @@ class InspectExtension {
     return result ?? const ExtractedSemantics();
   }
 
+  /// Extracts semantics from the RenderObject's debugSemantics node.
+  /// Aligned with Flutter native find.bySemanticsLabel() which reads
+  /// from renderObject.debugSemantics rather than the Semantics widget directly.
+  static ExtractedSemantics _extractSemanticsFromRenderObject(Element element) {
+    if (element is! RenderObjectElement) return const ExtractedSemantics();
+    final renderObject = element.renderObject;
+    final SemanticsNode? node = renderObject.debugSemantics;
+    if (node == null) return const ExtractedSemantics();
+    return ExtractedSemantics(
+      identifier: node.identifier?.isEmpty == true ? null : node.identifier,
+      label: node.label?.isEmpty == true ? null : node.label,
+      hint: node.hint?.isEmpty == true ? null : node.hint,
+      role: _roleFromSemanticsNode(node),
+    );
+  }
+
   static ExtractedSemantics extractOwnSemantics(Element element) {
+    // Try RenderObject semantics first (aligned with Flutter native)
+    final roResult = _extractSemanticsFromRenderObject(element);
+    if (roResult.hasAnyValue) return roResult;
+
+    // Fallback to Semantics widget properties
     final widget = element.widget;
     if (widget is! Semantics) return const ExtractedSemantics();
     final properties = widget.properties;
@@ -1023,6 +1198,21 @@ class InspectExtension {
       hint: _readString(properties, 'hint'),
       role: _roleFromProperties(properties),
     );
+  }
+
+  /// Derives a role string from a SemanticsNode, matching _roleFromProperties.
+  static String? _roleFromSemanticsNode(SemanticsNode node) {
+    final flags = node.flags;
+    if (flags.isEmpty) return null;
+    // Check in the same order as _roleFromProperties
+    if (flags.contains(SemanticsFlag.isButton)) return 'button';
+    if (flags.contains(SemanticsFlag.isLink)) return 'link';
+    if (flags.contains(SemanticsFlag.isHeader)) return 'header';
+    if (flags.contains(SemanticsFlag.isTextField)) return 'textField';
+    if (flags.contains(SemanticsFlag.isFocused)) return 'focused';
+    if (flags.contains(SemanticsFlag.hasCheckedState)) return 'checkbox';
+    if (flags.contains(SemanticsFlag.isSelected)) return 'selected';
+    return null;
   }
 
   static String? _roleFromProperties(Object properties) {
@@ -1105,7 +1295,7 @@ class InspectExtension {
       case 'type':
         return widget.runtimeType.toString() == selector.value;
       case 'key':
-        return extractKeyValue(widget.key) == selector.value;
+        return _keyMatches(widget.key, selector.value);
       case 'ancestorKey':
         return findAncestorKey(element) == selector.value;
       case 'name':
@@ -1118,6 +1308,8 @@ class InspectExtension {
         return label != null && label.contains(selector.value);
       case 'role':
         return extractOwnSemantics(element).role == selector.value;
+      case 'tooltip':
+        return _extractTooltip(element) == selector.value;
       case 'text':
         final text = extractText(widget);
         return text != null && text.contains(selector.value);
@@ -1135,7 +1327,11 @@ class InspectExtension {
   }
 
   static String? extractText(Widget widget) {
-    if (widget is Text) return widget.data;
+    if (widget is Text) {
+      // Aligned with Flutter native _MatchTextFinder:
+      // Use data if non-null, otherwise fallback to textSpan.toPlainText()
+      return widget.data ?? widget.textSpan?.toPlainText();
+    }
     if (widget is RichText) return widget.text.toPlainText();
     if (widget is EditableText) return widget.controller.text;
     return null;
@@ -1216,9 +1412,161 @@ class InspectExtension {
     if (data == null) return false;
     final codePoint = selector.intValue('codePoint');
     final fontFamily = selector.stringValue('fontFamily');
+    final fontPackage = selector.stringValue('fontPackage');
     if (codePoint == null || data.codePoint != codePoint) return false;
     if (fontFamily != null && data.fontFamily != fontFamily) return false;
+    if (fontPackage != null && data.fontPackage != fontPackage) return false;
     return true;
+  }
+
+  /// Checks if [typeName] matches the widget's type or any of its supertypes.
+  /// Aligned with Flutter native find.bySubtype<T>() — supports inheritance.
+  static bool _isSubtype(String actualTypeName, String targetTypeName) {
+    // Exact match
+    if (actualTypeName == targetTypeName) return true;
+    // Common Flutter base types — check against known supertype chains
+    const knownSupertypes = <String, Set<String>>{
+      'StatelessWidget': {'Widget'},
+      'StatefulWidget': {'Widget'},
+      'State': {'Widget'},
+      'Text': {'StatelessWidget', 'Widget'},
+      'RichText': {'StatelessWidget', 'Widget'},
+      'EditableText': {'StatefulWidget', 'Widget'},
+      'TextField': {'StatefulWidget', 'Widget'},
+      'TextFormField': {'StatefulWidget', 'Widget'},
+      'ElevatedButton': {'StatelessWidget', 'Widget'},
+      'TextButton': {'StatelessWidget', 'Widget'},
+      'OutlinedButton': {'StatelessWidget', 'Widget'},
+      'IconButton': {'StatelessWidget', 'Widget'},
+      'FloatingActionButton': {'StatelessWidget', 'Widget'},
+      'ListView': {'BoxScrollView', 'ScrollView', 'StatelessWidget', 'Widget'},
+      'GridView': {'BoxScrollView', 'ScrollView', 'StatelessWidget', 'Widget'},
+      'SingleChildScrollView': {'StatelessWidget', 'Widget'},
+      'Column': {'Flex', 'MultiChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
+      'Row': {'Flex', 'MultiChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
+      'Container': {'StatelessWidget', 'Widget'},
+      'Scaffold': {'StatefulWidget', 'Widget'},
+      'AppBar': {'StatefulWidget', 'Widget'},
+      'Checkbox': {'StatefulWidget', 'Widget'},
+      'Switch': {'StatefulWidget', 'Widget'},
+      'Radio': {'StatefulWidget', 'Widget'},
+      'Slider': {'StatefulWidget', 'Widget'},
+      'Form': {'StatefulWidget', 'Widget'},
+      'DropdownButton': {'StatefulWidget', 'Widget'},
+      'InkWell': {'StatefulWidget', 'Widget'},
+      'GestureDetector': {'StatelessWidget', 'Widget'},
+      'Padding': {'SingleChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
+      'Align': {'SingleChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
+      'Center': {'Align', 'SingleChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
+      'SizedBox': {'SingleChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
+      'Expanded': {'Flexible', 'ParentDataWidget', 'ProxyWidget', 'Widget'},
+      'Flexible': {'ParentDataWidget', 'ProxyWidget', 'Widget'},
+      'Stack': {'MultiChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
+      'Positioned': {'ParentDataWidget', 'ProxyWidget', 'Widget'},
+      'Icon': {'StatelessWidget', 'Widget'},
+      'Image': {'StatefulWidget', 'Widget'},
+      'CircularProgressIndicator': {'ProgressIndicator', 'StatefulWidget', 'Widget'},
+      'LinearProgressIndicator': {'ProgressIndicator', 'StatefulWidget', 'Widget'},
+      'BottomNavigationBar': {'StatefulWidget', 'Widget'},
+      'TabBar': {'StatefulWidget', 'Widget'},
+      'TabBarView': {'StatefulWidget', 'Widget'},
+      'MaterialApp': {'StatefulWidget', 'Widget'},
+      'WidgetsApp': {'StatefulWidget', 'Widget'},
+      'Navigator': {'StatefulWidget', 'Widget'},
+    };
+    final supertypes = knownSupertypes[actualTypeName];
+    if (supertypes != null) return supertypes.contains(targetTypeName);
+    // For unknown types, check if the type name ends with the target (heuristic)
+    // e.g., "_ElevatedButtonState" contains "ElevatedButton"
+    return false;
+  }
+
+  static bool _passesFilter(Element element, Map<String, dynamic> filter) {
+    if (filter['enabled'] == true && _enabledForElement(element) != true) {
+      return false;
+    }
+    if (filter['enabled'] == false && _enabledForElement(element) != false) {
+      return false;
+    }
+    final widget = element.widget;
+    if (filter['checked'] == true && _checkedValueOf(widget) != true) {
+      return false;
+    }
+    if (filter['checked'] == false && _checkedValueOf(widget) != false) {
+      return false;
+    }
+    if (filter['visible'] == true && !_isHitTestable(element, Alignment.center)) {
+      return false;
+    }
+    if (filter['visible'] == false && _isHitTestable(element, Alignment.center)) {
+      return false;
+    }
+    final hasText = filter['hasText'];
+    if (hasText is String && extractText(widget) != hasText) {
+      return false;
+    }
+    final hasTextContains = filter['hasTextContains'];
+    if (hasTextContains is String) {
+      final text = extractText(widget);
+      if (text == null || !text.contains(hasTextContains)) return false;
+    }
+    final hasTextRegex = filter['hasTextRegex'];
+    if (hasTextRegex is String) {
+      final text = extractText(widget);
+      if (text == null || !RegExp(hasTextRegex).hasMatch(text)) return false;
+    }
+    return true;
+  }
+
+  static String? _extractTooltip(Element element) {
+    final widget = element.widget;
+
+    // Aligned with Flutter native find.byTooltip():
+    // 1. Direct Tooltip widget — supports both message and richMessage
+    if (widget is Tooltip) {
+      final String tooltipMessage =
+          widget.message ?? widget.richMessage?.toPlainText() ?? '';
+      if (tooltipMessage.isNotEmpty) return tooltipMessage;
+    }
+
+    // 2. RawTooltip (Tooltip's base class) — reads semanticsTooltip
+    if (widget is RawTooltip) {
+      final String? semantics = widget.semanticsTooltip;
+      if (semantics != null && semantics.isNotEmpty) return semantics;
+    }
+
+    // 3. Widgets with a tooltip property (IconButton, FloatingActionButton, etc.)
+    try {
+      final dynamic tooltip = (widget as dynamic).tooltip;
+      if (tooltip is String && tooltip.isNotEmpty) return tooltip;
+    } catch (_) {}
+
+    // 4. Walk ancestors for Tooltip / RawTooltip / tooltip property
+    String? result;
+    element.visitAncestorElements((ancestor) {
+      final aw = ancestor.widget;
+      if (aw is Tooltip) {
+        result = aw.message ?? aw.richMessage?.toPlainText() ?? '';
+        if (result!.isNotEmpty) return false;
+      }
+      if (aw is RawTooltip) {
+        final String? semantics = aw.semanticsTooltip;
+        if (semantics != null && semantics.isNotEmpty) {
+          result = semantics;
+          return false;
+        }
+      }
+      try {
+        final dynamic tooltip = (aw as dynamic).tooltip;
+        if (tooltip is String && tooltip.isNotEmpty) {
+          result = tooltip;
+          return false;
+        }
+      } catch (_) {}
+      if (aw is Scaffold || aw is WidgetsApp) return false;
+      return true;
+    });
+    return result;
   }
 
   static bool _isHitTestable(Element element, Alignment alignment) {

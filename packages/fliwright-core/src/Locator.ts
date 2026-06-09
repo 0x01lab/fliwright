@@ -1,4 +1,5 @@
 import type {
+  FilterCriteria,
   RefTarget,
   SelectorAst,
   SelectorInput,
@@ -65,6 +66,10 @@ export class Locator {
     return this.locator({ type });
   }
 
+  getBySubtype(subtype: string): Locator {
+    return this.locator({ subtype });
+  }
+
   getBySemantics(semantics: {
     identifier?: string;
     label?: string;
@@ -94,6 +99,22 @@ export class Locator {
 
   first(): Locator {
     return this.nth(0);
+  }
+
+  last(): Locator {
+    return new Locator(this.requireSelector('last').last(), this.sendRequest);
+  }
+
+  filter(criteria: FilterCriteria): Locator {
+    return new Locator(this.requireSelector('filter').filter(criteria), this.sendRequest);
+  }
+
+  containing(descendant: SelectorInput): Locator {
+    return new Locator(this.requireSelector('containing').containing(descendant), this.sendRequest);
+  }
+
+  getByTooltip(tooltip: string): Locator {
+    return this.locator({ tooltip });
   }
 
   async click(options?: { alignment?: AlignmentOption; timeout?: number }): Promise<void> {

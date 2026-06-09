@@ -3,6 +3,15 @@ export type SendRequest = (method: string, params?: Record<string, unknown>) => 
 
 export type TextMatchMode = 'exact' | 'contains' | 'regex';
 
+export interface FilterCriteria {
+  hasText?: string;
+  hasTextContains?: string;
+  hasTextRegex?: string;
+  visible?: boolean;
+  enabled?: boolean;
+  checked?: boolean;
+}
+
 export interface MatchCriteria {
   type?: string;
   key?: string;
@@ -16,6 +25,13 @@ export interface MatchCriteria {
   semanticsLabel?: string;
   semanticsHint?: string;
   role?: string;
+  tooltip?: string;
+  enabled?: boolean;
+  checked?: boolean;
+  subtype?: string;
+  iconCodePoint?: number;
+  iconFontFamily?: string;
+  iconFontPackage?: string;
 }
 
 export interface FallbackCriteria {
@@ -37,6 +53,10 @@ export interface SelectorQuery {
   within?: SelectorQuery;
   fallback?: FallbackCriteria;
   position?: PositionFilter;
+  and?: SelectorQuery[];
+  or?: SelectorQuery[];
+  filter?: FilterCriteria;
+  containing?: SelectorQuery;
 }
 
 export type SelectorAst =
@@ -48,6 +68,7 @@ export type SelectorAst =
     }
   | { kind: 'key'; value: string }
   | { kind: 'type'; value: string }
+  | { kind: 'subtype'; value: string }
   | { kind: 'id'; value: string }
   | { kind: 'name'; value: string }
   | { kind: 'ancestorKey'; value: string }
@@ -60,12 +81,16 @@ export type SelectorAst =
       match?: TextMatchMode;
       caseSensitive?: boolean;
     }
-  | { kind: 'icon'; codePoint: number; fontFamily?: string }
+  | { kind: 'icon'; codePoint: number; fontFamily?: string; fontPackage?: string }
+  | { kind: 'tooltip'; value: string }
   | { kind: 'descendant'; of: SelectorAst; matching: SelectorAst; matchRoot?: boolean }
   | { kind: 'ancestor'; of: SelectorAst; matching: SelectorAst; matchRoot?: boolean }
   | { kind: 'and'; selectors: SelectorAst[] }
   | { kind: 'or'; selectors: SelectorAst[] }
-  | { kind: 'nth'; selector: SelectorAst; index: number };
+  | { kind: 'nth'; selector: SelectorAst; index: number }
+  | { kind: 'last'; selector: SelectorAst }
+  | { kind: 'filter'; selector: SelectorAst; filter: FilterCriteria }
+  | { kind: 'containing'; parent: SelectorAst; descendant: SelectorAst };
 
 export type SelectorInput =
   | string
@@ -74,10 +99,11 @@ export type SelectorInput =
   | SelectorAst
   | { text: string | RegExp; match?: TextMatchMode; exact?: boolean; caseSensitive?: boolean; ancestor?: SelectorInput }
   | { key: string; ancestor?: SelectorInput }
-  | { type: string; ancestor?: SelectorInput }
+  | { type: string; enabled?: boolean; checked?: boolean; ancestor?: SelectorInput }
   | { id: string; ancestor?: SelectorInput }
   | { name: string; ancestor?: SelectorInput }
   | { ancestorKey: string; ancestor?: SelectorInput }
+  | { subtype: string; ancestor?: SelectorInput }
   | {
       semantics: {
         identifier?: string;
@@ -89,7 +115,8 @@ export type SelectorInput =
       };
       ancestor?: SelectorInput;
     }
-  | { icon: { codePoint: number; fontFamily?: string }; ancestor?: SelectorInput };
+  | { icon: { codePoint: number; fontFamily?: string; fontPackage?: string }; ancestor?: SelectorInput }
+  | { tooltip: string; ancestor?: SelectorInput };
 
 export interface ProviderInfo {
   name: string;
@@ -385,6 +412,8 @@ export interface FormHelperOptions {
   skipObscureFields?: boolean;
   scope?: string;
   requireRuleMatch?: boolean;
+  /** Pick a specific index from PRESET_SKILL/LLM_GENERATE `data` arrays. When omitted, cycles automatically. */
+  dataIndex?: number;
 }
 
 export interface FormSkill {

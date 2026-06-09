@@ -14,6 +14,10 @@ export class VitestRunner implements TestRunner {
       FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: params.failureContextDir.fsPath,
     };
     if (params.vmServiceUrl) env.FLIWRIGHT_VM_URL = params.vmServiceUrl;
+    if (params.traceMode && params.traceMode !== 'off' && params.traceDir) {
+      env.FLIWRIGHT_TRACE = params.traceMode;
+      env.FLIWRIGHT_TRACE_DIR = params.traceDir.fsPath;
+    }
 
     const execution = await runCommand('pnpm', args, params.workspaceRoot.fsPath, env);
     return parseVitestJson(execution.stdout, execution.stderr, execution.exitCode);

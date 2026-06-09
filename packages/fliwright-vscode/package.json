@@ -71,7 +71,9 @@
     "onCommand:fliwright.unwatchStateProvider",
     "onCommand:fliwright.copyStateProviderValue",
     "onCommand:fliwright.openRiverpodSetupHelp",
-    "onCommand:fliwright.openVisualEditor"
+    "onCommand:fliwright.openVisualEditor",
+    "onCommand:fliwright.openTraceViewer",
+    "onCommand:fliwright.showLastTrace"
   ],
   "contributes": {
     "viewsContainers": {
@@ -290,6 +292,16 @@
         "command": "fliwright.openVisualEditor",
         "title": "Fliwright: Open Visual Test Editor",
         "icon": "$(eye)"
+      },
+      {
+        "command": "fliwright.openTraceViewer",
+        "title": "Fliwright: Open Trace Viewer",
+        "icon": "$(timeline)"
+      },
+      {
+        "command": "fliwright.showLastTrace",
+        "title": "Fliwright: Show Last Trace",
+        "icon": "$(history)"
       }
     ],
     "menus": {
@@ -570,6 +582,12 @@
           "type": "boolean",
           "default": true,
           "description": "Show Fliwright CodeLens actions in TypeScript test files."
+        },
+        "fliwright.traceMode": {
+          "type": "string",
+          "enum": ["off", "on-failure", "full"],
+          "default": "on-failure",
+          "description": "Trace capture mode for test runs. 'on-failure' captures screenshots only on failed steps. 'full' captures every step."
         }
       }
     }

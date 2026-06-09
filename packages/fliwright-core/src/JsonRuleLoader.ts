@@ -11,49 +11,50 @@ export class JsonRuleLoader {
     this.projectRoot = projectRoot ?? process.cwd();
   }
 
-  loadFromFile(filePath: string): FormSkill[] {
+  loadFromFile(filePath: string, dataIndex?: number): FormSkill[] {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
       const data = JSON.parse(raw) as FormRulesFile;
-      return this.parseRules(data);
+      return this.parseRules(data, dataIndex);
     } catch {
       return [];
     }
   }
 
-  loadFromDir(dirPath: string): FormSkill[] {
+  loadFromDir(dirPath: string, dataIndex?: number): FormSkill[] {
     if (!fs.existsSync(dirPath)) return [];
     const skills: FormSkill[] = [];
     const entries = fs.readdirSync(dirPath);
     for (const entry of entries) {
       if (entry.endsWith('.json')) {
-        skills.push(...this.loadFromFile(path.join(dirPath, entry)));
+        skills.push(...this.loadFromFile(path.join(dirPath, entry), dataIndex));
       }
     }
     return skills;
   }
 
-  autoDiscover(): FormSkill[] {
+  autoDiscover(dataIndex?: number): FormSkill[] {
     const skills: FormSkill[] = [];
     const singleFile = path.join(this.projectRoot, 'fliwright.form-rules.json');
-    skills.push(...this.loadFromFile(singleFile));
+    skills.push(...this.loadFromFile(singleFile, dataIndex));
     const rulesDir = path.join(this.projectRoot, 'fliwright.form-rules');
-    skills.push(...this.loadFromDir(rulesDir));
+    skills.push(...this.loadFromDir(rulesDir, dataIndex));
     return skills;
   }
 
-  private parseRules(data: FormRulesFile): FormSkill[] {
+  private parseRules(data: FormRulesFile, dataIndex?: number): FormSkill[] {
     if (data.version !== 1) return [];
-    return data.rules.map((rule) => this.ruleToSkill(rule));
+    return data.rules.map((rule) => this.ruleToSkill(rule, dataIndex));
   }
 
-  private ruleToSkill(rule: FormRule): FormSkill {
+  private ruleToSkill(rule: FormRule, dataIndex?: number): FormSkill {
     const matchEntries = Object.entries(rule.match ?? {});
     const name = 'rule:' + matchEntries.map(([k, v]) => `${k}=${v}`).join(',');
     const find = rule.find ? new Selector(rule.find).toQuery() : undefined;
 
     if (rule.type === 'PRESET_SKILL' && rule.data && rule.data.length > 0) {
-      let index = 0;
+      const auto = dataIndex === undefined;
+      let index = auto ? 0 : dataIndex;
       return {
         name,
         type: 'PRESET_SKILL',
@@ -61,14 +62,15 @@ export class JsonRuleLoader {
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: () => {
           const value = rule.data![index % rule.data!.length];
-          index++;
+          if (auto) index++;
           return value;
         },
       };
     }
 
     if (rule.type === 'LLM_GENERATE' && rule.data) {
-      let index = 0;
+      const auto = dataIndex === undefined;
+      let index = auto ? 0 : dataIndex;
       return {
         name,
         type: 'LLM_GENERATE',
@@ -76,7 +78,7 @@ export class JsonRuleLoader {
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: () => {
           const value = rule.data![index % rule.data!.length];
-          index++;
+          if (auto) index++;
           return value;
         },
       };

@@ -1,4 +1,4 @@
-import type { MatchCriteria, SelectorAst, SelectorInput, SelectorQuery, TextMatchMode } from './types.js';
+import type { FilterCriteria, MatchCriteria, SelectorAst, SelectorInput, SelectorQuery, TextMatchMode } from './types.js';
 
 export class Selector {
   readonly query: SelectorQuery;
@@ -51,17 +51,27 @@ export class Selector {
     } else if ('key' in input) {
       query = { match: { key: Selector.nonEmptyString('key', input.key) } };
     } else if ('type' in input) {
-      query = { match: { type: Selector.nonEmptyString('type', input.type) } };
+      query = {
+        match: {
+          type: Selector.nonEmptyString('type', input.type),
+          ...(input.enabled != null ? { enabled: input.enabled } : {}),
+          ...(input.checked != null ? { checked: input.checked } : {}),
+        },
+      };
     } else if ('id' in input) {
       query = { match: { id: Selector.nonEmptyString('id', input.id) } };
     } else if ('name' in input) {
       query = { match: { name: Selector.nonEmptyString('name', input.name) } };
     } else if ('ancestorKey' in input) {
       query = { match: { ancestorKey: Selector.nonEmptyString('ancestorKey', input.ancestorKey) } };
+    } else if ('subtype' in input) {
+      query = Selector.astToQuery({ kind: 'subtype', value: Selector.nonEmptyString('subtype', input.subtype) });
     } else if ('semantics' in input) {
       query = Selector.astToQuery(Selector.semanticsAst(input.semantics));
     } else if ('icon' in input) {
       query = Selector.astToQuery(Selector.iconAst(input.icon));
+    } else if ('tooltip' in input) {
+      query = { match: { tooltip: Selector.nonEmptyString('tooltip', input.tooltip) } };
     } else {
       throw new Error('Invalid selector input');
     }
@@ -105,6 +115,24 @@ export class Selector {
 
   first(): Selector {
     return this.nth(0);
+  }
+
+  last(): Selector {
+    return new Selector({ ...this.query, position: { ...this.query.position, last: true } });
+  }
+
+  filter(criteria: FilterCriteria): Selector {
+    const merged: FilterCriteria = { ...this.query.filter, ...criteria };
+    return new Selector({ ...this.query, filter: merged });
+  }
+
+  containing(descendant: SelectorInput): Selector {
+    const descQuery = Selector.normalize(descendant);
+    return Selector.fromAst({
+      kind: 'containing',
+      parent: Selector.queryToAst(this.query),
+      descendant: Selector.queryToAst(descQuery),
+    });
   }
 
   get ast(): SelectorAst {
@@ -173,6 +201,10 @@ export class Selector {
         return { kind: 'semantics', label: value, match: 'contains' };
       case 'role':
         return { kind: 'semantics', role: value };
+      case 'tooltip':
+        return { kind: 'tooltip', value };
+      case 'subtype':
+        return { kind: 'subtype', value };
       default:
         throw new Error(`Unsupported selector string prefix: ${field}`);
     }
@@ -203,7 +235,7 @@ export class Selector {
     };
   }
 
-  private static valueAst<K extends 'key' | 'type' | 'id' | 'name' | 'ancestorKey'>(
+  private static valueAst<K extends 'key' | 'type' | 'id' | 'name' | 'ancestorKey' | 'tooltip' | 'subtype'>(
     kind: K,
     value: unknown,
   ): Extract<SelectorAst, { kind: K }> {
@@ -228,7 +260,7 @@ export class Selector {
     return { kind: 'semantics', ...input };
   }
 
-  private static iconAst(input: { codePoint: number; fontFamily?: string }): SelectorAst {
+  private static iconAst(input: { codePoint: number; fontFamily?: string; fontPackage?: string }): SelectorAst {
     if (!Number.isInteger(input.codePoint) || input.codePoint < 0) {
       throw new Error('Icon selector codePoint must be a non-negative integer');
     }
@@ -255,6 +287,8 @@ export class Selector {
       case 'id':
       case 'name':
       case 'ancestorKey':
+      case 'tooltip':
+      case 'subtype':
         return Selector.valueAst(ast.kind, ast.value);
       case 'semantics':
         return Selector.semanticsAst(ast);
@@ -278,6 +312,16 @@ export class Selector {
           throw new Error('Selector index must be a non-negative integer');
         }
         return { ...ast, selector: Selector.validateAst(ast.selector) };
+      case 'last':
+        return { ...ast, selector: Selector.validateAst(ast.selector) };
+      case 'filter':
+        return { ...ast, selector: Selector.validateAst(ast.selector) };
+      case 'containing':
+        return {
+          ...ast,
+          parent: Selector.validateAst(ast.parent),
+          descendant: Selector.validateAst(ast.descendant),
+        };
       default:
         throw new Error('Invalid selector input');
     }
@@ -289,6 +333,10 @@ export class Selector {
       ...(query.within ? { within: Selector.validateQuery(query.within) } : {}),
       ...(query.fallback ? { fallback: Selector.validateFallback(query.fallback) } : {}),
       ...(query.position ? { position: Selector.validatePosition(query.position) } : {}),
+      ...(query.and ? { and: query.and.map(Selector.validateQuery) } : {}),
+      ...(query.or ? { or: query.or.map(Selector.validateQuery) } : {}),
+      ...(query.filter ? { filter: Selector.validateFilter(query.filter) } : {}),
+      ...(query.containing ? { containing: Selector.validateQuery(query.containing) } : {}),
     };
   }
 
@@ -307,10 +355,17 @@ export class Selector {
       'semanticsLabel',
       'semanticsHint',
       'role',
+      'tooltip',
+      'subtype',
+      'iconFontFamily',
+      'iconFontPackage',
     ] as const) {
       const value = match[key];
       if (value != null) out[key] = Selector.nonEmptyString(key, value);
     }
+    if (match.enabled != null) out.enabled = Boolean(match.enabled);
+    if (match.checked != null) out.checked = Boolean(match.checked);
+    if (match.iconCodePoint != null) out.iconCodePoint = typeof match.iconCodePoint === 'number' ? match.iconCodePoint : 0;
     if (Object.keys(out).length === 0) {
       throw new Error('Selector match must include at least one criterion');
     }
@@ -341,6 +396,20 @@ export class Selector {
     };
   }
 
+  private static validateFilter(filter: NonNullable<SelectorQuery['filter']>): NonNullable<SelectorQuery['filter']> {
+    const out: NonNullable<SelectorQuery['filter']> = {};
+    if (filter.hasText != null) out.hasText = Selector.nonEmptyString('hasText', filter.hasText);
+    if (filter.hasTextContains != null) out.hasTextContains = Selector.nonEmptyString('hasTextContains', filter.hasTextContains);
+    if (filter.hasTextRegex != null) out.hasTextRegex = Selector.nonEmptyString('hasTextRegex', filter.hasTextRegex);
+    if (filter.visible != null) out.visible = Boolean(filter.visible);
+    if (filter.enabled != null) out.enabled = Boolean(filter.enabled);
+    if (filter.checked != null) out.checked = Boolean(filter.checked);
+    if (Object.keys(out).length === 0) {
+      throw new Error('Selector filter must include at least one criterion');
+    }
+    return out;
+  }
+
   private static nonEmptyString(name: string, value: unknown): string {
     if (typeof value !== 'string' || value.length === 0) {
       throw new Error(`Selector ${name} must be a non-empty string`);
@@ -364,6 +433,10 @@ export class Selector {
         return { match: { name: ast.value } };
       case 'ancestorKey':
         return { match: { ancestorKey: ast.value } };
+      case 'tooltip':
+        return { match: { tooltip: ast.value } };
+      case 'subtype':
+        return { match: { subtype: ast.value } };
       case 'semantics':
         return {
           match: {
@@ -373,28 +446,83 @@ export class Selector {
             ...(ast.role ? { role: ast.role } : {}),
           },
         };
+      case 'icon':
+        return {
+          match: {
+            type: 'Icon',
+            iconCodePoint: ast.codePoint,
+            ...(ast.fontFamily ? { iconFontFamily: ast.fontFamily } : {}),
+            ...(ast.fontPackage ? { iconFontPackage: ast.fontPackage } : {}),
+          },
+        };
       case 'descendant':
         return { ...Selector.astToQuery(ast.matching), within: Selector.astToQuery(ast.of) };
+      case 'ancestor':
+        return { ...Selector.astToQuery(ast.matching), within: Selector.astToQuery(ast.of) };
+      case 'and':
+        return { and: ast.selectors.map((s) => Selector.astToQuery(s)) };
+      case 'or':
+        return { or: ast.selectors.map((s) => Selector.astToQuery(s)) };
       case 'nth':
         return { ...Selector.astToQuery(ast.selector), position: { nth: ast.index } };
+      case 'last':
+        return { ...Selector.astToQuery(ast.selector), position: { last: true } };
+      case 'filter':
+        return { ...Selector.astToQuery(ast.selector), filter: ast.filter };
+      case 'containing':
+        return { ...Selector.astToQuery(ast.parent), containing: Selector.astToQuery(ast.descendant) };
       default:
-        return { match: { type: ast.kind } };
+        return { match: { type: 'Widget' } };
     }
   }
 
   private static queryToAst(query: SelectorQuery): SelectorAst {
+    // Handle top-level and/or composition
+    if (query.and) {
+      const ast: SelectorAst = { kind: 'and', selectors: query.and.map(Selector.queryToAst) };
+      if (query.position?.nth != null) return { kind: 'nth', selector: ast, index: query.position.nth };
+      if (query.position?.last) return { kind: 'last', selector: ast };
+      if (query.filter) return { kind: 'filter', selector: ast, filter: query.filter };
+      return ast;
+    }
+    if (query.or) {
+      const ast: SelectorAst = { kind: 'or', selectors: query.or.map(Selector.queryToAst) };
+      if (query.position?.nth != null) return { kind: 'nth', selector: ast, index: query.position.nth };
+      if (query.position?.last) return { kind: 'last', selector: ast };
+      if (query.filter) return { kind: 'filter', selector: ast, filter: query.filter };
+      return ast;
+    }
+
     const base = Selector.matchToAst(query.match);
     const scoped = query.within
       ? { kind: 'descendant' as const, of: Selector.queryToAst(query.within), matching: base }
       : base;
+    const withFilter = query.filter
+      ? { kind: 'filter' as const, selector: scoped, filter: query.filter } as SelectorAst
+      : scoped;
+    const withContaining = query.containing
+      ? { kind: 'containing' as const, parent: withFilter, descendant: Selector.queryToAst(query.containing) } as SelectorAst
+      : withFilter;
     if (query.position?.nth != null) {
-      return { kind: 'nth', selector: scoped, index: query.position.nth };
+      return { kind: 'nth', selector: withContaining, index: query.position.nth };
     }
-    return scoped;
+    if (query.position?.last) {
+      return { kind: 'last', selector: withContaining };
+    }
+    return withContaining;
   }
 
   private static matchToAst(match?: MatchCriteria): SelectorAst {
     if (!match) return { kind: 'type', value: 'Widget' };
+    // Icon must be checked before type since icon match includes type: 'Icon'
+    if (match.iconCodePoint != null) {
+      return {
+        kind: 'icon',
+        codePoint: match.iconCodePoint,
+        ...(match.iconFontFamily ? { fontFamily: match.iconFontFamily } : {}),
+        ...(match.iconFontPackage ? { fontPackage: match.iconFontPackage } : {}),
+      };
+    }
     if (match.text) return { kind: 'text', value: match.text, match: 'exact' };
     if (match.textContains) return { kind: 'text', value: match.textContains, match: 'contains' };
     if (match.textRegex) return { kind: 'text', value: match.textRegex, match: 'regex' };
@@ -403,6 +531,8 @@ export class Selector {
     if (match.id) return { kind: 'id', value: match.id };
     if (match.name) return { kind: 'name', value: match.name };
     if (match.ancestorKey) return { kind: 'ancestorKey', value: match.ancestorKey };
+    if (match.tooltip) return { kind: 'tooltip', value: match.tooltip };
+    if (match.subtype) return { kind: 'subtype', value: match.subtype };
     if (match.semanticIdentifier || match.semanticsLabel || match.semanticsHint || match.role) {
       return {
         kind: 'semantics',

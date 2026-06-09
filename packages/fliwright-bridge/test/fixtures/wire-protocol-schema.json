@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fliwright Wire Protocol",
+  "description": "JSON contract between fliwright-core (TS) and fliwright-bridge (Dart). Auto-generated from Zod schemas.",
+  "definitions": {
+    "MatchCriteria": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key": {
+          "$ref": "#/properties/type"
+        },
+        "id": {
+          "$ref": "#/properties/type"
+        },
+        "name": {
+          "$ref": "#/properties/type"
+        },
+        "ancestorKey": {
+          "$ref": "#/properties/type"
+        },
+        "text": {
+          "$ref": "#/properties/type"
+        },
+        "textContains": {
+          "$ref": "#/properties/type"
+        },
+        "textRegex": {
+          "$ref": "#/properties/type"
+        },
+        "semanticIdentifier": {
+          "$ref": "#/properties/type"
+        },
+        "semanticsLabel": {
+          "$ref": "#/properties/type"
+        },
+        "semanticsHint": {
+          "$ref": "#/properties/type"
+        },
+        "role": {
+          "$ref": "#/properties/type"
+        },
+        "tooltip": {
+          "$ref": "#/properties/type"
+        },
+        "subtype": {
+          "$ref": "#/properties/type"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "iconCodePoint": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "iconFontFamily": {
+          "$ref": "#/properties/type"
+        },
+        "iconFontPackage": {
+          "$ref": "#/properties/type"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FilterCriteria": {
+      "type": "object",
+      "properties": {
+        "hasText": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hasTextContains": {
+          "$ref": "#/properties/hasText"
+        },
+        "hasTextRegex": {
+          "$ref": "#/properties/hasText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "checked": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FallbackCriteria": {
+      "type": "object",
+      "properties": {
+        "semanticsLabel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "semanticsHint": {
+          "$ref": "#/properties/semanticsLabel"
+        },
+        "hintText": {
+          "$ref": "#/properties/semanticsLabel"
+        },
+        "textContains": {
+          "$ref": "#/properties/semanticsLabel"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PositionFilter": {
+      "type": "object",
+      "properties": {
+        "nth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "first": {
+          "type": "boolean"
+        },
+        "last": {
+          "type": "boolean"
+        },
+        "visible": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -115,15 +115,16 @@ export class FormHelper {
     const generator = new FakerGenerator({ locale: options?.locale });
     const registry = new SkillRegistry();
     const loader = new JsonRuleLoader();
+    const dataIndex = options?.dataIndex;
 
     if (options?.rulesFile) {
-      const skills = loader.loadFromFile(options.rulesFile);
+      const skills = loader.loadFromFile(options.rulesFile, dataIndex);
       for (const skill of skills) registry.register(skill);
     } else if (options?.rulesDir) {
-      const skills = loader.loadFromDir(options.rulesDir);
+      const skills = loader.loadFromDir(options.rulesDir, dataIndex);
       for (const skill of skills) registry.register(skill);
     } else {
-      const skills = loader.autoDiscover();
+      const skills = loader.autoDiscover(dataIndex);
       for (const skill of skills) registry.register(skill);
     }
 

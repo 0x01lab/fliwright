@@ -5,6 +5,11 @@ import { AnnotationWriter } from './AnnotationWriter.js';
 import { getEditorHtml } from './getHtml.js';
 import type { StepModel, WebviewToExt, ExtToWebview } from './types.js';
 
+/** VS Code output channel, set from extension.ts */
+export let editorOutput: vscode.OutputChannel | undefined;
+export function setEditorOutput(ch: vscode.OutputChannel): void { editorOutput = ch; }
+function output(msg: string): void { editorOutput?.appendLine(msg); }
+
 export class TestEditorPanel implements vscode.Disposable {
   private readonly parser = new AnnotationParser();
   private readonly writer = new AnnotationWriter();
@@ -26,7 +31,18 @@ export class TestEditorPanel implements vscode.Disposable {
     };
 
     // 处理 Webview 消息
-    panel.webview.onDidReceiveMessage((msg: WebviewToExt) => {
+    panel.webview.onDidReceiveMessage((msg: WebviewToExt | { type: 'ready' }) => {
+      if (msg.type === 'ready') {
+        // Webview 加载完毕，发送初始数据
+        output('[FliwrightEditor] Webview ready, sending init data: ' + this.steps.length + ' steps');
+        this.panel.webview.postMessage({
+          type: 'init',
+          steps: this.steps,
+          code: this.document.getText(),
+          testName: this.testName,
+        } satisfies ExtToWebview);
+        return;
+      }
       this.handleMessage(msg);
     }, null, this.disposables);
 
@@ -49,12 +65,12 @@ export class TestEditorPanel implements vscode.Disposable {
   }
 
   private render(): void {
-    // 初始数据直接嵌入 HTML，避免 postMessage 竞争条件
-    this.panel.webview.html = getEditorHtml(this.steps, {
+    const html = getEditorHtml(this.steps, {
       testName: this.testName,
       cspSource: this.panel.webview.cspSource,
       nonce: getNonce(),
     });
+    this.panel.webview.html = html;
   }
 
   private async handleMessage(msg: WebviewToExt): Promise<void> {

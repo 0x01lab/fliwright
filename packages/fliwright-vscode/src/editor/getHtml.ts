@@ -84,25 +84,25 @@ export function getEditorHtml(
   <div class="editor" id="editor"></div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    let steps = ${JSON.stringify(steps)};
-    let selectedIdx = steps.length > 0 ? 0 : -1;
+    let steps = [];
+    let testName = null;
+    let selectedIdx = -1;
     let expandedIdx = -1;
     let activeTab = 'code';
     let liveMode = ${liveMode ? 'true' : 'false'};
-    let testName = ${testName ? "'" + testName.replace(/'/g, "\\'") + "'" : 'null'};
 
-    // 首次渲染
-    render();
+    // 通知扩展 webview 已准备好接收数据
+    vscode.postMessage({ type: 'ready' });
 
     function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
     function render() {
       const el = document.getElementById('editor');
       if (!steps.length) {
-        el.innerHTML = '<div class="empty-state"><div class="icon">🧪</div><h3>No visual steps found</h3><p>This test file does not contain @fliwright-step annotations yet.</p><button onclick="vscode.postMessage({type:\'run-test\'})">⏺ Record to Generate</button></div>';
+        el.innerHTML = '<div class="empty-state"><div class="icon">🧪</div><h3>No visual steps found</h3><p>This test file does not contain @fliwright-step annotations yet.</p><button onclick="vscode.postMessage({type:\\'run-test\\'})">⏺ Record to Generate</button></div>';
         return;
       }
-      el.innerHTML = '<div class="step-panel"><div class="toolbar"><button onclick="vscode.postMessage({type:\'run-test\'})">▶ Run</button><button onclick="vscode.postMessage({type:\'open-source\'})">📝 Source</button>' + (liveMode ? '<span class="live-badge">● LIVE</span>' : '') + '<span class="stats">' + steps.length + ' steps</span></div><div class="step-list" id="stepList"></div></div><div class="right-panel"><div class="screenshot-area" id="screenshotArea"></div><div class="detail-panel"><div class="detail-tabs" id="detailTabs"></div><div id="detailContent"></div></div></div>';
+      el.innerHTML = '<div class="step-panel"><div class="toolbar"><button onclick="vscode.postMessage({type:\\'run-test\\'})">▶ Run</button><button onclick="vscode.postMessage({type:\\'open-source\\'})">📝 Source</button>' + (liveMode ? '<span class="live-badge">● LIVE</span>' : '') + '<span class="stats">' + steps.length + ' steps</span></div><div class="step-list" id="stepList"></div></div><div class="right-panel"><div class="screenshot-area" id="screenshotArea"></div><div class="detail-panel"><div class="detail-tabs" id="detailTabs"></div><div id="detailContent"></div></div></div>';
       renderStepList();
       renderScreenshot();
       renderDetailPanel();
@@ -145,7 +145,7 @@ export function getEditorHtml(
       if (!tabs || !content) return;
       const names = ['code','network','assertions','healing'];
       const labels = {code:'Code',network:'Network',assertions:'Assertions',healing:'Healing'};
-      tabs.innerHTML = names.map(t => '<div class="detail-tab' + (t === activeTab ? ' active' : '') + '" onclick="switchTab(\'' + t + '\')">' + labels[t] + '</div>').join('');
+      tabs.innerHTML = names.map(t => '<div class="detail-tab' + (t === activeTab ? ' active' : '') + '" onclick="switchTab(\\'' + t + '\\')">' + labels[t] + '</div>').join('');
       const s = steps[selectedIdx];
       content.innerHTML = renderTabContent(activeTab, s);
     }

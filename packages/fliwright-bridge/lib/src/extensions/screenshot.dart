@@ -70,11 +70,13 @@ class ScreenshotExtension {
   /// screenshots during active animations or layout changes.
   static Future<void> _waitForFrame() async {
     final binding = WidgetsBinding.instance;
-    // Schedule and wait for a frame to complete rendering
-    binding.addPostFrameCallback((_) {});
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    // Pump an extra frame to ensure paint is complete
-    binding.handleDrawFrame();
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // Pump multiple frames to settle the render tree.
+    // WebView and active animations can keep marking the tree as needing paint,
+    // so we pump several times with delays to let the pipeline converge.
+    for (var i = 0; i < 5; i++) {
+      binding.addPostFrameCallback((_) {});
+      binding.handleDrawFrame();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
   }
 }

@@ -7,7 +7,7 @@ import {
   fillFormFieldsCapability,
 } from '@fliwright/cli/capabilities/form';
 import { loadConfig, resolveWorkspacePath } from '../config.js';
-import type { FormRulesEntry, FormRunSummary } from '../types.js';
+import type { FormRulesEntry, FormRule, FormRunSummary } from '../types.js';
 
 export interface PreviewField {
   id: string;
@@ -35,8 +35,8 @@ export class FormHelperService {
     return this.lastAnalyze;
   }
 
-  async analyze(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry): Promise<FormAnalyzeResult> {
-    const options = this.options(workspaceRoot, rulesFile);
+  async analyze(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry, dataIndex?: number): Promise<FormAnalyzeResult> {
+    const options = this.options(workspaceRoot, rulesFile, dataIndex);
     const result = await analyzeFormCapability(driver, options);
     this.lastAnalyze = result;
     this.lastSummary = {
@@ -48,8 +48,8 @@ export class FormHelperService {
     return result;
   }
 
-  async fill(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry): Promise<FormFillResult> {
-    const options = this.options(workspaceRoot, rulesFile);
+  async fill(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry, dataIndex?: number): Promise<FormFillResult> {
+    const options = this.options(workspaceRoot, rulesFile, dataIndex);
     const result = await fillFormCapability(driver, options);
     this.lastAnalyze = undefined;
     this.lastSummary = {
@@ -69,8 +69,9 @@ export class FormHelperService {
     workspaceRoot: vscode.Uri,
     fieldHints: string[],
     rulesFile?: FormRulesEntry,
+    dataIndex?: number,
   ): Promise<FormFillResult> {
-    const options = this.options(workspaceRoot, rulesFile);
+    const options = this.options(workspaceRoot, rulesFile, dataIndex);
     const result = await fillFormFieldsCapability(driver, fieldHints, options);
     this.lastAnalyze = undefined;
     this.lastSummary = {
@@ -99,7 +100,7 @@ export class FormHelperService {
     });
   }
 
-  private options(workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry): FormHelperOptions {
+  private options(workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry, dataIndex?: number): FormHelperOptions {
     const config = loadConfig();
     const configuredRulesFile = config.formRulesFile
       ? resolveWorkspacePath(workspaceRoot, config.formRulesFile).fsPath
@@ -111,6 +112,7 @@ export class FormHelperService {
       locale: rulesFile?.rulesFile.locale ?? config.formLocale,
       skipObscureFields: true,
       requireRuleMatch: Boolean(rulesFile || configuredRulesFile),
+      dataIndex,
     };
   }
 }
@@ -136,6 +138,50 @@ function maskValue(value: string): string {
 
 export function formRulesFileName(entry?: FormRulesEntry): string {
   return entry ? path.basename(entry.uri.fsPath) : 'configured rules';
+}
+
+/**
+ * Returns the maximum data-set count across all PRESET_SKILL/LLM_GENERATE rules in a file.
+ * Each rule's `data` array represents multiple data sets at the same index.
+ * Returns 0 if no rules have a `data` array with more than one entry.
+ */
+export function dataSetCount(rules: FormRule[]): number {
+  let max = 0;
+  for (const rule of rules) {
+    if ((rule.type === 'PRESET_SKILL' || rule.type === 'LLM_GENERATE') && rule.data && rule.data.length > 1) {
+      if (rule.data.length > max) max = rule.data.length;
+    }
+  }
+  return max;
+}
+
+/**
+ * Builds QuickPick labels for each data set index.
+ * Shows one line per rule that has multiple data entries, combining them into a single label.
+ */
+export interface DataSetLabel {
+  index: number;
+  label: string;
+  description: string;
+}
+
+export function dataSetLabels(rules: FormRule[]): DataSetLabel[] {
+  const count = dataSetCount(rules);
+  if (count <= 1) return [];
+
+  const results: DataSetLabel[] = [];
+  for (let i = 0; i < count; i++) {
+    const preview = rules
+      .filter(r => (r.type === 'PRESET_SKILL' || r.type === 'LLM_GENERATE') && r.data && r.data[i] !== undefined)
+      .map(r => r.data![i])
+      .join(' / ');
+    results.push({
+      index: i,
+      label: `Data Set ${i + 1}`,
+      description: preview,
+    });
+  }
+  return results;
 }
 
 export function formRuleSnippetForField(field: FormAnalyzeResult['fields'][number]): FormRuleSnippet {

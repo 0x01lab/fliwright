@@ -12,9 +12,27 @@ Implemented through P1 live-agent loop plus part of P2/P3:
 - Playwright-style SDK/MCP/bridge actions: hover, multi-click, right click, focus/blur, clear, pressKey, setCheckbox, selectOption, dismissModal, and mock-backed waitForNetworkIdle.
 - CLI `capabilities/interaction` and `capabilities/form` modules that centralize reusable operations for CLI/MCP/VS Code integration.
 - MCP `fliwright_diagnostics` for buffered VM Service diagnostic events.
+- CLI `fliwright run --reporter ai-json` and MCP `fliwright_run` now share `@fliwright/cli/run`, producing persisted `.fliwright/runs/<runId>/report.json` reports with failures, screenshots, diagnostics, artifacts, and reproduce commands.
+- `@fliwright/vitest` exposes both `page` and `driver` fixtures, supports `FLIWRIGHT_VM_URL` plus legacy `FLIWRIGHT_VM_SERVICE_URL`, and captures richer failure context for AI repair loops.
+- E2E examples are fixture-first where possible, with the Exio live app script intentionally kept on the raw driver path for older bridge compatibility.
 - FormHelper regression guardrails preserving `ext.fliwright.extractForm` as the canonical form discovery path.
 
 Remaining P2/P3 items include making the snapshot bridge more Semantics-first without losing the live Element action target required by ref actions.
+
+## AI Run Report Loop
+
+The authored-test loop is now:
+
+```text
+AI agent -> bash/CLI or MCP fliwright_run
+  -> @fliwright/cli/run
+  -> Vitest + @fliwright/vitest fixture
+  -> sidecar failure context
+  -> .fliwright/runs/<runId>/report.json
+  -> AI summary/fix/re-run
+```
+
+The report includes per-test results, structured failures, widget tree snapshots, recent VM Service diagnostics, failure screenshots, artifact paths, and a reproduce command. MCP stores the same `RunResult` in server state, so `fliwright_get_failure` and the `test_report` resource can be used after the run without re-parsing shell output.
 
 ## Capability Ownership
 

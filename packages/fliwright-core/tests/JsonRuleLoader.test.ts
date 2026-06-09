@@ -196,4 +196,82 @@ describe('JsonRuleLoader', () => {
     const skills = discoverLoader.autoDiscover();
     expect(skills).toHaveLength(1);
   });
+
+  describe('dataIndex', () => {
+    it('picks data[0] when dataIndex is 0', () => {
+      writeRuleFile('rules.json', {
+        version: 1,
+        rules: [
+          { match: { hintText: 'test' }, type: 'PRESET_SKILL', data: ['first', 'second'] },
+        ],
+      });
+      const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'), 0);
+      expect(skills[0].generate({} as any, 'zh_CN')).toBe('first');
+      // Same index every time (no auto-cycling)
+      expect(skills[0].generate({} as any, 'zh_CN')).toBe('first');
+    });
+
+    it('picks data[1] when dataIndex is 1', () => {
+      writeRuleFile('rules.json', {
+        version: 1,
+        rules: [
+          { match: { hintText: 'test' }, type: 'PRESET_SKILL', data: ['first', 'second'] },
+        ],
+      });
+      const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'), 1);
+      expect(skills[0].generate({} as any, 'zh_CN')).toBe('second');
+    });
+
+    it('wraps around with modulo when dataIndex exceeds data length', () => {
+      writeRuleFile('rules.json', {
+        version: 1,
+        rules: [
+          { match: { hintText: 'test' }, type: 'PRESET_SKILL', data: ['a', 'b'] },
+        ],
+      });
+      const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'), 5);
+      // 5 % 2 === 1
+      expect(skills[0].generate({} as any, 'zh_CN')).toBe('b');
+    });
+
+    it('still auto-cycles when dataIndex is omitted', () => {
+      writeRuleFile('rules.json', {
+        version: 1,
+        rules: [
+          { match: { hintText: 'test' }, type: 'PRESET_SKILL', data: ['a', 'b', 'c'] },
+        ],
+      });
+      const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'));
+      expect(skills[0].generate({} as any, 'zh_CN')).toBe('a');
+      expect(skills[0].generate({} as any, 'zh_CN')).toBe('b');
+      expect(skills[0].generate({} as any, 'zh_CN')).toBe('c');
+      expect(skills[0].generate({} as any, 'zh_CN')).toBe('a');
+    });
+
+    it('works with LLM_GENERATE rules', () => {
+      writeRuleFile('rules.json', {
+        version: 1,
+        rules: [
+          { match: { hintText: 'test' }, type: 'LLM_GENERATE', data: ['val1', 'val2'] },
+        ],
+      });
+      const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'), 1);
+      expect(skills[0].generate({} as any, 'zh_CN')).toBe('val2');
+    });
+
+    it('all PRESET_SKILL rules in one file use the same dataIndex', () => {
+      writeRuleFile('rules.json', {
+        version: 1,
+        rules: [
+          { match: { hintText: 'username' }, type: 'PRESET_SKILL', data: ['user_a', 'user_b'] },
+          { match: { hintText: 'password' }, type: 'PRESET_SKILL', data: ['pass_a', 'pass_b'] },
+        ],
+      });
+      const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'), 1);
+      const username = skills.find(s => s.name.includes('username'))!;
+      const password = skills.find(s => s.name.includes('password'))!;
+      expect(username.generate({} as any, 'zh_CN')).toBe('user_b');
+      expect(password.generate({} as any, 'zh_CN')).toBe('pass_b');
+    });
+  });
 });

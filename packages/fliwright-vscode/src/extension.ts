@@ -1,9 +1,10 @@
+import * as fs from 'node:fs';
 import * as vscode from 'vscode';
 import type { FormAnalyzeResult, FormFillResult } from '@fliwright/core';
 import { setConnectorDebugLog } from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
 import { FailureContextStore } from './failure/FailureContextStore.js';
-import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug } from './form/FormHelperService.js';
+import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug, dataSetLabels } from './form/FormHelperService.js';
 import { FormRuleService } from './form/FormRuleService.js';
 import { RecorderService } from './recording/RecorderService.js';
 import { FliwrightCodeLensProvider } from './runner/FliwrightCodeLensProvider.js';
@@ -17,7 +18,7 @@ import { formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js
 import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
-import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunEntry, StateProviderEntry, TestFileEntry } from './types.js';
+import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRule, FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunEntry, StateProviderEntry, TestFileEntry } from './types.js';
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
 import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
@@ -27,7 +28,12 @@ import { TestsTreeProvider } from './views/TestsTreeProvider.js';
 import { FailurePanel } from './webview/FailurePanel.js';
 import { EditorBridge } from './editor/EditorBridge.js';
 import { TestEditorProvider } from './editor/TestEditorProvider.js';
+import { setEditorOutput } from './editor/TestEditorPanel.js';
 import { RecordingPanel } from './webview/RecordingPanel.js';
+import { TraceViewerPanel } from './trace/TraceViewerPanel.js';
+import { TraceService } from './trace/TraceService.js';
+import { TraceStore } from '@fliwright/core';
+import type { TraceMode } from '@fliwright/core';
 
 let output: vscode.OutputChannel;
 const LAST_VM_SERVICE_URL_KEY = 'fliwright.vmServiceUrl.lastSuccess';
@@ -37,6 +43,7 @@ const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 5000;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel('Fliwright');
   context.subscriptions.push(output);
+  setEditorOutput(output);
 
   // Route VM Service debug logs to the output channel
   setConnectorDebugLog((message) => output.appendLine(message));
@@ -62,6 +69,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const statusBar = new StatusBarService();
   const failurePanel = new FailurePanel(context.extensionUri);
   const recordingPanel = new RecordingPanel();
+  const traceService = new TraceService();
+  const traceViewerPanel = new TraceViewerPanel(context.extensionUri);
   void updateRecordingContext(recorderService.getSession());
 
   context.subscriptions.push(session);
@@ -178,6 +187,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const editorProvider = new TestEditorProvider(context.extensionUri);
   const editorBridge = new EditorBridge();
 
+  output.appendLine('[FliwrightEditor] Registering custom editor provider...');
+
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
       'fliwright.testEditor',
@@ -186,16 +197,45 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
   );
 
+  output.appendLine('[FliwrightEditor] Custom editor provider registered.');
+
   context.subscriptions.push(
     vscode.commands.registerCommand('fliwright.openVisualEditor', async (uri?: vscode.Uri) => {
+      output.appendLine('[FliwrightEditor] openVisualEditor command called, uri: ' + (uri?.fsPath ?? 'none'));
       if (!uri) {
         const active = vscode.window.activeTextEditor;
+        output.appendLine('[FliwrightEditor] activeTextEditor: ' + (active ? active.document.uri.fsPath : 'none'));
         if (active) {
           uri = active.document.uri;
         }
       }
+      if (!uri) {
+        // Fallback: pick from visible editors
+        const visible = vscode.window.visibleTextEditors;
+        output.appendLine('[FliwrightEditor] visible editors: ' + visible.map(e => e.document.uri.fsPath).join(', '));
+        const testEditor = visible.find(e => e.document.uri.fsPath.endsWith('.test.ts') || e.document.uri.fsPath.endsWith('.spec.ts'));
+        if (testEditor) {
+          uri = testEditor.document.uri;
+        }
+      }
+      if (!uri) {
+        // Last fallback: file picker
+        const picked = await vscode.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: false,
+          filters: { 'Test Files': ['ts'] },
+          title: 'Select a test file to open in Visual Editor',
+        });
+        if (picked && picked.length > 0) {
+          uri = picked[0];
+        }
+      }
       if (uri) {
+        output.appendLine('[FliwrightEditor] Opening: ' + uri.fsPath);
         await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+      } else {
+        output.appendLine('[FliwrightEditor] No URI found, aborting.');
       }
     }),
   );
@@ -368,13 +408,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.analyzeForm', async (node?: FormRulesEntry) => {
       await runCommand('Analyze Current Form', async () => {
         const root = requireWorkspaceRoot();
+        const resolvedNode = formRulesNode(node);
+        const dataIndex = await pickDataIndex(resolvedNode);
         const result = await withWindowProgress('Fliwright: analyzing current form fields...', () => (
-          formHelperService.analyze(session.connectedDriver, root, formRulesNode(node))
+          formHelperService.analyze(session.connectedDriver, root, resolvedNode, dataIndex)
         ));
         formTree.setLastSummary(formHelperService.getLastSummary());
         formTree.setLastAnalyze(formHelperService.getLastAnalyze());
         await showFormPreview(formHelperService, result, 'Analyze Current Form');
-        output.appendLine(`Analyzed ${result.fields.length} form field(s) with ${formRulesFileName(formRulesNode(node))}.`);
+        output.appendLine(`Analyzed ${result.fields.length} form field(s) with ${formRulesFileName(resolvedNode)}${dataIndexLabel(dataIndex)}.`);
         vscode.window.showInformationMessage(`Analyzed ${result.fields.length} form field(s).`);
       });
     }),
@@ -407,6 +449,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       } else {
         failurePanel.open(failure);
       }
+    }),
+    vscode.commands.registerCommand('fliwright.openTraceViewer', async () => {
+      await traceViewerPanel.openWithPicker();
+    }),
+    vscode.commands.registerCommand('fliwright.showLastTrace', async () => {
+      await traceViewerPanel.openLatest();
     }),
     vscode.commands.registerCommand('fliwright.startRecording', async () => {
       await runCommand('Start Recording', async () => {
@@ -608,33 +656,66 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   async function fillFormWithRules(node?: FormRulesEntry): Promise<void> {
     await runCommand('Fill Current Form', async () => {
       const root = requireWorkspaceRoot();
+      const dataIndex = await pickDataIndex(node);
       if (loadConfig().formPreviewBeforeFill) {
         const analysis = await withWindowProgress('Fliwright: analyzing current form fields...', () => (
-          formHelperService.analyze(session.connectedDriver, root, node)
+          formHelperService.analyze(session.connectedDriver, root, node, dataIndex)
         ));
         formTree.setLastSummary(formHelperService.getLastSummary());
         formTree.setLastAnalyze(formHelperService.getLastAnalyze());
         const selectedHints = await showFormPreview(formHelperService, analysis, 'Fill Current Form', true);
         if (!selectedHints) return;
         const result = await withWindowProgress('Fliwright: filling selected form fields...', () => (
-          formHelperService.fillSelected(session.connectedDriver, root, selectedHints, node)
+          formHelperService.fillSelected(session.connectedDriver, root, selectedHints, node, dataIndex)
         ));
         formTree.setLastSummary(formHelperService.getLastSummary());
         formTree.setLastAnalyze(formHelperService.getLastAnalyze());
-        output.appendLine(`Filled selected form fields with ${formRulesFileName(node)}: ${result.filled} filled, ${result.skipped} skipped, ${result.errors.length} errors.`);
+        output.appendLine(`Filled selected form fields with ${formRulesFileName(node)}${dataIndexLabel(dataIndex)}: ${result.filled} filled, ${result.skipped} skipped, ${result.errors.length} errors.`);
         appendFormFillDebug(result);
         vscode.window.showInformationMessage(`Filled ${result.filled} field(s), skipped ${result.skipped}, errors ${result.errors.length}.`);
         return;
       }
       const result = await withWindowProgress('Fliwright: filling current form...', () => (
-        formHelperService.fill(session.connectedDriver, root, node)
+        formHelperService.fill(session.connectedDriver, root, node, dataIndex)
       ));
       formTree.setLastSummary(formHelperService.getLastSummary());
       formTree.setLastAnalyze(formHelperService.getLastAnalyze());
-      output.appendLine(`Filled form with ${formRulesFileName(node)}: ${result.filled} filled, ${result.skipped} skipped, ${result.errors.length} errors.`);
+      output.appendLine(`Filled form with ${formRulesFileName(node)}${dataIndexLabel(dataIndex)}: ${result.filled} filled, ${result.skipped} skipped, ${result.errors.length} errors.`);
       appendFormFillDebug(result);
       vscode.window.showInformationMessage(`Filled ${result.filled} field(s), skipped ${result.skipped}, errors ${result.errors.length}.`);
     });
+  }
+
+  async function pickDataIndex(node?: FormRulesEntry): Promise<number | undefined> {
+    const rules = resolveRules(node);
+    if (!rules) return undefined;
+    const sets = dataSetLabels(rules);
+    if (sets.length <= 1) return undefined;
+    const picked = await vscode.window.showQuickPick(
+      sets.map(s => ({ label: s.label, description: s.description, index: s.index })),
+      { placeHolder: 'Select a data set for form filling' },
+    );
+    output.appendLine(`[debug] pickDataIndex: selected index=${picked?.index}, total sets=${sets.length}`);
+    return picked?.index;
+  }
+
+  function resolveRules(node?: FormRulesEntry): FormRule[] | undefined {
+    if (node?.rulesFile.rules) return node.rulesFile.rules;
+    const config = loadConfig();
+    const root = getWorkspaceRoot();
+    if (config.formRulesFile && root) {
+      const filePath = resolveWorkspacePath(root, config.formRulesFile).fsPath;
+      try {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const data = JSON.parse(raw);
+        if (data.rules) return data.rules;
+      } catch { /* ignore */ }
+    }
+    return undefined;
+  }
+
+  function dataIndexLabel(dataIndex?: number): string {
+    return dataIndex !== undefined ? ` [data set ${dataIndex + 1}]` : '';
   }
 
   function updateRecordingViews(recording: ReturnType<RecorderService['getSession']>): void {
@@ -810,12 +891,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const root = requireWorkspaceRoot();
       const file = workspace ? undefined : node?.uri ?? vscode.window.activeTextEditor?.document.uri;
       const failureContextDir = resolveWorkspacePath(root, loadConfig().failureContextDir);
+
+      // Trace configuration
+      const traceMode = getTraceMode();
+      const traceDir = vscode.Uri.joinPath(root, '.fliwright', 'traces');
+
       session.setRunning(workspace ? 'workspace tests' : file?.fsPath ?? 'current test');
       const result = await runner.run({
         workspaceRoot: root,
         testFile: file,
         vmServiceUrl: session.currentUrl,
         failureContextDir,
+        traceMode,
+        traceDir: traceMode !== 'off' ? traceDir : undefined,
       });
       const failures = await failureStore.loadLatest(failureContextDir, result);
       const run: RunEntry = {
@@ -830,22 +918,46 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       statusBar.setRunResult(result);
       session.setConnectedIdle();
       output.appendLine(`Run complete: ${result.passedTests}/${result.totalTests} passed, ${result.failedTests} failed.`);
+
+      // Cleanup old trace runs (keep last 10)
+      if (traceMode !== 'off') {
+        try {
+          const deleted = await traceService.cleanupOldRuns(traceDir);
+          if (deleted > 0) output.appendLine(`Cleaned up ${deleted} old trace run(s).`);
+        } catch { /* non-critical */ }
+      }
+
       if (result.failedTests > 0) {
-        vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, 'Open Failure').then(async (selection) => {
-          if (selection !== 'Open Failure' || !failures[0]) return;
-          const failure = failures[0];
-          // Open visual editor if source file is available, otherwise fall back to FailurePanel
-          if (failure.source?.file) {
-            const uri = vscode.Uri.file(failure.source.file);
-            await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
-          } else {
-            failurePanel.open(failure);
+        const actions = traceMode !== 'off' ? ['View Trace', 'Open Failure'] : ['Open Failure'];
+        vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, ...actions).then(async (selection) => {
+          if (selection === 'View Trace') {
+            await traceViewerPanel.openLatest();
+          } else if (selection === 'Open Failure' && failures[0]) {
+            const failure = failures[0];
+            if (failure.source?.file) {
+              const uri = vscode.Uri.file(failure.source.file);
+              await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+            } else {
+              failurePanel.open(failure);
+            }
           }
         });
       } else {
-        vscode.window.showInformationMessage(`Fliwright tests passed: ${result.passedTests}/${result.totalTests}`);
+        const actions = traceMode !== 'off' ? ['View Trace'] : [];
+        vscode.window.showInformationMessage(`Fliwright tests passed: ${result.passedTests}/${result.totalTests}`, ...actions).then(async (selection) => {
+          if (selection === 'View Trace') {
+            await traceViewerPanel.openLatest();
+          }
+        });
       }
     });
+  }
+
+  function getTraceMode(): TraceMode {
+    const config = vscode.workspace.getConfiguration('fliwright');
+    const value = config.get<string>('traceMode', 'on-failure');
+    if (value === 'full' || value === 'off') return value;
+    return 'on-failure';
   }
 
   function markActiveWatches(providers: StateProviderEntry[]): StateProviderEntry[] {

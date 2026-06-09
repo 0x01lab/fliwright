@@ -20,7 +20,9 @@ export type {
   SelectorQuery,
   MatchCriteria,
   FallbackCriteria,
+  FilterCriteria,
   PositionFilter,
+  SelectorAst,
   FailureContext,
   HealingReport,
   RawInputEvent,
@@ -59,6 +61,8 @@ export { Locator } from './Locator.js';
 export { Selector } from './Selector.js';
 export { Assertion, AssertionError, createExpect } from './Assertion.js';
 export { FailureCollector } from './FailureCollector.js';
+export { TraceCollector, isActionMethod, TraceStore } from './TraceCollector.js';
+export type { TraceStep, TraceMeta, TraceData, TraceMode } from './TraceCollector.js';
 export { EventAggregator } from './EventAggregator.js';
 export { CodeGenerator } from './CodeGenerator.js';
 export { MockManager } from './MockManager.js';
@@ -76,6 +80,15 @@ export { FakerGenerator } from './FakerGenerator.js';
 export { SkillRegistry } from './SkillRegistry.js';
 export { JsonRuleLoader } from './JsonRuleLoader.js';
 export { SelectorResolver, resolveSelector } from './SelectorResolver.js';
+export {
+  selectorQuerySchema,
+  matchCriteriaSchema,
+  filterCriteriaSchema,
+  fallbackCriteriaSchema,
+  positionFilterSchema,
+  validateSelectorQuery,
+  parseSelectorJson,
+} from './wire-protocol.js';
 export { DartCodeGenerator } from './DartCodeGenerator.js';
 export { AssertionSuggester } from './AssertionSuggester.js';
 export type { AssertionSuggestion } from './AssertionSuggester.js';

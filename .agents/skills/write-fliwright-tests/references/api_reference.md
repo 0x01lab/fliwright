@@ -25,11 +25,12 @@ import { test, expect } from '@fliwright/vitest';
 
 The default `test` export:
 
-- reads `process.env.FLIWRIGHT_VM_URL`
+- reads `process.env.FLIWRIGHT_VM_URL`, with `FLIWRIGHT_VM_SERVICE_URL` as a compatibility fallback
 - creates one shared `FliwrightDriver`
 - connects to the Flutter VM Service
-- provides `{ page }`
-- writes MCP failure context when `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH` is set
+- provides `{ page, driver }`
+- writes MCP/CLI failure context when `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH` is set
+- captures assertion details, widget tree, screenshot, recent diagnostics, source location, and healing suggestions on failure
 - configures the Flutter mock controller when `FLIWRIGHT_MOCK_CONTROLLER_URL` is set
 
 Use custom config when the test needs explicit VM URL handling:
@@ -135,7 +136,7 @@ viExpect(await page.getByText('Ready').count()).toBe(1);
 
 ## Snapshots and Refs
 
-Use snapshots for exploration, debugging, or selectors returned by MCP tools:
+Use snapshots for exploration, debugging, or selectors returned by MCP tools. This requires the current bridge with `ext.fliwright.snap`; if the VM returns `Unknown method "ext.fliwright.snap"`, upgrade/rebuild the app before using ref-based flows.
 
 ```typescript
 const snap = await page.snapshot({ depth: 4, includeRects: true });
@@ -152,6 +153,27 @@ await (await page.findRef({ text: 'Confirm', role: 'button' })).click();
 ```
 
 Do not hard-code `e<N>` refs in committed tests unless the test captures the snapshot in the same run.
+
+Bridge capability checklist:
+
+| Capability | Required for |
+| --- | --- |
+| `ext.fliwright.snap` | `page.snapshot()`, `page.findRef()`, `fliwright_snap`, `fliwright_observe` |
+| `ext.fliwright.action` | ref-backed tap/type/wait/actionability |
+| `ext.fliwright.extractForm` | `page.formHelper.analyze()`, `fill()`, `fillFields()` |
+| `ext.fliwright.screenshot` | AI run report screenshots |
+| mock extensions | `driver.mock` and tool-side mock server integration |
+
+For Flutter app setup, initialize the current bridge in debug builds:
+
+```dart
+import 'package:flutter/foundation.dart';
+import 'package:fliwright_bridge/fliwright_bridge.dart';
+
+if (kDebugMode) {
+  await FliwrightBridge.init();
+}
+```
 
 ## Form Helper
 
@@ -175,9 +197,31 @@ Prefer explicit locators for business-critical fields where exact values matter.
 
 ## Mocks
 
-Use `driver.mock` from raw `FliwrightDriver` tests, or configure the mock controller through environment for `@fliwright/vitest`.
+Use `driver.mock` from the `@fliwright/vitest` driver fixture, or configure the mock controller through environment. Raw `FliwrightDriver` lifecycle is only needed for legacy bridge scripts or custom plugin setup.
 
-Common raw-driver mock pattern:
+Common fixture mock pattern:
+
+```typescript
+import { test } from '@fliwright/vitest';
+import { expect } from 'vitest';
+
+test('submits through mocked API', async ({ page, driver }) => {
+  await driver.mock.clear();
+  await driver.mock.clearCalls();
+  await driver.mock.route('/api/login', {
+    method: 'POST',
+    status: 200,
+    body: { token: 'test-token', name: 'Alice' },
+  });
+
+  await page.getByKey('loginButton').click();
+
+  const calls = await driver.mock.getCalls('/api/login');
+  expect(calls.length).toBeGreaterThanOrEqual(1);
+});
+```
+
+Raw-driver mock pattern:
 
 ```typescript
 await driver.mock.clear();
@@ -195,7 +239,7 @@ Available operations include route, remove route, clear, list routes, set passth
 
 ## Manual Driver Lifecycle
 
-Use this for advanced E2E tests:
+Use this for advanced E2E tests, custom plugin setup, or older bridge compatibility. Prefer `@fliwright/vitest` for normal scripts.
 
 ```typescript
 import { beforeAll, afterAll, describe, it } from 'vitest';
@@ -235,11 +279,11 @@ function toWsUrl(httpUrl: string): string {
 
 When MCP tools are available:
 
+- Use `fliwright_connect`, `fliwright_snap`, and `fliwright_observe` to confirm the current bridge and inspect visible targets.
 - Use `fliwright_record` to capture a flow, then simplify selectors and add assertions.
-- Use `fliwright_generate_test` for a first draft from Flutter source, then inspect and harden it.
-- Use `fliwright_run` to execute a test against a running VM Service.
-- Use `fliwright_get_failure` after a failed run for widget tree, source, and healing suggestions.
-- Use `fliwright_connect`, `fliwright_snap`, `fliwright_observe`, `fliwright_tap`, and `fliwright_type` for live exploration before committing the final script.
+- Use `fliwright_generate_test` with `refs` or `snapshot` for a first draft that uses `page.findRef(...)` queries instead of hard-coded ephemeral refs.
+- Use `fliwright_run` to execute a test against a running VM Service and get the same AI report shape as CLI `fliwright run --reporter ai-json`.
+- Use `fliwright_get_failure` after a failed run for assertion details, widget tree, diagnostics, screenshot artifact, source, and healing suggestions.
 
 ## Validation Commands
 
@@ -254,11 +298,23 @@ pnpm --filter @fliwright/core test
 Live app validation:
 
 ```bash
-FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/xxxxxxxxxxxxxx/ws" pnpm vitest run path/to/test.ts
+fliwright run --test path/to/test.ts --vm-url "ws://127.0.0.1:54321/xxxxxxxxxxxxxx/ws" --reporter ai-json
 ```
 
 MCP validation:
 
 ```text
-fliwright_run({ testFile: "path/to/test.ts", vmServiceUrl: "ws://127.0.0.1:54321/token/ws" })
+fliwright_run({
+  testFile: "path/to/test.ts",
+  vmServiceUrl: "ws://127.0.0.1:54321/token/ws",
+  screenshot: "file"
+})
 ```
+
+Direct Vitest validation is still useful for quick smoke checks:
+
+```bash
+FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/xxxxxxxxxxxxxx/ws" pnpm vitest run path/to/test.ts
+```
+
+If the app crashes, the VM returns unstable screenshot/assertion errors, or bridge methods are missing, stop live testing and ask for the app to be restarted or upgraded.

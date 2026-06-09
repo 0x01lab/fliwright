@@ -14,9 +14,12 @@ import {
   Assertion,
   FailureCollector,
   FliwrightDriver,
+  TraceCollector,
+  TraceStore,
+  isActionMethod,
   createExpect,
 } from '@fliwright/core';
-import type { FailureContext, HealingReport, Locator, Page, VMServiceEvent } from '@fliwright/core';
+import type { FailureContext, HealingReport, Locator, Page, VMServiceEvent, TraceMode } from '@fliwright/core';
 
 export interface FliwrightConfig {
   vmServiceUrl: string;
@@ -34,9 +37,14 @@ export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUr
 
 let sharedDriver: FliwrightDriver | null = null;
 
+// Run-level trace ID, generated once per Vitest process
+const runId = TraceStore.generateRunId();
+
 interface FliwrightTestContext {
   driver: FliwrightDriver;
   testName: string;
+  traceCollector?: TraceCollector;
+  originalSendRequest?: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 }
 
 const testContext = new AsyncLocalStorage<FliwrightTestContext>();
@@ -59,14 +67,61 @@ export function createFliwrightTest(config: FliwrightConfig) {
     page: async ({ task }, use) => {
       const driver = await getSharedDriver(config);
       const testName = getTestName(task);
+
+      // ── Trace collection setup ──────────────────────────────
+      const traceMode = parseTraceMode(process.env.FLIWRIGHT_TRACE);
+      const traceDir = process.env.FLIWRIGHT_TRACE_DIR;
+      let collector: TraceCollector | undefined;
+      let origSendRequest: ((method: string, params?: Record<string, unknown>) => Promise<unknown>) | undefined;
+
+      if (traceMode !== 'off' && traceDir) {
+        try {
+          collector = await TraceCollector.create(traceDir, testName, runId, driver.sendRequest.bind(driver), traceMode);
+          // Shadow driver.sendRequest with traced version
+          origSendRequest = driver.sendRequest.bind(driver);
+          const capturedCollector = collector;
+          const capturedOrigSend = origSendRequest;
+          (driver as any).sendRequest = async (method: string, params?: Record<string, unknown>) => {
+            const start = Date.now();
+            let error: unknown;
+            let result: unknown;
+            try {
+              result = await capturedOrigSend(method, params);
+            } catch (e) {
+              error = e;
+              throw e;
+            } finally {
+              if (isActionMethod(method)) {
+                await capturedCollector.onAction(method, params ?? {}, Date.now() - start, result, error);
+              }
+            }
+            return result;
+          };
+        } catch {
+          // Trace setup failure should not prevent test from running
+        }
+      }
+
+      // Reset lazy Page so it picks up the shadowed sendRequest
+      (driver as any)._page = null;
+
+      const ctx: FliwrightTestContext = { driver, testName, traceCollector: collector, originalSendRequest: origSendRequest };
+
       try {
-        await testContext.run({ driver, testName }, async () => {
+        await testContext.run(ctx, async () => {
           await use(driver.page);
         });
       } catch (error) {
+        await collector?.complete('failed');
         await writeMcpFailureContext(error, driver, testName, config.timeout ?? 5000, config.screenshot ?? 'file');
+        // Restore original sendRequest before re-throwing
+        if (origSendRequest) (driver as any).sendRequest = origSendRequest;
         throw error;
       }
+
+      await collector?.complete('passed');
+      // Restore original sendRequest
+      if (origSendRequest) (driver as any).sendRequest = origSendRequest;
     },
   });
 
@@ -101,6 +156,8 @@ export function expect(locator: Locator): Assertion {
     (method, params) => context.driver.sendRequest(method, params),
   );
 }
+
+// ── MCP Failure Context (unchanged) ──────────────────────────
 
 interface McpFailureEntry {
   testName: string;
@@ -262,6 +319,11 @@ function collectDiagnostics(driver: FliwrightDriver): VMServiceEvent[] | undefin
 function parseScreenshotMode(value: string | undefined): 'file' | 'base64' | 'off' {
   if (value === 'base64' || value === 'off') return value;
   return 'file';
+}
+
+function parseTraceMode(value: string | undefined): TraceMode {
+  if (value === 'full' || value === 'on-failure') return value;
+  return 'off';
 }
 
 function parsePositiveInt(value: string | undefined): number | undefined {
