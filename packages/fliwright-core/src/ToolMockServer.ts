@@ -132,6 +132,14 @@ export class ToolMockServer {
     }));
   }
 
+  getRouteResponse(path: string, method?: string): MockRouteResponse | null {
+    const route = this.routes.find((candidate) => (
+      candidate.pathPattern === path &&
+      (!method || (candidate.method ?? '').toUpperCase() === method.toUpperCase())
+    ));
+    return route ? { ...route.response } : null;
+  }
+
   async loadRules(mockDir = '.fliwright/mocks'): Promise<void> {
     await this.ruleStore.loadFromDirectory(mockDir);
     for (const endpoint of this.ruleStore.listEndpoints()) {

@@ -253,10 +253,6 @@ async function getSharedDriver(config: FliwrightConfig): Promise<FliwrightDriver
     sharedDriver = new FliwrightDriver();
     await sharedDriver.connect(vmServiceUrl);
     await listenToDiagnostics(sharedDriver);
-    const mockControllerUrl = process.env.FLIWRIGHT_MOCK_CONTROLLER_URL;
-    if (mockControllerUrl) {
-      await sharedDriver.mock.configureFlutterController(mockControllerUrl);
-    }
   }
   return sharedDriver;
 }

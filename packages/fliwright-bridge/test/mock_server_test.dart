@@ -6,6 +6,75 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 
 void main() {
+  group('MockRuleStore', () {
+    test('adds, finds, replaces, removes, and clears routes', () async {
+      final store = MockRuleStore();
+      await store.addRoute(MockRoute(
+        id: 'get-users-1',
+        method: 'GET',
+        pathPattern: '/api/users',
+        status: 200,
+        body: {'version': 1},
+      ));
+      await store.addRoute(MockRoute(
+        id: 'get-users-2',
+        method: 'GET',
+        pathPattern: '/api/users',
+        status: 201,
+        body: {'version': 2},
+      ));
+      await store.addRoute(MockRoute(
+        id: 'post-users',
+        method: 'POST',
+        pathPattern: '/api/users',
+        status: 202,
+      ));
+
+      expect(store.getAllRoutes(), hasLength(2));
+      expect(store.findRoute('GET', '/api/users')?.id, 'get-users-2');
+      expect(store.findRoute('POST', '/api/users')?.id, 'post-users');
+      expect(store.findRoute('DELETE', '/api/users'), isNull);
+
+      expect(
+          await store.removeRoute(path: '/api/users', method: 'GET'), isTrue);
+      expect(store.findRoute('GET', '/api/users'), isNull);
+      expect(store.findRoute('POST', '/api/users')?.id, 'post-users');
+
+      expect(await store.clearRoutes(), 1);
+      expect(store.getAllRoutes(), isEmpty);
+    });
+
+    test('persists and loads routes with FileMockRuleStorage', () async {
+      final temp = await Directory.systemTemp.createTemp('fliwright_store_');
+      final filePath = '${temp.path}/rules.json';
+      try {
+        final store = MockRuleStore(storage: FileMockRuleStorage(filePath));
+        await store.addRoute(MockRoute(
+          id: 'persisted',
+          method: 'GET',
+          pathPattern: '/api/persisted',
+          status: 200,
+          headers: {'Content-Type': 'application/json'},
+          body: {'ok': true},
+          delayMs: 5,
+        ));
+
+        final loaded = MockRuleStore(storage: FileMockRuleStorage(filePath));
+        await loaded.loadFromStorage();
+        final route = loaded.findRoute('GET', '/api/persisted');
+
+        expect(route, isNotNull);
+        expect(route!.id, 'persisted');
+        expect(route.status, 200);
+        expect(route.headers['Content-Type'], 'application/json');
+        expect(route.body, {'ok': true});
+        expect(route.delayMs, 5);
+      } finally {
+        await temp.delete(recursive: true);
+      }
+    });
+  });
+
   group('MockServerExtension', () {
     setUp(() async {
       await FliwrightBridge.reset();
@@ -620,70 +689,34 @@ void main() {
       expect(response.data?['preserved'], isTrue);
     });
 
-    test('forwards mocked Dio requests to tool mock controller', () async {
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      final requests = <Map<String, dynamic>>[];
-      server.listen((request) async {
-        final body = await utf8.decoder.bind(request).join();
-        requests.add(jsonDecode(body) as Map<String, dynamic>);
-        request.response
-          ..statusCode = 200
-          ..headers.contentType = ContentType.json
-          ..write(jsonEncode({
-            'matched': true,
-            'status': 200,
-            'headers': {'Content-Type': 'application/json'},
-            'body': {'fromTool': true},
-          }));
-        await request.response.close();
-      });
+    test('Dio requests resolve directly from the in-process rule store',
+        () async {
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'tool-route',
+            'method': 'GET',
+            'path': '/api/tool',
+            'response': {
+              'status': 200,
+              'body': {'fromStore': true},
+            },
+          }),
+        },
+      );
 
-      try {
-        await FliwrightBridge.registry.invoke(
-          'ext.fliwright.mock.addRoute',
-          {
-            'route': jsonEncode({
-              'id': 'tool-route',
-              'method': 'GET',
-              'path': '/api/tool',
-              'response': {},
-            }),
-          },
-        );
-        await FliwrightBridge.registry.invoke(
-          'ext.fliwright.mock.setController',
-          {'url': 'http://127.0.0.1:${server.port}'},
-        );
+      final dio = Dio()..interceptors.add(interceptor);
+      final response = await dio.get<Map<String, dynamic>>(
+        'https://dev.ex.io/api/tool',
+      );
 
-        final dio = Dio()..interceptors.add(interceptor);
-        final response = await dio.get<Map<String, dynamic>>(
-          'https://dev.ex.io/api/tool',
-        );
-
-        expect(response.statusCode, 200);
-        expect(response.data?['fromTool'], isTrue);
-        expect(requests, hasLength(1));
-        expect(requests.single['method'], 'GET');
-        expect(requests.single['path'], '/api/tool');
-      } finally {
-        await server.close(force: true);
-      }
+      expect(response.statusCode, 200);
+      expect(response.data?['fromStore'], isTrue);
     });
 
-    test('does not forward unmocked Dio requests to tool mock controller',
+    test('unmocked Dio requests passthrough without controller forwarding',
         () async {
-      final controller = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      final controllerRequests = <Map<String, dynamic>>[];
-      controller.listen((request) async {
-        final body = await utf8.decoder.bind(request).join();
-        controllerRequests.add(jsonDecode(body) as Map<String, dynamic>);
-        request.response
-          ..statusCode = 500
-          ..headers.contentType = ContentType.json
-          ..write(jsonEncode({'matched': false}));
-        await request.response.close();
-      });
-
       final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       upstream.listen((request) async {
         request.response
@@ -704,10 +737,6 @@ void main() {
             }),
           },
         );
-        await FliwrightBridge.registry.invoke(
-          'ext.fliwright.mock.setController',
-          {'url': 'http://127.0.0.1:${controller.port}'},
-        );
 
         final dio = Dio()..interceptors.add(interceptor);
         final response = await dio.get<void>(
@@ -715,11 +744,47 @@ void main() {
         );
 
         expect(response.statusCode, 204);
-        expect(controllerRequests, isEmpty);
         expect(interceptor.callLog, isEmpty);
       } finally {
-        await controller.close(force: true);
         await upstream.close(force: true);
+      }
+    });
+
+    test('loads persisted Dio routes during initForDioMock', () async {
+      await FliwrightBridge.reset();
+      final temp = await Directory.systemTemp.createTemp('fliwright_mock_');
+      final file = File('${temp.path}/active-rules.json');
+      await file.writeAsString(jsonEncode({
+        'version': 1,
+        'rules': [
+          {
+            'id': 'persisted-route',
+            'method': 'GET',
+            'pathPattern': '/api/persisted',
+            'status': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': {'persisted': true},
+            'delayMs': 0,
+          }
+        ],
+      }));
+      final persistedInterceptor = FliwrightDioMockInterceptor();
+      DioMockExtension.setInterceptor(persistedInterceptor);
+      await FliwrightBridge.initForDioMock(
+        mockStorage: FileMockRuleStorage(file.path),
+      );
+
+      try {
+        final dio = Dio()..interceptors.add(persistedInterceptor);
+        final response = await dio.get<Map<String, dynamic>>(
+          'https://dev.ex.io/api/persisted',
+        );
+
+        expect(response.statusCode, 200);
+        expect(response.data?['persisted'], isTrue);
+        expect(persistedInterceptor.routes.single.id, 'persisted-route');
+      } finally {
+        await temp.delete(recursive: true);
       }
     });
   });

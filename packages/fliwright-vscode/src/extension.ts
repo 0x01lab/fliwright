@@ -823,8 +823,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ) return;
 
     if (config.autoStartMockController) {
-      const url = await sandboxService.ensureController(session.connectedDriver);
-      output.appendLine(`Mock controller ready: ${url}`);
+      await sandboxService.ensureController(session.connectedDriver);
+      output.appendLine('Mock rule store ready.');
     }
 
     if (config.autoApplyDefaultMocksOnConnect) {
@@ -873,14 +873,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   async function appendMockControllerDebug(): Promise<void> {
-    const controllerUrl = sandboxService.getControllerUrl();
-    output.appendLine(`Mock controller: ${controllerUrl ?? '(not configured)'}`);
     const routes = await session.connectedDriver.mock.listRoutes();
     if (routes.length === 0) {
-      output.appendLine('Mock controller routes: (none)');
+      output.appendLine('Mock routes: (none)');
       return;
     }
-    output.appendLine(`Mock controller routes (${routes.length}):`);
+    output.appendLine(`Mock routes (${routes.length}):`);
     for (const route of routes) {
       output.appendLine(`  ${(route.method ?? '*').toUpperCase()} ${route.path}`);
     }

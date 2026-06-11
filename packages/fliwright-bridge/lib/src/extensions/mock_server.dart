@@ -3,85 +3,30 @@ import 'dart:developer' as developer;
 import 'dart:io';
 
 import '../bridge.dart';
-
-class MockRoute {
-  final String id;
-  final String? method;
-  final String pathPattern;
-  final int status;
-  final Map<String, String> headers;
-  final dynamic body;
-  final int delayMs;
-
-  MockRoute({
-    required this.id,
-    this.method,
-    required this.pathPattern,
-    this.status = 200,
-    this.headers = const {},
-    this.body,
-    this.delayMs = 0,
-  });
-
-  bool matches(String method, String path) {
-    if (this.method != null &&
-        this.method!.toUpperCase() != method.toUpperCase()) {
-      return false;
-    }
-    return matchesPath(path);
-  }
-
-  bool matchesPath(String path) {
-    if (pathPattern.endsWith('/*')) {
-      // '/api/*' → prefix '/api', matches '/api', '/api/users', but NOT '/apiFoo'
-      final prefix = pathPattern.substring(0, pathPattern.length - 2);
-      return path == prefix || path.startsWith('$prefix/');
-    }
-    return path == pathPattern;
-  }
-}
-
-class MockCallRecord {
-  final String method;
-  final String path;
-  final Map<String, String> headers;
-  final String? body;
-  final DateTime timestamp;
-
-  MockCallRecord({
-    required this.method,
-    required this.path,
-    required this.headers,
-    this.body,
-    required this.timestamp,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'method': method,
-        'path': path,
-        'headers': headers,
-        'body': body,
-        'timestamp': timestamp.toIso8601String(),
-      };
-}
+import 'mock_rule_store.dart';
 
 class MockServerExtension {
   static HttpServer? _server;
-  static final List<MockRoute> _routes = [];
+  static MockRuleStore _store = MockRuleStore();
   static final List<MockCallRecord> _callLog = [];
   static bool _passthrough = false;
 
   static int? get serverPort => _server?.port;
 
   static bool shouldProxy(Uri uri) {
-    return _routes.any((route) => route.matchesPath(uri.path));
+    return _store.shouldProxyPath(uri.path);
   }
 
   static void _log(String message) {
     developer.log(message, name: 'fliwright.mock');
   }
 
-  static void register(ExtensionRegistry registry) {
+  static void setRuleStore(MockRuleStore store) {
+    _store = store;
+  }
+
+  static void register(ExtensionRegistry registry, {MockRuleStore? store}) {
+    if (store != null) _store = store;
     registry.register('ext.fliwright.mock.addRoute', _addRoute);
     registry.register('ext.fliwright.mock.removeRoute', _removeRoute);
     registry.register('ext.fliwright.mock.clearRoutes', _clearRoutes);
@@ -91,7 +36,6 @@ class MockServerExtension {
     registry.register('ext.fliwright.mock.clearCalls', _clearCalls);
     registry.register('ext.fliwright.mock.testRequest', _testRequest);
     registry.register('ext.fliwright.mock.debugState', _debugState);
-    registry.register('ext.fliwright.mock.setController', _setController);
   }
 
   static Future<void> startServer({int port = 0}) async {
@@ -114,7 +58,8 @@ class MockServerExtension {
   }
 
   static Future<void> reset() async {
-    _routes.clear();
+    await _store.clearRoutes();
+    _store = MockRuleStore();
     _callLog.clear();
     _passthrough = false;
     await stopServer();
@@ -144,13 +89,12 @@ class MockServerExtension {
         body: response['body'],
         delayMs: response['delay'] as int? ?? 0,
       );
-      final beforeReplace = _routes.length;
-      _routes.removeWhere((existing) => _sameRouteKey(existing, route));
-      final replaced = beforeReplace - _routes.length;
-      _routes.add(route);
+      final beforeReplace = _store.getAllRoutes().length;
+      await _store.addRoute(route);
+      final replaced = beforeReplace - _store.getAllRoutes().length + 1;
       _log(
         'Registered route ${route.method ?? '*'} ${route.pathPattern} '
-        'status=${route.status} delayMs=${route.delayMs} replaced=$replaced routes=${_routes.length}',
+        'status=${route.status} delayMs=${route.delayMs} replaced=$replaced routes=${_store.getAllRoutes().length}',
       );
       return {'success': true, 'id': route.id};
     } catch (e) {
@@ -159,47 +103,37 @@ class MockServerExtension {
     }
   }
 
-  static bool _sameRouteKey(MockRoute a, MockRoute b) {
-    return a.pathPattern == b.pathPattern &&
-        (a.method ?? '').toUpperCase() == (b.method ?? '').toUpperCase();
-  }
-
   static Future<Map<String, dynamic>> _removeRoute(
       Map<String, String> params) async {
     final id = params['id'];
     final path = params['path'];
     if (id != null) {
-      final removed = _routes.length;
-      _routes.removeWhere((r) => r.id == id);
+      final removed = await _store.removeRoute(id: id);
       _log(
-          'Removed route id=$id removed=${removed != _routes.length} routes=${_routes.length}');
-      return {'removed': removed != _routes.length};
+          'Removed route id=$id removed=$removed routes=${_store.getAllRoutes().length}');
+      return {'removed': removed};
     }
     if (path != null) {
       final method = params['method'];
-      final removed = _routes.length;
-      _routes.removeWhere((r) =>
-          r.pathPattern == path &&
-          (method == null ||
-              (r.method ?? '').toUpperCase() == method.toUpperCase()));
+      final removed = await _store.removeRoute(path: path, method: method);
       _log(
-          'Removed route path=$path method=${method ?? '*'} removed=${removed != _routes.length} routes=${_routes.length}');
-      return {'removed': removed != _routes.length};
+          'Removed route path=$path method=${method ?? '*'} removed=$removed routes=${_store.getAllRoutes().length}');
+      return {'removed': removed};
     }
     return {'error': 'Missing parameter: id or path'};
   }
 
   static Future<Map<String, dynamic>> _clearRoutes(
       Map<String, String> params) async {
-    final count = _routes.length;
-    _routes.clear();
+    final count = await _store.clearRoutes();
     _log('Cleared $count route(s)');
     return {'cleared': count};
   }
 
   static Future<Map<String, dynamic>> _listRoutes(
       Map<String, String> params) async {
-    final routes = _routes
+    final routes = _store
+        .getAllRoutes()
         .map((r) => {
               'id': r.id,
               'method': r.method,
@@ -240,7 +174,8 @@ class MockServerExtension {
       'mode': 'http',
       'serverPort': _server?.port,
       'passthrough': _passthrough,
-      'routes': _routes
+      'routes': _store
+          .getAllRoutes()
           .map((route) => {
                 'id': route.id,
                 'method': route.method,
@@ -249,14 +184,6 @@ class MockServerExtension {
               })
           .toList(),
       'calls': _callLog.length,
-    };
-  }
-
-  static Future<Map<String, dynamic>> _setController(
-      Map<String, String> params) async {
-    return {
-      'error':
-          'Tool mock controller is only supported by FliwrightDioMockInterceptor. Use FliwrightBridge.initForDioMock().'
     };
   }
 
@@ -269,10 +196,7 @@ class MockServerExtension {
       'rawUri=${request.uri} originalUrl=${originalUrl ?? '-'}',
     );
 
-    final route = _routes.cast<MockRoute?>().firstWhere(
-          (r) => r!.matches(request.method, uri.path),
-          orElse: () => null,
-        );
+    final route = _store.findRoute(request.method, uri.path);
 
     if (route != null) {
       final requestBody = await _readRequestBody(request);
@@ -300,7 +224,7 @@ class MockServerExtension {
     } else {
       _log(
         'No route matched ${request.method} ${uri.path}; returning 404. '
-        'Registered routes: ${_routes.map((r) => '${r.method ?? '*'} ${r.pathPattern}').join(', ')}',
+        'Registered routes: ${_store.getAllRoutes().map((r) => '${r.method ?? '*'} ${r.pathPattern}').join(', ')}',
       );
       request.response
         ..statusCode = 404

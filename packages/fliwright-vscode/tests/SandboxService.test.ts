@@ -6,15 +6,11 @@ import type { MockDiscoveryResult, MockRuleEntry } from '../src/types.js';
 describe('SandboxService', () => {
   it('applies one selected mock rule through driver.mock.route', async () => {
     const route = vi.fn().mockResolvedValue(undefined);
-    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:1234');
-    const configureFlutterController = vi.fn().mockResolvedValue(undefined);
     const service = new SandboxService();
     const entry = mockRule('success');
 
-    const applied = await service.applyRule({ mock: { route, startServer, configureFlutterController } } as any, entry);
+    const applied = await service.applyRule({ mock: { route } } as any, entry);
 
-    expect(startServer).toHaveBeenCalledOnce();
-    expect(configureFlutterController).toHaveBeenCalledWith('http://127.0.0.1:1234');
     expect(route).toHaveBeenCalledWith('/v1/token', {
       method: 'GET',
       status: 200,
@@ -28,15 +24,13 @@ describe('SandboxService', () => {
 
   it('keeps only one active rule per method and endpoint', async () => {
     const route = vi.fn().mockResolvedValue(undefined);
-    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:1234');
-    const configureFlutterController = vi.fn().mockResolvedValue(undefined);
     const service = new SandboxService();
     const success = mockRule('success');
     const error = mockRule('error');
     error.rule.status = 400;
 
-    await service.applyRule({ mock: { route, startServer, configureFlutterController } } as any, success);
-    await service.applyRule({ mock: { route, startServer, configureFlutterController } } as any, error);
+    await service.applyRule({ mock: { route } } as any, success);
+    await service.applyRule({ mock: { route } } as any, error);
 
     expect(service.getAppliedRules()).toHaveLength(1);
     expect(service.getAppliedRules()[0]?.ruleName).toBe('error');
@@ -44,12 +38,10 @@ describe('SandboxService', () => {
     expect(service.isApplied(error)).toBeDefined();
   });
 
-  it('reuses one controller when applying multiple rules to the same driver', async () => {
+  it('routes multiple rules directly through the same driver', async () => {
     const route = vi.fn().mockResolvedValue(undefined);
-    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:1234');
-    const configureFlutterController = vi.fn().mockResolvedValue(undefined);
     const service = new SandboxService();
-    const driver = { mock: { route, startServer, configureFlutterController } } as any;
+    const driver = { mock: { route } } as any;
     const first = mockRule('success');
     const second = mockRule('error');
     second.endpoint = '/v1/profile';
@@ -57,22 +49,17 @@ describe('SandboxService', () => {
     await service.applyRule(driver, first);
     await service.applyRule(driver, second);
 
-    expect(startServer).toHaveBeenCalledOnce();
-    expect(configureFlutterController).toHaveBeenCalledOnce();
-    expect(configureFlutterController).toHaveBeenCalledWith('http://127.0.0.1:1234');
     expect(route).toHaveBeenCalledTimes(2);
   });
 
   it('stops only the currently active rule for an endpoint', async () => {
     const route = vi.fn().mockResolvedValue(undefined);
     const removeRoute = vi.fn().mockResolvedValue(undefined);
-    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:1234');
-    const configureFlutterController = vi.fn().mockResolvedValue(undefined);
     const service = new SandboxService();
     const success = mockRule('success');
     const error = mockRule('error');
 
-    await service.applyRule({ mock: { route, startServer, configureFlutterController } } as any, success);
+    await service.applyRule({ mock: { route } } as any, success);
 
     await expect(service.stopRule({ mock: { removeRoute } } as any, error)).resolves.toBe(false);
     expect(removeRoute).not.toHaveBeenCalled();
@@ -85,11 +72,9 @@ describe('SandboxService', () => {
 
   it('applies index default rules and skips invalid files', async () => {
     const route = vi.fn().mockResolvedValue(undefined);
-    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:1234');
-    const configureFlutterController = vi.fn().mockResolvedValue(undefined);
     const service = new SandboxService();
 
-    const result = await service.applyDefaultMocks({ mock: { route, startServer, configureFlutterController } } as any, discovery());
+    const result = await service.applyDefaultMocks({ mock: { route } } as any, discovery());
 
     expect(result.applied).toHaveLength(1);
     expect(result.applied[0]?.ruleName).toBe('error');
@@ -97,10 +82,8 @@ describe('SandboxService', () => {
     expect(route).toHaveBeenCalledWith('/v1/token', expect.objectContaining({ status: 500 }));
   });
 
-  it('starts and configures one controller when applying default mocks in bulk', async () => {
+  it('applies default mocks in bulk without starting a controller', async () => {
     const route = vi.fn().mockResolvedValue(undefined);
-    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:1234');
-    const configureFlutterController = vi.fn().mockResolvedValue(undefined);
     const service = new SandboxService();
     const result = discovery();
     result.endpoints.push({
@@ -118,20 +101,16 @@ describe('SandboxService', () => {
       },
     });
 
-    await service.applyDefaultMocks({ mock: { route, startServer, configureFlutterController } } as any, result);
+    await service.applyDefaultMocks({ mock: { route } } as any, result);
 
-    expect(startServer).toHaveBeenCalledOnce();
-    expect(configureFlutterController).toHaveBeenCalledOnce();
     expect(route).toHaveBeenCalledTimes(2);
   });
 
   it('clears routes and tracked state', async () => {
     const route = vi.fn().mockResolvedValue(undefined);
-    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:1234');
-    const configureFlutterController = vi.fn().mockResolvedValue(undefined);
     const clear = vi.fn().mockResolvedValue(undefined);
     const service = new SandboxService();
-    await service.applyRule({ mock: { route, startServer, configureFlutterController } } as any, mockRule('success'));
+    await service.applyRule({ mock: { route } } as any, mockRule('success'));
 
     const count = await service.clear({ mock: { clear } } as any);
 

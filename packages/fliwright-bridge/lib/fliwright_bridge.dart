@@ -7,6 +7,7 @@ export 'src/extensions/dio_mock_interceptor.dart';
 export 'src/extensions/gesture.dart';
 export 'src/extensions/http_overrides.dart';
 export 'src/extensions/mock_server.dart';
+export 'src/extensions/mock_rule_store.dart';
 export 'src/extensions/recording.dart';
 export 'src/extensions/riverpod.dart';
 export 'src/extensions/router_navigate.dart';

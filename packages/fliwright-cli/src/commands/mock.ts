@@ -17,8 +17,8 @@ export async function mockStartCommand(options: MockStartOptions = {}): Promise<
   const url = await server.start();
   await server.loadRules(options.mockDir ?? join(cwd, '.fliwright/mocks'));
 
-  console.log(`Fliwright mock controller: ${url}`);
-  console.log(`Flutter dart-define: --dart-define=FLIWRIGHT_MOCK_CONTROLLER_URL=${url}`);
+  console.log(`Fliwright legacy mock controller: ${url}`);
+  console.log('For Dio apps, prefer FliwrightBridge.initForDioMock() with MockRuleStorage.');
 
   await waitForever();
 }

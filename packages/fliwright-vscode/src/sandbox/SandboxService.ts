@@ -9,9 +9,6 @@ import type {
 
 export class SandboxService {
   private readonly applied = new Map<string, AppliedMockRule>();
-  private controllerUrl: string | undefined;
-  private controllerDriver: FliwrightDriver | undefined;
-  private configuredControllerUrl: string | undefined;
 
   getAppliedRules(): AppliedMockRule[] {
     return Array.from(this.applied.values()).sort((a, b) => b.appliedAt - a.appliedAt);
@@ -23,24 +20,14 @@ export class SandboxService {
   }
 
   getControllerUrl(): string | undefined {
-    return this.controllerUrl;
+    return undefined;
   }
 
-  async ensureController(driver: FliwrightDriver): Promise<string> {
-    if (this.controllerDriver !== driver || !this.controllerUrl) {
-      this.controllerUrl = await driver.mock.startServer();
-      this.controllerDriver = driver;
-      this.configuredControllerUrl = undefined;
-    }
-    if (this.configuredControllerUrl !== this.controllerUrl) {
-      await driver.mock.configureFlutterController(this.controllerUrl);
-      this.configuredControllerUrl = this.controllerUrl;
-    }
-    return this.controllerUrl;
+  async ensureController(_driver: FliwrightDriver): Promise<string | undefined> {
+    return undefined;
   }
 
   async applyRule(driver: FliwrightDriver, entry: MockRuleEntry): Promise<AppliedMockRule> {
-    await this.ensureController(driver);
     await routeRule(driver, entry.endpoint, entry.method, entry.rule);
     const applied: AppliedMockRule = {
       endpoint: entry.endpoint,
@@ -83,7 +70,6 @@ export class SandboxService {
         rule,
         isDefault: true,
       };
-      await this.ensureController(driver);
       await routeRule(driver, entry.endpoint, entry.method, entry.rule);
       const appliedRule: AppliedMockRule = {
         endpoint: entry.endpoint,
@@ -107,9 +93,6 @@ export class SandboxService {
   }
 
   resetController(): void {
-    this.controllerUrl = undefined;
-    this.controllerDriver = undefined;
-    this.configuredControllerUrl = undefined;
   }
 }
 

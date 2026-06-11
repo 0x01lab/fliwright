@@ -8,6 +8,7 @@ import 'extensions/form_extract.dart';
 import 'extensions/gesture.dart';
 import 'extensions/http_overrides.dart';
 import 'extensions/inspect.dart';
+import 'extensions/mock_rule_store.dart';
 import 'extensions/mock_server.dart';
 import 'extensions/recording.dart';
 import 'extensions/riverpod.dart';
@@ -51,7 +52,10 @@ class FliwrightBridge {
   /// programmatic navigation via `ext.fliwright.navigate`. The bridge calls
   /// `router.go(path)` via `dynamic` dispatch — no hard dependency on
   /// go_router is required.
-  static Future<void> init({dynamic router}) async {
+  static Future<void> init({
+    dynamic router,
+    MockRuleStorage? mockStorage,
+  }) async {
     _router = router;
     if (_initialized) return;
     _initialized = true;
@@ -73,7 +77,9 @@ class FliwrightBridge {
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
 
-    MockServerExtension.register(_registry);
+    final mockRuleStore = MockRuleStore(storage: mockStorage);
+    await mockRuleStore.loadFromStorage();
+    MockServerExtension.register(_registry, store: mockRuleStore);
     await MockServerExtension.startServer();
     final port = MockServerExtension.serverPort;
     if (port != null) {
@@ -93,7 +99,10 @@ class FliwrightBridge {
   /// 2. Call [DioMockExtension.setInterceptor] with that instance.
   ///
   /// No HTTP server is started and no `HttpOverrides` are installed.
-  static Future<void> initForDioMock({dynamic router}) async {
+  static Future<void> initForDioMock({
+    dynamic router,
+    MockRuleStorage? mockStorage,
+  }) async {
     _router = router;
     if (_initialized) return;
     _initialized = true;
@@ -115,8 +124,10 @@ class FliwrightBridge {
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
 
+    final mockRuleStore = MockRuleStore(storage: mockStorage);
+    await mockRuleStore.loadFromStorage();
     // Dio mock — no HttpServer, no HttpOverrides.
-    DioMockExtension.register(_registry);
+    DioMockExtension.register(_registry, store: mockRuleStore);
   }
 
   static void _registerPingAndHandshake() {

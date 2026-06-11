@@ -3,10 +3,10 @@ import { FliwrightDriver } from '../src/Driver.js';
 import { createProtocolMock } from './helpers/mockVMService.js';
 
 describe('MockManager Integration', () => {
-  it('configureFlutterController() sends the tool mock controller URL through VM Service', async () => {
+  it('configureFlutterController() syncs passthrough without a tool controller URL', async () => {
     const mock = createProtocolMock();
-    mock.mockExtension('ext.fliwright.mock.setController', (params: any) => ({
-      controllerUrl: params.url,
+    mock.mockExtension('ext.fliwright.mock.setPassthrough', (params: any) => ({
+      passthrough: params.enabled === 'true',
     }));
     const driver = new FliwrightDriver();
     await driver.attachMockConnector(mock.ws);
@@ -14,13 +14,14 @@ describe('MockManager Integration', () => {
     await driver.mock.configureFlutterController('http://127.0.0.1:18080');
 
     const messages = mock.sentMessages();
-    const msg = messages.find((entry) => entry.method === 'ext.fliwright.mock.setController');
+    const msg = messages.find((entry) => entry.method === 'ext.fliwright.mock.setPassthrough');
     expect(msg).toBeDefined();
     expect(msg!.params).toHaveProperty('isolateId', mock.isolateId);
-    expect(msg!.params).toHaveProperty('url', 'http://127.0.0.1:18080');
+    expect(msg!.params).toHaveProperty('enabled', 'true');
+    expect(messages.some((entry) => entry.method === 'ext.fliwright.mock.setController')).toBe(false);
   });
 
-  it('route() and getCalls() operate on the tool-side mock server', async () => {
+  it('route() syncs Flutter store and keeps a local mirror for tool-side inspection', async () => {
     const driver = new FliwrightDriver();
     await driver.attachMockConnector(createProtocolMock().ws);
 
@@ -38,6 +39,6 @@ describe('MockManager Integration', () => {
 
     expect(result.matched).toBe(true);
     expect(result.body).toEqual([{ id: 1, name: 'Test' }]);
-    expect(await driver.mock.getCalls('/api/users')).toHaveLength(1);
+    expect(driver.mock['_server'].getCalls('/api/users')).toHaveLength(1);
   });
 });

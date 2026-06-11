@@ -1,4 +1,3 @@
-import { ToolMockServer } from '@fliwright/core';
 import { resolveVmUrl } from '../vm-discovery.js';
 import { loadConfig } from '../config.js';
 import { formatPretty, formatJson, formatJunit, type CliFailureEntry, type CliRunResult } from '../reporter.js';
@@ -55,39 +54,30 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
 
   deps.onVmResolved?.(vmUrl);
 
-  const mockServer = new ToolMockServer();
-  const mockControllerUrl = await mockServer.start();
-  await mockServer.loadRules(join(cwd, '.fliwright/mocks'));
+  const vitestResult = await runVitest({
+    testPattern,
+    testName: options.testName,
+    vmUrl,
+    cwd,
+    failureContextPath: join(outputDir, 'failures.json'),
+    timeout,
+    screenshot,
+  });
+  const withArtifacts = await attachArtifacts(vitestResult, {
+    cwd,
+    outputDir,
+    reportPath,
+    runId,
+    screenshot,
+    testPattern,
+    testName: options.testName,
+  });
+  const formatted = formatOutput(withArtifacts, reporter);
 
-  try {
-    const vitestResult = await runVitest({
-      testPattern,
-      testName: options.testName,
-      vmUrl,
-      cwd,
-      mockControllerUrl,
-      failureContextPath: join(outputDir, 'failures.json'),
-      timeout,
-      screenshot,
-    });
-    const withArtifacts = await attachArtifacts(vitestResult, {
-      cwd,
-      outputDir,
-      reportPath,
-      runId,
-      screenshot,
-      testPattern,
-      testName: options.testName,
-    });
-    const formatted = formatOutput(withArtifacts, reporter);
-
-    if (options.print !== false) {
-      console.log(formatted);
-    }
-    return withArtifacts;
-  } finally {
-    await mockServer.stop();
+  if (options.print !== false) {
+    console.log(formatted);
   }
+  return withArtifacts;
 }
 
 interface RunVitestOptions {
@@ -95,7 +85,6 @@ interface RunVitestOptions {
   testName?: string;
   vmUrl: string;
   cwd: string;
-  mockControllerUrl: string;
   failureContextPath: string;
   timeout: number;
   screenshot: 'file' | 'base64' | 'off';
@@ -114,7 +103,6 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
     {
       ...process.env,
       FLIWRIGHT_VM_URL: options.vmUrl,
-      FLIWRIGHT_MOCK_CONTROLLER_URL: options.mockControllerUrl,
       FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: options.failureContextPath,
       FLIWRIGHT_SCREENSHOT_MODE: options.screenshot,
       FLIWRIGHT_FAILURE_TIMEOUT_MS: String(options.timeout),
