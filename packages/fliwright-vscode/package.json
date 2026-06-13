@@ -25,8 +25,9 @@
   ],
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json && pnpm run bundle",
+    "build": "tsc -p tsconfig.json && pnpm run bundle && pnpm run bundle:webview",
     "bundle": "esbuild src/extension.ts --bundle --platform=node --format=esm --external:vscode --outfile=dist/extension.js --sourcemap --banner:js='import{createRequire}from\"module\";const require=createRequire(import.meta.url);'",
+    "bundle:webview": "esbuild src/webview/recording-canvas/app.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=dist/webview/recordingCanvas.js --loader:.css=css --asset-names=webview/[name] --outbase=src --sourcemap",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:integration": "node scripts/run-integration.mjs",
@@ -35,9 +36,6 @@
     "publish:vsce": "pnpm run verify:release && cd .vsix-stage && pnpm dlx @vscode/vsce publish --packagePath ../fliwright-vscode-0.1.0.vsix"
   },
   "activationEvents": [
-    "onView:fliwright.devices",
-    "onView:fliwright.mockApis",
-    "onView:fliwright.formData",
     "onCommand:fliwright.reloadMocks",
     "onCommand:fliwright.reloadFormRules",
     "onCommand:fliwright.connect",
@@ -138,7 +136,7 @@
       {
         "command": "fliwright.discoverVmService",
         "title": "Fliwright: Refresh / Discover VM Service",
-        "icon": "$(search)"
+        "icon": "$(refresh)"
       },
       {
         "command": "fliwright.configureMcp",
@@ -592,11 +590,18 @@
       }
     }
   },
+  "dependencies": {
+    "@xyflow/react": "^12.8.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
   "devDependencies": {
     "@fliwright/cli": "workspace:*",
     "@fliwright/core": "workspace:*",
     "@fliwright/plugin-riverpod": "workspace:*",
     "@types/node": "^20.14.0",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.4.1",
     "esbuild": "^0.21.5",

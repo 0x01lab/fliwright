@@ -1,86 +1,111 @@
 import * as vscode from 'vscode';
 import type { RecordingSession } from '../types.js';
+import type { CanvasToExtensionMessage, ExtensionToCanvasMessage, RecordingCanvasSession } from './recording-canvas/types.js';
+
+export interface RecordingPanelOptions {
+  onSetFrameIncluded?: (frameId: string, included: boolean) => void | Promise<void>;
+}
 
 export class RecordingPanel {
   private panel: vscode.WebviewPanel | undefined;
+  private lastSession: RecordingSession | undefined;
+
+  constructor(
+    private readonly extensionUri?: vscode.Uri,
+    private readonly options: RecordingPanelOptions = {},
+  ) {}
 
   open(session: RecordingSession): void {
+    this.lastSession = session;
     if (!this.panel) {
       this.panel = vscode.window.createWebviewPanel(
         'fliwright.recording',
         'Fliwright Recording',
         vscode.ViewColumn.Beside,
-        { enableScripts: true },
+        {
+          enableScripts: true,
+          localResourceRoots: this.extensionUri ? [this.extensionUri] : undefined,
+        },
       );
       this.panel.onDidDispose(() => {
         this.panel = undefined;
       });
-      this.panel.webview.onDidReceiveMessage((message: { type: string }) => {
+      this.panel.webview.onDidReceiveMessage((message: CanvasToExtensionMessage) => {
+        if (message.type === 'ready') {
+          this.postSession();
+        }
         if (message.type === 'insertRecordedTest') {
           void vscode.commands.executeCommand('fliwright.insertRecordedTest');
         }
         if (message.type === 'stopRecording') {
           void vscode.commands.executeCommand('fliwright.stopRecording');
         }
+        if (message.type === 'setFrameIncluded') {
+          void this.options.onSetFrameIncluded?.(message.frameId, message.included);
+        }
       });
+      this.panel.webview.html = renderRecordingHtml(this.panel.webview, this.extensionUri);
     }
-    this.update(session);
+    this.postSession();
     this.panel.reveal(vscode.ViewColumn.Beside);
   }
 
   update(session: RecordingSession): void {
-    if (!this.panel) return;
-    this.panel.webview.html = renderRecordingHtml(session);
+    this.lastSession = session;
+    this.postSession();
+  }
+
+  private postSession(): void {
+    if (!this.panel || !this.lastSession) return;
+    const message: ExtensionToCanvasMessage = {
+      type: 'session',
+      session: toCanvasSession(this.lastSession),
+    };
+    void this.panel.webview.postMessage?.(message);
   }
 }
 
-function renderRecordingHtml(session: RecordingSession): string {
-  const code = session.generatedCode
-    ? `<h2>Generated Test</h2><pre>${escapeHtml(session.generatedCode)}</pre><button id="insert">Insert Recorded Test</button>`
-    : '';
-  const stop = session.status === 'recording' ? '<button id="stop">Stop Recording</button>' : '';
+function renderRecordingHtml(webview: vscode.Webview, extensionUri?: vscode.Uri): string {
+  const nonce = getNonce();
+  const scriptUri = resourceUri(webview, extensionUri, 'dist/webview/recordingCanvas.js');
+  const styleUri = resourceUri(webview, extensionUri, 'dist/webview/recordingCanvas.css');
+  const cspSource = webview.cspSource ?? 'vscode-resource:';
+
   return `<!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <style>
-    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 16px; }
-    h1 { font-size: 18px; margin: 0 0 12px; }
-    h2 { font-size: 13px; margin: 18px 0 8px; }
-    dl { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; }
-    dt { color: var(--vscode-descriptionForeground); }
-    dd { margin: 0; }
-    pre { background: var(--vscode-editor-background); padding: 12px; overflow: auto; border-radius: 4px; }
-  </style>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} data:; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link nonce="${nonce}" rel="stylesheet" href="${styleUri}">
+  <title>Fliwright Recording</title>
 </head>
 <body>
-  <h1>${title(session.status)}</h1>
-  <dl>
-    <dt>Raw events</dt><dd>${session.rawEventCount}</dd>
-    <dt>Operations</dt><dd>${session.operationCount}</dd>
-    <dt>Target</dt><dd>${escapeHtml(session.targetFile ?? 'active editor')}</dd>
-  </dl>
-  ${stop}
-  ${code}
-  <script>
-    const vscode = acquireVsCodeApi();
-    document.getElementById('insert')?.addEventListener('click', () => vscode.postMessage({ type: 'insertRecordedTest' }));
-    document.getElementById('stop')?.addEventListener('click', () => vscode.postMessage({ type: 'stopRecording' }));
-  </script>
+  <div id="root"></div>
+  <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
 }
 
-function title(status: RecordingSession['status']): string {
-  if (status === 'recording') return 'Recording';
-  if (status === 'preview') return 'Recording Preview';
-  return 'Ready to Record';
+function resourceUri(webview: vscode.Webview, extensionUri: vscode.Uri | undefined, relativePath: string): string {
+  if (!extensionUri || typeof webview.asWebviewUri !== 'function') {
+    return relativePath;
+  }
+  return webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, ...relativePath.split('/'))).toString();
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function toCanvasSession(session: RecordingSession): RecordingCanvasSession {
+  return {
+    ...session,
+    frames: session.frames ?? [],
+  };
+}
+
+function getNonce(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 32; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }

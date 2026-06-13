@@ -108,7 +108,7 @@ function statusIcon(state: DeviceConnectionState): string {
   if (state.status === 'connected') return 'vm-active';
   if (state.status === 'recording') return 'record';
   if (state.status === 'running') return 'run';
-  if (state.status === 'scanning') return 'search~spin';
+  if (state.status === 'scanning') return 'sync~spin';
   if (state.status === 'connecting') return 'sync~spin';
   if (state.status === 'error') return 'error';
   return 'circle-outline';

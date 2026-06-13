@@ -123,4 +123,22 @@ describe('CodeGenerator', () => {
     expect(code).toContain("page.locator({ text: 'User' }).click()");
     expect(code).toContain("page.locator({ text: 'Pass' }).click()");
   });
+
+  it('skips ignored operations', () => {
+    const gen = new CodeGenerator();
+    const ops: RecordedOperation[] = [
+      tap(100, 200, 1000),
+      { ...tap(102, 202, 1100), status: 'ignored', ignoreReason: 'duplicate' },
+      typeOp(100, 300, 'ok', 2000),
+    ];
+    const selectors = new Map<number, string>([
+      [0, "{ text: 'Open' }"],
+      [1, "{ text: 'Open' }"],
+      [2, "{ text: 'Field' }"],
+    ]);
+    const code = gen.generate(ops, selectors);
+    expect(code).toContain("page.locator({ text: 'Open' }).click()");
+    expect(code).toContain("page.locator({ text: 'Field' }).type('ok')");
+    expect(code.match(/Open/g)).toHaveLength(1);
+  });
 });

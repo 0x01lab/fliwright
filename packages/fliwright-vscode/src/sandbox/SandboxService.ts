@@ -28,7 +28,8 @@ export class SandboxService {
   }
 
   async applyRule(driver: FliwrightDriver, entry: MockRuleEntry): Promise<AppliedMockRule> {
-    await routeRule(driver, entry.endpoint, entry.method, entry.rule);
+    const routeResult = await routeRule(driver, entry.endpoint, entry.method, entry.rule);
+    await assertFlutterMockReady(driver, entry.endpoint, entry.method, routeResult);
     const applied: AppliedMockRule = {
       endpoint: entry.endpoint,
       method: entry.method,
@@ -40,10 +41,40 @@ export class SandboxService {
     return applied;
   }
 
+  async syncFromFlutter(driver: FliwrightDriver, discovery: MockDiscoveryResult): Promise<{
+    applied: AppliedMockRule[];
+    routes: Array<{ id?: string; method?: string; path: string }>;
+    unmatched: Array<{ id?: string; method?: string; path: string }>;
+  }> {
+    const routes = await driver.mock.listFlutterRoutes();
+    this.applied.clear();
+    const applied: AppliedMockRule[] = [];
+    const unmatched: Array<{ id?: string; method?: string; path: string }> = [];
+
+    for (const route of routes) {
+      const match = resolveFlutterRoute(route, discovery);
+      if (!match) {
+        unmatched.push(route);
+        continue;
+      }
+
+      this.applied.set(appliedKey(match.method, match.endpoint), match);
+      applied.push(match);
+    }
+
+    return { applied, routes, unmatched };
+  }
+
   async stopRule(driver: FliwrightDriver, entry: MockRuleEntry): Promise<boolean> {
     const key = appliedKey(entry.method, entry.endpoint);
     const applied = this.applied.get(key);
-    if (applied?.ruleName !== entry.rule.name) return false;
+    if (applied && applied.ruleName !== entry.rule.name) return false;
+    if (!applied) {
+      const flutterRoute = await findFlutterRoute(driver, entry.endpoint, entry.method);
+      if (!flutterRoute) return false;
+      const parsed = parseRouteId(flutterRoute.id);
+      if (parsed && parsed.ruleName !== entry.rule.name) return false;
+    }
     await driver.mock.removeRoute(entry.endpoint, entry.method);
     this.applied.delete(key);
     return true;
@@ -70,7 +101,8 @@ export class SandboxService {
         rule,
         isDefault: true,
       };
-      await routeRule(driver, entry.endpoint, entry.method, entry.rule);
+      const routeResult = await routeRule(driver, entry.endpoint, entry.method, entry.rule);
+      await assertFlutterMockReady(driver, entry.endpoint, entry.method, routeResult);
       const appliedRule: AppliedMockRule = {
         endpoint: entry.endpoint,
         method: entry.method,
@@ -93,6 +125,7 @@ export class SandboxService {
   }
 
   resetController(): void {
+    this.applied.clear();
   }
 }
 
@@ -119,18 +152,177 @@ async function routeRule(
   endpoint: string,
   method: string,
   rule: MockRule,
-): Promise<void> {
-  await driver.mock.route(endpoint, {
+): Promise<unknown> {
+  const response = {
+    id: routeId(endpoint, method, rule.name),
     method,
     status: rule.status,
     delay: rule.delay,
     headers: rule.headers,
     body: rule.body,
-  });
+  };
+  return (await driver.mock.routeFlutter(endpoint, response)) ?? { success: true };
 }
 
 function appliedKey(method: string, endpoint: string): string {
   return `${method.toUpperCase()} ${endpoint}`;
+}
+
+function routeId(endpoint: string, method: string, ruleName: string): string {
+  return `fliwright-vscode:${encodeURIComponent(method.toUpperCase())}:${encodeURIComponent(endpoint)}:${encodeURIComponent(ruleName)}`;
+}
+
+function resolveFlutterRoute(
+  route: { id?: string; method?: string; path: string },
+  discovery: MockDiscoveryResult,
+): AppliedMockRule | undefined {
+  const parsed = parseRouteId(route.id);
+  const endpoint = parsed?.endpoint ?? route.path;
+  const method = (parsed?.method ?? route.method)?.toUpperCase();
+  if (!method) return undefined;
+
+  const endpointEntry = discovery.endpoints.find((candidate) => (
+    candidate.endpointFile.endpoint === endpoint &&
+    candidate.endpointFile.method.toUpperCase() === method
+  ));
+  if (!endpointEntry) return undefined;
+
+  const rule = parsed?.ruleName
+    ? endpointEntry.endpointFile.rules.find((candidate) => candidate.name === parsed.ruleName)
+    : selectDefaultRule(endpointEntry);
+  if (!rule) return undefined;
+
+  return {
+    endpoint,
+    method: endpointEntry.endpointFile.method,
+    ruleName: rule.name,
+    filePath: endpointEntry.uri.fsPath,
+    appliedAt: Date.now(),
+  };
+}
+
+function parseRouteId(id: string | undefined): { method: string; endpoint: string; ruleName: string } | undefined {
+  if (!id?.startsWith('fliwright-vscode:')) return undefined;
+  const parts = id.split(':');
+  if (parts.length !== 4) return undefined;
+  try {
+    return {
+      method: decodeURIComponent(parts[1] ?? '').toUpperCase(),
+      endpoint: decodeURIComponent(parts[2] ?? ''),
+      ruleName: decodeURIComponent(parts[3] ?? ''),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function findFlutterRoute(
+  driver: FliwrightDriver,
+  endpoint: string,
+  method: string,
+): Promise<{ id?: string; method?: string; path: string } | undefined> {
+  try {
+    const routes = await driver.mock.listFlutterRoutes();
+    return routes.find((route) => (
+      route.path === endpoint &&
+      (!route.method || route.method.toUpperCase() === method.toUpperCase())
+    ));
+  } catch {
+    return undefined;
+  }
+}
+
+interface MockDebugState {
+  mode?: string;
+  serverPort?: number | null;
+  interceptorInjected?: boolean;
+  routes?: Array<{ method?: string; path?: string }>;
+}
+
+interface MockListRoutesResult {
+  routes?: Array<{ method?: string; path?: string }>;
+}
+
+async function assertFlutterMockReady(
+  driver: FliwrightDriver,
+  endpoint: string,
+  method: string,
+  routeResult: unknown,
+): Promise<void> {
+  const state = unwrapExtensionPayload<MockDebugState>(
+    await driver.sendRequest('ext.fliwright.mock.debugState', {}),
+  );
+  if (!state || typeof state !== 'object') {
+    throw new Error('Flutter mock debug state is unavailable. Ensure FliwrightBridge mock extensions are initialized.');
+  }
+
+  if (state.mode === 'dio' && state.interceptorInjected !== true) {
+    throw new Error(
+      'Dio mock route was registered, but FliwrightDioMockInterceptor is not injected. '
+      + 'Add the interceptor to the app Dio instance and call DioMockExtension.setInterceptor(interceptor).',
+    );
+  }
+
+  if (state.mode === 'http' && (state.serverPort == null || !Number.isFinite(state.serverPort))) {
+    throw new Error('HTTP mock route was registered, but the Flutter mock server is not running.');
+  }
+
+  const routeList = unwrapExtensionPayload<MockListRoutesResult>(
+    await driver.sendRequest('ext.fliwright.mock.listRoutes', {}),
+  );
+  const routeRegistered = isSuccessfulRouteResult(routeResult);
+  const routes = [
+    ...(Array.isArray(state.routes) ? state.routes : []),
+    ...(Array.isArray(routeList?.routes) ? routeList.routes : []),
+  ];
+  const routeSynced = routes.some((route) => (
+    route.path === endpoint &&
+    (!route.method || route.method.toUpperCase() === method.toUpperCase())
+  ));
+  if (!routeSynced && !routeRegistered) {
+    const available = routes.map((route) => `${(route.method ?? '*').toUpperCase()} ${route.path ?? '(unknown)'}`);
+    throw new Error(
+      `Flutter mock route was not registered: ${method.toUpperCase()} ${endpoint}. `
+      + `Available Flutter routes: ${available.length ? available.join(', ') : '(none)'}`,
+    );
+  }
+}
+
+function isSuccessfulRouteResult(value: unknown): boolean {
+  const payload = unwrapExtensionPayload<Record<string, unknown>>(value);
+  if (!payload || typeof payload !== 'object') return false;
+  if (payload.success === true) return true;
+  return typeof payload.id === 'string' && payload.id.length > 0;
+}
+
+function unwrapExtensionPayload<T>(value: unknown): T {
+  if (value && typeof value === 'object' && 'result' in value) {
+    const result = (value as { result?: unknown }).result;
+    if (typeof result === 'string') {
+      try {
+        return JSON.parse(result) as T;
+      } catch {
+        return value as T;
+      }
+    }
+    if (result && typeof result === 'object') {
+      return unwrapExtensionPayload<T>(result);
+    }
+  }
+  if (value && typeof value === 'object' && 'response' in value) {
+    const response = (value as { response?: unknown }).response;
+    if (typeof response === 'string') {
+      try {
+        return JSON.parse(response) as T;
+      } catch {
+        return value as T;
+      }
+    }
+    if (response && typeof response === 'object') {
+      return response as T;
+    }
+  }
+  return value as T;
 }
 
 function summarizeBody(body: unknown): string {

@@ -76,4 +76,19 @@ describe('DartCodeGenerator', () => {
     expect(code).toContain("find.text('Email')");
     expect(code).toContain("find.text('Submit')");
   });
+
+  it('skips ignored operations', () => {
+    const gen = new DartCodeGenerator();
+    const ops: RecordedOperation[] = [
+      { kind: 'tap', position: { x: 100, y: 200 }, timestamp: 1000 },
+      { kind: 'tap', position: { x: 102, y: 202 }, timestamp: 1100, status: 'ignored', ignoreReason: 'duplicate' },
+    ];
+    const selectors = new Map<number, string>([
+      [0, "{ text: 'Open' }"],
+      [1, "{ text: 'Duplicate' }"],
+    ]);
+    const code = gen.generate(ops, selectors);
+    expect(code).toContain("find.text('Open')");
+    expect(code).not.toContain('Duplicate');
+  });
 });

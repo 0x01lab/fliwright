@@ -4,33 +4,128 @@ import { SandboxService } from '../src/sandbox/SandboxService.js';
 import type { MockDiscoveryResult, MockRuleEntry } from '../src/types.js';
 
 describe('SandboxService', () => {
-  it('applies one selected mock rule through driver.mock.route', async () => {
-    const route = vi.fn().mockResolvedValue(undefined);
+  it('applies one selected mock rule through driver.mock.routeFlutter', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = vi.fn().mockImplementation(async (method: string) => {
+      if (method === 'ext.fliwright.mock.debugState') {
+        return {
+          mode: 'http',
+          serverPort: 12345,
+          routes: [{ method: 'GET', path: '/v1/token' }],
+        };
+      }
+      return { routes: [{ method: 'GET', path: '/v1/token' }] };
+    });
     const service = new SandboxService();
     const entry = mockRule('success');
 
-    const applied = await service.applyRule({ mock: { route } } as any, entry);
+    const applied = await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, entry);
 
-    expect(route).toHaveBeenCalledWith('/v1/token', {
+    expect(routeFlutter).toHaveBeenCalledWith('/v1/token', {
+      id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success',
       method: 'GET',
       status: 200,
       delay: undefined,
       headers: undefined,
       body: { ok: true },
     });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.debugState', {});
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.listRoutes', {});
     expect(applied.ruleName).toBe('success');
     expect(service.isApplied(entry)).toBeDefined();
   });
 
+  it('syncs active rules from Flutter route ids without pushing local rules', async () => {
+    const service = new SandboxService();
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      {
+        id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:error',
+        method: 'GET',
+        path: '/v1/token',
+      },
+    ]);
+    const routeFlutter = vi.fn();
+
+    const result = await service.syncFromFlutter(
+      { mock: { listFlutterRoutes, routeFlutter } } as any,
+      discovery(),
+    );
+
+    expect(result.routes).toHaveLength(1);
+    expect(result.applied).toMatchObject([
+      {
+        endpoint: '/v1/token',
+        method: 'GET',
+        ruleName: 'error',
+      },
+    ]);
+    expect(service.getAppliedRules()).toHaveLength(1);
+    expect(routeFlutter).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the local default rule when Flutter route ids have no rule metadata', async () => {
+    const service = new SandboxService();
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'flutter-route', method: 'GET', path: '/v1/token' },
+    ]);
+
+    const result = await service.syncFromFlutter(
+      { mock: { listFlutterRoutes } } as any,
+      discovery(),
+    );
+
+    expect(result.applied).toMatchObject([
+      {
+        endpoint: '/v1/token',
+        method: 'GET',
+        ruleName: 'error',
+      },
+    ]);
+    expect(result.unmatched).toHaveLength(0);
+  });
+
+  it('accepts wrapped VM service extension payloads', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = vi.fn().mockImplementation(async (method: string) => {
+      if (method === 'ext.fliwright.mock.debugState') {
+        return {
+          result: JSON.stringify({
+            mode: 'dio',
+            interceptorInjected: true,
+            routes: [],
+          }),
+        };
+      }
+      return {
+        result: JSON.stringify({
+          routes: [{ method: 'POST', path: '/api/v1/user/info' }],
+        }),
+      };
+    });
+    const service = new SandboxService();
+    const entry = mockRule('success');
+    entry.endpoint = '/api/v1/user/info';
+    entry.method = 'POST';
+
+    const applied = await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, entry);
+
+    expect(applied).toMatchObject({
+      endpoint: '/api/v1/user/info',
+      method: 'POST',
+      ruleName: 'success',
+    });
+  });
+
   it('keeps only one active rule per method and endpoint', async () => {
-    const route = vi.fn().mockResolvedValue(undefined);
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
     const service = new SandboxService();
     const success = mockRule('success');
     const error = mockRule('error');
     error.rule.status = 400;
 
-    await service.applyRule({ mock: { route } } as any, success);
-    await service.applyRule({ mock: { route } } as any, error);
+    await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, success);
+    await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, error);
 
     expect(service.getAppliedRules()).toHaveLength(1);
     expect(service.getAppliedRules()[0]?.ruleName).toBe('error');
@@ -39,9 +134,13 @@ describe('SandboxService', () => {
   });
 
   it('routes multiple rules directly through the same driver', async () => {
-    const route = vi.fn().mockResolvedValue(undefined);
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = httpReadySendRequest([
+      { method: 'GET', path: '/v1/token' },
+      { method: 'GET', path: '/v1/profile' },
+    ]);
     const service = new SandboxService();
-    const driver = { mock: { route } } as any;
+    const driver = { mock: { routeFlutter }, sendRequest } as any;
     const first = mockRule('success');
     const second = mockRule('error');
     second.endpoint = '/v1/profile';
@@ -49,41 +148,65 @@ describe('SandboxService', () => {
     await service.applyRule(driver, first);
     await service.applyRule(driver, second);
 
-    expect(route).toHaveBeenCalledTimes(2);
+    expect(routeFlutter).toHaveBeenCalledTimes(2);
   });
 
   it('stops only the currently active rule for an endpoint', async () => {
-    const route = vi.fn().mockResolvedValue(undefined);
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
     const removeRoute = vi.fn().mockResolvedValue(undefined);
+    const listFlutterRoutes = vi.fn().mockResolvedValue([]);
     const service = new SandboxService();
     const success = mockRule('success');
     const error = mockRule('error');
 
-    await service.applyRule({ mock: { route } } as any, success);
+    await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, success);
 
-    await expect(service.stopRule({ mock: { removeRoute } } as any, error)).resolves.toBe(false);
+    await expect(service.stopRule({ mock: { removeRoute, listFlutterRoutes } } as any, error)).resolves.toBe(false);
     expect(removeRoute).not.toHaveBeenCalled();
     expect(service.getAppliedRules()).toHaveLength(1);
 
-    await expect(service.stopRule({ mock: { removeRoute } } as any, success)).resolves.toBe(true);
+    await expect(service.stopRule({ mock: { removeRoute, listFlutterRoutes } } as any, success)).resolves.toBe(true);
     expect(removeRoute).toHaveBeenCalledWith('/v1/token', 'GET');
     expect(service.getAppliedRules()).toHaveLength(0);
   });
 
-  it('applies index default rules and skips invalid files', async () => {
-    const route = vi.fn().mockResolvedValue(undefined);
+  it('stops a Flutter route even when local active state was not recorded', async () => {
+    const removeRoute = vi.fn().mockResolvedValue(undefined);
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      {
+        id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success',
+        method: 'GET',
+        path: '/v1/token',
+      },
+    ]);
     const service = new SandboxService();
 
-    const result = await service.applyDefaultMocks({ mock: { route } } as any, discovery());
+    await expect(service.stopRule({ mock: { removeRoute, listFlutterRoutes } } as any, mockRule('success')))
+      .resolves.toBe(true);
+
+    expect(removeRoute).toHaveBeenCalledWith('/v1/token', 'GET');
+  });
+
+  it('applies index default rules and skips invalid files', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
+    const service = new SandboxService();
+
+    const result = await service.applyDefaultMocks({ mock: { routeFlutter }, sendRequest } as any, discovery());
 
     expect(result.applied).toHaveLength(1);
     expect(result.applied[0]?.ruleName).toBe('error');
     expect(result.skipped).toBe(1);
-    expect(route).toHaveBeenCalledWith('/v1/token', expect.objectContaining({ status: 500 }));
+    expect(routeFlutter).toHaveBeenCalledWith('/v1/token', expect.objectContaining({ status: 500 }));
   });
 
   it('applies default mocks in bulk without starting a controller', async () => {
-    const route = vi.fn().mockResolvedValue(undefined);
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = httpReadySendRequest([
+      { method: 'GET', path: '/v1/token' },
+      { method: 'POST', path: '/v1/profile' },
+    ]);
     const service = new SandboxService();
     const result = discovery();
     result.endpoints.push({
@@ -101,16 +224,145 @@ describe('SandboxService', () => {
       },
     });
 
-    await service.applyDefaultMocks({ mock: { route } } as any, result);
+    await service.applyDefaultMocks({ mock: { routeFlutter }, sendRequest } as any, result);
 
-    expect(route).toHaveBeenCalledTimes(2);
+    expect(routeFlutter).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not mark a Dio mock active when the interceptor is not injected', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = vi.fn().mockResolvedValue({
+      mode: 'dio',
+      interceptorInjected: false,
+      routes: [{ method: 'GET', path: '/v1/token' }],
+    });
+    const service = new SandboxService();
+    const entry = mockRule('success');
+
+    await expect(service.applyRule({ mock: { routeFlutter }, sendRequest } as any, entry)).rejects.toThrow(
+      'FliwrightDioMockInterceptor is not injected',
+    );
+
+    expect(routeFlutter).toHaveBeenCalledOnce();
+    expect(service.getAppliedRules()).toHaveLength(0);
+    expect(service.isApplied(entry)).toBeUndefined();
+  });
+
+  it('surfaces strict routeFlutter errors before active verification', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    routeFlutter.mockRejectedValueOnce(new Error('Flutter mock route registration failed: Invalid route JSON: bad payload'));
+    const sendRequest = vi.fn();
+    const service = new SandboxService();
+    const entry = mockRule('success');
+
+    await expect(service.applyRule({ mock: { routeFlutter }, sendRequest } as any, entry)).rejects.toThrow(
+      'Flutter mock route registration failed: Invalid route JSON: bad payload',
+    );
+
+    expect(routeFlutter).toHaveBeenCalledOnce();
+    expect(sendRequest).not.toHaveBeenCalled();
+    expect(service.getAppliedRules()).toHaveLength(0);
+  });
+
+  it('does not mark a mock active when Flutter did not register the route', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue({});
+    const sendRequest = vi.fn().mockResolvedValue({
+      mode: 'http',
+      serverPort: 12345,
+      routes: [],
+    });
+    const service = new SandboxService();
+    const entry = mockRule('success');
+
+    await expect(service.applyRule({ mock: { routeFlutter }, sendRequest } as any, entry)).rejects.toThrow(
+      'Flutter mock route was not registered: GET /v1/token. Available Flutter routes: (none)',
+    );
+
+    expect(service.getAppliedRules()).toHaveLength(0);
+  });
+
+  it('accepts completed routeFlutter calls even when the extension returns no payload', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = vi.fn().mockResolvedValue({
+      mode: 'http',
+      serverPort: 12345,
+      routes: [],
+    });
+    const service = new SandboxService();
+
+    const applied = await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, mockRule('success'));
+
+    expect(applied.ruleName).toBe('success');
+    expect(service.getAppliedRules()).toHaveLength(1);
+  });
+
+  it('accepts successful addRoute even when immediate route list is stale', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue({
+      result: JSON.stringify({ success: true, id: 'registered-route' }),
+    });
+    const sendRequest = vi.fn().mockImplementation(async (method: string) => {
+      if (method === 'ext.fliwright.mock.debugState') {
+        return {
+          result: JSON.stringify({
+            mode: 'dio',
+            interceptorInjected: true,
+            routes: [],
+          }),
+        };
+      }
+      return {
+        result: JSON.stringify({ routes: [] }),
+      };
+    });
+    const service = new SandboxService();
+    const entry = mockRule('success');
+    entry.endpoint = '/api/v1/user/info';
+    entry.method = 'POST';
+
+    const applied = await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, entry);
+
+    expect(applied).toMatchObject({
+      endpoint: '/api/v1/user/info',
+      method: 'POST',
+      ruleName: 'success',
+    });
+    expect(service.getAppliedRules()).toHaveLength(1);
+  });
+
+  it('accepts real VM service extension response wrappers', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(vmExtensionResult({ success: true, id: 'registered-route' }));
+    const sendRequest = vi.fn().mockImplementation(async (method: string) => {
+      if (method === 'ext.fliwright.mock.debugState') {
+        return vmExtensionResult({
+          mode: 'dio',
+          interceptorInjected: true,
+          routes: [],
+        });
+      }
+      return vmExtensionResult({
+        routes: [{ method: 'POST', path: '/api/v1/user/info' }],
+      });
+    });
+    const service = new SandboxService();
+    const entry = mockRule('success');
+    entry.endpoint = '/api/v1/user/info';
+    entry.method = 'POST';
+
+    const applied = await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, entry);
+
+    expect(applied).toMatchObject({
+      endpoint: '/api/v1/user/info',
+      method: 'POST',
+      ruleName: 'success',
+    });
   });
 
   it('clears routes and tracked state', async () => {
-    const route = vi.fn().mockResolvedValue(undefined);
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
     const clear = vi.fn().mockResolvedValue(undefined);
     const service = new SandboxService();
-    await service.applyRule({ mock: { route } } as any, mockRule('success'));
+    await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, mockRule('success'));
 
     const count = await service.clear({ mock: { clear } } as any);
 
@@ -128,6 +380,26 @@ function mockRule(ruleName: string): MockRuleEntry {
     method: 'GET',
     rule: { name: ruleName, status: 200, body: { ok: true } },
     isDefault: false,
+  };
+}
+
+function httpReadySendRequest(routes: Array<{ method: string; path: string }>) {
+  return vi.fn().mockImplementation(async (method: string) => {
+    if (method === 'ext.fliwright.mock.debugState') {
+      return {
+        mode: 'http',
+        serverPort: 12345,
+        routes,
+      };
+    }
+    return { routes };
+  });
+}
+
+function vmExtensionResult(response: unknown) {
+  return {
+    type: '_ExtensionType',
+    response: JSON.stringify(response),
   };
 }
 

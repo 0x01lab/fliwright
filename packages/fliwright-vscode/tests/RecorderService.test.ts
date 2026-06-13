@@ -9,12 +9,16 @@ function mockRecorder(overrides: Partial<{
   stop: typeof vi.fn;
   getRawEvents: typeof vi.fn;
   getOperations: typeof vi.fn;
+  getFrames: typeof vi.fn;
+  setOperationIncluded: typeof vi.fn;
 }> = {}) {
   return {
     start: overrides.start ?? vi.fn(async () => undefined),
     stop: overrides.stop ?? vi.fn(async () => "test('recorded', async () => {});"),
     getRawEvents: overrides.getRawEvents ?? vi.fn(() => []),
     getOperations: overrides.getOperations ?? vi.fn(() => []),
+    getFrames: overrides.getFrames ?? vi.fn(() => []),
+    setOperationIncluded: overrides.setOperationIncluded ?? vi.fn(() => "test('recorded', async () => {});"),
   };
 }
 
@@ -27,6 +31,14 @@ describe('RecorderService', () => {
         stop: vi.fn(async () => "test('recorded', async () => {});"),
         getRawEvents: vi.fn(() => [{ kind: 'tap' }]),
         getOperations: vi.fn(() => [{ kind: 'tap' }]),
+        getFrames: vi.fn(() => [{
+          id: 'frame-1',
+          index: 0,
+          kind: 'tap',
+          status: 'ready',
+          timestamp: 1000,
+          position: { x: 10, y: 20 },
+        }]),
       });
       const service = new RecorderService();
 
@@ -40,7 +52,14 @@ describe('RecorderService', () => {
       expect(stopped.operationCount).toBe(1);
       expect(stopped.testName).toBe('checkout flow');
       expect(stopped.generatedCode).toContain('recorded');
+      expect(stopped.frames).toHaveLength(1);
       expect(changes).toEqual(['recording:0', 'recording:1', 'preview:1']);
+      expect(recorder.start).toHaveBeenCalledWith(expect.objectContaining({
+        captureScreenshots: true,
+        filterNoise: true,
+        onOperation: expect.any(Function),
+        onFrame: expect.any(Function),
+      }));
       expect(recorder.stop).toHaveBeenCalledWith(expect.objectContaining({
         lang: 'ts',
         testName: 'checkout flow',
@@ -75,7 +94,37 @@ describe('RecorderService', () => {
     it('resets to idle', async () => {
       const service = new RecorderService();
 
-      expect(service.reset()).toEqual({ status: 'idle', rawEventCount: 0, operationCount: 0 });
+      expect(service.reset()).toEqual({ status: 'idle', rawEventCount: 0, operationCount: 0, frames: [] });
+    });
+
+    it('updates frame inclusion through the active recorder', async () => {
+      const recorder = mockRecorder({
+        getRawEvents: vi.fn(() => [{ kind: 'tap' }]),
+        getOperations: vi.fn(() => [{ kind: 'tap', status: 'ignored' }]),
+        getFrames: vi.fn(() => [{
+          id: 'frame-1',
+          index: 0,
+          kind: 'tap',
+          status: 'ready',
+          timestamp: 1000,
+          position: { x: 10, y: 20 },
+          operationIndex: 0,
+          operationStatus: 'included',
+        }]),
+        setOperationIncluded: vi.fn(() => "test('updated', async () => {});"),
+      });
+      const service = new RecorderService();
+      await service.start({ recorder } as any);
+      await service.stop({ recorder } as any);
+
+      const updated = await service.setFrameIncluded({ recorder } as any, 'frame-1', true);
+
+      expect(recorder.setOperationIncluded).toHaveBeenCalledWith(0, true);
+      expect(updated.generatedCode).toContain('updated');
+      expect(updated.frames?.[0]).toEqual(expect.objectContaining({
+        id: 'frame-1',
+        operationStatus: 'included',
+      }));
     });
   });
 
@@ -127,6 +176,87 @@ describe('RecorderService', () => {
       const written = await readText(root, saved.fsPath.replace(root + '/', ''));
       expect(written).toContain("test('recorded'");
       expect(service.getSession().targetFile).toBe(saved.fsPath);
+    });
+  });
+
+  describe('recording persistence', () => {
+    it('persists a recording manifest and frame screenshots on stop', async () => {
+      const root = await createWorkspace();
+      const recorder = mockRecorder({
+        getRawEvents: vi.fn(() => [{ kind: 'tap' }]),
+        getOperations: vi.fn(() => [{ kind: 'tap' }]),
+        getFrames: vi.fn(() => [{
+          id: 'frame-1',
+          index: 0,
+          kind: 'tap',
+          status: 'ready',
+          timestamp: 1000,
+          position: { x: 10, y: 20 },
+          operationIndex: 0,
+          screenshot: {
+            base64: Buffer.from('png-bytes').toString('base64'),
+            format: 'png',
+            width: 100,
+            height: 200,
+            pixelRatio: 1,
+          },
+        }]),
+      });
+      const service = new RecorderService();
+
+      await service.start({ recorder } as any, { testName: 'persisted flow' });
+      const stopped = await service.stop({ recorder } as any, undefined, {}, Uri.file(root));
+
+      expect(stopped.recordingDir).toMatch(/\.fliwright\/recordings\/recording-\d+$/);
+      const relativeDir = stopped.recordingDir!.replace(`${root}/`, '');
+      const manifest = JSON.parse(await readText(root, `${relativeDir}/recording.json`));
+      expect(manifest).toEqual(expect.objectContaining({
+        version: 1,
+        testName: 'persisted flow',
+        generatedCode: "test('recorded', async () => {});",
+      }));
+      expect(manifest.frames[0]).toEqual(expect.objectContaining({
+        id: 'frame-1',
+        screenshotFile: 'screenshots/frame-0001.png',
+        screenshot: { format: 'png', width: 100, height: 200, pixelRatio: 1 },
+      }));
+      await expect(readText(root, `${relativeDir}/screenshots/frame-0001.png`)).resolves.toBe('png-bytes');
+    });
+
+    it('updates the persisted manifest after manual frame filtering', async () => {
+      const root = await createWorkspace();
+      let included = false;
+      const recorder = mockRecorder({
+        getRawEvents: vi.fn(() => [{ kind: 'tap' }]),
+        getOperations: vi.fn(() => [{ kind: 'tap', status: included ? 'included' : 'ignored' }]),
+        getFrames: vi.fn(() => [{
+          id: 'frame-1',
+          index: 0,
+          kind: 'tap',
+          status: 'ready',
+          timestamp: 1000,
+          position: { x: 10, y: 20 },
+          operationIndex: 0,
+          operationStatus: included ? 'included' : 'ignored',
+          ignoreReason: included ? undefined : 'nonActionable',
+        }]),
+        setOperationIncluded: vi.fn((_index, nextIncluded) => {
+          included = nextIncluded;
+          return "test('updated', async () => {});";
+        }),
+      });
+      const service = new RecorderService();
+      await service.start({ recorder } as any);
+      const stopped = await service.stop({ recorder } as any, undefined, {}, Uri.file(root));
+
+      await service.setFrameIncluded({ recorder } as any, 'frame-1', true, Uri.file(root));
+
+      const relativeDir = stopped.recordingDir!.replace(`${root}/`, '');
+      const manifest = JSON.parse(await readText(root, `${relativeDir}/recording.json`));
+      expect(manifest.generatedCode).toContain('updated');
+      expect(manifest.frames[0]).toEqual(expect.objectContaining({
+        operationStatus: 'included',
+      }));
     });
   });
 

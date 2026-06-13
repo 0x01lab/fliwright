@@ -14,7 +14,7 @@ Write Fliwright tests as deterministic Flutter app automation, not browser tests
 1. Identify the test shape: new `.test.ts`, repair existing script, convert recording output, add mocks/state setup, or diagnose a failure.
 2. Check bridge capability before live exploration. Prefer apps with the current bridge exposing `ext.fliwright.snap`, `ext.fliwright.action`, `ext.fliwright.extractForm`, screenshot, and mock extensions.
 3. Prefer `import { test, expect } from '@fliwright/vitest'` unless the file needs explicit driver lifecycle, custom plugins, or low-level setup.
-4. Read [references/api_reference.md](references/api_reference.md) when you need exact APIs, selector formats, environment variables, mocks, forms, state, bridge capability checks, or MCP tool behavior.
+4. Read the focused reference doc for the topic you need. Start at **[references/index.md](references/index.md)** (topic map), or go straight to: [getting-started.md](references/getting-started.md), [test-harness.md](references/test-harness.md), [selectors.md](references/selectors.md), [actions.md](references/actions.md), [assertions.md](references/assertions.md), [navigation.md](references/navigation.md), [forms.md](references/forms.md), [mocks.md](references/mocks.md), [screenshots-snapshots.md](references/screenshots-snapshots.md), [driver-lifecycle.md](references/driver-lifecycle.md), [cli.md](references/cli.md), [mcp-workflow.md](references/mcp-workflow.md), [troubleshooting.md](references/troubleshooting.md), [examples.md](references/examples.md), or the one-page [api-quick-reference.md](references/api-quick-reference.md) for exact signatures.
 5. Inspect nearby tests and source UI before writing selectors. Use `rg` for widget text, keys, route names, provider names, and existing Fliwright patterns.
 6. Write the shortest user-path script that sets state, performs actions, and asserts visible user outcomes. Avoid sleeps; rely on `waitFor()` and Fliwright assertions.
 7. Validate syntax and imports with the repo's TypeScript checks when possible. Only run Fliwright E2E tests when a Flutter VM Service URL is available and the app is stable.
@@ -54,6 +54,8 @@ Use these as copyable starting points:
 - [examples/custom-config-login.test.ts](examples/custom-config-login.test.ts) — custom fixture config and login flow.
 - [examples/manual-driver-form-mock.test.ts](examples/manual-driver-form-mock.test.ts) — raw driver lifecycle with mock and form helper.
 
+For longer, fully commented scripts (mock+form+submit, go_router navigation, legacy raw-driver flows), see [references/examples.md](references/examples.md).
+
 ## Validation
 
 - Static checks: run `pnpm lint` or a package-filtered TypeScript check if the edited package has one.
@@ -70,3 +72,5 @@ Use these as copyable starting points:
 - Existing examples using `FLIWRIGHT_VM_SERVICE_URL` usually use manual `FliwrightDriver`; convert HTTP VM URLs to WebSocket URLs before `driver.connect()`.
 - Flaky selector: replace broad text/type with key, semantics, scoped locator, or an assertion target returned by `snapshot()`/`findRef()` during exploration.
 - Field fill misses the intended input: use `page.formHelper.analyze()` to inspect fields, then `fillFields([...])` or a more precise locator.
+
+For a full symptom → cause → fix table (VM URL, bridge readiness, flaky selectors, timing, mocks, forms), see [references/troubleshooting.md](references/troubleshooting.md).

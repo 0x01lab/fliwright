@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
+import 'package:hive_ce_flutter/hive_flutter.dart';
 
 void main() {
   group('MockRuleStore', () {
@@ -70,6 +71,99 @@ void main() {
         expect(route.body, {'ok': true});
         expect(route.delayMs, 5);
       } finally {
+        await temp.delete(recursive: true);
+      }
+    });
+
+    test('persists and loads routes with HiveMockRuleStorage', () async {
+      final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
+      final boxName =
+          'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
+      try {
+        Hive.init(temp.path);
+        final box = await Hive.openBox<dynamic>(boxName);
+        final storage = HiveMockRuleStorage.fromBox(box);
+        final store = MockRuleStore(storage: storage);
+        await store.addRoute(MockRoute(
+          id: 'hive-route',
+          method: 'POST',
+          pathPattern: '/api/hive',
+          status: 202,
+          headers: {'Content-Type': 'application/json'},
+          body: {
+            'ok': true,
+            'items': [1, 2, 3],
+          },
+          delayMs: 7,
+        ));
+
+        expect(storage.box.get(HiveMockRuleStorage.defaultVersionKey), 1);
+        expect(storage.box.get(HiveMockRuleStorage.defaultRouteIndexKey), [
+          'route:POST /api/hive',
+        ]);
+        final rawRoute = storage.box.get('route:POST /api/hive');
+        expect(rawRoute, isA<Map>());
+        final rawRouteMap =
+            Map<dynamic, dynamic>.from(rawRoute as Map<dynamic, dynamic>);
+        expect(rawRouteMap['id'], 'hive-route');
+        expect(rawRouteMap['method'], 'POST');
+        expect(rawRouteMap['pathPattern'], '/api/hive');
+        expect(storage.box.get(HiveMockRuleStorage.legacyRulesKey), isNull);
+
+        final loaded = MockRuleStore(storage: storage);
+        await loaded.loadFromStorage();
+        final route = loaded.findRoute('POST', '/api/hive');
+
+        expect(route, isNotNull);
+        expect(route!.id, 'hive-route');
+        expect(route.status, 202);
+        expect(route.body, {
+          'ok': true,
+          'items': [1, 2, 3],
+        });
+        expect(route.delayMs, 7);
+      } finally {
+        if (Hive.isBoxOpen(boxName)) {
+          await Hive.box<dynamic>(boxName).close();
+        }
+        await temp.delete(recursive: true);
+      }
+    });
+
+    test('loads legacy Hive activeRules payload', () async {
+      final temp =
+          await Directory.systemTemp.createTemp('fliwright_hive_legacy_');
+      final boxName =
+          'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
+      try {
+        Hive.init(temp.path);
+        final box = await Hive.openBox<dynamic>(boxName);
+        await box.put(HiveMockRuleStorage.legacyRulesKey, {
+          'version': 1,
+          'rules': [
+            {
+              'id': 'legacy-route',
+              'method': 'GET',
+              'pathPattern': '/api/legacy',
+              'status': 200,
+              'headers': {'Content-Type': 'application/json'},
+              'body': {'legacy': true},
+              'delayMs': 0,
+            },
+          ],
+        });
+        final storage = HiveMockRuleStorage.fromBox(box);
+        final loaded = MockRuleStore(storage: storage);
+        await loaded.loadFromStorage();
+
+        final route = loaded.findRoute('GET', '/api/legacy');
+        expect(route, isNotNull);
+        expect(route!.id, 'legacy-route');
+        expect(route.body, {'legacy': true});
+      } finally {
+        if (Hive.isBoxOpen(boxName)) {
+          await Hive.box<dynamic>(boxName).close();
+        }
         await temp.delete(recursive: true);
       }
     });
@@ -687,6 +781,136 @@ void main() {
 
       expect(response.statusCode, 200);
       expect(response.data?['preserved'], isTrue);
+    });
+
+    test('previously injected Dio interceptor keeps using registered routes',
+        () async {
+      final olderInterceptor = interceptor;
+      final newerInterceptor = FliwrightDioMockInterceptor();
+      DioMockExtension.setInterceptor(newerInterceptor);
+
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'shared-route',
+            'method': 'GET',
+            'path': '/api/shared',
+            'response': {
+              'status': 200,
+              'body': {'shared': true},
+            },
+          }),
+        },
+      );
+
+      final olderDio = Dio()..interceptors.add(olderInterceptor);
+      final newerDio = Dio()..interceptors.add(newerInterceptor);
+      final olderResponse = await olderDio.get<Map<String, dynamic>>(
+        'https://dev.ex.io/api/shared',
+      );
+      final newerResponse = await newerDio.get<Map<String, dynamic>>(
+        'https://dev.ex.io/api/shared',
+      );
+
+      expect(olderResponse.statusCode, 200);
+      expect(olderResponse.data?['shared'], isTrue);
+      expect(newerResponse.statusCode, 200);
+      expect(newerResponse.data?['shared'], isTrue);
+    });
+
+    test('all injected Dio interceptors receive store loaded during init',
+        () async {
+      await FliwrightBridge.reset();
+      final firstInterceptor = FliwrightDioMockInterceptor();
+      final secondInterceptor = FliwrightDioMockInterceptor();
+      DioMockExtension.setInterceptor(firstInterceptor);
+      DioMockExtension.setInterceptor(secondInterceptor);
+      await FliwrightBridge.initForDioMock();
+
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'post-init-route',
+            'method': 'GET',
+            'path': '/api/post-init',
+            'response': {
+              'status': 200,
+              'body': {'postInit': true},
+            },
+          }),
+        },
+      );
+
+      final firstDio = Dio()..interceptors.add(firstInterceptor);
+      final secondDio = Dio()..interceptors.add(secondInterceptor);
+      final firstResponse = await firstDio.get<Map<String, dynamic>>(
+        'https://dev.ex.io/api/post-init',
+      );
+      final secondResponse = await secondDio.get<Map<String, dynamic>>(
+        'https://dev.ex.io/api/post-init',
+      );
+
+      expect(firstResponse.statusCode, 200);
+      expect(firstResponse.data?['postInit'], isTrue);
+      expect(secondResponse.statusCode, 200);
+      expect(secondResponse.data?['postInit'], isTrue);
+    });
+
+    test('getCalls and clearCalls aggregate all Dio interceptors', () async {
+      final secondInterceptor = FliwrightDioMockInterceptor();
+      DioMockExtension.setInterceptor(secondInterceptor);
+
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.addRoute',
+        {
+          'route': jsonEncode({
+            'id': 'aggregate-route',
+            'method': 'GET',
+            'path': '/api/aggregate',
+            'response': {
+              'status': 200,
+              'body': {'ok': true},
+            },
+          }),
+        },
+      );
+
+      await (Dio()..interceptors.add(interceptor)).get<void>(
+        'https://dev.ex.io/api/aggregate',
+      );
+      await (Dio()..interceptors.add(secondInterceptor)).get<void>(
+        'https://dev.ex.io/api/aggregate',
+      );
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.getCalls',
+        {'path': '/api/aggregate'},
+      );
+      final calls = result['calls'] as List<dynamic>;
+      expect(calls, hasLength(2));
+
+      final clearResult = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.clearCalls',
+        {},
+      );
+      expect(clearResult['cleared'], 2);
+      expect(interceptor.callLog, isEmpty);
+      expect(secondInterceptor.callLog, isEmpty);
+    });
+
+    test('setPassthrough applies to all Dio interceptors', () async {
+      final secondInterceptor = FliwrightDioMockInterceptor();
+      DioMockExtension.setInterceptor(secondInterceptor);
+
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.setPassthrough',
+        {'enabled': 'false'},
+      );
+
+      expect(interceptor.passthrough, isFalse);
+      expect(secondInterceptor.passthrough, isFalse);
     });
 
     test('Dio requests resolve directly from the in-process rule store',

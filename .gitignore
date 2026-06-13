@@ -15,4 +15,5 @@ coverage/
 *.log
 /packages/fliwright-bridge/pubspec.lock
 .codex/
+.superpowers/
 docs/features

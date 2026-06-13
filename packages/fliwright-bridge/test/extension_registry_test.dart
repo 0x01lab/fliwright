@@ -103,6 +103,18 @@ void main() {
       expect(handshake['compatible'], isTrue);
       expect(handshake['initialized'], isTrue);
       expect(handshake['debugMode'], isTrue);
+      expect(
+        handshake['bridgeCapabilities'],
+        containsPair('screenshotWaitForFrame', true),
+      );
+      expect(
+        handshake['bridgeCapabilities'],
+        containsPair('rootRenderViewScreenshot', true),
+      );
+      expect(
+        handshake['bridgeCapabilities'],
+        containsPair('recordingScreenshotSampler', true),
+      );
     });
   });
 

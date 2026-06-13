@@ -1,0 +1,189 @@
+# API Quick Reference
+
+One-page signature cheat sheet. For prose/examples follow the topic links. All signatures are
+copied from current source — code wins on disagreement.
+
+## `@fliwright/vitest` exports
+
+```typescript
+import { test, expect, createFliwrightTest, defineConfig,
+         beforeEach, afterEach, beforeAll, afterAll, describe } from '@fliwright/vitest';
+
+// fixture: test('name', async ({ page, driver }) => {})
+// expect(locator): Assertion            // auto-wait + healing
+// createFliwrightTest(config): test     // custom config
+// defineConfig(overrides & { vmServiceUrl }): FliwrightConfig   // fills defaults
+//   FliwrightConfig { vmServiceUrl; timeout?: 5000; screenshot?: 'file'|'base64'|'off' }
+```
+
+Env vars: `FLIWRIGHT_VM_URL`, `FLIWRIGHT_VM_SERVICE_URL`, `FLIWRIGHT_SCREENSHOT_MODE`,
+`FLIWRIGHT_FAILURE_TIMEOUT_MS`, `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`,
+`FLIWRIGHT_MOCK_CONTROLLER_URL`, `FLIWRIGHT_TRACE`, `FLIWRIGHT_TRACE_DIR`.
+
+## `page` — `Page`
+
+```typescript
+// Locators
+page.locator(selector): Locator
+page.find(query): Locator
+page.getByText(text, opts?): Locator          // { exact?, match?, caseSensitive? }
+page.getByKey(key): Locator
+page.getByType(type): Locator
+page.getBySubtype(subtype): Locator
+page.getBySemantics(sem): Locator             // { identifier?, label?, hint?, role?, match?, caseSensitive? }
+page.getByTooltip(tooltip): Locator
+page.ref(ref): Locator
+page.findRef(query): Promise<Locator>         // { text?, containsText?, key?, semanticsLabel?, role?, type? }
+
+// Waiting
+page.waitFor(selector, timeoutMs?=5000): Promise<Locator>
+page.waitForNew(selector, opts?): Promise<Locator>     // { timeout? }
+page.settle(opts?): Promise<void>                       // { timeout? } default 2000
+page.waitForNetworkIdle(opts?): Promise<void>           // { quietMs?, timeout? }
+page.dismissModal(): Promise<void>
+
+// Navigation (requires router in FliwrightBridge.init)
+page.navigate(path, opts?): Promise<void>     // { extra? }
+page.currentRoute(): Promise<string>
+page.goBack(): Promise<void>
+
+// Screenshots / snapshots
+page.screenshot(opts?): Promise<Buffer>       // { pixelRatio?, mode?: 'auto'|'boundary'|'canvas', rect? }
+page.screenshotFullPage(opts?): Promise<Buffer>   // { pixelRatio? }
+page.snapshot(opts?): Promise<AgentSnapshotResult> // { depth?, includeRects?, includeProperties? }
+
+// Raw coordinates (outside widget tree)
+page.clickAt(x, y): Promise<void>
+page.dragFrom(x, y, deltaX, deltaY, opts?): Promise<void>   // { steps? }
+
+// Forms
+page.formHelper.analyze(opts?): Promise<FormAnalyzeResult>
+page.formHelper.fill(opts?): Promise<FormFillResult>
+page.formHelper.fillFields(hints[], opts?): Promise<FormFillResult>
+//   FormHelperOptions { scope?, skipObscureFields?, locale?, rulesPath? }
+```
+
+## `locator` — `Locator`
+
+```typescript
+// Construction / scoping (return new Locator)
+loc.locator(selector): Locator                 // descendant
+loc.getByText / getByKey / getByType / getBySubtype / getBySemantics / getByTooltip
+loc.ancestor(selector): Locator
+loc.and(...selectors): Locator
+loc.or(...selectors): Locator
+loc.nth(index, opts?): Locator                 // { visible? }
+loc.first(opts?): Locator                      // { visible? }
+loc.last(opts?): Locator                       // { visible? }
+loc.filter(criteria: FilterCriteria): Locator
+loc.containing(descendant): Locator
+
+// Gestures / input (Promise<void>)
+loc.click(opts?)                  // { alignment?, timeout?, waitForAnimations?, settleTimeout? }
+loc.doubleClick(opts?) / tripleClick(opts?) / rightClick(opts?)   // { alignment?, timeout? }
+loc.hover(opts?) / focus(opts?)                                   // { alignment?, timeout? }
+loc.blur(opts?)                                                   // { timeout? }
+loc.longPress(opts?)              // { duration?, alignment?, timeout? }
+loc.drag(deltaX, deltaY, opts?)   // { steps?, alignment?, timeout? }
+loc.dragTo(direction, distance?, opts?)  // 'left'|'right'|'up'|'down'
+loc.slideTo(targetX, opts?)       // slider/captcha
+loc.pinch(scale, opts?)
+loc.type(text, opts?)             // { delay?|charDelay?, timeout? }  append
+loc.fill(text, opts?)             // { delay?|charDelay?, timeout? }  replace
+loc.clear(opts?)                  // { timeout? }
+loc.pressKey(key, opts?)          // { timeout? }
+loc.setCheckbox(checked, opts?)   // { timeout? }
+loc.selectOption(value, opts?)    // string|number
+loc.scrollIntoView(opts?)         // { alignment?=0.5, duration?=300, timeout? }
+
+// Read (no side effect)
+loc.count(): Promise<number>
+loc.isVisible(): Promise<boolean>
+loc.resolve(): Promise<WidgetInfo | undefined>
+loc.resolveAll(opts?): Promise<WidgetInfo[]>    // { visible?: 'any'|'hitTestable', strict?, limit? }
+
+// Fast path on pre-resolved widget
+loc.fillWithResolved(text, resolved, opts?): Promise<void>
+loc.clickResolved(resolved): Promise<void>
+```
+
+## `expect` — `Assertion`
+
+```typescript
+expect(locator): Assertion
+// matchers (options?: { timeout?=5000 })
+.toBeVisible() | .toHaveText(text) | .toContainText(text)
+.toBeEnabled() | .toBeDisabled()
+.not          // negation (disables healing)
+// raw Vitest for non-locator checks:
+import { expect as viExpect } from 'vitest'
+```
+
+## `driver.mock` — `MockManager`
+
+```typescript
+driver.mock.route(path, response): Promise<void>          // best-effort sync to Flutter store
+driver.mock.routeFlutter(path, response): Promise<unknown> // strict (no silent fallback)
+driver.mock.addRoute(path, response): Promise<void>        // alias of route
+driver.mock.removeRoute(path, method?): Promise<void>
+driver.mock.clear(): Promise<void>
+driver.mock.clearCalls(): Promise<void>
+driver.mock.setPassthrough(enabled): Promise<void>
+driver.mock.getCalls(path?): Promise<MockCall[]>
+driver.mock.listRoutes(): Promise<{ id, method?, path }[]>
+driver.mock.loadRules(mockDir?= '.fliwright/mocks'): Promise<void>
+driver.mock.listRules(): { endpoint, method, rules[], activeRule }[]
+driver.mock.switchRule(endpoint, ruleName, method?): Promise<void>
+driver.mock.startServer(opts?) / stopServer()
+driver.mock.controllerUrl: string | null
+// MockRouteResponse { status, body, headers?, delay?, method? }
+```
+
+## `driver` — `FliwrightDriver` (raw / advanced)
+
+```typescript
+new FliwrightDriver(options?: { plugins?: FliwrightPlugin[] })
+driver.connect(vmServiceUrl): Promise<void>     // needs ws://…/ws
+driver.dispose(): Promise<void>
+driver.page / driver.mock / driver.healing / driver.recorder / driver.state
+driver.sdkVersion: string | null
+driver.sendRequest(method, params?): Promise<unknown>
+driver.reloadSources(): Promise<unknown>
+driver.listenToDiagnostics(streamIds?): Promise<void>
+driver.getDiagnostics(opts?): VMServiceEvent[]
+driver.clearDiagnostics(): void
+driver.getStateAdapter(name) / getMockAdapter(name) / getFinderStrategy(name) / getHealingStrategy(name)
+driver.notifyTestStart(name) / notifyTestEnd(name, result)
+```
+
+## `fliwright` CLI
+
+```text
+fliwright run   [--test <p>] [--test-name <p>] [--vm-url <url>] [--reporter pretty|json|ai-json|junit]
+                [--timeout <ms>] [--screenshot file|base64|off] [--output <file>]
+fliwright init
+fliwright doctor [--vm-url <url>]
+fliwright record [--vm-url <url>] [--output <file>] [--lang ts|dart] [--name <n>]
+                 [--home-route <route>] [--no-reset-home]
+fliwright mock:start [--host <h>] [--port <p>] [--mock-dir <d>]
+```
+
+## Selector string formats
+
+`text=` · `textContains=` · `key=` · `type=`/`byType=` · `subtype=` · `tooltip=` · `semantics=`
+· `role=` · plain string (exact text) · `RegExp`.
+
+## Bridge capabilities (required extensions)
+
+| Feature | Extension |
+| --- | --- |
+| snapshot/findRef/snap/observe | `ext.fliwright.snap` |
+| all Locator actions, actionability | `ext.fliwright.action` |
+| resolve/count/isVisible | `ext.fliwright.resolve` |
+| formHelper/extractForm | `ext.fliwright.extractForm` |
+| screenshot | `ext.fliwright.screenshot` |
+| mocks | `ext.fliwright.mock.*` |
+| click/dragFrom (raw) | `ext.fliwright.click` / `ext.fliwright.dragFrom` |
+| navigation | `ext.fliwright.navigate` / `.currentRoute` / `.goBack` |
+| settle | `ext.fliwright.settle` |
+| legacy flat snapshot | `ext.fliwright.snapshot` (older bridge) |

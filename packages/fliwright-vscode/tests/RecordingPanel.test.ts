@@ -1,19 +1,33 @@
 import { describe, expect, it, vi } from 'vitest';
-import { commands, window } from 'vscode';
+import { commands, Uri, window } from 'vscode';
 import type { RecordingSession } from '../src/types.js';
 import { RecordingPanel } from '../src/webview/RecordingPanel.js';
 
 describe('RecordingPanel', () => {
-  function createPanel(): { panel: RecordingPanel; getHtml: () => string; getMessages: () => Array<{ type: string }> } {
-    const messages: Array<{ type: string }> = { length: 0 } as any;
-    const messageHandlers: Array<(msg: any) => void> = [];
+  function createPanel(options?: ConstructorParameters<typeof RecordingPanel>[1]): {
+    panel: RecordingPanel;
+    getHtml: () => string;
+    getPostedMessages: () => unknown[];
+    sendMessage: (msg: unknown) => void;
+    restore: () => void;
+  } {
+    const postedMessages: unknown[] = [];
+    const messageHandlers: Array<(msg: unknown) => void> = [];
     let html = '';
 
     const mockWebviewPanel = {
       webview: {
+        cspSource: 'vscode-resource:',
         get html() { return html; },
         set html(value: string) { html = value; },
-        onDidReceiveMessage(handler: (msg: any) => void) {
+        asWebviewUri(uri: Uri) {
+          return Uri.file(`/webview${uri.path}`);
+        },
+        postMessage(message: unknown) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+        onDidReceiveMessage(handler: (msg: unknown) => void) {
           messageHandlers.push(handler);
           return { dispose() {} };
         },
@@ -29,190 +43,136 @@ describe('RecordingPanel', () => {
     (window as any).createWebviewPanel = vi.fn(() => mockWebviewPanel);
 
     return {
-      panel: new RecordingPanel(),
+      panel: new RecordingPanel(Uri.file('/extension'), options),
       getHtml: () => html,
-      getMessages: () => messages,
-      sendMessage: (msg: any) => messageHandlers.forEach(h => h(msg)),
+      getPostedMessages: () => postedMessages,
+      sendMessage: (msg: unknown) => messageHandlers.forEach(h => h(msg)),
       restore: () => { (window as any).createWebviewPanel = originalCreate; },
     };
   }
 
-  describe('open', () => {
-    it('creates a webview panel with scripting enabled', () => {
-      const { panel, restore } = createPanel();
-      panel.open({ status: 'idle', rawEventCount: 0, operationCount: 0 });
+  it('creates a webview panel with scripting and local roots enabled', () => {
+    const { panel, restore } = createPanel();
 
-      expect(window.createWebviewPanel).toHaveBeenCalledWith(
-        'fliwright.recording',
-        'Fliwright Recording',
-        expect.anything(),
-        { enableScripts: true },
-      );
+    panel.open({ status: 'idle', rawEventCount: 0, operationCount: 0, frames: [] });
 
-      restore();
-    });
+    expect(window.createWebviewPanel).toHaveBeenCalledWith(
+      'fliwright.recording',
+      'Fliwright Recording',
+      expect.anything(),
+      {
+        enableScripts: true,
+        localResourceRoots: [Uri.file('/extension')],
+      },
+    );
 
-    it('reuses existing panel on subsequent opens', () => {
-      const { panel, restore } = createPanel();
-      panel.open({ status: 'idle', rawEventCount: 0, operationCount: 0 });
-      panel.open({ status: 'recording', rawEventCount: 5, operationCount: 3 });
-
-      expect(window.createWebviewPanel).toHaveBeenCalledTimes(1);
-
-      restore();
-    });
+    restore();
   });
 
-  describe('HTML rendering', () => {
-    it('renders idle state as "Ready to Record"', () => {
-      const { panel, getHtml, restore } = createPanel();
-      panel.open({ status: 'idle', rawEventCount: 0, operationCount: 0 });
+  it('renders shell HTML that loads the local React Flow bundle and CSS', () => {
+    const { panel, getHtml, restore } = createPanel();
 
-      const html = getHtml();
-      expect(html).toContain('Ready to Record');
-      expect(html).toContain('Raw events');
-      expect(html).toContain('active editor');
-      expect(html).not.toContain('Stop Recording');
-      expect(html).not.toContain('Generated Test');
+    panel.open({ status: 'recording', rawEventCount: 1, operationCount: 0, frames: [] });
 
-      restore();
-    });
+    const html = getHtml();
+    expect(html).toContain('Content-Security-Policy');
+    expect(html).toContain("img-src vscode-resource: data:");
+    expect(html).toContain('dist/webview/recordingCanvas.js');
+    expect(html).toContain('dist/webview/recordingCanvas.css');
+    expect(html).toContain('<div id="root"></div>');
 
-    it('renders recording state with stop button', () => {
-      const { panel, getHtml, restore } = createPanel();
-      panel.open({ status: 'recording', rawEventCount: 12, operationCount: 5, startedAt: Date.now() });
-
-      const html = getHtml();
-      expect(html).toContain('Recording');
-      expect(html).toContain('>12<');
-      expect(html).toContain('>5<');
-      expect(html).toContain('Stop Recording');
-      expect(html).not.toContain('Generated Test');
-
-      restore();
-    });
-
-    it('renders preview state with generated code and insert button', () => {
-      const { panel, getHtml, restore } = createPanel();
-      const session: RecordingSession = {
-        status: 'preview',
-        rawEventCount: 12,
-        operationCount: 5,
-        generatedCode: "test('login flow', async () => { await page.click('#btn'); });",
-        targetFile: '/app/tests/login.test.ts',
-      };
-      panel.open(session);
-
-      const html = getHtml();
-      expect(html).toContain('Recording Preview');
-      expect(html).toContain('Generated Test');
-      // escapeHtml escapes < > & " but not single quotes — verify > is escaped in =>
-      expect(html).toContain("test('login flow', async () =&gt;");
-      expect(html).toContain('/app/tests/login.test.ts');
-      expect(html).toContain('Insert Recorded Test');
-      expect(html).not.toContain('Stop Recording');
-
-      restore();
-    });
+    restore();
   });
 
-  describe('HTML escaping (XSS prevention)', () => {
-    it('escapes special characters in generated code within <pre>', () => {
-      const { panel, getHtml, restore } = createPanel();
-      const session: RecordingSession = {
+  it('posts the session to the webview on open and update', () => {
+    const { panel, getPostedMessages, restore } = createPanel();
+    const first: RecordingSession = {
+      status: 'recording',
+      rawEventCount: 2,
+      operationCount: 1,
+      frames: [
+        {
+          id: 'frame-1',
+          index: 0,
+          kind: 'tap',
+          status: 'ready',
+          timestamp: 1000,
+          position: { x: 10, y: 20 },
+          screenshot: { base64: 'png', format: 'png', width: 100, height: 200, pixelRatio: 1 },
+        },
+      ],
+    };
+
+    panel.open(first);
+    panel.update({ ...first, rawEventCount: 3 });
+
+    expect(getPostedMessages()).toEqual([
+      { type: 'session', session: first },
+      { type: 'session', session: { ...first, rawEventCount: 3 } },
+    ]);
+
+    restore();
+  });
+
+  it('reposts the latest session when the webview reports ready', () => {
+    const { panel, getPostedMessages, sendMessage, restore } = createPanel();
+
+    panel.open({ status: 'preview', rawEventCount: 0, operationCount: 0, generatedCode: 'code' });
+    sendMessage({ type: 'ready' });
+
+    expect(getPostedMessages()).toHaveLength(2);
+    expect(getPostedMessages()[1]).toEqual({
+      type: 'session',
+      session: {
         status: 'preview',
         rawEventCount: 0,
         operationCount: 0,
-        generatedCode: '<script>alert("xss")</script>&<>"',
-      };
-      panel.open(session);
-
-      const html = getHtml();
-      // The <pre> block should contain escaped content
-      expect(html).toContain('<pre>&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;&amp;&lt;&gt;&quot;</pre>');
-      // Raw unescaped injected code should not appear (the template's own <script> is fine)
-      expect(html).not.toContain('<script>alert');
-
-      restore();
+        generatedCode: 'code',
+        frames: [],
+      },
     });
 
-    it('escapes special characters in targetFile path', () => {
-      const { panel, getHtml, restore } = createPanel();
-      const session: RecordingSession = {
-        status: 'preview',
-        rawEventCount: 0,
-        operationCount: 0,
-        generatedCode: 'test("a", () => {});',
-        targetFile: '<img onerror="alert(1)">',
-      };
-      panel.open(session);
-
-      const html = getHtml();
-      expect(html).toContain('&lt;img onerror=&quot;alert(1)&quot;&gt;');
-      expect(html).not.toContain('<img onerror');
-
-      restore();
-    });
+    restore();
   });
 
-  describe('webview message handling', () => {
-    it('sends insertRecordedTest command when insert button is clicked', () => {
-      const { panel, sendMessage, restore } = createPanel();
-      panel.open({ status: 'preview', rawEventCount: 0, operationCount: 0, generatedCode: 'code' });
+  it('sends insertRecordedTest command from webview messages', () => {
+    const { panel, sendMessage, restore } = createPanel();
+    panel.open({ status: 'preview', rawEventCount: 0, operationCount: 0, generatedCode: 'code' });
 
-      const executeSpy = vi.fn();
-      const originalExecute = commands.executeCommand;
-      (commands as any).executeCommand = executeSpy;
+    const executeSpy = vi.fn();
+    const originalExecute = commands.executeCommand;
+    (commands as any).executeCommand = executeSpy;
 
-      sendMessage({ type: 'insertRecordedTest' });
-      expect(executeSpy).toHaveBeenCalledWith('fliwright.insertRecordedTest');
+    sendMessage({ type: 'insertRecordedTest' });
+    expect(executeSpy).toHaveBeenCalledWith('fliwright.insertRecordedTest');
 
-      (commands as any).executeCommand = originalExecute;
-      restore();
-    });
-
-    it('sends stopRecording command when stop button is clicked', () => {
-      const { panel, sendMessage, restore } = createPanel();
-      panel.open({ status: 'recording', rawEventCount: 0, operationCount: 0 });
-
-      const executeSpy = vi.fn();
-      const originalExecute = commands.executeCommand;
-      (commands as any).executeCommand = executeSpy;
-
-      sendMessage({ type: 'stopRecording' });
-      expect(executeSpy).toHaveBeenCalledWith('fliwright.stopRecording');
-
-      (commands as any).executeCommand = originalExecute;
-      restore();
-    });
+    (commands as any).executeCommand = originalExecute;
+    restore();
   });
 
-  describe('update', () => {
-    it('updates HTML without creating a new panel', () => {
-      const { panel, getHtml, restore } = createPanel();
-      panel.open({ status: 'idle', rawEventCount: 0, operationCount: 0 });
+  it('sends stopRecording command from webview messages', () => {
+    const { panel, sendMessage, restore } = createPanel();
+    panel.open({ status: 'recording', rawEventCount: 0, operationCount: 0 });
 
-      const idleHtml = getHtml();
-      expect(idleHtml).toContain('Ready to Record');
+    const executeSpy = vi.fn();
+    const originalExecute = commands.executeCommand;
+    (commands as any).executeCommand = executeSpy;
 
-      panel.update({ status: 'recording', rawEventCount: 3, operationCount: 1 });
+    sendMessage({ type: 'stopRecording' });
+    expect(executeSpy).toHaveBeenCalledWith('fliwright.stopRecording');
 
-      const updatedHtml = getHtml();
-      expect(updatedHtml).toContain('Recording');
-      expect(updatedHtml).toContain('>3<');
-      expect(window.createWebviewPanel).toHaveBeenCalledTimes(1);
+    (commands as any).executeCommand = originalExecute;
+    restore();
+  });
 
-      restore();
-    });
+  it('forwards frame inclusion messages from the webview', () => {
+    const onSetFrameIncluded = vi.fn();
+    const { panel, sendMessage, restore } = createPanel({ onSetFrameIncluded });
+    panel.open({ status: 'recording', rawEventCount: 0, operationCount: 0 });
 
-    it('does nothing if no panel has been created', () => {
-      const { panel, getHtml, restore } = createPanel();
-      // Should not throw
-      panel.update({ status: 'recording', rawEventCount: 1, operationCount: 1 });
+    sendMessage({ type: 'setFrameIncluded', frameId: 'frame-1', included: false });
 
-      expect(getHtml()).toBe('');
-
-      restore();
-    });
+    expect(onSetFrameIncluded).toHaveBeenCalledWith('frame-1', false);
+    restore();
   });
 });

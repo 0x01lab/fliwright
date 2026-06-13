@@ -26,6 +26,8 @@ export type {
   FailureContext,
   HealingReport,
   RawInputEvent,
+  RecordingFrame,
+  RecordingScreenshot,
   RecordedOperation,
   CodegenOptions,
   FormFieldMeta,

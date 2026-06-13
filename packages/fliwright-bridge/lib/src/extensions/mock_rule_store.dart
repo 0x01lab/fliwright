@@ -173,8 +173,7 @@ class MockRuleStore {
     final raw = await storage.load();
     if (raw == null || raw.trim().isEmpty) return;
 
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) return;
+    final decoded = decodeStoragePayload(raw);
     final rules = decoded['rules'];
     if (rules is! List) return;
 
@@ -190,10 +189,39 @@ class MockRuleStore {
   Future<void> _persist() async {
     final storage = _storage;
     if (storage == null) return;
-    await storage.save(jsonEncode({
+    await storage.save(encodeStoragePayload({
       'version': 1,
       'rules': _routes.values.map((route) => route.toJson()).toList(),
     }));
+  }
+
+  static Map<String, dynamic> decodeStoragePayload(Object value) {
+    if (value is String) {
+      final decoded = jsonDecode(value);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return _stringKeyedMap(decoded);
+      return const {};
+    }
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return _stringKeyedMap(value);
+    return const {};
+  }
+
+  static String encodeStoragePayload(Object value) {
+    return jsonEncode(_jsonSafe(value));
+  }
+
+  static Map<String, dynamic> _stringKeyedMap(Map<dynamic, dynamic> map) {
+    return {
+      for (final entry in map.entries)
+        if (entry.key != null) entry.key.toString(): _jsonSafe(entry.value),
+    };
+  }
+
+  static Object? _jsonSafe(Object? value) {
+    if (value is Map) return _stringKeyedMap(value);
+    if (value is List) return value.map(_jsonSafe).toList();
+    return value;
   }
 
   String _routeKey(String path, String? method) {

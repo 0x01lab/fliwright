@@ -29,6 +29,7 @@ describe('Recording command integration', () => {
       stop: overrides.stop ?? vi.fn(async () => "test('recorded', async () => {});"),
       getRawEvents: overrides.getRawEvents ?? vi.fn(() => []),
       getOperations: overrides.getOperations ?? vi.fn(() => []),
+      getFrames: overrides.getFrames ?? vi.fn(() => []),
     };
   }
 

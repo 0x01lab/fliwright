@@ -106,6 +106,132 @@ describe('RecorderController', () => {
     expect(code).toContain("page.locator({ type: 'Widget' }).click()");
   });
 
+  it('marks generic tap operations ignored when noise filtering is enabled', async () => {
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.hitTest') {
+        return Promise.resolve({ widget: {} });
+      }
+      return Promise.resolve({});
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((callback) => {
+        eventCallback = callback;
+        return () => {};
+      }),
+    );
+
+    await controller.start({ filterNoise: true });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 10, y: 20 }, timestamp: 1000, buttons: 1 },
+    });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 10, y: 20 }, timestamp: 1100, buttons: 0 },
+    });
+
+    const code = await controller.stop();
+
+    expect(code).not.toContain('.click()');
+    expect(controller.getOperations()[0]).toEqual(expect.objectContaining({
+      status: 'ignored',
+      ignoreReason: 'nonActionable',
+    }));
+  });
+
+  it('can manually include an ignored operation after stop', async () => {
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.hitTest') return Promise.resolve({ widget: {} });
+      return Promise.resolve({});
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((callback) => {
+        eventCallback = callback;
+        return () => {};
+      }),
+    );
+
+    await controller.start({ filterNoise: true });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 10, y: 20 }, timestamp: 1000, buttons: 1 },
+    });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 10, y: 20 }, timestamp: 1100, buttons: 0 },
+    });
+    await controller.stop();
+
+    const code = controller.setOperationIncluded(0, true);
+
+    expect(code).toContain("page.locator({ type: 'Widget' }).click()");
+    expect(controller.getOperations()[0]).toEqual(expect.objectContaining({
+      status: 'included',
+      ignoreReason: undefined,
+    }));
+  });
+
+  it('marks rapid nearby duplicate taps ignored when noise filtering is enabled', async () => {
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.hitTest') {
+        return Promise.resolve({
+          widget: {
+            id: '1',
+            type: 'ElevatedButton',
+            text: 'Open',
+            properties: {},
+          },
+        });
+      }
+      return Promise.resolve({});
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((callback) => {
+        eventCallback = callback;
+        return () => {};
+      }),
+    );
+
+    await controller.start({ filterNoise: true });
+    for (const [timestamp, x, y, pointer] of [
+      [1000, 100, 200, 1],
+      [1100, 100, 200, 1],
+      [1200, 105, 205, 2],
+      [1300, 105, 205, 2],
+    ]) {
+      eventCallback?.({
+        kind: 'FliwrightRecording',
+        timestamp: Date.now(),
+        data: {
+          type: 'pointerEvent',
+          kind: timestamp === 1000 || timestamp === 1200 ? 'down' : 'up',
+          pointer,
+          position: { x, y },
+          timestamp,
+          buttons: timestamp === 1000 || timestamp === 1200 ? 1 : 0,
+        },
+      });
+    }
+
+    const code = await controller.stop();
+
+    expect(code.match(/\.click\(\)/g)).toHaveLength(1);
+    expect(controller.getOperations()[1]).toEqual(expect.objectContaining({
+      status: 'ignored',
+      ignoreReason: 'duplicate',
+    }));
+  });
+
   it('keeps listening until stopRecording resolves', async () => {
     let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
     const unsubscribe = vi.fn();
@@ -139,5 +265,232 @@ describe('RecorderController', () => {
     expect(controller.getOperations()).toEqual([
       { kind: 'tap', position: { x: 10, y: 20 }, timestamp: 1000 },
     ]);
+  });
+
+  it('uses the latest sampled screenshot for pointer down frames when enabled', async () => {
+    const frames: unknown[] = [];
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.screenshot') {
+        return Promise.resolve({
+          success: true,
+          format: 'png',
+          screenshot: 'base64-png',
+          width: 320,
+          height: 640,
+          pixelRatio: 1,
+        });
+      }
+      if (method === 'ext.fliwright.hitTest') {
+        return Promise.resolve({
+          widget: {
+            id: '1',
+            type: 'ElevatedButton',
+            text: 'Login',
+            properties: {},
+          },
+        });
+      }
+      return Promise.resolve({});
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((callback) => {
+        eventCallback = callback;
+        return () => {};
+      }),
+    );
+
+    await controller.start({
+      captureScreenshots: true,
+      onFrame: (frame) => frames.push(frame),
+    });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'down', pointer: 7, position: { x: 100, y: 200 }, timestamp: 1000, buttons: 1 },
+    });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'up', pointer: 7, position: { x: 100, y: 200 }, timestamp: 1100, buttons: 0 },
+    });
+    await controller.stop();
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.settle', { timeout: '1200', stableFrames: '2' });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', { pixelRatio: '1.0', mode: 'auto', waitForFrame: 'false' });
+    expect(controller.getFrames()).toEqual([
+      expect.objectContaining({
+        index: 0,
+        kind: 'tap',
+        status: 'ready',
+        pointer: 7,
+        operationIndex: 0,
+        position: { x: 100, y: 200 },
+        selector: "{ text: 'Login' }",
+        screenshot: {
+          base64: 'base64-png',
+          format: 'png',
+          width: 320,
+          height: 640,
+          pixelRatio: 1,
+        },
+      }),
+    ]);
+    expect(frames.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('records screenshot errors without stopping recording when baseline capture fails', async () => {
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.screenshot') {
+        return Promise.resolve({ success: false, error: 'No repaint boundary' });
+      }
+      return Promise.resolve({});
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((callback) => {
+        eventCallback = callback;
+        return () => {};
+      }),
+    );
+
+    await controller.start({ captureScreenshots: true });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 10, y: 20 }, timestamp: 1000, buttons: 1 },
+    });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 10, y: 20 }, timestamp: 1100, buttons: 0 },
+    });
+
+    await expect(controller.stop()).resolves.toContain('page.locator');
+    expect(controller.getFrames()[0]).toEqual(expect.objectContaining({
+      status: 'error',
+      screenshotError: 'No repaint boundary',
+      kind: 'tap',
+    }));
+  });
+
+  it('accepts nested VM Service extension event payloads', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({});
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown>; streamId?: string }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((callback) => {
+        eventCallback = callback;
+        return () => {};
+      }),
+    );
+
+    await controller.start();
+    eventCallback?.({
+      kind: 'unknown',
+      streamId: 'Extension',
+      timestamp: Date.now(),
+      data: {
+        extensionKind: 'FliwrightRecording',
+        extensionData: { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 10, y: 20 }, timestamp: 1000, buttons: 1 },
+      },
+    });
+    eventCallback?.({
+      kind: 'unknown',
+      streamId: 'Extension',
+      timestamp: Date.now(),
+      data: {
+        extensionKind: 'FliwrightRecording',
+        extensionData: { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 10, y: 20 }, timestamp: 1100, buttons: 0 },
+      },
+    });
+
+    expect(controller.getRawEvents()).toHaveLength(2);
+    expect(controller.getOperations()).toEqual([
+      { kind: 'tap', position: { x: 10, y: 20 }, timestamp: 1000 },
+    ]);
+  });
+
+  it('updates a tap frame to type when text input is associated', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      success: true,
+      screenshot: 'base64-png',
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((callback) => {
+        eventCallback = callback;
+        return () => {};
+      }),
+    );
+
+    await controller.start({ captureScreenshots: true });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1000, buttons: 1 },
+    });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 100, y: 200 }, timestamp: 1100, buttons: 0 },
+    });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'textInput', text: 'hello', timestamp: 1200 },
+    });
+    await controller.stop();
+
+    expect(controller.getFrames()[0]).toEqual(expect.objectContaining({
+      kind: 'type',
+      text: 'hello',
+      position: { x: 100, y: 200 },
+    }));
+  });
+
+  it('does not recapture screenshots on pointer down when a sampled screenshot exists', async () => {
+    let activeScreenshots = 0;
+    let maxActiveScreenshots = 0;
+    const sendRequest = vi.fn().mockImplementation(async (method: string) => {
+      if (method === 'ext.fliwright.screenshot') {
+        activeScreenshots++;
+        maxActiveScreenshots = Math.max(maxActiveScreenshots, activeScreenshots);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        activeScreenshots--;
+        return { success: true, screenshot: 'base64-png' };
+      }
+      return {};
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((callback) => {
+        eventCallback = callback;
+        return () => {};
+      }),
+    );
+
+    await controller.start({ captureScreenshots: true, screenshotSampleIntervalMs: 60_000 });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'down', pointer: 1, position: { x: 10, y: 20 }, timestamp: 1000, buttons: 1 },
+    });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'pointerEvent', kind: 'down', pointer: 2, position: { x: 30, y: 40 }, timestamp: 2000, buttons: 1 },
+    });
+
+    await controller.stop();
+
+    expect(maxActiveScreenshots).toBe(1);
+    expect(sendRequest.mock.calls.filter(([method]) => method === 'ext.fliwright.screenshot')).toHaveLength(1);
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.settle', { timeout: '1200', stableFrames: '2' });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', { pixelRatio: '1.0', mode: 'auto', waitForFrame: 'false' });
   });
 });

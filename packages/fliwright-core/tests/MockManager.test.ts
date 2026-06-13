@@ -170,6 +170,90 @@ describe('MockManager', () => {
     });
   });
 
+  it('routeFlutter() registers a local mirror and fails on Flutter errors', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': { error: 'Invalid route JSON: bad payload' },
+    });
+    const mock = new MockManager(sendRequest);
+
+    await expect(mock.routeFlutter('/api/test', { method: 'POST', status: 201 })).rejects.toThrow(
+      'Flutter mock route registration failed: Invalid route JSON: bad payload',
+    );
+
+    expect(await mock.listRoutes()).toEqual([
+      expect.objectContaining({ method: 'POST', path: '/api/test' }),
+    ]);
+  });
+
+  it('routeFlutter() detects wrapped Flutter extension errors', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': {
+        result: JSON.stringify({ error: 'Missing parameter: route' }),
+      },
+    });
+    const mock = new MockManager(sendRequest);
+
+    await expect(mock.routeFlutter('/api/test', { method: 'GET', status: 200 })).rejects.toThrow(
+      'Flutter mock route registration failed: Missing parameter: route',
+    );
+  });
+
+  it('routeFlutter() detects VM service extension response errors', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': vmExtensionResult({ error: 'Missing parameter: route' }),
+    });
+    const mock = new MockManager(sendRequest);
+
+    await expect(mock.routeFlutter('/api/test', { method: 'GET', status: 200 })).rejects.toThrow(
+      'Flutter mock route registration failed: Missing parameter: route',
+    );
+  });
+
+  it('routeFlutter() marks Flutter store as authoritative after success', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': { success: true },
+      'ext.fliwright.mock.listRoutes': {
+        routes: [{ id: 'flutter-route', method: 'GET', path: '/api/test' }],
+      },
+    });
+    const mock = new MockManager(sendRequest);
+
+    await mock.routeFlutter('/api/test', { method: 'GET', status: 200 });
+
+    expect(await mock.listRoutes()).toEqual([
+      { id: 'flutter-route', method: 'GET', path: '/api/test' },
+    ]);
+  });
+
+  it('listRoutes() unwraps VM service extension responses', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': vmExtensionResult({ success: true }),
+      'ext.fliwright.mock.listRoutes': vmExtensionResult({
+        routes: [{ id: 'flutter-route', method: 'POST', path: '/api/v1/user/info' }],
+      }),
+    });
+    const mock = new MockManager(sendRequest);
+
+    await mock.routeFlutter('/api/v1/user/info', { method: 'POST', status: 200 });
+
+    expect(await mock.listRoutes()).toEqual([
+      { id: 'flutter-route', method: 'POST', path: '/api/v1/user/info' },
+    ]);
+  });
+
+  it('listFlutterRoutes() reads Flutter routes even before local Flutter mode is active', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.listRoutes': vmExtensionResult({
+        routes: [{ id: 'flutter-route', method: 'GET', path: '/api/from-flutter' }],
+      }),
+    });
+    const mock = new MockManager(sendRequest);
+
+    expect(await mock.listFlutterRoutes()).toEqual([
+      { id: 'flutter-route', method: 'GET', path: '/api/from-flutter' },
+    ]);
+  });
+
   it('switchRule() targets the requested method for shared endpoint paths', async () => {
     const mock = new MockManager(createMockSendRequest());
     const store = mock['_server'].ruleStore as any;
@@ -254,3 +338,10 @@ describe('MockManager', () => {
     });
   });
 });
+
+function vmExtensionResult(response: unknown) {
+  return {
+    type: '_ExtensionType',
+    response: JSON.stringify(response),
+  };
+}

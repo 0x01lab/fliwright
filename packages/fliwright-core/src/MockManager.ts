@@ -30,13 +30,28 @@ export class MockManager implements MockAdapter {
     await this.route(pattern, response);
   }
 
-  async route(path: string, response: MockRouteResponse & { method?: string }): Promise<void> {
+  async route(path: string, response: MockRouteResponse & { method?: string; id?: string }): Promise<void> {
     this._server.route(path, response);
     const synced = await this.trySyncFlutterRoute(path, response);
     if (synced) {
       this.usesFlutterStore = true;
       return;
     }
+  }
+
+  /**
+   * Register or replace a route in the Flutter mock store.
+   *
+   * Unlike route(), this method does not silently fall back to the tool-side
+   * mirror when the Flutter extension is unavailable or rejects the route.
+   * Use it for UI actions where "active" must mean the running app can see
+   * the mock rule.
+   */
+  async routeFlutter(path: string, response: MockRouteResponse & { method?: string; id?: string }): Promise<unknown> {
+    this._server.route(path, response);
+    const result = await this.syncFlutterRoute(path, response);
+    this.usesFlutterStore = true;
+    return result;
   }
 
   async removeRoute(path: string, method?: string): Promise<void> {
@@ -72,7 +87,9 @@ export class MockManager implements MockAdapter {
 
   async getCalls(path?: string): Promise<MockCall[]> {
     if (this.usesFlutterStore) {
-      const result = await this.sendRequest('ext.fliwright.mock.getCalls', path ? { path } : {}) as { calls?: MockCall[] };
+      const result = unwrapExtensionPayload(await this.sendRequest('ext.fliwright.mock.getCalls', path ? { path } : {})) as {
+        calls?: MockCall[];
+      };
       return result.calls ?? [];
     }
     return this._server.getCalls(path);
@@ -80,12 +97,20 @@ export class MockManager implements MockAdapter {
 
   async listRoutes(): Promise<Array<{ id: string; method?: string; path: string }>> {
     if (this.usesFlutterStore) {
-      const result = await this.sendRequest('ext.fliwright.mock.listRoutes', {}) as {
+      const result = unwrapExtensionPayload(await this.sendRequest('ext.fliwright.mock.listRoutes', {})) as {
         routes?: Array<{ id: string; method?: string; path: string }>;
       };
       return result.routes ?? [];
     }
     return this._server.listRoutes();
+  }
+
+  async listFlutterRoutes(): Promise<Array<{ id: string; method?: string; path: string }>> {
+    const result = unwrapExtensionPayload(await this.sendRequest('ext.fliwright.mock.listRoutes', {})) as {
+      routes?: Array<{ id: string; method?: string; path: string }>;
+    };
+    this.usesFlutterStore = true;
+    return result.routes ?? [];
   }
 
   async clearCalls(): Promise<void> {
@@ -157,9 +182,10 @@ export class MockManager implements MockAdapter {
     this.usesFlutterStore = true;
   }
 
-  private async syncFlutterRoute(path: string, response: MockRouteResponse & { method?: string }): Promise<void> {
-    await this.sendRequest('ext.fliwright.mock.addRoute', {
+  private async syncFlutterRoute(path: string, response: MockRouteResponse & { method?: string; id?: string }): Promise<unknown> {
+    const result = await this.sendRequest('ext.fliwright.mock.addRoute', {
       route: JSON.stringify({
+        id: response.id,
         path,
         method: response.method,
         response: {
@@ -170,11 +196,15 @@ export class MockManager implements MockAdapter {
         },
       }),
     });
+    const error = extensionError(result);
+    if (error) throw new Error(`Flutter mock route registration failed: ${error}`);
+    return result;
   }
 
-  private async trySyncFlutterRoute(path: string, response: MockRouteResponse & { method?: string }): Promise<boolean> {
+  private async trySyncFlutterRoute(path: string, response: MockRouteResponse & { method?: string; id?: string }): Promise<boolean> {
     return this.trySendRequest('ext.fliwright.mock.addRoute', {
       route: JSON.stringify({
+        id: response.id,
         path,
         method: response.method,
         response: {
@@ -190,12 +220,7 @@ export class MockManager implements MockAdapter {
   private async trySendRequest(method: string, params?: Record<string, unknown>): Promise<boolean> {
     try {
       const result = await this.sendRequest(method, params);
-      if (
-        result &&
-        typeof result === 'object' &&
-        'error' in result &&
-        typeof (result as { error?: unknown }).error === 'string'
-      ) {
+      if (extensionError(result)) {
         return false;
       }
       return true;
@@ -203,4 +228,43 @@ export class MockManager implements MockAdapter {
       return false;
     }
   }
+}
+
+function extensionError(result: unknown): string | null {
+  const payload = unwrapExtensionPayload(result);
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'error' in payload &&
+    typeof (payload as { error?: unknown }).error === 'string'
+  ) {
+    return (payload as { error: string }).error;
+  }
+  return null;
+}
+
+function unwrapExtensionPayload(value: unknown): unknown {
+  if (value && typeof value === 'object' && 'result' in value) {
+    const result = (value as { result?: unknown }).result;
+    if (typeof result === 'string') {
+      try {
+        return JSON.parse(result);
+      } catch {
+        return value;
+      }
+    }
+    if (result && typeof result === 'object') return unwrapExtensionPayload(result);
+  }
+  if (value && typeof value === 'object' && 'response' in value) {
+    const response = (value as { response?: unknown }).response;
+    if (typeof response === 'string') {
+      try {
+        return JSON.parse(response);
+      } catch {
+        return value;
+      }
+    }
+    if (response && typeof response === 'object') return response;
+  }
+  return value;
 }

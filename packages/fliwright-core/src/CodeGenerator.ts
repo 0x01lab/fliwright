@@ -34,6 +34,7 @@ export class CodeGenerator {
 
     for (let i = 0; i < operations.length; i++) {
       const op = operations[i];
+      if (op.status === 'ignored') continue;
       const selector = selectors.get(i) ?? "{ type: 'Widget' }";
       const locator = `page.locator(${selector})`;
 

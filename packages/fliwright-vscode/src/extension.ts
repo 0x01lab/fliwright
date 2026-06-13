@@ -68,7 +68,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const stateTree = new StateTreeProvider();
   const statusBar = new StatusBarService();
   const failurePanel = new FailurePanel(context.extensionUri);
-  const recordingPanel = new RecordingPanel();
+  const recordingPanel = new RecordingPanel(context.extensionUri, {
+    onSetFrameIncluded: async (frameId, included) => {
+      try {
+        const recording = await recorderService.setFrameIncluded(session.connectedDriver, frameId, included, getWorkspaceRoot());
+        updateRecordingViews(recording);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        output.appendLine(`Failed to update recorded frame: ${message}`);
+        vscode.window.showWarningMessage(message);
+      }
+    },
+  });
   const traceService = new TraceService();
   const traceViewerPanel = new TraceViewerPanel(context.extensionUri);
   void updateRecordingContext(recorderService.getSession());
@@ -467,6 +478,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         try {
           session.setRecording();
+          const pendingRecording = {
+            status: 'recording' as const,
+            startedAt: Date.now(),
+            rawEventCount: 0,
+            operationCount: 0,
+            frames: [],
+            testName: testName.trim() || 'recorded test',
+          };
+          updateRecordingViews(pendingRecording);
+          recordingPanel.open(pendingRecording);
           output.appendLine(`[debug] session state: ${session.state.status}`);
           output.appendLine(`[debug] calling recorderService.start()...`);
           const recording = await recorderService.start(session.connectedDriver, {
@@ -489,7 +510,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Stop Recording', async () => {
         try {
           output.appendLine(`[debug] calling recorderService.stop()...`);
-          const recording = await recorderService.stop(session.connectedDriver, vscode.window.activeTextEditor?.document.uri);
+          const recording = await recorderService.stop(session.connectedDriver, vscode.window.activeTextEditor?.document.uri, {}, getWorkspaceRoot());
           output.appendLine(`[debug] stop returned: status=${recording.status} rawEvents=${recording.rawEventCount} operations=${recording.operationCount}`);
           updateRecordingViews(recording);
           // Open visual editor if target file is available, otherwise fall back to RecordingPanel
@@ -827,10 +848,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       output.appendLine('Mock rule store ready.');
     }
 
+    if (!mockTree.currentResult) await mockTree.refresh();
+    const discovery = mockTree.currentResult;
+    if (!discovery) return;
+
+    const flutterSync = await sandboxService.syncFromFlutter(session.connectedDriver, discovery);
+    if (flutterSync.routes.length > 0) {
+      for (const applied of flutterSync.applied) {
+        await mockSelectionStore.saveAppliedRule(applied);
+      }
+      mockTree.setAppliedRules(sandboxService.getAppliedRules());
+      output.appendLine(
+        `Synced ${flutterSync.applied.length} mock route(s) from Flutter, `
+        + `left ${flutterSync.unmatched.length} unmatched Flutter route(s).`,
+      );
+      await appendMockControllerDebug();
+      return;
+    }
+
     if (config.autoApplyDefaultMocksOnConnect) {
-      if (!mockTree.currentResult) await mockTree.refresh();
-      const discovery = mockTree.currentResult;
-      if (!discovery) return;
       const result = await sandboxService.applyDefaultMocks(session.connectedDriver, discovery);
       mockTree.setAppliedRules(sandboxService.getAppliedRules());
       output.appendLine(`Auto-applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);

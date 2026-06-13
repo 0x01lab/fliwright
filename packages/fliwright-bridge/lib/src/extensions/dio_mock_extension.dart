@@ -12,7 +12,7 @@ import '../bridge.dart';
 /// This avoids the `HttpOverrides` proxy limitation (HTTPS) by intercepting
 /// at the Dio layer instead.
 class DioMockExtension {
-  static FliwrightDioMockInterceptor? _interceptor;
+  static final Set<FliwrightDioMockInterceptor> _interceptors = {};
   static MockRuleStore _store = MockRuleStore();
   static final List<MockCallRecord> _callLog = [];
   static bool _passthrough = true;
@@ -26,25 +26,28 @@ class DioMockExtension {
   /// Call this before or during app startup — the VM service extensions will
   /// delegate to this instance when invoked by external tools.
   static void setInterceptor(FliwrightDioMockInterceptor interceptor) {
-    final previous = _interceptor;
-    if (previous != null && previous != interceptor) {
-      _callLog
-        ..clear()
-        ..addAll(previous.callLog);
-    }
+    _interceptors.add(interceptor);
     interceptor.ruleStore = _store;
-    interceptor.callLog
-      ..clear()
-      ..addAll(_callLog);
     interceptor.passthrough = _passthrough;
-    _interceptor = interceptor;
     _log(
-      'Dio mock interceptor injected routes=${interceptor.routes.length} passthrough=${interceptor.passthrough}',
+      'Dio mock interceptor injected routes=${interceptor.routes.length} '
+      'passthrough=${interceptor.passthrough} interceptors=${_interceptors.length}',
     );
   }
 
+  /// Remove a Dio mock interceptor from extension diagnostics.
+  ///
+  /// Apps usually do not need to call this because Dio instances are typically
+  /// long-lived. It is available for providers that dispose and recreate Dio
+  /// instances frequently, so call logs and debug state can stop tracking
+  /// inactive interceptors.
+  static void unsetInterceptor(FliwrightDioMockInterceptor interceptor) {
+    _interceptors.remove(interceptor);
+    _log('Dio mock interceptor removed interceptors=${_interceptors.length}');
+  }
+
   static void reset() {
-    _interceptor = null;
+    _interceptors.clear();
     _store = MockRuleStore();
     _callLog.clear();
     _passthrough = true;
@@ -53,8 +56,7 @@ class DioMockExtension {
   static void register(ExtensionRegistry registry, {MockRuleStore? store}) {
     if (store != null) {
       _store = store;
-      final interceptor = _interceptor;
-      if (interceptor != null) {
+      for (final interceptor in _interceptors) {
         interceptor.ruleStore = _store;
       }
     }
@@ -157,20 +159,20 @@ class DioMockExtension {
   static Future<Map<String, dynamic>> _setPassthrough(
     Map<String, String> params,
   ) async {
-    final interceptor = _interceptor;
     _passthrough = params['enabled'] == 'true';
-    if (interceptor != null) {
+    for (final interceptor in _interceptors) {
       interceptor.passthrough = _passthrough;
     }
-    _log('Dio passthrough set to $_passthrough');
+    _log(
+      'Dio passthrough set to $_passthrough interceptors=${_interceptors.length}',
+    );
     return {'passthrough': _passthrough};
   }
 
   static Future<Map<String, dynamic>> _getCalls(
     Map<String, String> params,
   ) async {
-    final interceptor = _interceptor;
-    var calls = (interceptor?.callLog ?? _callLog).toList();
+    var calls = _allCalls();
     final pathFilter = params['path'];
     if (pathFilter != null) {
       calls = calls.where((c) => c.path == pathFilter).toList();
@@ -181,10 +183,10 @@ class DioMockExtension {
   static Future<Map<String, dynamic>> _clearCalls(
     Map<String, String> params,
   ) async {
-    final interceptor = _interceptor;
-    final targetLog = interceptor?.callLog ?? _callLog;
-    final count = targetLog.length;
-    targetLog.clear();
+    final count = _allCalls().length;
+    for (final interceptor in _interceptors) {
+      interceptor.callLog.clear();
+    }
     _callLog.clear();
     _log('Cleared $count Dio recorded call(s)');
     return {'cleared': count};
@@ -193,11 +195,12 @@ class DioMockExtension {
   static Future<Map<String, dynamic>> _debugState(
     Map<String, String> params,
   ) async {
-    final interceptor = _interceptor;
-    if (interceptor == null) {
+    final calls = _allCalls();
+    if (_interceptors.isEmpty) {
       return {
         'mode': 'dio',
         'interceptorInjected': false,
+        'interceptors': 0,
         'passthrough': _passthrough,
         'routes': _store
             .getAllRoutes()
@@ -208,14 +211,15 @@ class DioMockExtension {
                   'status': route.status,
                 })
             .toList(),
-        'calls': 0,
+        'calls': calls.length,
       };
     }
 
     return {
       'mode': 'dio',
       'interceptorInjected': true,
-      'passthrough': interceptor.passthrough,
+      'interceptors': _interceptors.length,
+      'passthrough': _passthrough,
       'routes': _store
           .getAllRoutes()
           .map((route) => {
@@ -225,7 +229,18 @@ class DioMockExtension {
                 'status': route.status,
               })
           .toList(),
-      'calls': interceptor.callLog.length,
+      'calls': calls.length,
     };
+  }
+
+  static List<MockCallRecord> _allCalls() {
+    if (_interceptors.isEmpty) {
+      return _callLog.toList();
+    }
+
+    return [
+      ..._callLog,
+      for (final interceptor in _interceptors) ...interceptor.callLog,
+    ];
   }
 }

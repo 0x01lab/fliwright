@@ -1,5 +1,5 @@
 import type * as vscode from 'vscode';
-import type { FormAnalyzeResult, SelectorQuery } from '@fliwright/core';
+import type { FormAnalyzeResult, RecordingFrame, SelectorQuery } from '@fliwright/core';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 
@@ -214,9 +214,12 @@ export interface RecordingSession {
   startedAt?: number;
   rawEventCount: number;
   operationCount: number;
+  frames?: RecordingFrame[];
   generatedCode?: string;
   targetFile?: string;
   testName?: string;
+  recordingId?: string;
+  recordingDir?: string;
 }
 
 export interface StateProviderEntry {

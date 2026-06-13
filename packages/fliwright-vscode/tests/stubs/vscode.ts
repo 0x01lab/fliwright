@@ -10,6 +10,10 @@ export class Uri {
     return this.fsPath.replace(/\\/g, '/');
   }
 
+  toString(): string {
+    return this.fsPath;
+  }
+
   static file(filePath: string): Uri {
     return new Uri(path.resolve(filePath));
   }
@@ -180,7 +184,12 @@ export const window = {
   createWebviewPanel() {
     return {
       webview: {
+        cspSource: 'vscode-resource:',
         html: '',
+        asWebviewUri(uri: Uri) {
+          return uri;
+        },
+        postMessage: async () => true,
         onDidReceiveMessage() {
           return { dispose() {} };
         },

@@ -145,6 +145,13 @@ class FliwrightBridge {
         'initialized': _initialized,
         'debugMode': kDebugMode,
         'dartSdkVersion': dartSdkVersion,
+        'bridgeCapabilities': {
+          'recordingPointerEvents': true,
+          'recordingTextInput': true,
+          'screenshotWaitForFrame': true,
+          'rootRenderViewScreenshot': true,
+          'recordingScreenshotSampler': true,
+        },
       };
     });
   }

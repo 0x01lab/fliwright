@@ -314,6 +314,38 @@ export interface RecordedOperation {
   action?: 'replace';
   duration?: number;
   timestamp: number;
+  status?: 'included' | 'ignored';
+  ignoreReason?: 'duplicate' | 'mergedIntoType' | 'nonActionable' | 'duringTransition' | 'noEffect';
+  confidence?: number;
+}
+
+export interface RecordingScreenshot {
+  base64: string;
+  format: 'png';
+  width?: number;
+  height?: number;
+  pixelRatio?: number;
+}
+
+export interface RecordingFrame {
+  id: string;
+  index: number;
+  kind: RecordedOperation['kind'] | 'pending';
+  status: 'capturing' | 'ready' | 'error';
+  timestamp: number;
+  pointer?: number;
+  operationIndex?: number;
+  position: { x: number; y: number };
+  delta?: { x: number; y: number };
+  text?: string;
+  action?: 'replace';
+  duration?: number;
+  selector?: string;
+  operationStatus?: RecordedOperation['status'];
+  ignoreReason?: RecordedOperation['ignoreReason'];
+  confidence?: number;
+  screenshot?: RecordingScreenshot;
+  screenshotError?: string;
 }
 
 export interface CodegenOptions {
