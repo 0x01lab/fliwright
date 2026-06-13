@@ -353,6 +353,10 @@ export class RecorderController {
         };
         this.frames.push(synthetic);
         this.emitFrame(synthetic);
+        if (!this.latestScreenshot) {
+          const task = this.enqueueScreenshotForFrame(synthetic.index);
+          this.screenshotTasks.push(task);
+        }
         continue;
       }
       const frame = this.frames[frameIndex];

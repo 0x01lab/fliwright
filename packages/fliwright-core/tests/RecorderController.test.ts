@@ -527,6 +527,41 @@ describe('RecorderController', () => {
     }));
   });
 
+  it('does not duplicate synthetic frames across aggregation re-runs', async () => {
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.screenshot') {
+        return Promise.resolve({ success: true, screenshot: 'b64', width: 320, height: 640, pixelRatio: 1 });
+      }
+      return Promise.resolve({});
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((callback) => {
+        eventCallback = callback;
+        return () => {};
+      }),
+    );
+
+    await controller.start({ captureScreenshots: true });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'textInput', text: 'one', timestamp: 1000 },
+    });
+    eventCallback?.({
+      kind: 'FliwrightRecording',
+      timestamp: Date.now(),
+      data: { type: 'textInput', text: 'two', timestamp: 2_000_000 },
+    });
+    await controller.stop();
+
+    const frames = controller.getFrames();
+    expect(frames).toHaveLength(2);
+    expect(frames[0]).toEqual(expect.objectContaining({ text: 'one', synthetic: true, index: 0 }));
+    expect(frames[1]).toEqual(expect.objectContaining({ text: 'two', synthetic: true, index: 1 }));
+  });
+
   it('records a drag operation as a frame carrying its delta', async () => {
     const sendRequest = vi.fn().mockImplementation((method: string) => {
       if (method === 'ext.fliwright.screenshot') {
