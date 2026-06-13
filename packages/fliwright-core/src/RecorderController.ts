@@ -327,8 +327,34 @@ export class RecorderController {
   private syncFramesWithOperations(): void {
     for (let i = 0; i < this.operations.length; i++) {
       const op = this.operations[i];
-      const frameIndex = this.findFrameIndexForOperation(op, i);
-      if (frameIndex < 0) continue;
+      let frameIndex = this.findFrameIndexForOperation(op, i);
+      if (frameIndex < 0) {
+        // Operation has no captured frame (e.g. standalone text input with no
+        // preceding pointer-down). Synthesize one so every operation stays
+        // visible in the canvas. Gated on captureScreenshots like real frames.
+        if (!this.activeOptions?.captureScreenshots) continue;
+        const synthetic: RecordingFrame = {
+          id: `frame-synthetic-${op.timestamp}-${i}`,
+          index: this.frames.length,
+          kind: op.kind,
+          status: this.latestScreenshot ? 'ready' : 'capturing',
+          timestamp: op.timestamp,
+          operationIndex: i,
+          position: { x: op.position.x, y: op.position.y },
+          delta: op.delta ? { x: op.delta.x, y: op.delta.y } : undefined,
+          text: op.text,
+          action: op.action,
+          duration: op.duration,
+          operationStatus: op.status,
+          ignoreReason: op.ignoreReason,
+          confidence: op.confidence,
+          screenshot: this.latestScreenshot ? { ...this.latestScreenshot } : undefined,
+          synthetic: true,
+        };
+        this.frames.push(synthetic);
+        this.emitFrame(synthetic);
+        continue;
+      }
       const frame = this.frames[frameIndex];
       const updated: RecordingFrame = {
         ...frame,

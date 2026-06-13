@@ -346,6 +346,7 @@ export interface RecordingFrame {
   confidence?: number;
   screenshot?: RecordingScreenshot;
   screenshotError?: string;
+  synthetic?: boolean;
 }
 
 export interface CodegenOptions {
