@@ -249,8 +249,11 @@ button.danger {
   transform: translate(-50%, -50%);
   border: 2px solid #ffffff;
   border-radius: 50%;
-  background: rgba(127, 184, 164, 0.28);
-  box-shadow: 0 0 0 6px rgba(127, 184, 164, 0.18), 0 0 22px rgba(127, 184, 164, 0.74);
+  --marker-color: #4b8f78;
+  background: color-mix(in srgb, var(--marker-color) 30%, transparent);
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--marker-color) 18%, transparent),
+    0 0 22px color-mix(in srgb, var(--marker-color) 74%, transparent);
   pointer-events: none;
 }
 
@@ -309,4 +312,150 @@ button.danger {
   border-radius: 5px;
   padding: 0 9px;
   font-size: 10px;
+}
+
+/* —— kind-aware overlays —— */
+.swipe-arrow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.marker-ring {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--marker-color, #e0a458);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--marker-color, #e0a458) 16%, transparent);
+  pointer-events: none;
+  animation: marker-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes marker-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--marker-color, #e0a458) 40%, transparent); }
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--marker-color, #e0a458) 0%, transparent); }
+}
+
+.marker-chip {
+  position: absolute;
+  transform: translate(-50%, 0);
+  margin-top: 14px;
+  padding: 2px 6px;
+  border: 1px solid var(--chip-color, #a371f7);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vscode-editor-background) 78%, transparent);
+  color: var(--chip-color, #a371f7);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* —— canvas + sidebar shell —— */
+.canvas-body {
+  position: absolute;
+  top: 64px;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 10px;
+}
+
+.canvas-body .react-flow-wrapper,
+.canvas-body > .flow-wrap {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ops-sidebar {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--vscode-editor-background) 92%, transparent);
+  overflow: hidden;
+}
+
+.ops-sidebar__head {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ops-sidebar__list {
+  flex: 1;
+  overflow: auto;
+}
+
+.ops-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ops-row:hover {
+  background: color-mix(in srgb, var(--vscode-button-background) 14%, transparent);
+}
+
+.ops-row--selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ops-row--ignored {
+  opacity: 0.5;
+}
+
+.ops-row__idx {
+  width: 14px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.ops-row__tag {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.ops-row__meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+}
+
+.ops-row__status {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.ops-empty {
+  padding: 18px 12px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  text-align: center;
 }
