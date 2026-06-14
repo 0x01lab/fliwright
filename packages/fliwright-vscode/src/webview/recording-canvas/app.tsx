@@ -53,6 +53,7 @@ const nodeTypes = {
 
 function RecordingCanvasApp(): JSX.Element {
   const [session, setSession] = useState<RecordingCanvasSession>(EMPTY_SESSION);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<ExtensionToCanvasMessage>) => {
@@ -75,8 +76,9 @@ function RecordingCanvasApp(): JSX.Element {
       position: { x: index * NODE_X_GAP, y: NODE_Y + (index % 2) * 28 },
       data: { frame },
       draggable: true,
+      selected: frame.id === selectedId,
     }))
-  ), [session.frames]);
+  ), [session.frames, selectedId]);
 
   const edges = useMemo<Edge[]>(() => (
     session.frames.slice(1).map((frame, index) => ({
@@ -102,7 +104,10 @@ function RecordingCanvasApp(): JSX.Element {
           onStop={stopRecording}
           onOpenSavedRecording={openSavedRecording}
         />
-        <FlowViewport session={session} nodes={nodes} edges={edges} />
+        <div className="canvas-body">
+          <FlowViewport session={session} nodes={nodes} edges={edges} selectedId={selectedId} onSelect={setSelectedId} />
+          <OperationsSidebar frames={session.frames} selectedId={selectedId} onSelect={setSelectedId} />
+        </div>
       </div>
     </ReactFlowProvider>
   );
@@ -112,12 +117,16 @@ function FlowViewport({
   session,
   nodes,
   edges,
+  selectedId,
+  onSelect,
 }: {
   session: RecordingCanvasSession;
   nodes: Array<Node<RecordingNodeData>>;
   edges: Edge[];
+  selectedId: string | null;
+  onSelect(id: string): void;
 }): JSX.Element {
-  const { fitView } = useReactFlow();
+  const { fitView, getNode, setCenter } = useReactFlow();
 
   useEffect(() => {
     window.requestAnimationFrame(() => {
@@ -125,12 +134,19 @@ function FlowViewport({
     });
   }, [fitView, nodes.length]);
 
+  useEffect(() => {
+    if (!selectedId) return;
+    const node = getNode(selectedId);
+    if (!node) return;
+    setCenter(node.position.x + NODE_WIDTH / 2, node.position.y + 56, { zoom: 1.1, duration: 280 });
+  }, [selectedId, getNode, setCenter]);
+
   if (nodes.length === 0) {
     return (
       <div className="empty-canvas">
         <div className="empty-kicker">Recording canvas</div>
-        <h1>{session.status === 'recording' ? 'Waiting for the first tap' : 'Ready to capture app frames'}</h1>
-        <p>Screenshot frames and coordinate markers will appear as the session records.</p>
+        <h1>{session.status === 'recording' ? 'Waiting for the first interaction' : 'Ready to capture app frames'}</h1>
+        <p>Tap, swipe, long-press and text input will appear as frames as the session records.</p>
       </div>
     );
   }
@@ -140,6 +156,7 @@ function FlowViewport({
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      onNodeClick={(event, node) => onSelect(node.id)}
       fitView
       minZoom={0.18}
       maxZoom={1.8}
@@ -192,6 +209,53 @@ function Toolbar({
       </div>
     </header>
   );
+}
+
+function OperationsSidebar({
+  frames,
+  selectedId,
+  onSelect,
+}: {
+  frames: RecordingFrame[];
+  selectedId: string | null;
+  onSelect(id: string): void;
+}): JSX.Element {
+  return (
+    <aside className="ops-sidebar">
+      <div className="ops-sidebar__head">操作列表 · {frames.length}</div>
+      <div className="ops-sidebar__list">
+        {frames.length === 0 ? (
+          <div className="ops-empty">还没有录制的操作</div>
+        ) : (
+          frames.map((frame) => {
+            const color = kindColor(frame.kind);
+            const isIgnored = frame.operationStatus === 'ignored';
+            return (
+              <div
+                key={frame.id}
+                className={`ops-row${frame.id === selectedId ? ' ops-row--selected' : ''}${isIgnored ? ' ops-row--ignored' : ''}`}
+                onClick={() => onSelect(frame.id)}
+              >
+                <span className="ops-row__idx">{frame.index + 1}</span>
+                <span className="ops-row__tag" style={{ background: `color-mix(in srgb, ${color} 22%, transparent)`, color }}>
+                  {frame.kind}
+                </span>
+                <span className="ops-row__meta">{rowMeta(frame)}</span>
+                <span className="ops-row__status">{isIgnored ? '忽略' : '✓'}</span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function rowMeta(frame: RecordingFrame): string {
+  const badge = badgeLabel(frame);
+  const coord = coordLabel(frame);
+  const selector = frame.selector ? ` · ${frame.selector}` : '';
+  return [badge, coord].filter(Boolean).join(' · ') + selector;
 }
 
 function RecordingFrameNode({ data }: NodeProps<Node<RecordingNodeData>>): JSX.Element {
