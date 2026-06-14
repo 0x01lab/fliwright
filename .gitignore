@@ -16,3 +16,4 @@ coverage/
 /packages/fliwright-bridge/pubspec.lock
 .codex/
 docs/features
+.worktrees/
