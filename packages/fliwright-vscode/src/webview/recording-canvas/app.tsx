@@ -302,10 +302,6 @@ function title(status: RecordingCanvasSession['status']): string {
   return 'Ready to record';
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
 const root = document.getElementById('root');
 if (root) {
   createRoot(root).render(<RecordingCanvasApp />);

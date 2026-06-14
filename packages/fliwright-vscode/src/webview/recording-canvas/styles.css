@@ -269,7 +269,6 @@ button.danger {
 }
 
 .selector,
-.input-preview,
 .ignore-text,
 .error-text {
   margin: 0 10px 10px;
@@ -284,11 +283,6 @@ button.danger {
   color: var(--vscode-descriptionForeground);
   background: color-mix(in srgb, var(--vscode-textCodeBlock-background) 74%, transparent);
   word-break: break-word;
-}
-
-.input-preview {
-  color: var(--accent-strong);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .ignore-text {
