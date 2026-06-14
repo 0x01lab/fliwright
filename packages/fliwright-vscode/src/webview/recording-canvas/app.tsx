@@ -18,6 +18,13 @@ import '@xyflow/react/dist/style.css';
 import './styles.css';
 import type { RecordingFrame } from '@fliwright/core';
 import type { CanvasToExtensionMessage, ExtensionToCanvasMessage, RecordingCanvasSession } from './types.js';
+import {
+  badgeLabel,
+  coordLabel,
+  kindColor,
+  markerEndPercent,
+  markerPercent,
+} from './marker-utils.js';
 
 declare const acquireVsCodeApi: () => {
   postMessage(message: CanvasToExtensionMessage): void;
@@ -85,7 +92,7 @@ function RecordingCanvasApp(): JSX.Element {
   ), [session.frames, session.status]);
 
   const stopRecording = useCallback(() => vscode.postMessage({ type: 'stopRecording' }), []);
-  const insertRecordedTest = useCallback(() => vscode.postMessage({ type: 'insertRecordedTest' }), []);
+  const openSavedRecording = useCallback(() => vscode.postMessage({ type: 'openSavedRecording' }), []);
 
   return (
     <ReactFlowProvider>
@@ -93,7 +100,7 @@ function RecordingCanvasApp(): JSX.Element {
         <Toolbar
           session={session}
           onStop={stopRecording}
-          onInsert={insertRecordedTest}
+          onOpenSavedRecording={openSavedRecording}
         />
         <FlowViewport session={session} nodes={nodes} edges={edges} />
       </div>
@@ -145,8 +152,8 @@ function FlowViewport({
         nodeColor={(node) => {
           const frame = node.data?.frame as RecordingFrame | undefined;
           if (frame?.status === 'error') return '#d95f4b';
-          if (frame?.kind === 'pending') return '#8a8f98';
-          return '#4b8f78';
+          if (!frame) return '#8a8f98';
+          return kindColor(frame.kind);
         }}
       />
       <Controls showInteractive={false} />
@@ -157,12 +164,14 @@ function FlowViewport({
 function Toolbar({
   session,
   onStop,
-  onInsert,
+  onOpenSavedRecording,
 }: {
   session: RecordingCanvasSession;
   onStop(): void;
-  onInsert(): void;
+  onOpenSavedRecording(): void;
 }): JSX.Element {
+  const canOpenSavedRecording = session.status === 'preview' && Boolean(session.recordingDir);
+
   return (
     <header className="toolbar">
       <div>
@@ -177,8 +186,8 @@ function Toolbar({
         {session.status === 'recording' ? (
           <button className="danger" type="button" onClick={onStop}>Stop Recording</button>
         ) : null}
-        {session.generatedCode ? (
-          <button type="button" onClick={onInsert}>Insert Recorded Test</button>
+        {canOpenSavedRecording ? (
+          <button type="button" onClick={onOpenSavedRecording}>Open Saved Recording</button>
         ) : null}
       </div>
     </header>
@@ -188,7 +197,10 @@ function Toolbar({
 function RecordingFrameNode({ data }: NodeProps<Node<RecordingNodeData>>): JSX.Element {
   const frame = data.frame;
   const imageSrc = frame.screenshot ? `data:image/${frame.screenshot.format};base64,${frame.screenshot.base64}` : undefined;
-  const marker = markerPosition(frame);
+  const color = kindColor(frame.kind);
+  const start = markerPercent(frame);
+  const end = markerEndPercent(frame);
+  const badge = badgeLabel(frame);
   const isIgnored = frame.operationStatus === 'ignored';
   const canToggle = frame.operationIndex != null;
   const setIncluded = useCallback((included: boolean) => {
@@ -199,9 +211,9 @@ function RecordingFrameNode({ data }: NodeProps<Node<RecordingNodeData>>): JSX.E
     <article className={`frame-node frame-node--${frame.status}${isIgnored ? ' frame-node--ignored' : ''}`}>
       <Handle type="target" position={Position.Left} />
       <div className="frame-meta">
-        <span className="frame-index">{frame.index + 1}</span>
+        <span className="frame-index" style={{ background: color }}>{frame.index + 1}</span>
         <span className="frame-kind">{isIgnored ? 'ignored' : frame.kind}</span>
-        <span className="frame-coord">{Math.round(frame.position.x)}, {Math.round(frame.position.y)}</span>
+        <span className="frame-coord">{coordLabel(frame)}</span>
       </div>
       <div className="screen-wrap" style={{ aspectRatio: screenshotAspectRatio(frame) }}>
         {imageSrc ? (
@@ -211,32 +223,49 @@ function RecordingFrameNode({ data }: NodeProps<Node<RecordingNodeData>>): JSX.E
             {frame.status === 'error' ? 'Screenshot failed' : 'Capturing screen'}
           </div>
         )}
-        <span
-          className="tap-marker"
-          style={{
-            left: `${marker.x}%`,
-            top: `${marker.y}%`,
-          }}
-        >
-          <span>{frame.index + 1}</span>
-        </span>
+        {end ? (
+          <svg className="swipe-arrow" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ color }}>
+            <defs>
+              <marker id={`ah-${frame.index}`} markerWidth="5" markerHeight="5" refX="2.5" refY="2.5" orient="auto">
+                <path d="M0,0 L5,2.5 L0,5 z" fill="currentColor" />
+              </marker>
+            </defs>
+            <line
+              x1={start.x} y1={start.y} x2={end.x} y2={end.y}
+              stroke="currentColor" strokeWidth={1.6} vectorEffect="non-scaling-stroke"
+              markerEnd={`url(#ah-${frame.index})`}
+            />
+          </svg>
+        ) : null}
+        {frame.kind === 'longPress' && !frame.synthetic ? (
+          <span className="marker-ring" style={{ left: `${start.x}%`, top: `${start.y}%`, ['--marker-color' as string]: color }} />
+        ) : null}
+        {!frame.synthetic ? (
+          <span
+            className="tap-marker"
+            style={{ left: `${start.x}%`, top: `${start.y}%`, ['--marker-color' as string]: color }}
+          >
+            <span>{frame.index + 1}</span>
+          </span>
+        ) : null}
+        {badge ? (
+          <span
+            className="marker-chip"
+            style={{ left: `${start.x}%`, top: `${start.y}%`, ['--chip-color' as string]: color }}
+          >
+            {badge}
+          </span>
+        ) : null}
       </div>
       {frame.selector ? <div className="selector">{frame.selector}</div> : null}
       {frame.ignoreReason ? <div className="ignore-text">{ignoreReasonLabel(frame.ignoreReason)}</div> : null}
-      {frame.text ? <div className="input-preview">"{frame.text}"</div> : null}
       {frame.screenshotError ? <div className="error-text">{frame.screenshotError}</div> : null}
       {canToggle ? (
         <div className="frame-actions" onPointerDown={(event) => event.stopPropagation()}>
           {isIgnored ? (
-            <button type="button" onClick={(event) => {
-              event.stopPropagation();
-              setIncluded(true);
-            }}>Include</button>
+            <button type="button" onClick={(event) => { event.stopPropagation(); setIncluded(true); }}>Include</button>
           ) : (
-            <button type="button" onClick={(event) => {
-              event.stopPropagation();
-              setIncluded(false);
-            }}>Ignore</button>
+            <button type="button" onClick={(event) => { event.stopPropagation(); setIncluded(false); }}>Ignore</button>
           )}
         </div>
       ) : null}
@@ -258,16 +287,6 @@ function ignoreReasonLabel(reason: NonNullable<RecordingFrame['ignoreReason']>):
     case 'noEffect':
       return 'Ignored: no visible effect';
   }
-}
-
-function markerPosition(frame: RecordingFrame): { x: number; y: number } {
-  const width = frame.screenshot?.width;
-  const height = frame.screenshot?.height;
-  if (!width || !height) return { x: 50, y: 50 };
-  return {
-    x: clamp((frame.position.x / width) * 100, 0, 100),
-    y: clamp((frame.position.y / height) * 100, 0, 100),
-  };
 }
 
 function screenshotAspectRatio(frame: RecordingFrame): string {
