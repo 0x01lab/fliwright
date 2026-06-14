@@ -12,4 +12,5 @@ export type CanvasToExtensionMessage =
   | { type: 'ready' }
   | { type: 'stopRecording' }
   | { type: 'insertRecordedTest' }
+  | { type: 'openSavedRecording' }
   | { type: 'setFrameIncluded'; frameId: string; included: boolean };

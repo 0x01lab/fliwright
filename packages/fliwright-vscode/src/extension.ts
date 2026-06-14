@@ -565,6 +565,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.window.showInformationMessage(`Saved recorded test to ${saved.fsPath}`);
       });
     }),
+    vscode.commands.registerCommand('fliwright.openRecording', async () => {
+      await runCommand('Open Saved Recording', async () => {
+        const root = requireWorkspaceRoot();
+        const recordings = await recorderService.listPersistedRecordings(root);
+        if (recordings.length === 0) {
+          vscode.window.showInformationMessage('No saved Fliwright recordings found.');
+          return;
+        }
+        const selected = await vscode.window.showQuickPick(recordings.map((recording) => ({
+          label: recording.label,
+          description: recording.description,
+          detail: recording.recordingDir.fsPath,
+          recording,
+        })), {
+          title: 'Open Saved Fliwright Recording',
+          placeHolder: 'Choose a persisted recording session',
+        });
+        if (!selected) return;
+
+        const loaded = await recorderService.loadPersistedRecording(selected.recording.recordingDir);
+        updateRecordingViews(loaded);
+        recordingPanel.open(loaded);
+      });
+    }),
     vscode.commands.registerCommand('fliwright.refreshStateProviders', async () => {
       await runCommand('Refresh State Providers', async () => {
         const providers = await stateService.listProviders(session.connectedDriver);

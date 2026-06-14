@@ -37,6 +37,9 @@ export class RecordingPanel {
         if (message.type === 'insertRecordedTest') {
           void vscode.commands.executeCommand('fliwright.insertRecordedTest');
         }
+        if (message.type === 'openSavedRecording') {
+          void vscode.commands.executeCommand('fliwright.openRecording');
+        }
         if (message.type === 'stopRecording') {
           void vscode.commands.executeCommand('fliwright.stopRecording');
         }

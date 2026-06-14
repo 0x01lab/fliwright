@@ -150,6 +150,21 @@ describe('RecordingPanel', () => {
     restore();
   });
 
+  it('sends openRecording command from webview messages', () => {
+    const { panel, sendMessage, restore } = createPanel();
+    panel.open({ status: 'preview', rawEventCount: 0, operationCount: 0, generatedCode: 'code', recordingDir: '/workspace/.fliwright/recordings/recording-1' });
+
+    const executeSpy = vi.fn();
+    const originalExecute = commands.executeCommand;
+    (commands as any).executeCommand = executeSpy;
+
+    sendMessage({ type: 'openSavedRecording' });
+    expect(executeSpy).toHaveBeenCalledWith('fliwright.openRecording');
+
+    (commands as any).executeCommand = originalExecute;
+    restore();
+  });
+
   it('sends stopRecording command from webview messages', () => {
     const { panel, sendMessage, restore } = createPanel();
     panel.open({ status: 'recording', rawEventCount: 0, operationCount: 0 });

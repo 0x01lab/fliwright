@@ -95,6 +95,7 @@ function RecordingCanvasApp(): JSX.Element {
 
   const stopRecording = useCallback(() => vscode.postMessage({ type: 'stopRecording' }), []);
   const openSavedRecording = useCallback(() => vscode.postMessage({ type: 'openSavedRecording' }), []);
+  const insertTest = useCallback(() => vscode.postMessage({ type: 'insertRecordedTest' }), []);
 
   return (
     <ReactFlowProvider>
@@ -102,6 +103,7 @@ function RecordingCanvasApp(): JSX.Element {
         <Toolbar
           session={session}
           onStop={stopRecording}
+          onInsertTest={insertTest}
           onOpenSavedRecording={openSavedRecording}
         />
         <div className="canvas-body">
@@ -181,13 +183,16 @@ function FlowViewport({
 function Toolbar({
   session,
   onStop,
+  onInsertTest,
   onOpenSavedRecording,
 }: {
   session: RecordingCanvasSession;
   onStop(): void;
+  onInsertTest(): void;
   onOpenSavedRecording(): void;
 }): JSX.Element {
-  const canOpenSavedRecording = session.status === 'preview' && Boolean(session.recordingDir);
+  const isPreview = session.status === 'preview';
+  const canOpenSavedRecording = isPreview && Boolean(session.recordingDir);
 
   return (
     <header className="toolbar">
@@ -202,6 +207,9 @@ function Toolbar({
       <div className="actions">
         {session.status === 'recording' ? (
           <button className="danger" type="button" onClick={onStop}>Stop Recording</button>
+        ) : null}
+        {isPreview ? (
+          <button type="button" onClick={onInsertTest}>Insert Test</button>
         ) : null}
         {canOpenSavedRecording ? (
           <button type="button" onClick={onOpenSavedRecording}>Open Saved Recording</button>

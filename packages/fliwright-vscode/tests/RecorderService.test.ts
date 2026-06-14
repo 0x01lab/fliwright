@@ -221,6 +221,26 @@ describe('RecorderService', () => {
         screenshot: { format: 'png', width: 100, height: 200, pixelRatio: 1 },
       }));
       await expect(readText(root, `${relativeDir}/screenshots/frame-0001.png`)).resolves.toBe('png-bytes');
+
+      const recordings = await service.listPersistedRecordings(Uri.file(root));
+      expect(recordings).toHaveLength(1);
+      expect(recordings[0]).toEqual(expect.objectContaining({
+        label: 'persisted flow',
+      }));
+
+      const loaded = await service.loadPersistedRecording(recordings[0].recordingDir);
+      expect(loaded).toEqual(expect.objectContaining({
+        status: 'preview',
+        testName: 'persisted flow',
+        generatedCode: "test('recorded', async () => {});",
+      }));
+      expect(loaded.frames?.[0].screenshot).toEqual({
+        base64: Buffer.from('png-bytes').toString('base64'),
+        format: 'png',
+        width: 100,
+        height: 200,
+        pixelRatio: 1,
+      });
     });
 
     it('updates the persisted manifest after manual frame filtering', async () => {

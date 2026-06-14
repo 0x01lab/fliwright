@@ -154,6 +154,10 @@ export const workspace = {
     stat(uri: Uri) {
       return fs.stat(uri.fsPath);
     },
+    async readDirectory(uri: Uri) {
+      const entries = await fs.readdir(uri.fsPath, { withFileTypes: true });
+      return entries.map((entry) => [entry.name, entry.isDirectory() ? 2 : 1] as [string, number]);
+    },
   },
   async findFiles(pattern: RelativePattern): Promise<Uri[]> {
     const [prefix, suffix] = pattern.pattern.split('*');

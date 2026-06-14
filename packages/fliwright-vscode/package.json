@@ -62,6 +62,7 @@
     "onCommand:fliwright.startRecording",
     "onCommand:fliwright.stopRecording",
     "onCommand:fliwright.insertRecordedTest",
+    "onCommand:fliwright.openRecording",
     "onCommand:fliwright.refreshStateProviders",
     "onCommand:fliwright.readStateProvider",
     "onCommand:fliwright.overrideStateProvider",
@@ -252,6 +253,11 @@
         "enablement": "fliwright.recording.hasPreview"
       },
       {
+        "command": "fliwright.openRecording",
+        "title": "Fliwright: Open Saved Recording",
+        "icon": "$(history)"
+      },
+      {
         "command": "fliwright.refreshStateProviders",
         "title": "Fliwright: Refresh State Providers",
         "icon": "$(refresh)"
@@ -388,6 +394,11 @@
           "command": "fliwright.insertRecordedTest",
           "when": "view == fliwright.runs && fliwright.recording.hasPreview",
           "group": "navigation@3"
+        },
+        {
+          "command": "fliwright.openRecording",
+          "when": "view == fliwright.runs",
+          "group": "navigation@4"
         },
         {
           "command": "fliwright.refreshStateProviders",

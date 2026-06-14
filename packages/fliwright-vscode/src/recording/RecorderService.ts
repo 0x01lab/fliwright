@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { CodegenOptions, FliwrightDriver, RecordingFrame } from '@fliwright/core';
 import type { RecordingSession } from '../types.js';
-import { RecordingPersistenceService } from './RecordingPersistenceService.js';
+import { RecordingPersistenceService, type RecordingListItem } from './RecordingPersistenceService.js';
 
 type RecorderLike = FliwrightDriver['recorder'] & {
   getFrames?: () => RecordingFrame[];
@@ -30,6 +30,16 @@ export class RecorderService {
     this.session = { status: 'idle', rawEventCount: 0, operationCount: 0, frames: [] };
     this.onDidChange = undefined;
     this.onStepRecorded = undefined;
+    return this.getSession();
+  }
+
+  listPersistedRecordings(workspaceRoot: vscode.Uri): Promise<RecordingListItem[]> {
+    return this.persistence.list(workspaceRoot);
+  }
+
+  async loadPersistedRecording(recordingDir: vscode.Uri): Promise<RecordingSession> {
+    const session = await this.persistence.load(recordingDir);
+    this.setSession(session);
     return this.getSession();
   }
 
