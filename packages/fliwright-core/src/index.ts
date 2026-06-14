@@ -92,3 +92,35 @@ export {
 export { DartCodeGenerator } from './DartCodeGenerator.js';
 export { AssertionSuggester } from './AssertionSuggester.js';
 export type { AssertionSuggestion } from './AssertionSuggester.js';
+export type {
+  AiResponseFormat,
+  AiProviderName,
+  AiCacheMode,
+  JsonSchemaType,
+  JsonSchema,
+  AiImageInput,
+  AiFileInput,
+  AiRequest,
+  AiGenerateRequest,
+  AiVisionOptions,
+  AiVisibleOptions,
+  AiInspectRequest,
+  AiClassifyRequest,
+  AiResponse,
+  AiAdapterResponse,
+  AiInvocationContext,
+  AiAdapter,
+  AiRuntimeContext,
+  AiRuntimeConfig,
+  AiCliAdapterOptions,
+  AiArtifactMeta,
+} from './ai/types.js';
+export {
+  AiInvocationError,
+  AiDisabledError,
+  AiTimeoutError,
+  AiParseError,
+  AiSchemaValidationError,
+  AiAssertionError,
+} from './ai/errors.js';
+export { validateJsonSchema } from './ai/AiSchemaValidator.js';
