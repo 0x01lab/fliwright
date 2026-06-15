@@ -1,5 +1,6 @@
-import { describe, it, expect, test as vitestTest } from 'vitest';
+import { describe, it, expect, test as vitestTest, vi } from 'vitest';
 import { Assertion, Locator } from '@fliwright/core';
+import { AiRuntime } from '@fliwright/core';
 import {
   afterEach as fliwrightAfterEach,
   beforeEach as fliwrightBeforeEach,
@@ -10,6 +11,35 @@ import {
   expect as fliwrightExpect,
   test as fliwrightTest,
 } from '../src/index.js';
+
+vi.mock(import('@fliwright/core'), async importOriginal => {
+  const actual = await importOriginal();
+
+  class MockDriver {
+    readonly page = {
+      screenshot: async () => Buffer.from(''),
+      snapshot: async () => ({}),
+    };
+    readonly healing = { getReports: () => [] };
+
+    async connect(): Promise<void> {}
+
+    async listenToDiagnostics(): Promise<void> {}
+
+    async sendRequest(): Promise<unknown> {
+      return {};
+    }
+
+    getDiagnostics(): unknown[] {
+      return [];
+    }
+  }
+
+  return {
+    ...actual,
+    FliwrightDriver: MockDriver,
+  };
+});
 
 describe('createFliwrightTest', () => {
   it('creates a test function with page fixture', () => {
@@ -40,6 +70,37 @@ describe('createFliwrightTest', () => {
     expect(assertion).toBeInstanceOf(Assertion);
   });
 
+  it('creates a test function with an ai fixture when configured', () => {
+    const test = createFliwrightTest({
+      vmServiceUrl: 'ws://localhost:12345/ws',
+      ai: { provider: 'mock' },
+    });
+    expect(test).toBeDefined();
+    expect(typeof test).toBe('function');
+  });
+
+  it('preserves ai config in defineConfig', () => {
+    const config = defineConfig({
+      vmServiceUrl: 'ws://localhost:12345/ws',
+      ai: {
+        provider: 'mock',
+        timeoutMs: 1234,
+        artifactsDir: '.fliwright/ai-test',
+      },
+    });
+
+    expect(config.ai).toMatchObject({
+      provider: 'mock',
+      timeoutMs: 1234,
+      artifactsDir: '.fliwright/ai-test',
+    });
+  });
+
+  it('exposes the AiRuntime type for ai fixture consumers', () => {
+    const runtime: AiRuntime | undefined = undefined;
+    expect(runtime).toBeUndefined();
+  });
+
   it('defineConfig merges defaults', () => {
     const config = defineConfig({
       vmServiceUrl: 'ws://localhost:12345/ws',
@@ -49,6 +110,15 @@ describe('createFliwrightTest', () => {
     expect(config.timeout).toBe(10000);
     expect(config.screenshot).toBe('file');
   });
+});
+
+const testWithAi = createFliwrightTest({
+  vmServiceUrl: 'ws://localhost:12345/ws',
+  ai: { provider: 'mock' },
+});
+
+testWithAi('provides an ai fixture to generated tests', async ({ ai }) => {
+  expect(ai).toBeInstanceOf(AiRuntime);
 });
 
 describe('fliwright hooks', () => {
