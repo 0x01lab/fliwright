@@ -130,6 +130,123 @@
         }
       },
       "additionalProperties": false
+    },
+    "WidgetInfo": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key": {
+          "$ref": "#/properties/text"
+        },
+        "name": {
+          "$ref": "#/properties/text"
+        },
+        "ancestorKey": {
+          "$ref": "#/properties/text"
+        },
+        "semanticsId": {
+          "$ref": "#/properties/text"
+        },
+        "semanticsLabel": {
+          "$ref": "#/properties/text"
+        },
+        "semanticsHint": {
+          "$ref": "#/properties/text"
+        },
+        "role": {
+          "$ref": "#/properties/text"
+        },
+        "tooltip": {
+          "$ref": "#/properties/text"
+        },
+        "descendantText": {
+          "$ref": "#/properties/text"
+        },
+        "descendantIcon": {
+          "type": "object",
+          "properties": {
+            "codePoint": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fontFamily": {
+              "$ref": "#/properties/text"
+            },
+            "fontPackage": {
+              "$ref": "#/properties/text"
+            }
+          },
+          "required": [
+            "codePoint"
+          ],
+          "additionalProperties": false
+        },
+        "keyedAncestors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "$ref": "#/properties/text"
+              },
+              "type": {
+                "$ref": "#/properties/text"
+              }
+            },
+            "required": [
+              "key",
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "rect": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "additionalProperties": false
+        },
+        "hitTestable": {
+          "type": "boolean"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "properties"
+      ],
+      "additionalProperties": false
     }
   }
 }

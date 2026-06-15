@@ -70,6 +70,44 @@ export const positionFilterSchema = z.object({
   visible: z.boolean().optional(),
 }).strict();
 
+// ── KeyedAncestor / WidgetInfo (hitTest response) ──────────────────
+
+export const keyedAncestorSchema = z.object({
+  key: nonEmptyString,
+  type: nonEmptyString,
+}).strict();
+
+export const descendantIconSchema = z.object({
+  codePoint: z.number().int().nonnegative(),
+  fontFamily: nonEmptyString.optional(),
+  fontPackage: nonEmptyString.optional(),
+}).strict();
+
+export const widgetInfoSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  text: nonEmptyString.optional(),
+  key: nonEmptyString.optional(),
+  name: nonEmptyString.optional(),
+  ancestorKey: nonEmptyString.optional(),
+  semanticsId: nonEmptyString.optional(),
+  semanticsLabel: nonEmptyString.optional(),
+  semanticsHint: nonEmptyString.optional(),
+  role: nonEmptyString.optional(),
+  tooltip: nonEmptyString.optional(),
+  descendantText: nonEmptyString.optional(),
+  descendantIcon: descendantIconSchema.optional(),
+  keyedAncestors: z.array(keyedAncestorSchema).optional(),
+  rect: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }).strict().optional(),
+  hitTestable: z.boolean().optional(),
+  properties: z.record(z.unknown()),
+}).strict();
+
 // ── SelectorQuery (recursive) ──────────────────────────────────────
 
 export const selectorQuerySchema: z.ZodType<import('./types.js').SelectorQuery> = z.lazy(() =>
