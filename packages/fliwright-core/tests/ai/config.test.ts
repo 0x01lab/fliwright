@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AiDisabledError, resolveAiConfig } from '../../src/index.js';
-import { AiRuntime, MockAiAdapter } from '../../src/index.js';
+import { AiRuntime, CodexCliAdapter, MockAiAdapter } from '../../src/index.js';
+import { parseAiArgs } from '../../src/ai/config.js';
 
 const ENV_KEYS = [
   'FLIWRIGHT_AI_PROVIDER',
@@ -50,7 +51,13 @@ describe('resolveAiConfig', () => {
     process.env.FLIWRIGHT_AI_PROVIDER = 'codex';
     process.env.FLIWRIGHT_AI_ARGS = 'exec, --json';
     const config = resolveAiConfig(undefined);
-    expect(config.adapter).toBeDefined();
+    expect(config.adapter).toBeInstanceOf(CodexCliAdapter);
+  });
+
+  it('parseAiArgs splits, trims, and filters comma-separated input', () => {
+    expect(parseAiArgs('exec, --json')).toEqual(['exec', '--json']);
+    expect(parseAiArgs('  a , , b ')).toEqual(['a', 'b']);
+    expect(parseAiArgs(undefined)).toBeUndefined();
   });
 
   it('respects an explicit adapter instance over provider-based construction', () => {

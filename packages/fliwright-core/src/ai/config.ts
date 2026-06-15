@@ -20,7 +20,7 @@ export function resolveAiConfig(config: AiRuntimeConfig | undefined): AiRuntimeC
 }
 
 function createAiAdapter(config: AiRuntimeConfig | undefined): AiAdapter | undefined {
-  if (isAiCliAdapterOptions(config?.adapter)) return new CliJsonAdapter(config!.adapter as AiCliAdapterOptions);
+  if (isAiCliAdapterOptions(config?.adapter)) return new CliJsonAdapter(config.adapter);
   const provider = config?.provider ?? parseAiProvider(process.env.FLIWRIGHT_AI_PROVIDER);
   if (provider === 'mock') return new MockAiAdapter();
   if (provider === 'claude') {
