@@ -17,3 +17,4 @@ coverage/
 .codex/
 .superpowers/
 docs/features
+.worktrees/

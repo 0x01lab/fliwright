@@ -11,134 +11,97 @@ Generate structured, AI-agent-consumable documentation for every implemented fea
 
 AI agents working on this codebase need to understand what's implemented without reading every source file. These docs act as a compressed map of the project — accurate, structured, and indexed for fast lookup. They are NOT for human end-users; they are for the next Claude session, the MCP agent, or any AI tool that needs to answer "can this project do X?"
 
+## Core Principle: Derive Everything From Source
+
+**Never hardcode which files, classes, tools, commands, or packages to document.** This project evolves fast; a hardcoded inventory goes stale within one change (the previous version of this skill listed 4 MCP tools when the code had 18). Instead, this skill defines **rules** — *where to read* and *how to structure* — and you derive the complete, current set of doc targets from the source code at run time. If something exists in code, it gets documented; if it doesn't, it doesn't.
+
 ## Output Directory
 
 All generated files go to `docs/features/`. On each run, **clear the entire directory first** and regenerate everything — this ensures consistency.
 
-The output has three layers: **package-level summaries**, **per-class detailed docs in sub-directories**, and **cross-cutting pipeline docs**.
+The output has three layers. The *shape* is fixed; the *file list* is derived from source:
+
+1. **Per-package sub-directory** — one directory under `docs/features/` per package in the monorepo (enumerate from `pnpm-workspace.yaml` + `packages/*/package.json`). TS libraries, the Dart bridge, the Dart Riverpod adapter, and the VS Code extension each get their own directory.
+2. **Per-export detailed docs** — inside each package directory, one `.md` per export target (class / tool / command / extension / view — see derivation rules in Step 2), plus a `README.md` overview and (for TS packages) a `types.md`.
+3. **Cross-cutting pipeline docs** — a handful of top-level `*-pipeline.md` / `*-integration.md` files tracing how packages collaborate end-to-end.
+
+Illustrative shape (do NOT treat as exhaustive — derive the real list from source):
 
 ```
 docs/features/
-├── index.md                          # Routing table (start here)
-├── core/                             # @fliwright/core — per-class sub-directory
-│   ├── README.md                     # Package overview + links to each class doc
-│   ├── FliwrightDriver.md            # Detailed doc for FliwrightDriver
-│   ├── Page.md                       # Detailed doc for Page
-│   ├── Locator.md                    # Detailed doc for Locator
-│   ├── Assertion.md                  # Detailed doc for Assertion + createExpect
-│   ├── MockManager.md                # Detailed doc for MockManager
-│   ├── SelfHealingEngine.md          # Detailed doc for SelfHealingEngine
-│   ├── SnapshotStore.md              # Detailed doc for SnapshotStore
-│   ├── RecorderController.md         # Detailed doc for RecorderController
-│   ├── CodeGenerator.md              # Detailed doc for CodeGenerator
-│   ├── DartCodeGenerator.md          # Detailed doc for DartCodeGenerator
-│   ├── AssertionSuggester.md         # Detailed doc for AssertionSuggester
-│   ├── FormHelper.md                 # Detailed doc for FormHelper
-│   ├── SemanticInferrer.md           # Detailed doc for SemanticInferrer
-│   ├── FakerGenerator.md             # Detailed doc for FakerGenerator
-│   ├── SkillRegistry.md              # Detailed doc for SkillRegistry
-│   ├── JsonRuleLoader.md             # Detailed doc for JsonRuleLoader
-│   ├── SelectorResolver.md           # Detailed doc for SelectorResolver
-│   ├── PluginRegistry.md             # Detailed doc for PluginRegistry
-│   ├── Protocol.md                   # Detailed doc for Protocol
-│   ├── VMServiceConnector.md         # Detailed doc for VMServiceConnector
-│   ├── EventAggregator.md            # Detailed doc for EventAggregator
-│   ├── FailureCollector.md           # Detailed doc for FailureCollector
-│   ├── MultiDimensionalHealingStrategy.md  # Detailed doc for strategy
-│   └── types.md                      # All exported types and interfaces
-├── mcp/                              # @fliwright/mcp
-│   ├── README.md                     # Package overview
-│   ├── fliwright-run.md              # Detailed doc for fliwright_run tool
-│   ├── fliwright-get-failure.md      # Detailed doc for fliwright_get_failure tool
-│   ├── fliwright-generate-test.md    # Detailed doc for fliwright_generate_test tool
-│   └── test-report.md               # Detailed doc for test_report resource
-├── vitest/                           # @fliwright/vitest
-│   ├── README.md                     # Package overview
-│   ├── test.md                       # Detailed doc for test() fixture
-│   └── expect.md                     # Detailed doc for expect() assertion
-├── cli/                              # @fliwright/cli
-│   ├── README.md                     # Package overview
-│   ├── run.md                        # Detailed doc for run command
-│   ├── init.md                       # Detailed doc for init command
-│   ├── doctor.md                     # Detailed doc for doctor command
-│   └── record.md                     # Detailed doc for record command
-├── plugin-riverpod/                  # @fliwright/plugin-riverpod
-│   ├── README.md                     # Package overview
-│   └── RiverpodStateAdapter.md       # Detailed doc for StateAdapter
-├── bridge/                           # fliwright-bridge (Dart)
-│   ├── README.md                     # Package overview
-│   ├── GestureExtension.md           # Detailed doc for gesture extension
-│   ├── InspectExtension.md           # Detailed doc for inspect extension
-│   ├── TypeExtension.md              # Detailed doc for type extension
-│   ├── ScrollExtension.md            # Detailed doc for scroll extension
-│   ├── SnapshotExtension.md          # Detailed doc for snapshot extension
-│   ├── RecordingExtension.md         # Detailed doc for recording extension
-│   ├── FormExtractExtension.md       # Detailed doc for form extract extension
-│   ├── RiverpodExtension.md          # Detailed doc for riverpod extension
-│   ├── MockServerExtension.md        # Detailed doc for mock server extension
-│   └── HttpOverrides.md              # Detailed doc for HTTP overrides
-├── self-healing-pipeline.md          # Cross-cutting: self-healing
-├── recording-pipeline.md             # Cross-cutting: recording & codegen
-├── form-filling-pipeline.md          # Cross-cutting: form auto-fill
-└── mcp-integration.md                # Cross-cutting: MCP agent integration
+├── index.md                  # Routing table (generated last)
+├── <package>/                # One directory per package
+│   ├── README.md             # Package overview + module table
+│   ├── <Export>.md           # One per exported class/tool/command
+│   └── types.md              # TS packages only: all types/interfaces
+└── <name>-pipeline.md        # Cross-cutting pipelines (one per capability)
 ```
+
+Every file MUST carry YAML frontmatter. Agents use it for routing.
 
 ## Workflow
 
 Follow these steps in order. Each step builds on the previous one.
 
-### Step 1: Clear and scan
+### Step 1: Clear and enumerate packages
 
-Delete everything in `docs/features/` (create the directory if it doesn't exist), then read these files to understand the monorepo layout:
+Delete everything in `docs/features/` (create it if missing), then enumerate the monorepo:
 
-- `packages/*/package.json` — package names, versions, dependencies
-- `packages/*/src/index.ts` — public API surface for each TypeScript package
-- `packages/fliwright-bridge/lib/fliwright_bridge.dart` — Dart bridge exports
-- `packages/fliwright-bridge/lib/src/bridge.dart` — registered Dart extensions
-- `packages/fliwright-mcp/src/server.ts` — MCP tool registrations
+- Read `pnpm-workspace.yaml` and every `packages/*/package.json` to get the **authoritative package list**, names, versions, dependencies, and type (TS lib / MCP / CLI / Dart / VS Code / plugin).
+- For each package, locate its public entry point(s) per the derivation rules below.
 
-### Step 2: Extract feature inventory
+### Step 2: Derive the doc targets for each package
 
-For each package, read the source files listed in its `index.ts` (or `fliwright_bridge.dart`). Extract:
+For every package from Step 1, read its public surface **from source** and produce one doc target per exported unit. Use this table to know what to read:
 
-- **Classes**: name, constructor signature, all public methods with parameter names and return types
-- **Functions**: name, parameter names/types, return type
-- **Types/Interfaces**: field names and types
-- **For MCP**: tool names, input schemas, descriptions, resource URIs
-- **For CLI**: command names, options, descriptions
-- **For bridge**: extension names registered via `_registry.register()`
+| Package type | How to recognize | Read this to get the doc targets |
+|---|---|---|
+| TS library (`@fliwright/*`) | has `src/index.ts` | every `export` in `src/index.ts`; open each class's source file to read its methods/properties |
+| MCP server | package with an MCP server entry | every tool registered (grep `server.tool(` and/or list `src/tools/`) + every resource |
+| CLI | package exposing `bin` or a `commands/` dir | every file in `commands/` → one command; every file in `capabilities/` → one capability; plus `config.ts`, `reporter.ts` |
+| Dart bridge | `lib/<pkg>.dart` + `lib/src/extensions/` | the barrel export + every `_registry.register(...)` call across `lib/src/extensions/*.dart` |
+| Dart adapter | `lib/*.dart` exporting an observer/adapter | each exported adapter class |
+| VS Code extension | `package.json` with `engines.vscode` | `contributes.commands/views/settings/menus` + `src/extension.ts` activation points + each `src/<area>/` module |
+| Plugin | exports a `FliwrightPlugin` / `StateAdapter` | the plugin object + its adapter(s) |
 
-Use the actual source code as the single source of truth. Do NOT document features from PRD or design specs that don't exist in code yet.
+**Rules for grouping targets into files:**
+
+- One exported class → one `<ClassName>.md`.
+- Standalone exported functions from the **same source file** → group into one doc named after the file (e.g. `wire-protocol.md`).
+- All exported types and interfaces of a TS package → one `types.md`.
+- Each MCP tool and each resource → its own doc.
+- Each CLI command and each capability → its own doc.
+- Each Dart bridge extension → its own doc.
+
+**Use the actual source code as the single source of truth.** Do NOT document features from PRD or design specs that don't exist in code yet. Read signatures from source — never reconstruct them from memory.
 
 ### Step 3: Map cross-cutting pipelines
 
-Trace these pipelines through the codebase by following import chains:
+Trace these end-to-end capabilities by following import chains through the code. **Verify every file in each trace path still exists** — rename or repoint if the code has moved. If you find a new end-to-end capability not listed here, add a pipeline doc for it.
 
-| Pipeline | Trace path |
+| Pipeline | Trace path (verify against current code) |
 |---|---|
-| Self-healing | `Assertion.ts` → `SelfHealingEngine.ts` → `SnapshotStore.ts` → `strategies/MultiDimensionalHealingStrategy.ts` → `bridge/snapshot.dart` |
-| Recording & codegen | `RecorderController.ts` → `EventAggregator.ts` → `CodeGenerator.ts` + `DartCodeGenerator.ts` → `AssertionSuggester.ts` → `bridge/recording.dart` |
-| Form auto-fill | `FormHelper.ts` → `SemanticInferrer.ts` → `FakerGenerator.ts` → `SkillRegistry.ts` → `JsonRuleLoader.ts` → `SelectorResolver.ts` → `bridge/form_extract.dart` |
-| MCP integration | `vitest/index.ts` → `mcp/server.ts` → `mcp/tools/*.ts` → `mcp/resources/testReport.ts` |
+| Self-healing | assertion entry → `SelfHealingEngine` → `SnapshotStore` → healing strategy → bridge snapshot extension |
+| Recording & codegen | `RecorderController` → `EventAggregator` → code generators → `AssertionSuggester` → bridge recording extension |
+| Form auto-fill | `FormHelper` → `SemanticInferrer` → `FakerGenerator` → `SkillRegistry`/`JsonRuleLoader` → `SelectorResolver` → bridge form extension |
+| MCP integration | vitest reporter → MCP server → MCP tools → MCP resources |
 
 ### Step 4: Generate per-package sub-directories with per-class docs
 
-For each package, create a sub-directory under `docs/features/` with a `README.md` package overview and one detailed markdown file per exported class, function group, or utility module.
+For each package, create its sub-directory with a `README.md` overview and one detailed markdown file per doc target derived in Step 2.
 
 #### 4a. Package README
 
-Write `docs/features/<package-dir>/README.md` as the package overview:
-
 ```markdown
 ---
-package: "@fliwright/<name>"
+package: "<package name from package.json>"
 version: "<from package.json>"
-layer: <core | integration | transport | plugin>
+layer: <core | integration | transport | plugin | tooling | editor>
 status: implemented
 generated: "<today's date YYYY-MM-DD>"
 ---
 
-# @fliwright/<name>
+# <package name>
 
 > One-line summary of what this package does.
 
@@ -146,9 +109,7 @@ generated: "<today's date YYYY-MM-DD>"
 
 | Module | Description | Doc |
 |--------|-------------|-----|
-| `ClassName` | One-line description | [ClassName.md](./ClassName.md) |
-| `AnotherClass` | One-line description | [AnotherClass.md](./AnotherClass.md) |
-| `types` | All exported types and interfaces | [types.md](./types.md) |
+| `<Export>` | One-line description | [<Export>.md](./<Export>.md) |
 
 ## Dependencies
 
@@ -157,18 +118,18 @@ generated: "<today's date YYYY-MM-DD>"
 ## Usage Example
 
 \```typescript
-// A complete, runnable code snippet demonstrating the package's primary use case
+// A complete, runnable snippet demonstrating the package's primary use case
 \```
 ```
 
 #### 4b. Per-class detailed docs
 
-For each exported class, write `docs/features/<package-dir>/<ClassName>.md` with full detail:
+For each exported class, write `docs/features/<package-dir>/<ClassName>.md`:
 
 ```markdown
 ---
 module: "<ClassName>"
-package: "@fliwright/<name>"
+package: "<package name>"
 source: "<relative path to source file>"
 tests: "<relative path to test file>"
 generated: "<today's date YYYY-MM-DD>"
@@ -180,7 +141,7 @@ generated: "<today's date YYYY-MM-DD>"
 
 ## Overview
 
-2-3 sentences explaining what this class does, why it exists, and how it fits into the broader architecture. Mention which other modules depend on it or it depends on.
+2-3 sentences: what it does, why it exists, how it fits into the architecture, and what depends on it.
 
 ## Constructor
 
@@ -190,36 +151,25 @@ constructor(param1: Type1, param2?: Type2)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `param1` | `Type1` | Yes | What this parameter controls |
-| `param2` | `Type2` | No | Default: `value`. What this does |
+| `param1` | `Type1` | Yes | What this controls |
 
 ## Public Methods
 
 ### `methodName(param: Type): ReturnType`
 
-Detailed description of what this method does, when to call it, and any side effects.
-
-**Parameters:**
+What this does, when to call it, side effects.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `param` | `Type` | Yes | Description |
 
-**Returns:** `ReturnType` — What the return value represents.
-
-**Throws:** `ErrorType` — When and why this throws.
-
-**Example:**
+**Returns:** `ReturnType` — what it represents.
+**Throws:** `ErrorType` — when and why.
+**Example:** *(read a real call site from the codebase)*
 
 \```typescript
 const result = instance.methodName('value');
 \```
-
----
-
-### `anotherMethod(): Promise<void>`
-
-(Repeat the above structure for every public method.)
 
 ## Properties
 
@@ -229,7 +179,7 @@ const result = instance.methodName('value');
 
 ## Related
 
-- **Depends on:** [OtherClass](./OtherClass.md), [AnotherClass](./AnotherClass.md)
+- **Depends on:** [OtherClass](./OtherClass.md)
 - **Used by:** [ConsumerClass](./ConsumerClass.md)
 - **Test:** `tests/ClassName.test.ts`
 - **Source:** `src/ClassName.ts`
@@ -237,12 +187,10 @@ const result = instance.methodName('value');
 
 #### 4c. Types doc
 
-Write `docs/features/<package-dir>/types.md` for all exported types and interfaces:
-
 ```markdown
 ---
 module: "types"
-package: "@fliwright/<name>"
+package: "<package name>"
 source: "src/types.ts"
 generated: "<today's date YYYY-MM-DD>"
 ---
@@ -255,7 +203,7 @@ generated: "<today's date YYYY-MM-DD>"
 \```typescript
 type TypeName = string | { text: string; ancestor?: TypeName };
 \```
-Description of when and how this type is used.
+When/how this type is used.
 
 ## Interfaces
 
@@ -270,13 +218,13 @@ Description of when and how this type is used.
 
 #### 4d. Utility function docs
 
-For exported standalone functions (not in a class), group related functions into a single file:
+For exported standalone functions, group those from the same source file:
 
 ```markdown
 ---
-module: "utility-group-name"
-package: "@fliwright/<name>"
-source: "src/utilityFile.ts"
+module: "<source-file-name>"
+package: "<package name>"
+source: "src/<file>.ts"
 generated: "<today's date YYYY-MM-DD>"
 ---
 
@@ -284,32 +232,29 @@ generated: "<today's date YYYY-MM-DD>"
 
 ## `functionName(param: Type): ReturnType`
 
-Description of what this function does.
-
-**Parameters:**
+What this function does.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `param` | `Type` | Description |
 
 **Returns:** `ReturnType`
-
 **Example:**
 
 \```typescript
-import { functionName } from '@fliwright/package';
+import { functionName } from '<package>';
 const result = functionName('value');
 \```
 ```
 
 ### Step 5: Generate cross-cutting pipeline docs
 
-For each pipeline, write a markdown file using this structure:
+For each pipeline from Step 3, write a top-level markdown file:
 
 ```markdown
 ---
 feature: "<Pipeline Name>"
-packages: ["@fliwright/core", "..."]
+packages: ["<package>", "..."]
 status: implemented
 agent_accessible: <true | false>
 mcp_tool: "<tool name if applicable, or omit>"
@@ -324,16 +269,15 @@ generated: "<today's date>"
 
 1. **Step name** (`ClassName`): Description of what happens.
 2. **Step name** (`ClassName`): Description.
-3. ... continue for each stage.
 
 ## Agent Integration
 
-How an AI agent can invoke or benefit from this feature. Include MCP tool names if applicable.
+How an AI agent invokes/benefits from this. Include MCP tool names if applicable.
 
 ## Data Flow
 
 \```
-ASCII diagram showing the pipeline stages and data flow between components.
+ASCII diagram showing stages and data flow between components.
 \```
 
 ## Key Files
@@ -343,7 +287,7 @@ ASCII diagram showing the pipeline stages and data flow between components.
 
 ### Step 6: Generate index.md
 
-Write `docs/features/index.md` with exactly these five sections:
+Write `docs/features/index.md` with exactly these five sections. **Fill every row from the data derived in Steps 2–5** — do not hardcode entries:
 
 ```markdown
 ---
@@ -359,32 +303,25 @@ generated: "<today's date>"
 
 | Package | Description | Overview | Detailed Docs |
 |---------|-------------|----------|---------------|
-| `@fliwright/core` | Core SDK | [core/README.md](./core/README.md) | FliwrightDriver, Page, Locator, Assertion, MockManager, ... |
-| `@fliwright/mcp` | MCP Server | [mcp/README.md](./mcp/README.md) | fliwright_run, fliwright_get_failure, ... |
-| ... | ... | ... | ... |
+| `<pkg>` | <one-line> | [<dir>/README.md](./<dir>/README.md) | <comma-separated export names> |
 
 ## By Class
 
 | Class | Package | Description | Doc |
 |-------|---------|-------------|-----|
-| `FliwrightDriver` | core | Main orchestrator | [core/FliwrightDriver.md](./core/FliwrightDriver.md) |
-| `Page` | core | Page object model | [core/Page.md](./core/Page.md) |
-| `Locator` | core | Widget locator with actions | [core/Locator.md](./core/Locator.md) |
-| ... | ... | ... | ... |
+| `<Class>` | <pkg> | <one-line> | [<dir>/<Class>.md](./<dir>/<Class>.md) |
 
 ## By Feature Slice
 
 | Feature | Packages | Doc | Agent-Accessible | Status |
 |---------|----------|-----|------------------|--------|
-| Self-Healing Pipeline | core, bridge | [self-healing-pipeline.md](./self-healing-pipeline.md) | via MCP | Implemented |
-| ... | ... | ... | ... | ... |
+| <Pipeline> | <pkgs> | [<file>.md](./<file>.md) | <how> | Implemented |
 
 ## MCP Tool Quick Reference
 
-| Tool | Input | Output | Doc |
-|------|-------|--------|-----|
-| `fliwright_run` | testFile, vmServiceUrl?, testName?, cwd? | RunResult | [mcp/fliwright-run.md](./mcp/fliwright-run.md) |
-| ... | ... | ... | ... |
+| Tool | Input (key fields) | Output | Doc |
+|------|--------------------|--------|-----|
+| `<tool>` | <fields> | <result> | [mcp/<tool>.md](./mcp/<tool>.md) |
 
 ## Quick Start for AI Agents
 
@@ -393,6 +330,7 @@ generated: "<today's date>"
 3. To **generate tests**: ...
 4. To **record interactions**: ...
 5. To **manipulate state**: ...
+6. (add one bullet per major capability present in the code)
 ```
 
 ### Step 7: Update AGENTS.md
@@ -406,9 +344,9 @@ Check if `AGENTS.md` already contains a `## Feature Documentation` section. If i
 AI-consumable feature documentation lives in `docs/features/`. These docs summarize every implemented feature with full API signatures, type definitions, and usage examples, organized for fast lookup by AI agents.
 
 - **Start here:** [docs/features/index.md](./docs/features/index.md) — routing table by package and by feature slice, MCP tool quick reference, agent quick-start guide
-- **Per-package overviews:** [core/README.md](./docs/features/core/README.md) · [mcp/README.md](./docs/features/mcp/README.md) · [vitest/README.md](./docs/features/vitest/README.md) · [cli/README.md](./docs/features/cli/README.md) · [plugin-riverpod/README.md](./docs/features/plugin-riverpod/README.md) · [bridge/README.md](./docs/features/bridge/README.md)
-- **Per-class detailed docs:** Each package sub-directory contains one `.md` per exported class/utility — e.g., [core/FliwrightDriver.md](./docs/features/core/FliwrightDriver.md), [core/Page.md](./docs/features/core/Page.md)
-- **Cross-cutting pipelines:** [self-healing-pipeline.md](./docs/features/self-healing-pipeline.md) · [recording-pipeline.md](./docs/features/recording-pipeline.md) · [form-filling-pipeline.md](./docs/features/form-filling-pipeline.md) · [mcp-integration.md](./docs/features/mcp-integration.md)
+- **Per-package overviews:** each package has a `README.md` under `docs/features/<package>/`
+- **Per-class detailed docs:** one `.md` per exported class/tool/command inside each package directory
+- **Cross-cutting pipelines:** top-level `*-pipeline.md` / `*-integration.md` files
 
 Regenerate with `/document-features` when source code changes significantly.
 ```
@@ -417,92 +355,12 @@ Do NOT modify `CLAUDE.md` — it only references `AGENTS.md`.
 
 ---
 
-## Per-Package Extraction Guide
-
-This section tells you what to look for in each package. Use it as a checklist to ensure completeness.
-
-### @fliwright/core (`docs/features/core/`)
-
-Sub-directory with per-class docs. The README.md links to each class file. Generate these files:
-
-Read `packages/fliwright-core/src/index.ts` to get the full export list. The main modules to document:
-
-Sub-directory with per-class docs. The README.md links to each class file. Generate these files:
-
-- `FliwrightDriver.md` — connect, disconnect, page, mock, healing, recorder, state, plugins
-- `Page.md` — locator, waitFor, formHelper
-- `Locator.md` — click, longPress, drag, pinch, type, fill, scrollIntoView, count, isVisible
-- `Selector.md` — toWireFormat, toWireParams, selector formats (text=, key=, byType=)
-- `Assertion.md` — toBeVisible, toHaveText, toContainText, toBeEnabled, toBeDisabled, .not negation, healing integration; include `createExpect` function and `AssertionError` class
-- `MockManager.md` — route, removeRoute, clear, setPassthrough, getCalls
-- `SelfHealingEngine.md` — recordSuccess, tryHeal, getReports, enabled
-- `SnapshotStore.md` — save, load, list
-- `RecorderController.md` — start, stop, getOperations, getRawEvents
-- `CodeGenerator.md` — generate (TypeScript output)
-- `DartCodeGenerator.md` — generate (Dart integration_test output)
-- `AssertionSuggester.md` — suggest
-- `FormHelper.md` — fill, analyze, fillFields
-- `SemanticInferrer.md` — infer
-- `FakerGenerator.md` — generate
-- `SkillRegistry.md` — register, match, clear
-- `JsonRuleLoader.md` — loadFromFile, loadFromDir, autoDiscover
-- `SelectorResolver.md` — resolve (role mapping), includes `resolveSelector` function
-- `PluginRegistry.md` — register, resolve, getStateAdapter, lifecycle hooks
-- `Protocol.md` — JSON-RPC 2.0 message handling, createRequest, parseResponse
-- `VMServiceConnector.md` — WebSocket connection, isolate management, onEvent
-- `EventAggregator.md` — aggregate (raw events → semantic operations)
-- `FailureCollector.md` — collect (screenshot + widget tree + source)
-- `MultiDimensionalHealingStrategy.md` — heal, score, scoreDimensions, ngramSimilarity, StrategyWeights
-- `types.md` — All exported types from types.ts and interfaces/*.ts
-
-### @fliwright/mcp (`docs/features/mcp/`)
-
-- `README.md` — Package overview with tool listing
-- `fliwright-run.md` — Detailed: input schema, output schema, error handling, usage
-- `fliwright-get-failure.md` — Detailed: failure entry structure, healing suggestion format
-- `fliwright-generate-test.md` — Detailed: source parsing, widget extraction, code template
-- `test-report.md` — Detailed: resource URI, data format
-
-### @fliwright/vitest (`docs/features/vitest/`)
-
-- `README.md` — Package overview
-- `test.md` — test() fixture, createFliwrightTest, auto-driver lifecycle
-- `expect.md` — expect() assertion with healing + failure context writing
-
-### @fliwright/cli (`docs/features/cli/`)
-
-- `README.md` — Package overview with config system (fliwright.config.ts via jiti, VM URL discovery)
-- `run.md` — Detailed: run command, all options, reporter formats, Vitest integration
-- `init.md` — Detailed: generated files, config template
-- `doctor.md` — Detailed: all environment checks
-- `record.md` — Detailed: recording options, code generation
-
-### @fliwright/plugin-riverpod (`docs/features/plugin-riverpod/`)
-
-- `README.md` — Package overview
-- `RiverpodStateAdapter.md` — Detailed: read, write, watch, unwatch, listProviders, override, handleEvent
-
-### fliwright-bridge (`docs/features/bridge/`)
-
-- `README.md` — Package overview, FliwrightBridge lifecycle, ExtensionRegistry
-- `GestureExtension.md` — Detailed: click, gesture (longPress/drag/pinch), coordinate system
-- `InspectExtension.md` — Detailed: selector syntax, widget tree traversal, WidgetInfo format
-- `TypeExtension.md` — Detailed: text input simulation, replaceAll, charDelay
-- `ScrollExtension.md` — Detailed: Scrollable.ensureVisible, alignment, duration
-- `SnapshotExtension.md` — Detailed: interactive widget types captured, metadata fields
-- `RecordingExtension.md` — Detailed: pointer event capture, text polling, hitTest reverse lookup
-- `FormExtractExtension.md` — Detailed: TextField/TextFormField/EditableText extraction, deduplication
-- `RiverpodExtension.md` — Detailed: ProviderContainer setup, all provider operations
-- `MockServerExtension.md` — Detailed: route matching, wildcard, passthrough, call logging
-- `HttpOverrides.md` — Detailed: HTTP interception mechanism
-
----
-
 ## Common Mistakes
 
+- **Hardcoding inventories in the skill or output.** This is the #1 mistake. File lists, class lists, tool lists, command lists — all of them drift. Derive every target from source at run time using the Step 2 rules. This skill intentionally contains no such list.
 - **Documenting planned features.** Only document what exists in source code. If a PRD feature has no implementation, omit it. The `status` field should reflect what the code actually does.
 - **Skipping cross-cutting docs.** The pipeline docs are the highest-value output for AI agents — they explain how components work together, which isn't obvious from reading individual package docs.
 - **Omitting YAML frontmatter.** Agents use frontmatter metadata for filtering and routing. Every file must have it.
 - **Guessing signatures.** Read the actual source code. Don't rely on memory or assumptions — method signatures may have changed since the last documentation run.
-- **Overwriting CLAUDE.md.** Only append the reference line. Preserve all existing content.
+- **Overwriting CLAUDE.md.** Only AGENTS.md gets a `## Feature Documentation` section (appended/updated). CLAUDE.md only references AGENTS.md — leave it alone.
 - **Writing prose instead of tables.** AI agents parse structured data (tables, lists, code blocks) far more reliably than paragraphs. Use tables for API surfaces, lists for steps, code blocks for examples.

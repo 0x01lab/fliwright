@@ -94,3 +94,43 @@ export {
 export { DartCodeGenerator } from './DartCodeGenerator.js';
 export { AssertionSuggester } from './AssertionSuggester.js';
 export type { AssertionSuggestion } from './AssertionSuggester.js';
+export type {
+  AiResponseFormat,
+  AiProviderName,
+  AiCacheMode,
+  JsonSchemaType,
+  JsonSchema,
+  AiImageInput,
+  AiFileInput,
+  AiRequest,
+  AiGenerateRequest,
+  AiVisionOptions,
+  AiVisibleOptions,
+  AiInspectRequest,
+  AiClassifyRequest,
+  AiResponse,
+  AiAdapterResponse,
+  AiInvocationContext,
+  AiAdapter,
+  AiRuntimeContext,
+  AiRuntimeConfig,
+  AiCliAdapterOptions,
+  AiArtifactMeta,
+} from './ai/types.js';
+export {
+  AiInvocationError,
+  AiDisabledError,
+  AiTimeoutError,
+  AiParseError,
+  AiSchemaValidationError,
+  AiAssertionError,
+} from './ai/errors.js';
+export { validateJsonSchema } from './ai/AiSchemaValidator.js';
+export { AiArtifactStore } from './ai/AiArtifactStore.js';
+export type { AiArtifactPathInput } from './ai/AiArtifactStore.js';
+export { MockAiAdapter } from './ai/adapters/MockAiAdapter.js';
+export type { MockAiAdapterHandler, MockAiAdapterItem } from './ai/adapters/MockAiAdapter.js';
+export { AiRuntime } from './ai/AiRuntime.js';
+export { CliJsonAdapter } from './ai/adapters/CliJsonAdapter.js';
+export { ClaudeCliAdapter } from './ai/adapters/ClaudeCliAdapter.js';
+export { CodexCliAdapter } from './ai/adapters/CodexCliAdapter.js';
