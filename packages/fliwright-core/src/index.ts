@@ -134,3 +134,4 @@ export { AiRuntime } from './ai/AiRuntime.js';
 export { CliJsonAdapter } from './ai/adapters/CliJsonAdapter.js';
 export { ClaudeCliAdapter } from './ai/adapters/ClaudeCliAdapter.js';
 export { CodexCliAdapter } from './ai/adapters/CodexCliAdapter.js';
+export { resolveAiConfig } from './ai/config.js';
