@@ -57,6 +57,9 @@ export class RecordedSelectorResolver {
     if (disambiguated) return disambiguated;
 
     const nthQuery = await this.nthFallback(base, widget, initial);
+    if (nthQuery === null) {
+      return { query: base, ambiguous: true, matchCount: initial.count };
+    }
     return { query: nthQuery, ambiguous: true, matchCount: initial.count };
   }
 
@@ -122,19 +125,19 @@ export class RecordedSelectorResolver {
     return best;
   }
 
-  /** Index the target inside the matched set and return base.nth(index). */
+  /** Index the target inside the matched set and return base.nth(index), or null if not found. */
   private async nthFallback(
     base: SelectorQuery,
     widget: Partial<WidgetInfo>,
     initial: ResolveOutcome,
-  ): Promise<SelectorQuery> {
+  ): Promise<SelectorQuery | null> {
     let matches = initial.matches;
     if (matches.length < initial.count) {
       const refill = await this.countMatches(base, NTH_LIMIT);
       if (refill) matches = refill.matches;
     }
     const foundIndex = matches.findIndex((m) => m.id === widget.id);
-    const index = foundIndex >= 0 ? foundIndex : 0;
-    return { ...base, position: { nth: index } };
+    if (foundIndex < 0) return null;
+    return { ...base, position: { nth: foundIndex } };
   }
 }

@@ -87,6 +87,27 @@ describe('RecordedSelectorResolver', () => {
     expect(result.ambiguous).toBe(true);
   });
 
+  it('returns bare base (ambiguous) when the target is not in the matched set', async () => {
+    const widget: Partial<WidgetInfo> = {
+      id: '999', type: 'GestureDetector', properties: {},
+    };
+    const r = resolver(widget, (q: any) => {
+      if (q.position?.nth != null) return { count: 1 };
+      // Target id '999' is NOT in the returned matches.
+      return {
+        count: 2,
+        matches: [
+          { id: '1', type: 'GestureDetector', properties: {} },
+          { id: '2', type: 'GestureDetector', properties: {} },
+        ],
+      };
+    });
+    const result = await r.resolveUniqueSelector(op);
+    expect(result.query).toEqual({ match: { type: 'GestureDetector' } });
+    expect(result.ambiguous).toBe(true);
+    expect(result.matchCount).toBe(2);
+  });
+
   it('survives a resolve rejection by falling back to nth/ambiguous', async () => {
     const widget: Partial<WidgetInfo> = { id: '1', type: 'GestureDetector', properties: {} };
     const sendRequest = vi.fn().mockImplementation((method: string) => {
