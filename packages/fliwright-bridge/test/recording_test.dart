@@ -1,8 +1,53 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
+import 'package:fliwright_bridge/src/extensions/inspect.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('InspectExtension enrichment', () {
+    testWidgets(
+        'extractWidgetInfo captures descendant text, tooltip, and keyed ancestors',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            key: const ValueKey('scaffoldKey'),
+            body: GestureDetector(
+              key: const ValueKey('tapTarget'),
+              child: const Icon(Icons.add),
+            ),
+          ),
+        ),
+      );
+      final element = tester.element(find.byKey(const ValueKey('tapTarget')));
+
+      final info = InspectExtension.extractWidgetInfo(
+        element,
+        includeDescendantText: true,
+        includeDescendantIcon: true,
+        includeTooltip: true,
+        includeKeyedAncestors: true,
+      )!;
+
+      expect(info['type'], 'GestureDetector');
+      expect(info['descendantIcon'], isNotNull);
+      expect((info['descendantIcon'] as Map)['codePoint'], Icons.add.codePoint);
+      final ancestors = info['keyedAncestors'] as List;
+      expect(ancestors.any((a) => a['key'] == 'scaffoldKey'), isTrue);
+    });
+
+    testWidgets('findDescendantText returns the inner Text of a wrapper',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+            home: Scaffold(body: GestureDetector(child: const Text('Login')))),
+      );
+      final element = tester.element(find.byType(GestureDetector));
+      expect(InspectExtension.findDescendantText(element), 'Login');
+    });
+  });
 
   group('RecordingExtension', () {
     setUp(() async {

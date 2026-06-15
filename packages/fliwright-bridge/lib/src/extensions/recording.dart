@@ -112,7 +112,13 @@ class RecordingExtension {
     if (best == null) return {'widget': <String, dynamic>{}};
     final widget = best!.widget;
     debugPrint('[fliwright] hitTest selected: ${widget.runtimeType}');
-    final info = InspectExtension.extractWidgetInfo(best!);
+    final info = InspectExtension.extractWidgetInfo(
+      best!,
+      includeDescendantText: true,
+      includeDescendantIcon: true,
+      includeTooltip: true,
+      includeKeyedAncestors: true,
+    );
     return {'widget': info};
   }
 
