@@ -129,3 +129,6 @@ export type { AiArtifactPathInput } from './ai/AiArtifactStore.js';
 export { MockAiAdapter } from './ai/adapters/MockAiAdapter.js';
 export type { MockAiAdapterHandler, MockAiAdapterItem } from './ai/adapters/MockAiAdapter.js';
 export { AiRuntime } from './ai/AiRuntime.js';
+export { CliJsonAdapter } from './ai/adapters/CliJsonAdapter.js';
+export { ClaudeCliAdapter } from './ai/adapters/ClaudeCliAdapter.js';
+export { CodexCliAdapter } from './ai/adapters/CodexCliAdapter.js';
