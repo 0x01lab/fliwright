@@ -1,5 +1,6 @@
-import type { RecordedOperation, CodegenOptions } from './types.js';
+import type { RecordedOperation, CodegenOptions, ResolvedSelector } from './types.js';
 import { DartCodeGenerator } from './DartCodeGenerator.js';
+import { serializeSelectorQuery } from './SelectorSerializer.js';
 
 const DEFAULT_IMPORT = "@fliwright/vitest";
 const DEFAULT_TEST_NAME = 'recorded test';
@@ -7,7 +8,7 @@ const DEFAULT_TEST_NAME = 'recorded test';
 export class CodeGenerator {
   generate(
     operations: RecordedOperation[],
-    selectors: Map<number, string>,
+    selectors: Map<number, ResolvedSelector>,
     options?: CodegenOptions,
   ): string {
     if (options?.lang === 'dart') {
@@ -35,24 +36,25 @@ export class CodeGenerator {
     for (let i = 0; i < operations.length; i++) {
       const op = operations[i];
       if (op.status === 'ignored') continue;
-      const selector = selectors.get(i) ?? "{ type: 'Widget' }";
-      const locator = `page.locator(${selector})`;
+      const resolved = selectors.get(i) ?? { query: { match: { type: 'Widget' } }, ambiguous: true, matchCount: 0 };
+      const locator = `page.locator(${serializeSelectorQuery(resolved.query)})`;
+      const lead = resolved.ambiguous ? `  // ambiguous: matched ${resolved.matchCount}, positional fallback\n` : '';
 
       switch (op.kind) {
         case 'tap':
-          lines.push(`  await ${locator}.click();`);
+          lines.push(`${lead}  await ${locator}.click();`);
           break;
         case 'longPress':
-          lines.push(`  await ${locator}.longPress({ duration: ${op.duration} });`);
+          lines.push(`${lead}  await ${locator}.longPress({ duration: ${op.duration} });`);
           break;
         case 'drag':
-          lines.push(`  await ${locator}.drag(${op.delta!.x}, ${op.delta!.y});`);
+          lines.push(`${lead}  await ${locator}.drag(${op.delta!.x}, ${op.delta!.y});`);
           break;
         case 'type':
           if (op.action === 'replace') {
-            lines.push(`  await ${locator}.fill('${escapeString(op.text ?? '')}');`);
+            lines.push(`${lead}  await ${locator}.fill('${escapeString(op.text ?? '')}');`);
           } else {
-            lines.push(`  await ${locator}.type('${escapeString(op.text ?? '')}');`);
+            lines.push(`${lead}  await ${locator}.type('${escapeString(op.text ?? '')}');`);
           }
           break;
       }

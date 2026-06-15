@@ -1,13 +1,14 @@
 import { CodeGenerator } from './CodeGenerator.js';
 import { EventAggregator } from './EventAggregator.js';
-import { resolveSelector } from './SelectorResolver.js';
+import { RecordedSelectorResolver } from './RecordedSelectorResolver.js';
+import { serializeSelectorQuery } from './SelectorSerializer.js';
 import type {
   CodegenOptions,
   RawInputEvent,
   RecordedOperation,
   RecordingFrame,
   RecordingScreenshot,
-  WidgetInfo,
+  ResolvedSelector,
   SendRequest,
 } from './types.js';
 
@@ -43,13 +44,16 @@ export class RecorderController {
   private screenshotSamplingActive = false;
   private unsubscribe: (() => void) | null = null;
   private activeOptions: RecorderStartOptions | undefined;
-  private lastSelectors = new Map<number, string>();
+  private lastSelectors = new Map<number, ResolvedSelector>();
   private lastCodegenOptions: CodegenOptions | undefined;
+  private readonly resolver: RecordedSelectorResolver;
 
   constructor(
     private readonly sendRequest: SendRequest,
     private readonly onEvent: OnEvent,
-  ) {}
+  ) {
+    this.resolver = new RecordedSelectorResolver(sendRequest);
+  }
 
   async start(options?: RecorderStartOptions): Promise<void> {
     this.rawEvents = [];
@@ -106,12 +110,13 @@ export class RecorderController {
 
     await Promise.allSettled(this.screenshotTasks);
     this.operations = this.aggregateOperations();
-    const selectors = new Map<number, string>();
+    const selectors = new Map<number, ResolvedSelector>();
     for (let i = 0; i < this.operations.length; i++) {
-      const selector = await this.resolveSelector(this.operations[i]);
-      selectors.set(i, selector);
-      this.classifyOperationWithSelector(i, selector);
-      this.setFrameSelector(i, selector);
+      const resolved = await this.resolver.resolveUniqueSelector(this.operations[i]);
+      selectors.set(i, resolved);
+      const display = serializeSelectorQuery(resolved.query);
+      this.classifyOperationWithSelector(i, display);
+      this.setFrameSelector(i, display);
     }
     this.lastSelectors = selectors;
     this.lastCodegenOptions = options;
@@ -162,21 +167,6 @@ export class RecorderController {
       if (!normalized.includes('already') && !normalized.includes('subscrib')) {
         throw error;
       }
-    }
-  }
-
-  private async resolveSelector(op: RecordedOperation): Promise<string> {
-    try {
-      const result = await this.sendRequest('ext.fliwright.hitTest', {
-        x: op.position.x,
-        y: op.position.y,
-      }) as { widget?: Partial<WidgetInfo> };
-
-      const widget = result.widget;
-      if (!widget?.type) return "{ type: 'Widget' }";
-      return resolveSelector(widget);
-    } catch {
-      return "{ type: 'Widget' }";
     }
   }
 

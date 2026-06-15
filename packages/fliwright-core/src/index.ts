@@ -1,6 +1,8 @@
 export type {
   ProviderInfo,
   WidgetInfo,
+  KeyedAncestor,
+  ResolvedSelector,
   WidgetSnapshot,
   AgentFindQuery,
   AgentSnapshotOptions,
@@ -81,7 +83,9 @@ export { SemanticInferrer } from './SemanticInferrer.js';
 export { FakerGenerator } from './FakerGenerator.js';
 export { SkillRegistry } from './SkillRegistry.js';
 export { JsonRuleLoader } from './JsonRuleLoader.js';
-export { SelectorResolver, resolveSelector } from './SelectorResolver.js';
+export { SelectorResolver, buildBaseSelector } from './SelectorResolver.js';
+export { serializeSelectorQuery } from './SelectorSerializer.js';
+export { RecordedSelectorResolver } from './RecordedSelectorResolver.js';
 export {
   selectorQuerySchema,
   matchCriteriaSchema,
@@ -113,6 +117,7 @@ export type {
   AiInvocationContext,
   AiAdapter,
   AiRuntimeContext,
+  AiCallContext,
   AiRuntimeConfig,
   AiCliAdapterOptions,
   AiArtifactMeta,
@@ -135,3 +140,4 @@ export { CliJsonAdapter } from './ai/adapters/CliJsonAdapter.js';
 export { ClaudeCliAdapter } from './ai/adapters/ClaudeCliAdapter.js';
 export { CodexCliAdapter } from './ai/adapters/CodexCliAdapter.js';
 export { resolveAiConfig } from './ai/config.js';
+export { ai, configureAi } from './ai/capability.js';
