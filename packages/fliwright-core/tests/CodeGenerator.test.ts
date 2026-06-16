@@ -81,7 +81,7 @@ describe('CodeGenerator', () => {
     });
     expect(code).toContain("import { test, expect, beforeEach } from '@fliwright/vitest'");
     expect(code).toContain("beforeEach(async ({ page }) => {");
-    expect(code).toContain("await page.navigate('/home')");
+    expect(code).toContain("await page.resetToHome({ homeRoute: '/home' })");
   });
 
   it('escapes string literals in generated code', () => {

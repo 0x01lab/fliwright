@@ -177,7 +177,7 @@ export function handleGenerateTest(
 
   if (resetToHomeBeforeEach) {
     lines.push('beforeEach(async ({ page }) => {');
-    lines.push(`  await page.navigate('${escapeStr(homeRoute)}');`);
+    lines.push(`  await page.resetToHome({ homeRoute: '${escapeStr(homeRoute)}' });`);
     lines.push('});');
     lines.push('');
   }

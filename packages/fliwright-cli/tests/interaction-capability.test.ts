@@ -4,6 +4,7 @@ import {
   diagnosticsInteraction,
   findInteraction,
   hotReloadAndSnapInteraction,
+  navigateInteraction,
   observeInteraction,
   snapInteraction,
   tapInteraction,
@@ -43,6 +44,7 @@ function createDriver(): {
   fill: ReturnType<typeof vi.fn>;
   dismissModal: ReturnType<typeof vi.fn>;
   waitForNetworkIdle: ReturnType<typeof vi.fn>;
+  resetRouteStack: ReturnType<typeof vi.fn>;
 } {
   const sendRequest = vi.fn().mockResolvedValue({ success: true });
   const pageSnapshot = vi.fn().mockResolvedValue(snapshot);
@@ -50,6 +52,7 @@ function createDriver(): {
   const fill = vi.fn().mockResolvedValue(undefined);
   const dismissModal = vi.fn().mockResolvedValue(undefined);
   const waitForNetworkIdle = vi.fn().mockResolvedValue(undefined);
+  const resetRouteStack = vi.fn().mockResolvedValue(undefined);
 
   return {
     sendRequest,
@@ -58,6 +61,7 @@ function createDriver(): {
     fill,
     dismissModal,
     waitForNetworkIdle,
+    resetRouteStack,
     driver: {
       sendRequest,
       reloadSources: vi.fn().mockResolvedValue({ type: 'Success' }),
@@ -77,6 +81,7 @@ function createDriver(): {
         waitFor: vi.fn().mockResolvedValue(undefined),
         dismissModal,
         waitForNetworkIdle,
+        resetRouteStack,
         getByKey: vi.fn(() => ({ click, fill })),
         getByText: vi.fn(() => ({ click, fill })),
         getByType: vi.fn(() => ({ click, fill })),
@@ -167,6 +172,55 @@ describe('CLI interaction capabilities', () => {
     expect(waitForNetworkIdle).toHaveBeenCalledWith({
       quietMs: 250,
       timeout: 2000,
+    });
+  });
+
+  it('navigates and resets route stacks through page APIs', async () => {
+    const { driver, resetRouteStack } = createDriver();
+
+    const result = await navigateInteraction(driver, {
+      action: 'resetRouteStack',
+      path: '/login',
+      waitUntil: 'settled',
+      settleTimeout: 2500,
+      includeSnapshot: true,
+    });
+
+    expect(resetRouteStack).toHaveBeenCalledWith('/login', {
+      extra: undefined,
+      waitUntil: 'settled',
+      settleTimeout: 2500,
+      stableFrames: undefined,
+      waitFor: undefined,
+      waitForTimeout: undefined,
+      throwOnSettleTimeout: undefined,
+    });
+    expect(result).toMatchObject({
+      success: true,
+      action: 'resetRouteStack',
+      path: '/login',
+      snapshot,
+    });
+  });
+
+  it('falls back to navigation RPCs and settle when page helpers are absent', async () => {
+    const { driver, sendRequest } = createDriver();
+    delete driver.page.resetRouteStack;
+
+    await navigateInteraction(driver, {
+      action: 'resetRouteStack',
+      path: '/home',
+      waitUntil: 'settled',
+      settleTimeout: 1500,
+      stableFrames: 2,
+    });
+
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.resetRouteStack', {
+      path: '/home',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.settle', {
+      timeout: '1500',
+      stableFrames: '2',
     });
   });
 

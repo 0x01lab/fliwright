@@ -63,7 +63,7 @@ describe('SandboxService', () => {
     expect(routeFlutter).not.toHaveBeenCalled();
   });
 
-  it('falls back to the local default rule when Flutter route ids have no rule metadata', async () => {
+  it('treats Flutter route ids without rule metadata as stale for multi-rule endpoints', async () => {
     const service = new SandboxService();
     const listFlutterRoutes = vi.fn().mockResolvedValue([
       { id: 'flutter-route', method: 'GET', path: '/v1/token' },
@@ -74,14 +74,109 @@ describe('SandboxService', () => {
       discovery(),
     );
 
-    expect(result.applied).toMatchObject([
+    expect(result.applied).toHaveLength(0);
+    expect(result.unmatched).toMatchObject([
+      { id: 'flutter-route', method: 'GET', path: '/v1/token' },
+    ]);
+  });
+
+  it('adopts Flutter route ids without rule metadata for single-rule endpoints', async () => {
+    const service = new SandboxService();
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'flutter-route', method: 'GET', path: '/v1/token' },
+    ]);
+    const result = discovery();
+    result.endpoints[0]!.endpointFile.rules = [
+      { name: 'success', status: 200 },
+    ];
+
+    const sync = await service.syncFromFlutter(
+      { mock: { listFlutterRoutes } } as any,
+      result,
+    );
+
+    expect(sync.applied).toMatchObject([
       {
         endpoint: '/v1/token',
         method: 'GET',
-        ruleName: 'error',
+        ruleName: 'success',
       },
     ]);
-    expect(result.unmatched).toHaveLength(0);
+    expect(sync.unmatched).toHaveLength(0);
+  });
+
+  it('rebuilds stale Flutter cache from workspace defaults after mocks and VM are ready', async () => {
+    const service = new SandboxService();
+    const clearFlutterRoutes = vi.fn().mockResolvedValue(undefined);
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:deleted-rule', method: 'GET', path: '/v1/token' },
+    ]);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
+    const stale = vi.fn();
+
+    const result = await service.reconcileFromFlutter(
+      { mock: { listFlutterRoutes, clearFlutterRoutes, routeFlutter }, sendRequest } as any,
+      discovery(),
+      {
+        applyDefaultRules: true,
+        onStaleRoutes: stale,
+      },
+    );
+
+    expect(result.rebuilt).toBe(true);
+    expect(stale).toHaveBeenCalledOnce();
+    expect(clearFlutterRoutes).toHaveBeenCalledOnce();
+    expect(result.reconciled).toMatchObject([
+      { endpoint: '/v1/token', method: 'GET', ruleName: 'error' },
+    ]);
+    expect(routeFlutter).toHaveBeenCalledWith('/v1/token', expect.objectContaining({
+      id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:error',
+    }));
+    expect(service.getAppliedRules()).toMatchObject([
+      { endpoint: '/v1/token', method: 'GET', ruleName: 'error' },
+    ]);
+  });
+
+  it('fills missing endpoints while preserving valid Flutter cached routes', async () => {
+    const service = new SandboxService();
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:error', method: 'GET', path: '/v1/token' },
+    ]);
+    const sendRequest = httpReadySendRequest([
+      { method: 'GET', path: '/v1/token' },
+      { method: 'POST', path: '/v1/profile' },
+    ]);
+    const result = discovery();
+    result.endpoints.push({
+      kind: 'endpoint',
+      uri: Uri.file('/tmp/profile.json'),
+      indexed: true,
+      endpointFile: {
+        version: 1,
+        name: 'Profile',
+        method: 'POST',
+        endpoint: '/v1/profile',
+        rules: [{ name: 'success', status: 201 }],
+      },
+    });
+
+    const sync = await service.reconcileFromFlutter(
+      { mock: { listFlutterRoutes, routeFlutter }, sendRequest } as any,
+      result,
+      { applyDefaultRules: true },
+    );
+
+    expect(sync.applied).toMatchObject([
+      { endpoint: '/v1/token', method: 'GET', ruleName: 'error' },
+    ]);
+    expect(sync.reconciled).toMatchObject([
+      { endpoint: '/v1/profile', method: 'POST', ruleName: 'success' },
+    ]);
+    expect(routeFlutter).toHaveBeenCalledTimes(1);
+    expect(routeFlutter).toHaveBeenCalledWith('/v1/profile', expect.objectContaining({ method: 'POST' }));
+    expect(service.getAppliedRules()).toHaveLength(2);
   });
 
   it('accepts wrapped VM service extension payloads', async () => {
@@ -154,7 +249,7 @@ describe('SandboxService', () => {
   it('stops only the currently active rule for an endpoint', async () => {
     const routeFlutter = vi.fn().mockResolvedValue(undefined);
     const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
-    const removeRoute = vi.fn().mockResolvedValue(undefined);
+    const removeFlutterRoute = vi.fn().mockResolvedValue(undefined);
     const listFlutterRoutes = vi.fn().mockResolvedValue([]);
     const service = new SandboxService();
     const success = mockRule('success');
@@ -162,17 +257,31 @@ describe('SandboxService', () => {
 
     await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, success);
 
-    await expect(service.stopRule({ mock: { removeRoute, listFlutterRoutes } } as any, error)).resolves.toBe(false);
-    expect(removeRoute).not.toHaveBeenCalled();
+    await expect(service.stopRule({ mock: { removeFlutterRoute, listFlutterRoutes } } as any, error)).resolves.toBe(false);
+    expect(removeFlutterRoute).not.toHaveBeenCalled();
     expect(service.getAppliedRules()).toHaveLength(1);
 
-    await expect(service.stopRule({ mock: { removeRoute, listFlutterRoutes } } as any, success)).resolves.toBe(true);
-    expect(removeRoute).toHaveBeenCalledWith('/v1/token', 'GET');
+    await expect(service.stopRule({ mock: { removeFlutterRoute, listFlutterRoutes } } as any, success)).resolves.toBe(true);
+    expect(removeFlutterRoute).toHaveBeenCalledWith('/v1/token', 'GET');
+    expect(service.getAppliedRules()).toHaveLength(0);
+  });
+
+  it('stops an applied rule through the Flutter removeRoute API even before Flutter mode is established', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const removeFlutterRoute = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
+    const service = new SandboxService();
+    const success = mockRule('success');
+
+    await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, success);
+
+    await expect(service.stopRule({ mock: { removeFlutterRoute } } as any, success)).resolves.toBe(true);
+    expect(removeFlutterRoute).toHaveBeenCalledWith('/v1/token', 'GET');
     expect(service.getAppliedRules()).toHaveLength(0);
   });
 
   it('stops a Flutter route even when local active state was not recorded', async () => {
-    const removeRoute = vi.fn().mockResolvedValue(undefined);
+    const removeFlutterRoute = vi.fn().mockResolvedValue(undefined);
     const listFlutterRoutes = vi.fn().mockResolvedValue([
       {
         id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success',
@@ -182,10 +291,10 @@ describe('SandboxService', () => {
     ]);
     const service = new SandboxService();
 
-    await expect(service.stopRule({ mock: { removeRoute, listFlutterRoutes } } as any, mockRule('success')))
+    await expect(service.stopRule({ mock: { removeFlutterRoute, listFlutterRoutes } } as any, mockRule('success')))
       .resolves.toBe(true);
 
-    expect(removeRoute).toHaveBeenCalledWith('/v1/token', 'GET');
+    expect(removeFlutterRoute).toHaveBeenCalledWith('/v1/token', 'GET');
   });
 
   it('applies index default rules and skips invalid files', async () => {
@@ -360,14 +469,28 @@ describe('SandboxService', () => {
   it('clears routes and tracked state', async () => {
     const routeFlutter = vi.fn().mockResolvedValue(undefined);
     const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
-    const clear = vi.fn().mockResolvedValue(undefined);
+    const clearFlutterRoutes = vi.fn().mockResolvedValue(undefined);
     const service = new SandboxService();
     await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, mockRule('success'));
 
-    const count = await service.clear({ mock: { clear } } as any);
+    const count = await service.clear({ mock: { clearFlutterRoutes } } as any);
 
     expect(count).toBe(1);
-    expect(clear).toHaveBeenCalledOnce();
+    expect(clearFlutterRoutes).toHaveBeenCalledOnce();
+    expect(service.getAppliedRules()).toHaveLength(0);
+  });
+
+  it('clears routes through the Flutter clearRoutes API even before Flutter mode is established', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const clearFlutterRoutes = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
+    const service = new SandboxService();
+    await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, mockRule('success'));
+
+    const count = await service.clear({ mock: { clearFlutterRoutes } } as any);
+
+    expect(count).toBe(1);
+    expect(clearFlutterRoutes).toHaveBeenCalledOnce();
     expect(service.getAppliedRules()).toHaveLength(0);
   });
 });

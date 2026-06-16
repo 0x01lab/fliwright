@@ -26,7 +26,7 @@ export class CodeGenerator {
     if (options?.resetToHomeBeforeEach) {
       const homeRoute = options.homeRoute ?? '/';
       lines.push('beforeEach(async ({ page }) => {');
-      lines.push(`  await page.navigate('${escapeString(homeRoute)}');`);
+      lines.push(`  await page.resetToHome({ homeRoute: '${escapeString(homeRoute)}' });`);
       lines.push('});');
       lines.push('');
     }

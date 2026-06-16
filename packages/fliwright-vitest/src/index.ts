@@ -59,7 +59,7 @@ type FliwrightHookContext = {
 type FliwrightHook = (context: FliwrightHookContext, suite: unknown) => unknown | Promise<unknown>;
 
 export function createFliwrightTest(config: FliwrightConfig) {
-  const fliwrightTest = vitestTest.extend<{ page: Page; driver: FliwrightDriver; ai: AiRuntime }>({
+  const fliwrightTest = vitestTest.extend<{ page: Page; driver: FliwrightDriver; aiRuntime: AiRuntime }>({
     driver: async ({ task }, use) => {
       const driver = await getSharedDriver(config);
       const testName = getTestName(task);
@@ -126,7 +126,7 @@ export function createFliwrightTest(config: FliwrightConfig) {
       // Restore original sendRequest
       if (origSendRequest) (driver as any).sendRequest = origSendRequest;
     },
-    ai: async ({ task }, use) => {
+    aiRuntime: async ({ task }, use) => {
       const driver = await getSharedDriver(config);
       const testName = getTestName(task);
       const runtime = new AiRuntime(resolveAiConfig(config.ai), {

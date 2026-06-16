@@ -120,6 +120,9 @@ class FileMockRuleStorage implements MockRuleStorage {
 
 /// In-process mock route table shared by VM Service extensions and interceptors.
 class MockRuleStore {
+  static int _nextDebugId = 1;
+
+  final int debugId = _nextDebugId++;
   final Map<String, MockRoute> _routes = {};
   final MockRuleStorage? _storage;
 
@@ -142,6 +145,7 @@ class MockRuleStore {
   }
 
   Future<bool> removeRoute({String? id, String? path, String? method}) async {
+    await loadFromStorage();
     final before = _routes.length;
     if (id != null) {
       _routes.removeWhere((_, route) => route.id == id);
@@ -158,8 +162,8 @@ class MockRuleStore {
   }
 
   Future<int> clearRoutes() async {
+    await loadFromStorage();
     final count = _routes.length;
-    if (count == 0) return 0;
     _routes.clear();
     await _persist();
     return count;

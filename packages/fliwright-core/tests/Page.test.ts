@@ -102,6 +102,103 @@ describe('Page', () => {
     });
   });
 
+  it('settle sends stable frame options and throws on settle timeout when requested', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      success: true,
+      timedOut: true,
+      settledAfterMs: 250,
+    });
+    const page = new Page(sendRequest);
+
+    await expect(page.settle({
+      timeout: 250,
+      stableFrames: 4,
+      throwOnTimeout: true,
+    })).rejects.toThrow('settle timed out after 250ms');
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.settle', {
+      timeout: '250',
+      stableFrames: '4',
+    });
+  });
+
+  it('goto navigates and waits for the destination to settle by default', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    await page.goto('/login', {
+      extra: { from: 'test' },
+      settleTimeout: 4000,
+      stableFrames: 2,
+    });
+
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.navigate', {
+      path: '/login',
+      extra: JSON.stringify({ from: 'test' }),
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.settle', {
+      timeout: '4000',
+      stableFrames: '2',
+    });
+  });
+
+  it('goto can wait for a selector before settling', async () => {
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.resolve') {
+        return {
+          matches: [{ id: '1', type: 'Text', text: 'Login', rect: { x: 0, y: 0, width: 100, height: 20 } }],
+          count: 1,
+        };
+      }
+      return { success: true };
+    });
+    const page = new Page(sendRequest);
+
+    await page.goto('/login', {
+      waitFor: { text: 'Login' },
+      waitForTimeout: 1000,
+      settleTimeout: 1500,
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.resolve', expect.objectContaining({
+      selector: expect.stringContaining('"text":"Login"'),
+    }));
+    expect(sendRequest).toHaveBeenLastCalledWith('ext.fliwright.settle', {
+      timeout: '1500',
+    });
+  });
+
+  it('resetRouteStack resets through the bridge and waits for stability', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    await page.resetRouteStack('/dashboard', {
+      extra: { id: 42 },
+      waitUntil: 'settled',
+      settleTimeout: 3500,
+    });
+
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.resetRouteStack', {
+      path: '/dashboard',
+      extra: JSON.stringify({ id: 42 }),
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.settle', {
+      timeout: '3500',
+    });
+  });
+
+  it('resetToHome resets to slash by default without settling when requested', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    await page.resetToHome({ waitUntil: 'none' });
+
+    expect(sendRequest).toHaveBeenCalledTimes(1);
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.resetRouteStack', {
+      path: '/',
+    });
+  });
+
   it('findRef returns a ref locator from the current snapshot', async () => {
     const sendRequest = vi.fn().mockImplementation((method: string) => {
       if (method === 'ext.fliwright.snap') {

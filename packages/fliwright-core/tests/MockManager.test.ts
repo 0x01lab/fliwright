@@ -37,6 +37,22 @@ describe('MockManager', () => {
     expect(await mock.listRoutes()).toEqual([]);
   });
 
+  it('removeFlutterRoute() always forwards removal to Flutter', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.removeRoute': { removed: true },
+      'ext.fliwright.mock.listRoutes': { routes: [] },
+    });
+    const mock = new MockManager(sendRequest);
+    await mock.route('/api/a', { status: 200 });
+
+    await mock.removeFlutterRoute('/api/a');
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.removeRoute', {
+      path: '/api/a',
+    });
+    expect(await mock.listRoutes()).toEqual([]);
+  });
+
   it('removeRoute() can remove only one method for a path', async () => {
     const mock = new MockManager(createMockSendRequest());
     await mock.route('/api/user', { method: 'GET', status: 200 });
@@ -336,6 +352,20 @@ describe('MockManager', () => {
         },
       }),
     });
+  });
+
+  it('clearFlutterRoutes() always forwards route clearing to Flutter', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.clearRoutes': { cleared: 1 },
+      'ext.fliwright.mock.listRoutes': { routes: [] },
+    });
+    const mock = new MockManager(sendRequest);
+    await mock.route('/api/a', { status: 200 });
+
+    await mock.clearFlutterRoutes();
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.clearRoutes');
+    expect(await mock.listRoutes()).toEqual([]);
   });
 });
 

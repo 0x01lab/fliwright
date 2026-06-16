@@ -70,7 +70,7 @@ describe('createFliwrightTest', () => {
     expect(assertion).toBeInstanceOf(Assertion);
   });
 
-  it('creates a test function with an ai fixture when configured', () => {
+  it('creates a test function with an aiRuntime fixture when configured', () => {
     const test = createFliwrightTest({
       vmServiceUrl: 'ws://localhost:12345/ws',
       ai: { provider: 'mock' },
@@ -96,7 +96,7 @@ describe('createFliwrightTest', () => {
     });
   });
 
-  it('exposes the AiRuntime type for ai fixture consumers', () => {
+  it('exposes the AiRuntime type for aiRuntime fixture consumers', () => {
     const runtime: AiRuntime | undefined = undefined;
     expect(runtime).toBeUndefined();
   });
@@ -117,8 +117,8 @@ const testWithAi = createFliwrightTest({
   ai: { provider: 'mock' },
 });
 
-testWithAi('provides an ai fixture to generated tests', async ({ ai }) => {
-  expect(ai).toBeInstanceOf(AiRuntime);
+testWithAi('provides an aiRuntime fixture to generated tests', async ({ aiRuntime }) => {
+  expect(aiRuntime).toBeInstanceOf(AiRuntime);
 });
 
 describe('fliwright hooks', () => {

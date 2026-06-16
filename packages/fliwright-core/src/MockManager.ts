@@ -56,21 +56,41 @@ export class MockManager implements MockAdapter {
 
   async removeRoute(path: string, method?: string): Promise<void> {
     if (this.usesFlutterStore) {
-      await this.sendRequest('ext.fliwright.mock.removeRoute', {
-        path,
-        ...(method ? { method } : {}),
-      });
+      await this.removeFlutterRoute(path, method);
       return;
     }
     this._server.removeRoute(path, method);
   }
 
+  /**
+   * Remove a route from the Flutter mock store regardless of whether this
+   * manager has already switched into Flutter-backed mode.
+   */
+  async removeFlutterRoute(path: string, method?: string): Promise<void> {
+    await this.sendRequest('ext.fliwright.mock.removeRoute', {
+      path,
+      ...(method ? { method } : {}),
+    });
+    this._server.removeRoute(path, method);
+    this.usesFlutterStore = true;
+  }
+
   async clear(): Promise<void> {
     if (this.usesFlutterStore) {
-      await this.sendRequest('ext.fliwright.mock.clearRoutes');
+      await this.clearFlutterRoutes();
       return;
     }
     this._server.clear();
+  }
+
+  /**
+   * Clear all Flutter mock routes regardless of whether this manager has
+   * already switched into Flutter-backed mode.
+   */
+  async clearFlutterRoutes(): Promise<void> {
+    await this.sendRequest('ext.fliwright.mock.clearRoutes');
+    this._server.clear();
+    this.usesFlutterStore = true;
   }
 
   async setPassthrough(enabled: boolean): Promise<void> {

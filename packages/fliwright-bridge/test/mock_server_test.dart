@@ -130,6 +130,87 @@ void main() {
       }
     });
 
+    test('clearRoutes clears persisted Hive routes from an empty memory store',
+        () async {
+      final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
+      final boxName =
+          'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
+      try {
+        Hive.init(temp.path);
+        final box = await Hive.openBox<dynamic>(boxName);
+        final storage = HiveMockRuleStorage.fromBox(box);
+        final writer = MockRuleStore(storage: storage);
+        await writer.addRoute(MockRoute(
+          id: 'cached-route',
+          method: 'POST',
+          pathPattern: '/api/cached',
+          status: 202,
+          body: {'cached': true},
+        ));
+
+        final emptyMemoryStore = MockRuleStore(storage: storage);
+        final cleared = await emptyMemoryStore.clearRoutes();
+
+        expect(cleared, 1);
+        expect(storage.box.get(HiveMockRuleStorage.defaultRouteIndexKey), []);
+        expect(storage.box.get('route:POST /api/cached'), isNull);
+
+        final loaded = MockRuleStore(storage: storage);
+        await loaded.loadFromStorage();
+        expect(loaded.getAllRoutes(), isEmpty);
+      } finally {
+        if (Hive.isBoxOpen(boxName)) {
+          await Hive.box<dynamic>(boxName).close();
+        }
+        await temp.delete(recursive: true);
+      }
+    });
+
+    test('removeRoute removes persisted Hive route after rehydrating storage',
+        () async {
+      final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
+      final boxName =
+          'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
+      try {
+        Hive.init(temp.path);
+        final box = await Hive.openBox<dynamic>(boxName);
+        final storage = HiveMockRuleStorage.fromBox(box);
+        final writer = MockRuleStore(storage: storage);
+        await writer.addRoute(MockRoute(
+          id: 'cached-remove',
+          method: 'POST',
+          pathPattern: '/api/remove',
+          status: 202,
+        ));
+        await writer.addRoute(MockRoute(
+          id: 'cached-keep',
+          method: 'GET',
+          pathPattern: '/api/keep',
+          status: 200,
+        ));
+
+        final emptyMemoryStore = MockRuleStore(storage: storage);
+        final removed = await emptyMemoryStore.removeRoute(
+          path: '/api/remove',
+          method: 'POST',
+        );
+
+        expect(removed, isTrue);
+        expect(storage.box.get('route:POST /api/remove'), isNull);
+        expect(storage.box.get('route:GET /api/keep'), isNotNull);
+
+        final loaded = MockRuleStore(storage: storage);
+        await loaded.loadFromStorage();
+        expect(loaded.findRoute('POST', '/api/remove'), isNull);
+        expect(loaded.findRoute('GET', '/api/keep')?.id, 'cached-keep');
+      } finally {
+        if (Hive.isBoxOpen(boxName)) {
+          await Hive.box<dynamic>(boxName).close();
+        }
+        await temp.delete(recursive: true);
+      }
+    });
+
     test('loads legacy Hive activeRules payload', () async {
       final temp =
           await Directory.systemTemp.createTemp('fliwright_hive_legacy_');
@@ -783,7 +864,7 @@ void main() {
       expect(response.data?['preserved'], isTrue);
     });
 
-    test('previously injected Dio interceptor keeps using registered routes',
+    test('newly injected Dio interceptor replaces and neutralizes old entry',
         () async {
       final olderInterceptor = interceptor;
       final newerInterceptor = FliwrightDioMockInterceptor();
@@ -804,22 +885,18 @@ void main() {
         },
       );
 
-      final olderDio = Dio()..interceptors.add(olderInterceptor);
       final newerDio = Dio()..interceptors.add(newerInterceptor);
-      final olderResponse = await olderDio.get<Map<String, dynamic>>(
-        'https://dev.ex.io/api/shared',
-      );
       final newerResponse = await newerDio.get<Map<String, dynamic>>(
         'https://dev.ex.io/api/shared',
       );
 
-      expect(olderResponse.statusCode, 200);
-      expect(olderResponse.data?['shared'], isTrue);
+      expect(olderInterceptor.routes, isEmpty);
+      expect(olderInterceptor.passthrough, isTrue);
       expect(newerResponse.statusCode, 200);
       expect(newerResponse.data?['shared'], isTrue);
     });
 
-    test('all injected Dio interceptors receive store loaded during init',
+    test('only the latest injected Dio interceptor receives routes after init',
         () async {
       await FliwrightBridge.reset();
       final firstInterceptor = FliwrightDioMockInterceptor();
@@ -843,22 +920,18 @@ void main() {
         },
       );
 
-      final firstDio = Dio()..interceptors.add(firstInterceptor);
       final secondDio = Dio()..interceptors.add(secondInterceptor);
-      final firstResponse = await firstDio.get<Map<String, dynamic>>(
-        'https://dev.ex.io/api/post-init',
-      );
       final secondResponse = await secondDio.get<Map<String, dynamic>>(
         'https://dev.ex.io/api/post-init',
       );
 
-      expect(firstResponse.statusCode, 200);
-      expect(firstResponse.data?['postInit'], isTrue);
+      expect(firstInterceptor.routes, isEmpty);
       expect(secondResponse.statusCode, 200);
       expect(secondResponse.data?['postInit'], isTrue);
     });
 
-    test('getCalls and clearCalls aggregate all Dio interceptors', () async {
+    test('getCalls and clearCalls use only the active Dio interceptor',
+        () async {
       final secondInterceptor = FliwrightDioMockInterceptor();
       DioMockExtension.setInterceptor(secondInterceptor);
 
@@ -877,9 +950,6 @@ void main() {
         },
       );
 
-      await (Dio()..interceptors.add(interceptor)).get<void>(
-        'https://dev.ex.io/api/aggregate',
-      );
       await (Dio()..interceptors.add(secondInterceptor)).get<void>(
         'https://dev.ex.io/api/aggregate',
       );
@@ -889,18 +959,18 @@ void main() {
         {'path': '/api/aggregate'},
       );
       final calls = result['calls'] as List<dynamic>;
-      expect(calls, hasLength(2));
+      expect(calls, hasLength(1));
 
       final clearResult = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.clearCalls',
         {},
       );
-      expect(clearResult['cleared'], 2);
+      expect(clearResult['cleared'], 1);
       expect(interceptor.callLog, isEmpty);
       expect(secondInterceptor.callLog, isEmpty);
     });
 
-    test('setPassthrough applies to all Dio interceptors', () async {
+    test('setPassthrough applies only to the active Dio interceptor', () async {
       final secondInterceptor = FliwrightDioMockInterceptor();
       DioMockExtension.setInterceptor(secondInterceptor);
 
@@ -909,8 +979,42 @@ void main() {
         {'enabled': 'false'},
       );
 
-      expect(interceptor.passthrough, isFalse);
+      expect(interceptor.passthrough, isTrue);
       expect(secondInterceptor.passthrough, isFalse);
+    });
+
+    test('debugState reports a single active Dio interceptor', () async {
+      DioMockExtension.setInterceptor(FliwrightDioMockInterceptor());
+
+      final state = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.debugState',
+        {},
+      );
+
+      expect(state['interceptorInjected'], isTrue);
+      expect(state['interceptors'], 1);
+      expect(state['interceptorState'], isA<Map<dynamic, dynamic>>());
+      expect(state.containsKey('interceptorStates'), isFalse);
+    });
+
+    test('unsetInterceptor neutralizes stale Dio interceptor routes', () async {
+      final staleStore = MockRuleStore();
+      await staleStore.addRoute(MockRoute(
+        id: 'unset-stale-route',
+        method: 'GET',
+        pathPattern: '/api/unset-stale',
+        status: 209,
+        body: {'stale': true},
+      ));
+      final staleInterceptor =
+          FliwrightDioMockInterceptor(ruleStore: staleStore);
+      DioMockExtension.setInterceptor(staleInterceptor);
+      staleInterceptor.ruleStore = staleStore;
+
+      DioMockExtension.unsetInterceptor(staleInterceptor);
+
+      expect(staleInterceptor.routes, isEmpty);
+      expect(staleInterceptor.passthrough, isTrue);
     });
 
     test('Dio requests resolve directly from the in-process rule store',

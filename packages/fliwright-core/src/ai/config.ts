@@ -5,7 +5,8 @@ import { MockAiAdapter } from './adapters/MockAiAdapter.js';
 import type { AiAdapter, AiCliAdapterOptions, AiProviderName, AiRuntimeConfig } from './types.js';
 
 export function resolveAiConfig(config: AiRuntimeConfig | undefined): AiRuntimeConfig {
-  const provider = config?.provider ?? parseAiProvider(process.env.FLIWRIGHT_AI_PROVIDER);
+  const explicitAdapter = isAiAdapter(config?.adapter) || isAiCliAdapterOptions(config?.adapter);
+  const provider = config?.provider ?? (explicitAdapter ? 'custom-cli' : parseAiProvider(process.env.FLIWRIGHT_AI_PROVIDER));
   const adapter = isAiAdapter(config?.adapter) ? config?.adapter : createAiAdapter(config);
   return {
     provider,

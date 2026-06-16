@@ -26,6 +26,7 @@ export function loadConfig(): ExtensionConfig {
     formLocale: config.get<string>('formLocale', 'zh_CN'),
     formPreviewBeforeFill: config.get<boolean>('formPreviewBeforeFill', true),
     codeLensEnabled: config.get<boolean>('codeLensEnabled', true),
+    scriptGlob: config.get<string>('scriptGlob', '.fliwright/scripts/**/*.{js,mjs,cjs}'),
   };
 }
 

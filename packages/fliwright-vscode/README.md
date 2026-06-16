@@ -10,12 +10,31 @@ This implementation slice provides native sidebar workflows for local Flutter te
 - `Devices`: connects and disconnects a running Flutter VM Service through `@fliwright/core`.
 - `Mock APIs`: applies a selected rule, applies default rules, and clears runtime mock routes through `driver.mock`.
 - `Form Data`: scans `.fliwright/forms/*.json`, previews generated values, and fills selected fields through `FormHelper`.
+- `Scripts`: scans `.fliwright/scripts/**/*.{js,mjs,cjs}` and runs selected scripts with the connected VM Service URL injected.
 - `Tests` / `Runs`: discovers Fliwright test files, runs Vitest, and opens persisted failure context.
 - `State`: lists, reads, watches, copies, and overrides Riverpod state providers exposed by the bridge.
 - Recording: starts/stops device interaction recording, previews generated TypeScript test code, and inserts it into an active editor or saves it as a new `*.test.ts` file.
 - Editor CodeLens: adds run and record actions for TypeScript Fliwright tests.
 
 Mock files are JSON-only. Legacy YAML mock files are intentionally unsupported.
+
+## Running Scripts
+
+Put runnable automation scripts under `.fliwright/scripts/`, for example:
+
+```text
+.fliwright/scripts/auto-register-fill.mjs
+```
+
+Start the Flutter app with the Fliwright bridge enabled, then connect the VS Code
+extension from the `Devices` view or let it auto-discover the VM Service. The
+`Scripts` view lists discovered scripts. Select one and click the inline Run
+action, or use `Fliwright: Run Script`.
+
+The script process receives both `FLIWRIGHT_VM_SERVICE_URL` and
+`FLIWRIGHT_VM_URL` from the connected session. Runtime stdout/stderr is streamed
+to the `Fliwright` output channel, and the final pass/fail result is added to
+the `Runs` view.
 
 ## Recording Tests
 

@@ -5,13 +5,14 @@ import '../bridge.dart';
 
 /// VM Service extension for programmatic route navigation.
 ///
-/// Supports any router that exposes `go(String)` / `pop()` methods
+/// Supports any router that exposes `push(String)` / `go(String)` / `pop()` methods
 /// (e.g. go_router) injected via [FliwrightBridge.init(router: ...)].
 ///
 /// Fallback to [NavigatorState] when no router is injected.
 class RouterNavigateExtension {
   static void register(ExtensionRegistry registry) {
     registry.register('ext.fliwright.navigate', _navigate);
+    registry.register('ext.fliwright.resetRouteStack', _resetRouteStack);
     registry.register('ext.fliwright.currentRoute', _currentRoute);
     registry.register('ext.fliwright.goBack', _goBack);
   }
@@ -29,21 +30,42 @@ class RouterNavigateExtension {
       return {'success': false, 'error': 'path is required'};
     }
 
-    // 1. Try injected router (e.g. GoRouter)
+    // 1. Try injected router (e.g. GoRouter). Normal navigation should keep a
+    // route below the destination so app back buttons can pop safely.
     final router = FliwrightBridge.router;
     if (router != null) {
       try {
         final extraRaw = params['extra'];
         if (extraRaw != null && extraRaw.isNotEmpty) {
-          (router as dynamic).go(path, extra: extraRaw);
+          (router as dynamic).push(path, extra: extraRaw);
         } else {
-          (router as dynamic).go(path);
+          (router as dynamic).push(path);
         }
         return {
           'success': true,
-          'method': 'injected_router',
+          'method': 'injected_router_push',
           'path': path,
         };
+      } on NoSuchMethodError {
+        try {
+          final extraRaw = params['extra'];
+          if (extraRaw != null && extraRaw.isNotEmpty) {
+            (router as dynamic).go(path, extra: extraRaw);
+          } else {
+            (router as dynamic).go(path);
+          }
+          return {
+            'success': true,
+            'method': 'injected_router_go',
+            'path': path,
+          };
+        } catch (e) {
+          return {
+            'success': false,
+            'error': 'injected router fallback failed: $e',
+            'path': path,
+          };
+        }
       } catch (e) {
         return {
           'success': false,
@@ -79,6 +101,72 @@ class RouterNavigateExtension {
       return {
         'success': false,
         'error': 'navigator pushNamed failed: $e',
+        'path': path,
+      };
+    }
+  }
+
+  /// Reset the route stack to [path].
+  ///
+  /// For injected routers this uses `go(path)`, which replaces the current
+  /// location in declarative router stacks. For Navigator fallback this uses
+  /// pushNamedAndRemoveUntil so back cannot return to the previous route.
+  static Future<Map<String, dynamic>> _resetRouteStack(
+    Map<String, String> params,
+  ) async {
+    final path = params['path'];
+    if (path == null || path.isEmpty) {
+      return {'success': false, 'error': 'path is required'};
+    }
+
+    final router = FliwrightBridge.router;
+    if (router != null) {
+      try {
+        final extraRaw = params['extra'];
+        if (extraRaw != null && extraRaw.isNotEmpty) {
+          (router as dynamic).go(path, extra: extraRaw);
+        } else {
+          (router as dynamic).go(path);
+        }
+        return {
+          'success': true,
+          'method': 'injected_router_go',
+          'path': path,
+        };
+      } catch (e) {
+        return {
+          'success': false,
+          'error': 'injected router reset failed: $e',
+          'path': path,
+        };
+      }
+    }
+
+    final root = WidgetsBinding.instance.rootElement;
+    if (root == null) {
+      return {'success': false, 'error': 'no root element', 'path': path};
+    }
+
+    final navigator = _findNavigatorState(root);
+    if (navigator == null) {
+      return {
+        'success': false,
+        'error': 'no navigator found',
+        'path': path,
+      };
+    }
+
+    try {
+      navigator.pushNamedAndRemoveUntil(path, (route) => false);
+      return {
+        'success': true,
+        'method': 'navigator_pushNamedAndRemoveUntil',
+        'path': path,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'navigator reset failed: $e',
         'path': path,
       };
     }

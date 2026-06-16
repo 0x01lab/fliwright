@@ -65,6 +65,14 @@ describe('resolveAiConfig', () => {
     const config = resolveAiConfig({ provider: 'mock', adapter });
     expect(config.adapter).toBe(adapter);
   });
+
+  it('enables the runtime when an explicit adapter is configured without a provider', () => {
+    const adapter = new MockAiAdapter();
+    const config = resolveAiConfig({ adapter });
+    expect(config.provider).not.toBe('none');
+    expect(config.enabled).toBe(true);
+    expect(config.adapter).toBe(adapter);
+  });
 });
 
 describe('AiRuntime via resolved config', () => {

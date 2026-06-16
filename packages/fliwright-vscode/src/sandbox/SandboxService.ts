@@ -65,6 +65,87 @@ export class SandboxService {
     return { applied, routes, unmatched };
   }
 
+  async reconcileFromFlutter(
+    driver: FliwrightDriver,
+    discovery: MockDiscoveryResult,
+    options: {
+      selectedEntries?: MockRuleEntry[];
+      applyDefaultRules?: boolean;
+      onStaleRoutes?: (summary: {
+        routes: Array<{ id?: string; method?: string; path: string }>;
+        applied: AppliedMockRule[];
+        unmatched: Array<{ id?: string; method?: string; path: string }>;
+      }) => Promise<void> | void;
+    } = {},
+  ): Promise<{
+    applied: AppliedMockRule[];
+    routes: Array<{ id?: string; method?: string; path: string }>;
+    unmatched: Array<{ id?: string; method?: string; path: string }>;
+    rebuilt: boolean;
+    reconciled: AppliedMockRule[];
+    skipped: number;
+  }> {
+    let sync = await this.syncFromFlutter(driver, discovery);
+    let rebuilt = false;
+    if (sync.unmatched.length > 0) {
+      await options.onStaleRoutes?.(sync);
+      await this.clear(driver);
+      rebuilt = true;
+      sync = { applied: [], routes: [], unmatched: [] };
+    }
+
+    const activeKeys = new Set(
+      this.getAppliedRules().map((rule) => appliedKey(rule.method, rule.endpoint)),
+    );
+    const selectedByKey = new Map(
+      (options.selectedEntries ?? []).map((entry) => [appliedKey(entry.method, entry.endpoint), entry] as const),
+    );
+    const reconciled: AppliedMockRule[] = [];
+    let skipped = 0;
+
+    for (const endpoint of discovery.endpoints) {
+      const key = appliedKey(endpoint.endpointFile.method, endpoint.endpointFile.endpoint);
+      if (activeKeys.has(key)) continue;
+
+      const selected = selectedByKey.get(key);
+      if (selected) {
+        const applied = await this.applyRule(driver, selected);
+        activeKeys.add(key);
+        reconciled.push(applied);
+        continue;
+      }
+
+      if (!options.applyDefaultRules) {
+        skipped++;
+        continue;
+      }
+
+      const rule = selectDefaultRule(endpoint);
+      if (!rule) {
+        skipped++;
+        continue;
+      }
+
+      const applied = await this.applyRule(driver, {
+        kind: 'rule',
+        uri: endpoint.uri,
+        endpoint: endpoint.endpointFile.endpoint,
+        method: endpoint.endpointFile.method,
+        rule,
+        isDefault: true,
+      });
+      activeKeys.add(key);
+      reconciled.push(applied);
+    }
+
+    return {
+      ...sync,
+      rebuilt,
+      reconciled,
+      skipped,
+    };
+  }
+
   async stopRule(driver: FliwrightDriver, entry: MockRuleEntry): Promise<boolean> {
     const key = appliedKey(entry.method, entry.endpoint);
     const applied = this.applied.get(key);
@@ -75,7 +156,7 @@ export class SandboxService {
       const parsed = parseRouteId(flutterRoute.id);
       if (parsed && parsed.ruleName !== entry.rule.name) return false;
     }
-    await driver.mock.removeRoute(entry.endpoint, entry.method);
+    await driver.mock.removeFlutterRoute(entry.endpoint, entry.method);
     this.applied.delete(key);
     return true;
   }
@@ -119,7 +200,7 @@ export class SandboxService {
 
   async clear(driver: FliwrightDriver): Promise<number> {
     const count = this.applied.size;
-    await driver.mock.clear();
+    await driver.mock.clearFlutterRoutes();
     this.applied.clear();
     return count;
   }
@@ -189,7 +270,7 @@ function resolveFlutterRoute(
 
   const rule = parsed?.ruleName
     ? endpointEntry.endpointFile.rules.find((candidate) => candidate.name === parsed.ruleName)
-    : selectDefaultRule(endpointEntry);
+    : singleRule(endpointEntry);
   if (!rule) return undefined;
 
   return {
@@ -214,6 +295,10 @@ function parseRouteId(id: string | undefined): { method: string; endpoint: strin
   } catch {
     return undefined;
   }
+}
+
+function singleRule(endpoint: MockEndpointEntry): MockRule | undefined {
+  return endpoint.endpointFile.rules.length === 1 ? endpoint.endpointFile.rules[0] : undefined;
 }
 
 async function findFlutterRoute(
@@ -280,12 +365,19 @@ async function assertFlutterMockReady(
     (!route.method || route.method.toUpperCase() === method.toUpperCase())
   ));
   if (!routeSynced && !routeRegistered) {
-    const available = routes.map((route) => `${(route.method ?? '*').toUpperCase()} ${route.path ?? '(unknown)'}`);
+    const available = routes.map(formatFlutterRouteForError);
     throw new Error(
       `Flutter mock route was not registered: ${method.toUpperCase()} ${endpoint}. `
       + `Available Flutter routes: ${available.length ? available.join(', ') : '(none)'}`,
     );
   }
+}
+
+function formatFlutterRouteForError(route: { id?: string; method?: string; path?: string }): string {
+  const label = `${(route.method ?? '*').toUpperCase()} ${route.path ?? '(unknown)'}`;
+  const parsed = parseRouteId(route.id);
+  if (parsed) return `${label} -> ${parsed.ruleName}`;
+  return route.id ? `${label} id=${route.id}` : label;
 }
 
 function isSuccessfulRouteResult(value: unknown): boolean {

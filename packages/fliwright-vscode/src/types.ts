@@ -21,6 +21,7 @@ export interface ExtensionConfig {
   formLocale: string;
   formPreviewBeforeFill: boolean;
   codeLensEnabled: boolean;
+  scriptGlob: string;
 }
 
 export interface MockIndexFile {
@@ -152,6 +153,14 @@ export interface TestFileEntry {
   lastResult?: TestCaseResult;
 }
 
+export interface ScriptFileEntry {
+  kind: 'scriptFile';
+  uri: vscode.Uri;
+  label: string;
+  description?: string;
+  lastResult?: RunResult;
+}
+
 export interface TestCaseResult {
   name: string;
   passed: boolean;
@@ -265,6 +274,10 @@ export interface TestStepEntry {
 export type TestTreeNode =
   | TestFileEntry
   | TestStepEntry
+  | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
+
+export type ScriptTreeNode =
+  | ScriptFileEntry
   | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
 
 export type RunTreeNode =

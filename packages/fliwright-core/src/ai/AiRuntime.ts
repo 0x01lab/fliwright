@@ -143,7 +143,7 @@ export class AiRuntime {
 
   private resolveAdapter(): AiAdapter {
     if (this.config.enabled === false || this.config.provider === 'none') {
-      throw new AiDisabledError('AI runtime is disabled. Configure FLIWRIGHT_AI_PROVIDER or createFliwrightTest({ ai }).');
+      throw new AiDisabledError('AI runtime is disabled. Configure FLIWRIGHT_AI_PROVIDER, call configureAi(...), or createFliwrightTest({ ai }).');
     }
     const adapter = this.config.adapter;
     if (!adapter || !('invoke' in adapter)) {

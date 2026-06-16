@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { handleRunTest, type TestRunner } from '../src/tools/runTest.js';
 import { handleGetFailure } from '../src/tools/getFailure.js';
 import { handleGenerateTest } from '../src/tools/generateTest.js';
+import { handleNavigate } from '../src/tools/navigate.js';
 import { handleRecord, type RecorderFactory } from '../src/tools/record.js';
 import { createServerState } from '../src/state.js';
 import type { FailureEntry, RunResult } from '../src/types.js';
@@ -65,7 +66,7 @@ describe('MCP + Core Integration', () => {
 
     expect(result.testName).toBe('test recording');
     expect(result.testCode).toContain("import { test, expect, beforeEach } from '@fliwright/vitest'");
-    expect(result.testCode).toContain("await page.navigate('/')");
+    expect(result.testCode).toContain("await page.resetToHome({ homeRoute: '/' })");
     expect(result.testCode).toContain('test recording');
     expect(result.operationCount).toBeGreaterThanOrEqual(0);
 
@@ -191,7 +192,7 @@ describe('MCP + Core Integration', () => {
     });
 
     expect(result.testCode).toContain("import { test, expect, beforeEach } from '@fliwright/vitest'");
-    expect(result.testCode).toContain("await page.navigate('/')");
+    expect(result.testCode).toContain("await page.resetToHome({ homeRoute: '/' })");
     expect(result.testCode).toContain("test('login page'");
     expect(result.testCode).toContain('page.locator(');
     expect(result.testCode).toContain('.click()');
@@ -199,5 +200,41 @@ describe('MCP + Core Integration', () => {
     expect(result.testCode).toContain('expect(');
     expect(result.testCode).toContain('.toBeVisible()');
     expect(result.testName).toBe('login page');
+  });
+
+  it('handleNavigate resets route stack and returns an optional snapshot', async () => {
+    const state = createServerState();
+    const driver = new FliwrightDriver();
+    const mock = createProtocolMock();
+    mock.mockExtension('ext.fliwright.resetRouteStack', (params) => {
+      expect(params.path).toBe('/login');
+      return { success: true };
+    });
+    mock.mockExtension('ext.fliwright.settle', (params) => {
+      expect(params.timeout).toBe('2500');
+      return { success: true };
+    });
+    mock.mockExtension('ext.fliwright.snap', () => ({
+      snapshot: '- text "Login" [ref=e1]\n',
+      groupId: 'snapshot-1',
+      refs: [{ ref: 'e1', role: 'text', label: 'Login', type: 'Text' }],
+      count: 1,
+    }));
+    await driver.attachMockConnector(mock.ws);
+    state.setDriver(driver);
+
+    const result = await handleNavigate({
+      action: 'resetRouteStack',
+      path: '/login',
+      settleTimeout: 2500,
+      includeSnapshot: true,
+    }, state);
+
+    expect(result).toMatchObject({
+      success: true,
+      action: 'resetRouteStack',
+      path: '/login',
+    });
+    expect(result.snapshot?.refs[0].label).toBe('Login');
   });
 });
