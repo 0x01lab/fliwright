@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 class MockRoute {
   final String id;
@@ -92,30 +91,6 @@ class MockCallRecord {
 abstract class MockRuleStorage {
   Future<String?> load();
   Future<void> save(String json);
-}
-
-/// File-backed storage for Dart VM and desktop test environments.
-class FileMockRuleStorage implements MockRuleStorage {
-  final String filePath;
-
-  FileMockRuleStorage(this.filePath);
-
-  @override
-  Future<String?> load() async {
-    final file = File(filePath);
-    if (!await file.exists()) return null;
-    return file.readAsString();
-  }
-
-  @override
-  Future<void> save(String json) async {
-    final file = File(filePath);
-    final parent = file.parent;
-    if (!await parent.exists()) {
-      await parent.create(recursive: true);
-    }
-    await file.writeAsString(json);
-  }
 }
 
 /// In-process mock route table shared by VM Service extensions and interceptors.

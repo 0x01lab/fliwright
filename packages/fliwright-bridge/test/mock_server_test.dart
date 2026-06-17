@@ -45,36 +45,6 @@ void main() {
       expect(store.getAllRoutes(), isEmpty);
     });
 
-    test('persists and loads routes with FileMockRuleStorage', () async {
-      final temp = await Directory.systemTemp.createTemp('fliwright_store_');
-      final filePath = '${temp.path}/rules.json';
-      try {
-        final store = MockRuleStore(storage: FileMockRuleStorage(filePath));
-        await store.addRoute(MockRoute(
-          id: 'persisted',
-          method: 'GET',
-          pathPattern: '/api/persisted',
-          status: 200,
-          headers: {'Content-Type': 'application/json'},
-          body: {'ok': true},
-          delayMs: 5,
-        ));
-
-        final loaded = MockRuleStore(storage: FileMockRuleStorage(filePath));
-        await loaded.loadFromStorage();
-        final route = loaded.findRoute('GET', '/api/persisted');
-
-        expect(route, isNotNull);
-        expect(route!.id, 'persisted');
-        expect(route.status, 200);
-        expect(route.headers['Content-Type'], 'application/json');
-        expect(route.body, {'ok': true});
-        expect(route.delayMs, 5);
-      } finally {
-        await temp.delete(recursive: true);
-      }
-    });
-
     test('persists and loads routes with HiveMockRuleStorage', () async {
       final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
       final boxName =
@@ -1117,26 +1087,26 @@ void main() {
     test('loads persisted Dio routes during initForDioMock', () async {
       await FliwrightBridge.reset();
       final temp = await Directory.systemTemp.createTemp('fliwright_mock_');
-      final file = File('${temp.path}/active-rules.json');
-      await file.writeAsString(jsonEncode({
-        'version': 1,
-        'rules': [
-          {
-            'id': 'persisted-route',
-            'method': 'GET',
-            'pathPattern': '/api/persisted',
-            'status': 200,
-            'headers': {'Content-Type': 'application/json'},
-            'body': {'persisted': true},
-            'delayMs': 0,
-          }
-        ],
-      }));
+      final boxName =
+          'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
+      Hive.init(temp.path);
+      final box = await Hive.openBox<dynamic>(boxName);
+      final storage = HiveMockRuleStorage.fromBox(box);
+      // Pre-populate the Hive box in its normalized shape by writing through a store.
+      final writer = MockRuleStore(storage: storage);
+      await writer.addRoute(MockRoute(
+        id: 'persisted-route',
+        method: 'GET',
+        pathPattern: '/api/persisted',
+        status: 200,
+        headers: {'Content-Type': 'application/json'},
+        body: {'persisted': true},
+        delayMs: 0,
+      ));
+
       final persistedInterceptor = FliwrightDioMockInterceptor();
       DioMockExtension.setInterceptor(persistedInterceptor);
-      await FliwrightBridge.initForDioMock(
-        mockStorage: FileMockRuleStorage(file.path),
-      );
+      await FliwrightBridge.initForDioMock(mockStorage: storage);
 
       try {
         final dio = Dio()..interceptors.add(persistedInterceptor);
@@ -1148,6 +1118,9 @@ void main() {
         expect(response.data?['persisted'], isTrue);
         expect(persistedInterceptor.routes.single.id, 'persisted-route');
       } finally {
+        if (Hive.isBoxOpen(boxName)) {
+          await Hive.box<dynamic>(boxName).close();
+        }
         await temp.delete(recursive: true);
       }
     });
