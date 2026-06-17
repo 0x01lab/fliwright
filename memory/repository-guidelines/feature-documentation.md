@@ -4,20 +4,17 @@ AI-consumable feature documentation for this repository lives under
 `docs/features/`. It summarizes every implemented feature with API signatures,
 type definitions, and usage examples, organized for fast lookup by AI agents.
 
-## Where To Start
+## How to read it (strictly on-demand)
 
-The single entry point is [docs/features/index.md](../../docs/features/index.md) —
-a routing table by package and by feature slice, an MCP tool quick reference,
-and an agent quick-start guide. Open it first; it links to every per-package
-overview, per-class doc, and cross-cutting pipeline. The detailed route list is
-kept there and is not duplicated here, so there is one source of truth.
+`docs/features/index.md` is a ~23 KB lookup table of every package, class, tool,
+and command. **Do not load it as a routine.** Use it only when you need to
+discover which component owns a behavior.
 
-## When To Read
-
-Read `docs/features/index.md` and the relevant package README or cross-cutting
-pipeline before changing MCP tools, selectors, protocol behavior, code
-generation, self-healing, form filling, Riverpod support, or any feature an
-agent would need to discover.
+When you need the *current* API of the exact component you are changing, open
+**that specific per-class doc** directly — for example
+`docs/features/core/Selector.md`, `docs/features/bridge/inspect.md`, or the
+relevant package `README.md`. This keeps the loaded context small. The detailed
+route list lives in the index and is not duplicated here.
 
 ## Regeneration
 

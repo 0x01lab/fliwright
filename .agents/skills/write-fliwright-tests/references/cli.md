@@ -1,8 +1,6 @@
 # CLI: `fliwright`
 
-The `fliwright` CLI runs tests, scaffolds config, checks your environment, records flows into code,
-and hosts the mock controller. **Prefer `fliwright run` over direct `pnpm vitest`** — it emits the
-AI/human report, persists screenshots, and prints a reproduce command.
+`fliwright` CLI 用来跑测试、生成配置脚手架、检查环境、把录制流程导出成代码，以及承载 mock 控制器。**优先用 `fliwright run` 而不是直接 `pnpm vitest`**——它会产出 AI/人类可读的报告、持久化截图，并打印复现命令。
 
 ```text
 fliwright <command> [options]
@@ -26,26 +24,24 @@ fliwright run \
   --output <file>           Write the AI run report JSON to this file
 ```
 
-### What it does
+### 它做了什么
 
-1. Loads `fliwright.config.ts` (via jiti) for defaults — `testDir`, `vmServiceUrl`, `timeout`, `reporter`.
-2. Resolves the VM URL: `--vm-url` flag ▸ `config.vmServiceUrl` ▸ auto-discovery (`vm-discovery.ts`
-   scans for a running Flutter VM Service).
-3. Spawns Vitest with `--reporter=json`, injecting `FLIWRIGHT_VM_URL`,
-   `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`, `FLIWRIGHT_SCREENSHOT_MODE`, `FLIWRIGHT_FAILURE_TIMEOUT_MS`.
-4. Reads the failure-context JSON, persists screenshots to `.fliwright/runs/<runId>/screenshots/`.
-5. Writes the full report to `.fliwright/runs/<runId>/report.json` (or `--output`).
-6. Prints a `reproduceCommand` (`fliwright run --test … --test-name …`) for every run.
+1. 通过 jiti 加载 `fliwright.config.ts` 取默认值——`testDir`、`vmServiceUrl`、`timeout`、`reporter`。
+2. 解析 VM URL：优先级 `--vm-url` ▸ `config.vmServiceUrl` ▸ 自动发现（`vm-discovery.ts` 会扫描正在运行的 Flutter VM Service）。
+3. 用 `--reporter=json` 启动 Vitest，注入 `FLIWRIGHT_VM_URL`、`FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`、`FLIWRIGHT_SCREENSHOT_MODE`、`FLIWRIGHT_FAILURE_TIMEOUT_MS`。
+4. 读取失败上下文 JSON，把截图持久化到 `.fliwright/runs/<runId>/screenshots/`。
+5. 把完整报告写到 `.fliwright/runs/<runId>/report.json`（或 `--output` 指定的路径）。
+6. 每次运行都打印 `reproduceCommand`（`fliwright run --test … --test-name …`）。
 
-### Reporters
+### 报告器
 
-| Format | Use |
+| 格式 | 用途 |
 | --- | --- |
-| `pretty` (default) | Human reading in a terminal |
-| `json` / `ai-json` | Machine / AI consumption — full result incl. failures + artifacts |
-| `junit` | CI integration (Jenkins, GitHub Actions JUnit viewers) |
+| `pretty`（默认） | 终端下给人看 |
+| `json` / `ai-json` | 给机器/AI 消费——含失败与产物的完整结果 |
+| `junit` | CI 集成（Jenkins、GitHub Actions 的 JUnit 查看器） |
 
-`CliRunResult` shape:
+`CliRunResult` 结构：
 
 ```typescript
 {
@@ -58,7 +54,7 @@ fliwright run \
 }
 ```
 
-### Examples
+### 示例
 
 ```bash
 # Run a single file against a running app
@@ -77,8 +73,7 @@ fliwright run --reporter json --output reports/run.json
 
 ## `fliwright init`
 
-Scaffold Fliwright in the current project: writes `fliwright.config.ts` and the `.fliwright/`
-skeleton (forms/, mocks/). Run once when adding Fliwright to an app.
+在当前项目里生成 Fliwright 脚手架：写入 `fliwright.config.ts` 和 `.fliwright/` 目录骨架（forms/、mocks/）。给应用接入 Fliwright 时跑一次即可。
 
 ```bash
 fliwright init
@@ -86,19 +81,18 @@ fliwright init
 
 ## `fliwright doctor`
 
-Validate the environment: Node/Flutter versions, package resolution, config presence, and (with
-`--vm-url`) live bridge capability checks (`ext.fliwright.snap`, `ext.fliwright.action`, …).
+校验环境：Node/Flutter 版本、包解析、配置是否存在；带上 `--vm-url` 时还会做实时的桥接能力检查（`ext.fliwright.snap`、`ext.fliwright.action` 等）。
 
 ```bash
 fliwright doctor
 fliwright doctor --vm-url "ws://127.0.0.1:54321/abc=/ws"   # runtime bridge checks
 ```
 
-Run this first when "it doesn't work" — it pinpoints missing bridge extensions.
+遇到“跑不起来”时先跑它——它能精确定位缺少的桥接扩展。
 
 ## `fliwright record`
 
-Record live interactions on the running app and emit a first-draft test.
+在正在运行的应用上录制实时交互，并产出测试初稿。
 
 ```text
 fliwright record \
@@ -115,14 +109,11 @@ fliwright record --vm-url "ws://127.0.0.1:54321/abc=/ws" \
   --output e2e/recorded.test.ts --lang ts --name "checkout flow"
 ```
 
-The recorder aggregates raw pointer/text events into semantic operations via `EventAggregator`,
-then `CodeGenerator` (TS) or `DartCodeGenerator` (Dart integration_test) renders the file.
-**Always clean up the output**: simplify selectors, replace ephemeral refs with query locators,
-add assertions. See [mcp-workflow.md](./mcp-workflow.md) for the `fliwright_record` equivalent.
+录制器会通过 `EventAggregator` 把原始的指针/文本事件聚合成语义操作，再由 `CodeGenerator`（TS）或 `DartCodeGenerator`（Dart integration_test）渲染成文件。**产出一定要再清理一遍**：精简选择器、把临时引用换成查询 locator、补上断言。`fliwright_record` 的等价流程见 [mcp-workflow.md](./mcp-workflow.md)。
 
 ## `fliwright mock:start`
 
-Host the tool-side mock controller as its own process.
+把工具侧的 mock 控制器作为独立进程启动。
 
 ```text
 fliwright mock:start \
@@ -131,12 +122,11 @@ fliwright mock:start \
   --mock-dir <dir>     default .fliwright/mocks
 ```
 
-Point the app at the printed WebSocket URL via `FLIWRIGHT_MOCK_CONTROLLER_URL`. See [mocks.md](./mocks.md).
+通过 `FLIWRIGHT_MOCK_CONTROLLER_URL` 让应用指向打印出来的 WebSocket URL。详见 [mocks.md](./mocks.md)。
 
-## Config: `fliwright.config.ts`
+## 配置：`fliwright.config.ts`
 
-`loadConfig()` reads it (via jiti). Recognized fields: `testDir` (default `e2e`), `vmServiceUrl`,
-`timeout`, `reporter`. CLI flags override config values override defaults.
+`loadConfig()` 通过 jiti 读取它。可识别的字段：`testDir`（默认 `e2e`）、`vmServiceUrl`、`timeout`、`reporter`。优先级：CLI 参数 > 配置值 > 默认值。
 
 ```typescript
 // fliwright.config.ts
@@ -150,9 +140,9 @@ export default defineConfig({
 });
 ```
 
-## Automation: `package.json` scripts
+## 自动化：`package.json` 脚本
 
-Add per-suite scripts so CI / teammates run the same thing. This pattern is used by the e2e package:
+为每个测试套件加一条脚本，让 CI/同事跑的是同一件事。e2e 包用的就是这个模式：
 
 ```json
 {
@@ -167,13 +157,13 @@ Add per-suite scripts so CI / teammates run the same thing. This pattern is used
 }
 ```
 
-Run with the VM URL exported:
+导出 VM URL 后运行：
 
 ```bash
 FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/abc=/ws" pnpm test:form-mock
 ```
 
-## Automation: CI shell sketch
+## 自动化：CI shell 示例
 
 ```bash
 # 1. start the app detached (example: macOS)
@@ -192,12 +182,11 @@ fliwright run --test "e2e/**/*.test.ts" \
 kill $APP_PID
 ```
 
-`vm-discovery.ts` auto-finds a running VM Service when no `--vm-url`/config is given, so step 2 can
-often be omitted.
+在没有给 `--vm-url`/配置时，`vm-discovery.ts` 会自动发现正在运行的 VM Service，因此第 2 步通常可以省掉。
 
-## Quick smoke (no report)
+## 快速冒烟（不产报告）
 
-For a fast local check you can call Vitest directly — but you lose the persisted report:
+本地想快速验证时可以直接调 Vitest——但拿不到持久化报告：
 
 ```bash
 FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/abc=/ws" pnpm vitest run path/to/test.ts

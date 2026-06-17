@@ -1,14 +1,14 @@
-# HTTP Mocks
+# HTTP Mock
 
-`driver.mock` (a `MockManager`) intercepts the app's HTTP traffic via Dart `HttpOverrides` inside the
-running app, so **real Dio/HttpClient requests are captured and answered by your mock rules**. You
-assert on the UI *and* on what the app actually sent.
+`driver.mock`（一个 `MockManager`）通过运行中 app 内的 Dart `HttpOverrides` 拦截 app 的
+HTTP 流量，因此 **Dio/HttpClient 的真实请求会被你的 mock 规则捕获并应答**。你既能在
+UI 上断言，也能对 app 实际发出的请求做断言。
 
-> Mocks require the bridge mock extensions (`ext.fliwright.mock.*`). When the current bridge exposes
-> the Flutter mock store, `MockManager` syncs rules there; otherwise it falls back to a tool-side
-> mirror (`ToolMockServer`). Either way the API below is identical.
+> Mock 需要桥接的 mock 扩展（`ext.fliwright.mock.*`）。当当前桥接暴露了
+> Flutter mock store 时，`MockManager` 会把规则同步过去；否则回退到工具侧的
+> 镜像（`ToolMockServer`）。无论哪种情况，下文 API 完全一致。
 
-## The mental model
+## 心智模型（The mental model）
 
 ```
 App code  ──►  HttpClient  ──►  HttpOverrides proxy  ──►  MockManager rules
@@ -17,25 +17,24 @@ App code  ──►  HttpClient  ──►  HttpOverrides proxy  ──►  Mock
  getCalls('/api/x')  ──►  records every intercepted request (method, path, body, …)
 ```
 
-## Registering a route: `route()`
+## 注册路由：`route()`
 
 ```typescript
 route(path: string, response: MockRouteResponse & { method?: string }): Promise<void>
 ```
 
-`MockRouteResponse`:
+`MockRouteResponse`：
 
-| Field | Type | Meaning |
+| 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `status` | `number` | HTTP status code |
-| `body` | `object \| string` | response body (object is JSON-encoded) |
-| `headers` | `Record<string, string>`? | response headers |
-| `delay` | `number`? | ms to delay the response |
-| `method` | `string`? | HTTP method to match (`'GET'`, `'POST'`, …) |
+| `status` | `number` | HTTP 状态码 |
+| `body` | `object \| string` | 响应体（object 会被 JSON 编码） |
+| `headers` | `Record<string, string>`? | 响应头 |
+| `delay` | `number`? | 延迟响应的毫秒数 |
+| `method` | `string`? | 要匹配的 HTTP method（`'GET'`、`'POST'`、…） |
 
-`route()` registers in the tool-side server **and** tries to sync to the Flutter store. If the
-Flutter extension is unavailable it silently falls back to the mirror — acceptable for read/probe
-flows.
+`route()` 会在工具侧服务器注册，**并**尝试同步到 Flutter store。如果
+Flutter 扩展不可用，它会静默回退到镜像——这对读取/探测类流程是可接受的。
 
 ```typescript
 // e2e
@@ -48,25 +47,24 @@ await driver.mock.route('/api/register', {
 });
 ```
 
-### `routeFlutter()` — "must be live in the app"
+### `routeFlutter()` —— “必须在 app 内生效”
 
-Same signature as `route()`, but **does not silently fall back**. Use it for UI-triggered requests
-where "mocked" must mean the running app can actually see the rule. Throws if the Flutter store
-rejects the route.
+签名与 `route()` 相同，但**不会静默回退**。用于 UI 触发的请求——此时“mock 了”必须
+意味着运行中的 app 真的能看到该规则。如果 Flutter store 拒绝该路由则抛错。
 
 ```typescript
 await driver.mock.routeFlutter('/api/login', { method: 'POST', status: 200, body: { token: 't' } });
 ```
 
-## Inspecting: `getCalls()` / `listRoutes()`
+## 查询：`getCalls()` / `listRoutes()`
 
 ```typescript
 getCalls(path?: string): Promise<MockCall[]>     // all calls, or filtered by path
 listRoutes(): Promise<Array<{ id: string; method?: string; path: string }>>
 ```
 
-`MockCall` carries `{ method, path, body, headers, … }`. `body` may be a JSON string (Dio sends JSON)
-— parse it before asserting:
+`MockCall` 带 `{ method, path, body, headers, … }`。`body` 可能是 JSON 字符串（Dio 发的是
+JSON）——断言前要先解析：
 
 ```typescript
 // e2e — assert the app POSTed the right form data
@@ -82,7 +80,7 @@ viExpect(body.phone).toMatch(/^1[3-9]\d{9}$/);
 viExpect(body.email).toContain('@');
 ```
 
-## Mutating: `removeRoute()` / `clear()` / `clearCalls()` / `setPassthrough()`
+## 修改：`removeRoute()` / `clear()` / `clearCalls()` / `setPassthrough()`
 
 ```typescript
 removeRoute(path: string, method?: string): Promise<void>
@@ -91,9 +89,9 @@ clearCalls(): Promise<void>          // reset the call log only
 setPassthrough(enabled: boolean): Promise<void>
 ```
 
-`setPassthrough(false)` makes unmatched routes return 404 (default is passthrough-on, which lets
-unmatched traffic hit the real network). The e2e suite relies on this: with `clear()` and no rule,
-`/api/nonexistent` returns `404`.
+`setPassthrough(false)` 会让未匹配的路由返回 404（默认 passthrough 是开启的，即未匹配
+流量会打到真实网络）。e2e 套件依赖此行为：在 `clear()` 且没有任何规则的情况下，
+`/api/nonexistent` 会返回 `404`。
 
 ```typescript
 // e2e — unmatched routes return 404
@@ -104,9 +102,9 @@ const result = await driver.sendRequest('ext.fliwright.mock.testRequest',
 viExpect(result.status).toBe(404);
 ```
 
-## Rule files: `loadRules()` / `listRules()` / `switchRule()`
+## 规则文件：`loadRules()` / `listRules()` / `switchRule()`
 
-For many endpoints with multiple response scenarios, define them as JSON and switch at runtime.
+对于多端点、多响应场景的情况，把它们定义成 JSON，运行时再切换。
 
 ```typescript
 loadRules(mockDir?: string): Promise<void>     // defaults to '.fliwright/mocks'
@@ -114,9 +112,9 @@ listRules(): Array<{ endpoint: string; method: string; rules: string[]; activeRu
 switchRule(endpoint: string, ruleName: string, method?: string): Promise<void>
 ```
 
-### JSON mock file format (`.fliwright/mocks/api/*.json`)
+### JSON mock 文件格式（`.fliwright/mocks/api/*.json`）
 
-Each file describes one endpoint with multiple named response rules:
+每个文件描述一个端点，含多条具名响应规则：
 
 ```json
 {
@@ -146,8 +144,8 @@ Each file describes one endpoint with multiple named response rules:
 }
 ```
 
-An index (`.fliwright/mocks/mock-index.json`) lists which rules are active by default. If it's
-missing, `loadRules()` scans `api/*.json`. Then switch scenarios mid-test:
+一个索引（`.fliwright/mocks/mock-index.json`）列出默认激活的规则。如果它
+缺失，`loadRules()` 会扫描 `api/*.json`。之后可在用例中途切换场景：
 
 ```typescript
 await driver.mock.loadRules();                                  // loads .fliwright/mocks
@@ -155,8 +153,8 @@ await driver.mock.switchRule('/v1/public/token', 'server-error');
 // trigger the request in the UI, then assert the error UI
 ```
 
-`loadRules()` applies every endpoint's current active rule immediately, so test scripts can reuse
-project mock files instead of duplicating response bodies inline:
+`loadRules()` 会立即应用每个端点当前的激活规则，因此测试脚本可以复用
+项目里的 mock 文件，而不必在代码里重复响应体：
 
 ```typescript
 await driver.mock.clearFlutterRoutes();
@@ -165,23 +163,23 @@ await driver.mock.loadRules('.fliwright/mocks');
 await driver.mock.switchRule('/api/register', 'success', 'POST');
 ```
 
-The VS Code extension scans `.fliwright/mocks/api/*.json`, lets you pick a rule, and applies it via
-`driver.mock.route(endpoint, response)`.
+VS Code 扩展会扫描 `.fliwright/mocks/api/*.json`，让你选一条规则，然后通过
+`driver.mock.route(endpoint, response)` 应用。
 
-## Standalone mock controller (CLI)
+## 独立 mock 控制器（CLI）
 
-Start the tool-side mock controller as its own process (useful when the app's bridge can't host the
-store, or for running multiple apps against shared rules):
+把工具侧 mock 控制器作为独立进程启动（在 app 的桥接无法承载 store，或想让多个 app
+共用同一套规则时很有用）：
 
 ```bash
 fliwright mock:start --host 127.0.0.1 --port 0 --mock-dir .fliwright/mocks
 # → prints a WebSocket URL
 ```
 
-Point the app at it via `FLIWRIGHT_MOCK_CONTROLLER_URL` (read by the vitest fixture) or by passing
-the URL to `driver.mock.configureFlutterController(url)`. See [cli.md](./cli.md).
+通过 `FLIWRIGHT_MOCK_CONTROLLER_URL`（由 vitest fixture 读取）把 app 指向它，或把
+URL 传给 `driver.mock.configureFlutterController(url)`。见 [cli.md](./cli.md)。
 
-## Complete mock + form + UI pattern
+## 完整 mock + 表单 + UI 模式
 
 ```typescript
 test('register flow: mock API → fill form → submit → assert request', async ({ page, driver }) => {
@@ -202,12 +200,12 @@ test('register flow: mock API → fill form → submit → assert request', asyn
 });
 ```
 
-## Gotchas
+## 常见坑（Gotchas）
 
-- **Clear before you set.** Leftover routes from a previous test bleed across the shared driver.
-  Start app-visible mock tests with `await driver.mock.clearFlutterRoutes(); await driver.mock.clearCalls();`.
-- **Body may be a string.** Dio JSON-encodes request bodies; `JSON.parse` before asserting fields.
-- **`route()` is best-effort; `routeFlutter()` is strict.** Use `routeFlutter()` when a UI action
-  must observe the rule, or the test can pass against the mirror while the app sees nothing.
-- **Passthrough default is on.** If you expect 404s for unmatched routes, call
-  `setPassthrough(false)` after `clear()`.
+- **先清后设。** 上一个用例残留的路由会顺着共享 driver 串到当前用例。
+  开始 app 可见的 mock 测试时，先 `await driver.mock.clearFlutterRoutes(); await driver.mock.clearCalls();`。
+- **body 可能是字符串。** Dio 会把请求体 JSON 编码；断言字段前先 `JSON.parse`。
+- **`route()` 是尽力而为；`routeFlutter()` 是严格语义。** 当某个 UI 动作
+  必须观察到该规则时用 `routeFlutter()`，否则用例可能只对镜像通过、而 app 什么也看不到。
+- **passthrough 默认开启。** 如果你期望未匹配的路由返回 404，在
+  `clear()` 之后调用 `setPassthrough(false)`。

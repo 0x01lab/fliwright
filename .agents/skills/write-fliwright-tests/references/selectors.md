@@ -1,20 +1,18 @@
-# Selectors & Locators
+# 选择器与 Locator（Selectors & Locators）
 
-A **Locator** describes how to find a widget. It does nothing until you act on it (`click()`,
-`fill()`, `expect()`, …) or resolve it (`count()`, `isVisible()`, `resolve()`). Construct locators
-from `page` (or from another locator to scope).
+**Locator** 描述了如何找到一个控件。在你不对其进行操作（`click()`、`fill()`、`expect()` ……）或解析（`count()`、`isVisible()`、`resolve()`）之前，它什么都不会做。从 `page`（或从另一个 locator 来限定范围）构造 locator。
 
-## Selector preference order
+## 选择器优先顺序
 
-Prefer, in this order:
+按下面的顺序优先选用：
 
-1. stable **`Key`** — `page.getByKey('submit')`
-2. **semantics** identifier / label / role — `page.getBySemantics({ label: 'Log in', role: 'button' })`
-3. exact visible **text** — `page.getByText('Submit')`
-4. scoped text/type
-5. widget **type** as a last resort — `page.getByType('ElevatedButton')`
+1. 稳定的 **`Key`** — `page.getByKey('submit')`
+2. **semantics** 的 identifier / label / role — `page.getBySemantics({ label: 'Log in', role: 'button' })`
+3. 精确的可见 **text** — `page.getByText('Submit')`
+4. 限定范围后的 text/type
+5. 控件 **type** 作为最后手段 — `page.getByType('ElevatedButton')`
 
-## The `getByX` family
+## `getByX` 家族
 
 ```typescript
 page.getByText(text: string | RegExp, options?: { exact?: boolean; match?: 'exact' | 'contains' | 'regex'; caseSensitive?: boolean }): Locator
@@ -28,16 +26,16 @@ page.getBySemantics(semantics: {
 page.getByTooltip(tooltip: string): Locator
 ```
 
-The same family exists on **`Locator`** too (it scopes as a descendant):
+**`Locator`** 上同样提供这套家族方法（作为后代限定范围）：
 
 ```typescript
 const form = page.getByType('LoginForm');
 await form.getByText('Email').fill('alice@example.com');
 ```
 
-## Object-form selectors
+## 对象形式的选择器
 
-Anything you can pass to `page.locator(...)`:
+任何你能传给 `page.locator(...)` 的形式：
 
 ```typescript
 page.locator({ text: 'Log in' });
@@ -48,26 +46,26 @@ page.locator({ tooltip: 'Save changes' });
 page.locator({ semantics: { label: 'Log in', role: 'button' } });
 ```
 
-## String selector formats
+## 字符串选择器格式
 
-| Format | Example | Meaning |
+| 格式 | 示例 | 含义 |
 | --- | --- | --- |
-| `text=<value>` | `text=Submit` | exact visible text |
-| `textContains=<value>` | `textContains=Sub` | text containing substring |
-| `key=<value>` | `key=submitButton` | widget `Key` |
-| `type=<value>` or `byType=<value>` | `type=ElevatedButton` | widget type |
-| `subtype=<value>` | `subtype=FilledButton` | widget subtype |
-| `tooltip=<value>` | `tooltip=Save` | tooltip message |
+| `text=<value>` | `text=Submit` | 精确可见文本 |
+| `textContains=<value>` | `textContains=Sub` | 包含子串的文本 |
+| `key=<value>` | `key=submitButton` | 控件的 `Key` |
+| `type=<value>` 或 `byType=<value>` | `type=ElevatedButton` | 控件类型 |
+| `subtype=<value>` | `subtype=FilledButton` | 控件子类型 |
+| `tooltip=<value>` | `tooltip=Save` | tooltip 消息 |
 | `semantics=<value>` | `semantics=Email address` | semantics label |
 | `role=<value>` | `role=button` | semantics role |
-| plain string | `Submit` | treated as exact text |
-| `RegExp` | `/log in/i` | text regex |
+| 纯字符串 | `Submit` | 视作精确文本 |
+| `RegExp` | `/log in/i` | 文本正则 |
 
-`page.waitFor(selector, timeout)` accepts these strings, e.g. `await page.waitFor('text=注册成功', 5000)`.
+`page.waitFor(selector, timeout)` 接受这些字符串，例如 `await page.waitFor('text=注册成功', 5000)`。
 
-## Text matching modes
+## 文本匹配模式
 
-`getByText` / `getBySemantics` accept a `match` mode and `caseSensitive`:
+`getByText` / `getBySemantics` 接受一个 `match` 模式和 `caseSensitive`：
 
 ```typescript
 page.getByText('Log in');                       // exact
@@ -76,9 +74,9 @@ page.getByText(/log.*in/i);                      // regex via RegExp
 page.getByText('Log in', { exact: true });        // explicit exact
 ```
 
-## Scoping & disambiguation
+## 限定范围与消歧
 
-When a selector matches multiple widgets, narrow it down:
+当一个选择器匹配到多个控件时，可以这样收窄：
 
 ```typescript
 // Descendant scoping — find within a parent
@@ -102,7 +100,7 @@ await page.getByText('Item').last({ visible: true }).click();
 await page.locator({ text: 'Submit' }).ancestor({ type: 'Form' }).click();
 ```
 
-`nth`, `first`, and `last` accept `{ visible: true }` to additionally filter to hit-testable widgets:
+`nth`、`first` 和 `last` 接受 `{ visible: true }`，可进一步过滤为可命中测试的控件：
 
 ```typescript
 nth(index: number, options?: { visible?: boolean }): Locator
@@ -110,17 +108,17 @@ first(options?: { visible?: boolean }): Locator
 last(options?: { visible?: boolean }): Locator
 ```
 
-## Advanced selectors
+## 高级选择器
 
-These compose on top of the base query and map to the wire-protocol AST.
+它们在基础查询之上做组合，并映射到 wire-protocol AST。
 
-### `filter(criteria)` — post-filter matched widgets
+### `filter(criteria)` — 对匹配到的控件做后置过滤
 
 ```typescript
 filter(criteria: FilterCriteria): Locator
 ```
 
-`FilterCriteria` lets you keep only matches with a given state, enabled flag, text, or count within a region:
+`FilterCriteria` 让你只保留具备某种状态、特定 enabled 标记、特定文本，或在某个区域内数量符合要求的匹配项：
 
 ```typescript
 // only enabled buttons
@@ -130,39 +128,38 @@ page.getByType('ElevatedButton').filter({ enabled: true });
 page.getByType('ListTile').filter({ text: 'In stock' });
 ```
 
-### `containing(descendant)` — a parent that contains a descendant
+### `containing(descendant)` — 包含某个后代的父控件
 
 ```typescript
 containing(descendant: SelectorInput): Locator
 ```
 
-Find a container because of what it contains (e.g. the list tile that has a "Delete" button):
+因为它包含某个后代控件来找到容器（例如包含 "Delete" 按钮的列表项）：
 
 ```typescript
 const row = page.getByType('ListTile').containing({ text: 'Alice' });
 await row.getByKey('delete').click();
 ```
 
-### `subtype` and `tooltip` — direct getters
+### `subtype` 和 `tooltip` — 直接 getter
 
 ```typescript
 page.getBySubtype('FilledButton');   // resolves to .locator({ subtype })
 page.getByTooltip('Save');           // resolves to .locator({ tooltip })
 ```
 
-### State / position filtering
+### 基于状态/位置的过滤
 
-`FilterCriteria` and `PositionFilter` support state-based narrowing (enabled/disabled, visible,
-index among siblings). Use these instead of fragile `.nth(0)` first-match behavior:
+`FilterCriteria` 和 `PositionFilter` 支持基于状态收窄（enabled/disabled、visible、在兄弟节点中的 index）。优先用这些，而不是脆弱的 `.nth(0)` 取首匹配行为：
 
 ```typescript
 // the enabled submit among several submit-like buttons
 page.getBySemantics({ role: 'button' }).filter({ enabled: true, text: 'Submit' });
 ```
 
-## Refs (snapshots)
+## Ref（快照）
 
-For exploration, refs from a snapshot can pin a specific widget instance:
+用于探索时，来自快照的 ref 可以固定到某个具体的控件实例：
 
 ```typescript
 const snap = await page.snapshot({ depth: 4, includeRects: true });
@@ -174,11 +171,9 @@ const loc = await page.findRef({ text: 'Confirm', role: 'button' });
 await loc.click();
 ```
 
-**Do not** hard-code `e<N>` refs in committed tests — they are ephemeral per snapshot. Capture the
-snapshot in the same run, or commit a resilient query locator instead. See
-[screenshots-snapshots.md](./screenshots-snapshots.md).
+**不要**在提交的测试里硬编码 `e<N>` 形式的 ref —— 它们对每个快照而言都是临时的。要么在同一次运行里抓取快照，要么提交一个稳定可查询的 locator。参见 [screenshots-snapshots.md](./screenshots-snapshots.md)。
 
-## Reading a Locator without acting
+## 不做操作地读取 Locator
 
 ```typescript
 await loc.count();                 // number of matches (any visibility)
@@ -187,18 +182,18 @@ await loc.resolve();               // first matching WidgetInfo | undefined
 await loc.resolveAll(options?);    // WidgetInfo[]
 ```
 
-`resolveAll` options: `{ visible?: 'any' | 'hitTestable'; strict?: boolean; limit?: number }`.
+`resolveAll` 的 options：`{ visible?: 'any' | 'hitTestable'; strict?: boolean; limit?: number }`。
 
-## Choosing a selector — worked example
+## 选择器选型 —— 实战示例
 
-Goal: tap "Submit" on a screen that also has a disabled "Submit" elsewhere.
+目标：在屏幕上点击 "Submit"，但屏幕别处还有一个被禁用的 "Submit"。
 
-❌ Fragile — first match is unstable:
+❌ 脆弱 —— 取首匹配不稳定：
 ```typescript
 await page.getByText('Submit').click();
 ```
 
-✅ Resilient — semantics role + filter to enabled, scoped to the form:
+✅ 稳定 —— semantics role + 过滤为 enabled，并限定在表单内：
 ```typescript
 const form = page.getByType('RegistrationForm');
 await form.getBySemantics({ label: 'Submit', role: 'button' }).filter({ enabled: true }).click();

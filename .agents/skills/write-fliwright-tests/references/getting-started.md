@@ -1,11 +1,10 @@
-# Getting Started
+# 快速开始
 
-Write your first Fliwright test in five steps: wire the bridge, start the app, set a VM URL, write a `.test.ts`, run it.
+五步写一个 Fliwright 测试：接入桥接、启动 app、设置 VM URL、写 `.test.ts`、运行它。
 
-## 1. Initialize the bridge in the app under test
+## 1. 在被测 app 中初始化桥接
 
-Fliwright drives Flutter through Dart VM Service extensions registered by the
-`fliwright_bridge` package. Initialize it **only in debug builds** in your app's `main()`:
+Fliwright 通过 `fliwright_bridge` 包注册的 Dart VM Service 扩展来驱动 Flutter。**只在 debug 构建里**初始化它，放在你 app 的 `main()` 中：
 
 ```dart
 import 'package:flutter/foundation.dart';
@@ -19,33 +18,32 @@ Future<void> main() async {
 }
 ```
 
-If your tests use route navigation (`page.navigate('/login')`), pass your router:
+如果你的测试用到路由导航（`page.navigate('/login')`），把你的 router 传进去：
 
 ```dart
 await FliwrightBridge.init(router: myGoRouter);
 ```
 
-Rebuild/restart the app after adding this. The bridge registers extensions like
-`ext.fliwright.snap`, `ext.fliwright.action`, `ext.fliwright.extractForm`, and `ext.fliwright.mock.*`.
+加完后重新构建/重启 app。桥接会注册 `ext.fliwright.snap`、`ext.fliwright.action`、`ext.fliwright.extractForm` 和 `ext.fliwright.mock.*` 等扩展。
 
-## 2. Start the app and copy the VM Service URL
+## 2. 启动 app 并复制 VM Service URL
 
 ```bash
 fvm flutter run -d macos --debug     # or ios / android / windows / linux
 ```
 
-The console prints a line like:
+控制台会打印一行类似：
 
 ```
 A Dart VM Service on macOS is available at: http://127.0.0.1:54321/abc=/
 ```
 
-The fixture accepts the HTTP URL and converts it to `ws://…/ws` automatically, so either form works.
-Keep the app running — tests connect to it.
+fixture 接受 HTTP URL 并自动把它转成 `ws://…/ws`，所以两种格式都行。
+保持 app 运行——测试要连接它。
 
-## 3. Set the VM URL for the test process
+## 3. 为测试进程设置 VM URL
 
-Pick one mechanism (the fixture reads them in this priority order):
+任选一种方式（fixture 按以下优先级读取）：
 
 ```bash
 # Option A — recommended env var
@@ -55,16 +53,16 @@ export FLIWRIGHT_VM_URL="http://127.0.0.1:54321/abc=/"
 export FLIWRIGHT_VM_SERVICE_URL="http://127.0.0.1:54321/abc=/"
 ```
 
-If neither is set, the test throws:
+如果两个都没设，测试会抛：
 
 ```
 No VM Service URL provided. Set FLIWRIGHT_VM_URL or FLIWRIGHT_VM_SERVICE_URL,
 or use createFliwrightTest({ vmServiceUrl }).
 ```
 
-## 4. Write the test
+## 4. 写测试
 
-A minimal test using the default `@fliwright/vitest` fixture:
+一个用默认 `@fliwright/vitest` fixture 的最小测试：
 
 ```typescript
 // counter.test.ts
@@ -79,18 +77,18 @@ test('counter increments when the increment button is tapped', async ({ page }) 
 });
 ```
 
-That's it. The fixture:
+这样就行了。fixture 会：
 
-- reads `FLIWRIGHT_VM_URL` (with `FLIWRIGHT_VM_SERVICE_URL` fallback),
-- creates **one shared `FliwrightDriver`** and connects it,
-- injects `{ page, driver }` into each test,
-- wires failure context (screenshot + widget tree + diagnostics + source) when run through the CLI/MCP.
+- 读取 `FLIWRIGHT_VM_URL`（兜底用 `FLIWRIGHT_VM_SERVICE_URL`），
+- 创建**一个共享的 `FliwrightDriver`** 并连接，
+- 给每个测试注入 `{ page, driver }`，
+- 在通过 CLI/MCP 运行时挂上失败上下文（截图 + 控件树 + 诊断信息 + 源码）。
 
-See [test-harness.md](./test-harness.md) for custom configs and lifecycle control.
+自定义配置与生命周期控制见 [test-harness.md](./test-harness.md)。
 
-## 5. Run the test
+## 5. 运行测试
 
-Through the CLI (recommended — emits the AI/human report, persists screenshots, prints a reproduce command):
+通过 CLI（推荐——会产出 AI/人类可读报告、持久化截图、打印复现命令）：
 
 ```bash
 fliwright run \
@@ -99,31 +97,29 @@ fliwright run \
   --reporter ai-json
 ```
 
-For a quick smoke check you can call Vitest directly, but you will **not** get the persisted report
-unless you go through `fliwright run`:
+想做快速冒烟可以直接调 Vitest，但**拿不到持久化报告**，除非走 `fliwright run`：
 
 ```bash
 FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/abc=/ws" pnpm vitest run path/to/counter.test.ts
 ```
 
-See [cli.md](./cli.md) for all flags and reporters.
+所有 flag 和 reporter 见 [cli.md](./cli.md)。
 
-## Prerequisites checklist
+## 前置检查清单
 
-| Requirement | How to verify |
+| 要求 | 如何校验 |
 | --- | --- |
-| App runs the **current** bridge | `ext.fliwright.snap` responds (see [screenshots-snapshots.md](./screenshots-snapshots.md)). `fliwright doctor` checks capabilities. |
-| VM Service URL exported | `echo $FLIWRIGHT_VM_URL` is non-empty. |
-| `@fliwright/vitest` + `@fliwright/core` resolvable | your `package.json` depends on them; `fliwright init` can scaffold a config. |
-| App stable (no crash loop) | the screen is interactive in the running app. |
+| app 跑的是**当前**桥接 | `ext.fliwright.snap` 能响应（见 [screenshots-snapshots.md](./screenshots-snapshots.md)）。`fliwright doctor` 会检查能力。 |
+| 已导出 VM Service URL | `echo $FLIWRIGHT_VM_URL` 非空。 |
+| 能解析 `@fliwright/vitest` + `@fliwright/core` | 你的 `package.json` 依赖了它们；`fliwright init` 可以脚手架出一份配置。 |
+| app 稳定（没有崩溃循环） | 运行中的 app 屏幕可交互。 |
 
-If `ext.fliwright.snap` returns `Unknown method …`, the app is on an older bridge. **Do not** keep
-clicking through an unstable screen — restart/rebuild the app first. Details in
-[troubleshooting.md](./troubleshooting.md).
+如果 `ext.fliwright.snap` 返回 `Unknown method …`，说明 app 用的是旧桥接。**别**在抖动的屏幕上继续点——先重启/重建 app。细节见
+[troubleshooting.md](./troubleshooting.md)。
 
-## Where to go next
+## 下一步去哪
 
-- Learn the fixture and hooks → [test-harness.md](./test-harness.md)
-- Locate widgets reliably → [selectors.md](./selectors.md)
-- Assert on visible outcomes → [assertions.md](./assertions.md)
-- Copy a full template → [examples.md](./examples.md)
+- 了解 fixture 和 hooks → [test-harness.md](./test-harness.md)
+- 稳定地定位控件 → [selectors.md](./selectors.md)
+- 对可见结果做断言 → [assertions.md](./assertions.md)
+- 复制完整模板 → [examples.md](./examples.md)

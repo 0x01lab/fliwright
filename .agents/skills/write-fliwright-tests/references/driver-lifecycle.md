@@ -1,11 +1,10 @@
-# Manual Driver Lifecycle
+# 手动 Driver 生命周期（Manual Driver Lifecycle）
 
-Reach for a raw `FliwrightDriver` only when the `@fliwright/vitest` fixture can't express what you
-need: **custom plugins**, **raw VM Service extensions** (`ext.fliwright.extractForm`,
-`ext.fliwright.snapshot`), **older-bridge compatibility**, or deliberately low-level coordinate
-tests. For everything else, use the fixture.
+只有当 `@fliwright/vitest` 的 fixture 表达不了你的需求时，才考虑直接用原始
+`FliwrightDriver`：**自定义插件**、**原始 VM Service 扩展**（`ext.fliwright.extractForm`、
+`ext.fliwright.snapshot`）、**兼容旧版桥接**，或者刻意要做底层坐标测试。其余情况一律用 fixture。
 
-## Basic lifecycle
+## 基本生命周期
 
 ```typescript
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -29,12 +28,12 @@ describe('registration flow', () => {
 });
 ```
 
-**Always** call `await driver.dispose()` in `afterAll` to close the WebSocket.
+**务必**在 `afterAll` 里调用 `await driver.dispose()` 关闭 WebSocket。
 
-## URL conversion
+## URL 转换
 
-`flutter run` sometimes prints an **HTTP** VM Service URL. `connect()` needs a **WebSocket** URL
-ending in `/ws`. The fixture converts automatically; raw-driver scripts must convert themselves:
+`flutter run` 有时会打印一个 **HTTP** 的 VM Service URL。`connect()` 需要的是以
+`/ws` 结尾的 **WebSocket** URL。fixture 会自动转换；使用原始 driver 的脚本必须自己转：
 
 ```typescript
 function toWsUrl(url: string): string {
@@ -45,9 +44,9 @@ function toWsUrl(url: string): string {
 await driver.connect(toWsUrl(process.env.FLIWRIGHT_VM_SERVICE_URL!));
 ```
 
-## Conditional skip
+## 条件跳过
 
-Skip a whole suite cleanly when no URL is present:
+当没有 URL 时，干净地跳过整组用例：
 
 ```typescript
 const vmServiceUrl = process.env.EXIO_VM_SERVICE_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL;
@@ -58,31 +57,31 @@ describe.skipIf(!vmServiceUrl)('Exio app live E2E', () => {
 });
 ```
 
-## `FliwrightDriver` public surface
+## `FliwrightDriver` 公共接口
 
-| Member | Signature | Purpose |
+| 成员 | 签名 | 用途 |
 | --- | --- | --- |
-| constructor | `new FliwrightDriver(options?: DriverOptions)` | `options.plugins` registers plugins at construction |
-| `connect` | `connect(vmServiceUrl: string): Promise<void>` | connect to the VM Service |
-| `dispose` | `dispose(): Promise<void>` | close the connection |
-| `page` | `get page(): Page` | lazy `Page` (selectors/actions/nav/screenshots/forms) |
-| `mock` | `get mock(): MockManager` | lazy `MockManager` (see [mocks.md](./mocks.md)) |
-| `healing` | `get healing(): SelfHealingEngine` | lazy healing engine |
-| `recorder` | `get recorder(): RecorderController` | lazy recorder for code-gen |
-| `state` | `get state(): StateAdapter` | lazy state adapter (Riverpod, when plugin configured) |
-| `sdkVersion` | `get sdkVersion(): string \| null` | resolved Dart SDK version |
-| `sendRequest` | `sendRequest(method, params?): Promise<unknown>` | raw JSON-RPC to any extension |
-| `reloadSources` | `reloadSources(): Promise<unknown>` | trigger a Dart hot reload |
-| `listenToDiagnostics` | `listenToDiagnostics(streamIds?): Promise<void>` | subscribe to Logging/Stdout/Stderr/Isolate |
-| `getDiagnostics` | `getDiagnostics(options?): VMServiceEvent[]` | read captured diagnostics |
-| `clearDiagnostics` | `clearDiagnostics(): void` | reset the diagnostics buffer |
-| registry getters | `getStateAdapter(name)`, `getMockAdapter(name)`, `getFinderStrategy(name)`, `getHealingStrategy(name)` | plugin lookups |
-| lifecycle hooks | `notifyTestStart(name)`, `notifyTestEnd(name, result)` | plugin lifecycle |
+| constructor | `new FliwrightDriver(options?: DriverOptions)` | `options.plugins` 在构造时注册插件 |
+| `connect` | `connect(vmServiceUrl: string): Promise<void>` | 连接到 VM Service |
+| `dispose` | `dispose(): Promise<void>` | 关闭连接 |
+| `page` | `get page(): Page` | 懒加载的 `Page`（选择器/动作/导航/截图/表单） |
+| `mock` | `get mock(): MockManager` | 懒加载的 `MockManager`（见 [mocks.md](./mocks.md)） |
+| `healing` | `get healing(): SelfHealingEngine` | 懒加载的自愈引擎 |
+| `recorder` | `get recorder(): RecorderController` | 用于代码生成的懒加载录制器 |
+| `state` | `get state(): StateAdapter` | 懒加载的状态适配器（Riverpod，配置插件后可用） |
+| `sdkVersion` | `get sdkVersion(): string \| null` | 解析得到的 Dart SDK 版本 |
+| `sendRequest` | `sendRequest(method, params?): Promise<unknown>` | 对任意扩展的原始 JSON-RPC 调用 |
+| `reloadSources` | `reloadSources(): Promise<unknown>` | 触发一次 Dart hot reload |
+| `listenToDiagnostics` | `listenToDiagnostics(streamIds?): Promise<void>` | 订阅 Logging/Stdout/Stderr/Isolate |
+| `getDiagnostics` | `getDiagnostics(options?): VMServiceEvent[]` | 读取已捕获的诊断事件 |
+| `clearDiagnostics` | `clearDiagnostics(): void` | 重置诊断缓冲区 |
+| registry getters | `getStateAdapter(name)`, `getMockAdapter(name)`, `getFinderStrategy(name)`, `getHealingStrategy(name)` | 插件查找 |
+| lifecycle hooks | `notifyTestStart(name)`, `notifyTestEnd(name, result)` | 插件生命周期 |
 
-## Raw extensions
+## 原始扩展调用
 
-Call any VM Service extension directly with `sendRequest`. This is how you reach features not yet
-wrapped by `Page`/`Locator`, and how you support older bridges:
+用 `sendRequest` 可以直接调用任何 VM Service 扩展。这是你访问 `Page`/`Locator`
+尚未封装的功能、以及支持旧版桥接的途径：
 
 ```typescript
 // legacy form extraction (older bridge)
@@ -103,8 +102,8 @@ await driver.sendRequest('ext.fliwright.mock.testRequest',
   { url: 'http://test.local/api/ping', method: 'GET' });
 ```
 
-`sendRequest` returns the raw extension response; `success`/`error` conventions vary per extension,
-so check the shape:
+`sendRequest` 返回的是扩展的原始响应；`success`/`error` 的约定因扩展而异，
+所以要检查返回的形状：
 
 ```typescript
 const result = await driver.sendRequest('ext.fliwright.type', { /* … */ }) as { success?: boolean; error?: string };
@@ -113,8 +112,8 @@ if (result.success === false || result.error) throw new Error(result.error);
 
 ## State / Riverpod
 
-When the `fliwright-plugin-riverpod` adapter is registered (or the app uses the Riverpod bridge),
-`driver.state` exposes provider reads/writes:
+当 `fliwright-plugin-riverpod` 适配器已注册（或 app 使用 Riverpod 桥接）时，
+`driver.state` 暴露出 provider 的读写：
 
 ```typescript
 const adapter = driver.getStateAdapter('riverpod'); // or driver.state
@@ -123,13 +122,13 @@ await adapter.write('authProvider', { user: { id: 1 } });
 await adapter.listProviders();
 ```
 
-Use this to set up state directly (logged-in, pre-populated) instead of driving the UI through a
-login flow on every test. See the `@fliwright/plugin-riverpod` docs for the full operation set.
+用它来直接设置状态（已登录、预填充），而不必每个用例都走 UI 登录流程。完整操作集见
+`@fliwright/plugin-riverpod` 文档。
 
-## Custom plugins
+## 自定义插件
 
-Pass plugins at construction; they register state adapters, mock adapters, finder strategies, or
-healing strategies:
+在构造时传入插件；它们会注册状态适配器、mock 适配器、finder 策略或
+自愈策略：
 
 ```typescript
 import { FliwrightDriver } from '@fliwright/core';
@@ -141,18 +140,18 @@ await driver.connect(toWsUrl(process.env.FLIWRIGHT_VM_URL!));
 
 ## Tracing
 
-When `FLIWRIGHT_TRACE` is set (`full` or `on-failure`) and `FLIWRIGHT_TRACE_DIR` is set, the fixture
-shadows `driver.sendRequest` to record per-action traces (`TraceCollector` / `TraceStore`) keyed by
-a per-process `runId`. This is only wired through the fixture, not raw-driver scripts — replicate
-the `sendRequest` shadowing yourself if you need it in a raw driver.
+当设置了 `FLIWRIGHT_TRACE`（`full` 或 `on-failure`）且设置了 `FLIWRIGHT_TRACE_DIR` 时，
+fixture 会替换（shadow）`driver.sendRequest`，按进程级 `runId` 记录每次动作的 trace
+（`TraceCollector` / `TraceStore`）。这只在 fixture 里接好了，原始 driver 脚本里
+没有——如果你在原始 driver 里也需要，请自行复刻这套 `sendRequest` 的 shadow 逻辑。
 
-## When the fixture is the right choice (reality check)
+## 什么时候该用 fixture（现实校验）
 
-Use the fixture (`@fliwright/vitest`) when you want any of these for free:
+当你想要下面任何一项“免费”能力时，就用 fixture（`@fliwright/vitest`）：
 
-- shared driver + auto-connect,
-- failure context (screenshot + tree + diagnostics + source + healing),
-- auto-waiting `expect()` with healing,
-- trace collection.
+- 共享 driver + 自动连接，
+- 失败上下文（截图 + 控件树 + 诊断 + 源码 + 自愈建议），
+- 带自愈的自动等待 `expect()`，
+- trace 收集。
 
-Drop to raw `FliwrightDriver` only when none of those matter and you need extension-level control.
+只有当这些都不重要、且你确实需要扩展级控制时，才下沉到原始 `FliwrightDriver`。

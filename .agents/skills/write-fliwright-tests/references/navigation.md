@@ -1,18 +1,16 @@
-# Navigation & Waiting
+# 导航与等待（Navigation & Waiting）
 
-Fliwright can drive route navigation when the app exposes its router to the bridge, and provides
-waiting primitives so tests stay free of fixed `sleep()` calls.
+当应用把它的 router 暴露给桥接时，Fliwright 可以驱动路由导航；它还提供了一系列等待原语，让测试摆脱固定的 `sleep()` 调用。
 
-## App-side setup
+## 应用侧准备
 
-Route navigation requires the app to inject a router (e.g. GoRouter) into the bridge:
+路由导航要求应用把一个 router（例如 GoRouter）注入到桥接：
 
 ```dart
 await FliwrightBridge.init(router: myGoRouter);   // enables ext.fliwright.navigate / currentRoute / goBack
 ```
 
-Without a router, `page.navigate()` will throw a bridge-side error. Widget-level navigation
-(tapping a button that pushes a route) always works regardless.
+没有 router 时，`page.navigate()` 会抛出桥接侧错误。控件级的导航（点击一个 push 新路由的按钮）则始终可用，与是否有 router 无关。
 
 ## `navigate(path)`
 
@@ -20,7 +18,7 @@ Without a router, `page.navigate()` will throw a bridge-side error. Widget-level
 navigate(path: string, options?: { extra?: Record<string, unknown> }): Promise<void>
 ```
 
-Pushes a route. `extra` is forwarded to the router as extra data.
+push 一条路由。`extra` 会作为附加数据转发给 router。
 
 ```typescript
 await page.navigate('/login');
@@ -50,11 +48,11 @@ await page.navigate('/register');
 await page.goBack();
 ```
 
-## Waiting primitives
+## 等待原语
 
 ### `waitFor(selector, timeout)`
 
-Poll until a selector resolves to at least one widget.
+轮询直到某个选择器解析到至少一个控件。
 
 ```typescript
 waitFor(selector: SelectorInput, timeoutMs = 5000): Promise<Locator>
@@ -65,13 +63,11 @@ const success = await page.waitFor('text=注册成功', 5000);
 viExpect(await success.isVisible()).toBe(true);
 ```
 
-Throws on timeout. Accepts the same string formats as selectors (`text=`, `key=`, …).
+超时会抛错。它接受与选择器相同的字符串格式（`text=`、`key=`、…）。
 
 ### `waitForNew(selector, options?)`
 
-Wait for a **new** element matching the selector that **did not exist** when the call started.
-Essential after a navigation/click that replaces the page — it avoids matching stale widgets that
-are still on screen during a transition animation.
+等待一个**新**的、匹配该选择器且在调用开始时**尚不存在**的元素。这在导航/点击替换了整个页面之后尤为关键——它能避免误匹配到转场动画期间仍留在屏幕上的陈旧控件。
 
 ```typescript
 waitForNew(selector: SelectorInput, options?: { timeout?: number }): Promise<Locator>
@@ -83,12 +79,11 @@ const details = await page.waitForNew('text=Details', { timeout: 5000 });
 await expect(details).toBeVisible();
 ```
 
-It snapshots current matching IDs at call time, then polls for matches whose ID is not in that set.
+它会在调用时把当前匹配到的 ID 集合做快照，然后轮询查找 ID 不在该集合内的匹配项。
 
 ### `settle(options?)`
 
-Wait for Flutter's rendering pipeline to settle — N consecutive frames with no scheduled work.
-Use after a click that triggers a route transition, before querying the new page.
+等待 Flutter 的渲染管线安定下来——即连续 N 帧都没有待调度的工作。适用于点击触发了路由转场、随后要查询新页面的场景。
 
 ```typescript
 settle(options?: { timeout?: number }): Promise<void>   // default timeout 2000 ms
@@ -100,13 +95,11 @@ await page.settle();                 // let the transition finish
 await expect(page.getByText('Welcome')).toBeVisible();
 ```
 
-`Locator.click({ waitForAnimations: true })` does a settle automatically — prefer that over a
-manual `settle()` after a click.
+`Locator.click({ waitForAnimations: true })` 会自动执行一次 settle——在点击之后优先用它，而不是手动调用 `settle()`。
 
 ### `waitForNetworkIdle(options?)`
 
-Wait until the app has had no network activity for a quiet window. Useful after an action kicks off
-background fetches.
+等到应用在一个静默窗口内没有任何网络活动。适用于某次操作触发了后台拉取之后。
 
 ```typescript
 waitForNetworkIdle(options?: { quietMs?: number; timeout?: number }): Promise<void>
@@ -119,13 +112,13 @@ await page.waitForNetworkIdle({ quietMs: 300, timeout: 8000 });
 
 ### `dismissModal()`
 
-Dismiss a modal dialog/sheet via the action extension.
+通过 action 扩展关闭一个模态对话框/底部弹层。
 
 ```typescript
 dismissModal(): Promise<void>
 ```
 
-## Pattern: navigate, wait, assert
+## 模式：导航、等待、断言
 
 ```typescript
 test('navigates between routes', async ({ page }) => {
@@ -139,9 +132,9 @@ test('navigates between routes', async ({ page }) => {
 });
 ```
 
-## Pattern: scope navigation per test
+## 模式：按测试隔离导航
 
-Reset to a known route before each test so order doesn't matter:
+在每个测试之前重置到一条已知路由，这样用例之间就不会相互依赖顺序：
 
 ```typescript
 import { test, beforeEach } from '@fliwright/vitest';
@@ -151,15 +144,14 @@ beforeEach(async ({ page }) => {
 });
 ```
 
-## When to use what
+## 什么时候用什么
 
-| Situation | Use |
+| 场景 | 用什么 |
 | --- | --- |
-| After a click triggers a page transition | `click({ waitForAnimations: true })` or `settle()` |
-| Wait for a specific widget to appear | `waitFor(selector)` or auto-waiting `expect(...).toBeVisible()` |
-| Wait for a widget that **replaces** a same-type widget on the previous page | `waitForNew(selector)` |
-| Wait for background fetches | `waitForNetworkIdle()` |
-| Read the current route | `currentRoute()` |
+| 点击触发了页面切换之后 | `click({ waitForAnimations: true })` 或 `settle()` |
+| 等待某个具体控件出现 | `waitFor(selector)` 或自动等待的 `expect(...).toBeVisible()` |
+| 等待一个**替换**了上一页同类型控件的控件 | `waitForNew(selector)` |
+| 等待后台拉取完成 | `waitForNetworkIdle()` |
+| 读取当前路由 | `currentRoute()` |
 
-Avoid `setTimeout`/`sleep`. The only legitimate uses are inside `clickAt`-style legacy flows where
-no widget event signals readiness (see `e2e/exio-app-e2e.test.ts`).
+请避免使用 `setTimeout`/`sleep`。唯一合理的例外是在 `clickAt` 这类遗留流程内部——那里没有任何控件事件可用作就绪信号（见 `e2e/exio-app-e2e.test.ts`）。

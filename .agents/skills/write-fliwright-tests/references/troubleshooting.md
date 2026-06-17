@@ -1,43 +1,41 @@
-# Troubleshooting & Common Repairs
+# 排错与常见修复
 
-Symptom → cause → fix. When in doubt, run `fliwright doctor --vm-url …` first.
+按“症状 → 原因 → 修复”组织。拿不准时，先跑 `fliwright doctor --vm-url …`。
 
-## Connection / VM URL
+## 连接 / VM URL
 
-| Symptom | Cause | Fix |
+| 症状 | 原因 | 修复 |
 | --- | --- | --- |
-| `No VM Service URL provided` | neither `FLIWRIGHT_VM_URL` nor `FLIWRIGHT_VM_SERVICE_URL` set | export the URL, or `createFliwrightTest({ vmServiceUrl })` |
-| connection error on a raw-driver script | `flutter run` printed an **HTTP** URL; `connect()` needs WS | convert: `url.replace('http://','ws://')` and append `/ws` (the fixture does this for you) |
-| `Could not find a running Flutter VM Service` (CLI) | no app running, no `--vm-url`, discovery found nothing | start the app (`flutter run`), then re-run; or pass `--vm-url` |
-| suite silently does nothing | test wrapped in `describe.skipIf(!vmUrl)` / `test.skipIf(!vmUrl)` | export the VM URL so the guard passes |
+| `No VM Service URL provided` | 既没设 `FLIWRIGHT_VM_URL`，也没设 `FLIWRIGHT_VM_SERVICE_URL` | export 该 URL，或 `createFliwrightTest({ vmServiceUrl })` |
+| 裸 driver 脚本报连接错误 | `flutter run` 打印的是 **HTTP** URL，而 `connect()` 需要 WS | 转换：`url.replace('http://','ws://')` 再追加 `/ws`（fixture 会自动帮你做） |
+| （CLI）`Could not find a running Flutter VM Service` | 没在跑应用、没传 `--vm-url`、自动发现也没找到 | 先启动应用（`flutter run`）再重跑；或传 `--vm-url` |
+| 套件静默什么都没做 | 测试被包在 `describe.skipIf(!vmUrl)` / `test.skipIf(!vmUrl)` 里 | export VM URL 让这个守卫通过 |
 
-## Bridge readiness (most common class of failure)
+## 桥接就绪（最常见的一类失败）
 
-| Symptom | Cause | Fix |
+| 症状 | 原因 | 修复 |
 | --- | --- | --- |
-| `Unknown method "ext.fliwright.snap"` | app runs an **older** bridge | upgrade `fliwright_bridge`, call `FliwrightBridge.init()` in `kDebugMode`, rebuild/restart, confirm `ext.fliwright.snap` works |
-| `Unknown method "ext.fliwright.extractForm"` | older bridge lacks form extraction | upgrade; meanwhile fall back to raw-driver legacy paths (label them) |
-| `snapshot()`/`findRef()`/`fliwright_snap` fail | same older-bridge issue | upgrade before using snap/ref/observe/actionability features |
-| mock rules don't affect the app | `route()` silently fell back to the tool-side mirror | use `routeFlutter()` (strict) or upgrade the bridge so the Flutter store is used |
+| `Unknown method "ext.fliwright.snap"` | 应用跑的是**旧版**桥接 | 升级 `fliwright_bridge`，在 `kDebugMode` 下调用 `FliwrightBridge.init()`，重新构建/重启，确认 `ext.fliwright.snap` 可用 |
+| `Unknown method "ext.fliwright.extractForm"` | 旧版桥接缺表单抽取能力 | 升级；过渡期回退到裸 driver 的 legacy 路径（标注清楚） |
+| `snapshot()`/`findRef()`/`fliwright_snap` 失败 | 同样的旧版桥接问题 | 在使用 snap/ref/observe/actionability 特性之前先升级 |
+| mock 规则对应用不生效 | `route()` 静默回退到了工具侧镜像 | 用 `routeFlutter()`（严格），或升级桥接让 Flutter 侧存储被用上 |
 
-**Upgrade direction:** depend on the current `fliwright_bridge`, initialize `FliwrightBridge.init()`
-behind `kDebugMode`, rebuild/restart, confirm `ext.fliwright.snap` works, then run the suite. Do not
-keep running against an older, crashing, or unstable app.
+**升级方向：** 依赖当前的 `fliwright_bridge`，在 `kDebugMode` 之后初始化 `FliwrightBridge.init()`，重新构建/重启，确认 `ext.fliwright.snap` 可用后再跑套件。不要继续对着一个过时、崩溃或不稳定的应用反复跑。
 
-## Selectors / flakiness
+## 选择器 / 不稳定
 
-| Symptom | Cause | Fix |
+| 症状 | 原因 | 修复 |
 | --- | --- | --- |
-| `tap failed` with a `contextDump` list | selector didn't resolve; the dump shows what's actually on screen | read the dump, switch to key/semantics, or scope with `.and()`/`.filter()` |
-| matches the wrong widget (ambiguous text) | `getByText('Submit')` matched several | scope to a parent, add `.and({ type })`, use semantics role, or `.filter({ enabled: true })` |
-| first-match instability | `.nth(0)` / first-match flips between runs | pin with key/semantics; use `.filter({ text })` or position filtering |
-| ref works once then fails | committed a hard-coded `e<N>` ref (ephemeral per snapshot) | capture snapshot in the same run, or commit a `findRef({...})` / `getBySemantics(...)` query |
-| stale element after navigation | selector matched a widget from the previous page mid-transition | `waitForNew(selector)` instead of `waitFor`/`locator` |
-| fill lands in the wrong field | broad `getByType('TextField')` | `formHelper.analyze()` then match by `selector`, or use `getByKey`/semantics |
+| `tap failed` 带一个 `contextDump` 列表 | 选择器没解析到；dump 显示了屏幕上实际有什么 | 读 dump，换成 key/semantics，或用 `.and()`/`.filter()` 限定范围 |
+| 匹配到错的控件（文案有歧义） | `getByText('Submit')` 命中了多个 | 限定到某个父级、加 `.and({ type })`、用 semantics role，或 `.filter({ enabled: true })` |
+| 首选命中不稳定 | `.nth(0)` / 首选命中在多次运行间跳变 | 用 key/semantics 钉住；用 `.filter({ text })` 或按位置过滤 |
+| ref 第一次行之后失败 | 提交了硬编码的 `e<N>` ref（每次快照都不同） | 在同一次运行里捕获快照，或提交 `findRef({...})` / `getBySemantics(...)` 查询 |
+| 路由跳转后元素变旧 | 选择器在跳转过程中匹配到了上一页的控件 | 用 `waitForNew(selector)` 而不是 `waitFor`/`locator` |
+| 填到了错的字段 | 太宽泛的 `getByType('TextField')` | 先 `formHelper.analyze()` 再按 `selector` 匹配，或用 `getByKey`/semantics |
 
-### Read the `contextDump`
+### 读 `contextDump`
 
-When an action fails to find its target, the thrown error appends up to 10 visible widgets:
+当一个操作找不到目标时，抛出的错误会附上最多 10 个可见控件：
 
 ```
 tap failed debug=…
@@ -47,50 +45,48 @@ Visible widgets on screen:
   - TextField "Email" semantics="Email address"
 ```
 
-This list is the fastest path to the right selector. Use it.
+这份列表是找到正确选择器最快的路径，好好用。
 
-## Timing / stability
+## 时机 / 稳定性
 
-| Symptom | Cause | Fix |
+| 症状 | 原因 | 修复 |
 | --- | --- | --- |
-| intermittent failure after a click that triggers navigation | queried the new page during the transition | `click({ waitForAnimations: true })` or `page.settle()`, then `waitFor`/`expect` |
-| assertion flaps on slow network | default 5s timeout too short | `expect(loc).toBeVisible({ timeout: 15_000 })` or `waitForNetworkIdle()` |
-| screenshot assertions fail / blank screen | app mid-frame or PlatformView not painted | wait for a stable frame / restart; use `screenshot({ mode: 'canvas' })` for WebView |
-| test depends on fixed `sleep` | hidden timing coupling | replace with `waitFor` / auto-wait `expect` / `settle` |
+| 点击触发跳转后偶发失败 | 在跳转过程中查询了新页面 | `click({ waitForAnimations: true })` 或 `page.settle()`，再 `waitFor`/`expect` |
+| 慢网络下断言来回抖动 | 默认 5s 超时太短 | `expect(loc).toBeVisible({ timeout: 15_000 })` 或 `waitForNetworkIdle()` |
+| 截图断言失败/空白屏 | 应用正处在帧中间或 PlatformView 还没绘制 | 等一帧稳定/重启；WebView 用 `screenshot({ mode: 'canvas' })` |
+| 测试依赖写死的 `sleep` | 隐性的时机耦合 | 换成 `waitFor` / 自动等待的 `expect` / `settle` |
 
-**If a live app crashes or enters an unstable state, stop E2E immediately.** Don't keep clicking
-through a broken screen. Restart/rebuild the app first.
+**如果正在跑的应用崩溃或进入不稳定状态，立刻停掉 E2E。** 不要继续在一个坏掉的界面上点来点去。先重启/重新构建应用。
 
-## Mocks
+## Mock
 
-| Symptom | Cause | Fix |
+| 症状 | 原因 | 修复 |
 | --- | --- | --- |
-| routes bleed between tests | shared driver retains previous routes | start each mock test with `await driver.mock.clear(); await driver.mock.clearCalls();` |
-| unmatched route hits real network | passthrough defaults on | `setPassthrough(false)` after `clear()` (then unmatched → 404) |
-| `getCalls()` body assertions fail | Dio sends JSON as a string | `JSON.parse(call.body)` before asserting fields |
-| `routeFlutter()` throws | Flutter store rejected the route / extension missing | upgrade bridge, or accept the `route()` fallback for non-UI probes |
+| 路由在测试间串味 | 共享 driver 保留了上一次的路由 | 每个用例开头 `await driver.mock.clear(); await driver.mock.clearCalls();` |
+| 没命中的路由打到真实网络 | passthrough 默认开着 | `clear()` 后 `setPassthrough(false)`（之后未命中 → 404） |
+| `getCalls()` 的 body 断言失败 | Dio 把 JSON 当字符串发 | 断言字段前先 `JSON.parse(call.body)` |
+| `routeFlutter()` 抛错 | Flutter 侧存储拒绝了路由/缺扩展 | 升级桥接，或对非 UI 探测接受 `route()` 回退 |
 
-## Forms
+## 表单
 
-| Symptom | Cause | Fix |
+| 症状 | 原因 | 修复 |
 | --- | --- | --- |
-| `formHelper.analyze()` returns `[]` | older bridge lacks `ext.fliwright.extractForm` | upgrade bridge; legacy scripts use raw `ext.fliwright.extractForm` |
-| `fill()` skips a field you expected filled | `skipObscureFields: true`, or field's semantic type inferred as `password` | pass `skipObscureFields: false`, or fill that field explicitly by key |
-| wrong semanticType inferred | hintText substring collision (e.g. "邮箱地址".includes("地址")) | match by `selector` not by hintText substring; add a `.fliwright/forms/*.json` rule |
-| `fillFields(['手机号'])` matches nothing | hint didn't match any field's hintText/label/name/semanticsId | `analyze()` first, copy the exact `hintText`/`selector` |
+| `formHelper.analyze()` 返回 `[]` | 旧版桥接缺 `ext.fliwright.extractForm` | 升级桥接；legacy 脚本直接用裸 `ext.fliwright.extractForm` |
+| `fill()` 漏掉了你以为该填的字段 | `skipObscureFields: true`，或该字段语义类型被推断成 `password` | 传 `skipObscureFields: false`，或按 key 显式填该字段 |
+| 语义类型推断错 | hintText 子串撞车（例如 "邮箱地址".includes("地址")） | 按 `selector` 而不是按 hintText 子串匹配；加一条 `.fliwright/forms/*.json` 规则 |
+| `fillFields(['手机号'])` 一个都没匹配到 | hint 没命中任何字段的 hintText/label/name/semanticsId | 先 `analyze()`，拷贝精确的 `hintText`/`selector` |
 
-## Environment checks
+## 环境检查
 
-- `fliwright doctor --vm-url …` validates versions, package resolution, config, and **live bridge
-  capabilities**. Run it first when something's off.
-- `echo $FLIWRIGHT_VM_URL` is non-empty and points at the running app.
-- The app exposes the **current** bridge (`ext.fliwright.snap` responds).
-- `.fliwright/` exists with `forms/` and `mocks/` (`fliwright init` creates it).
+- `fliwright doctor --vm-url …` 校验版本、包解析、配置以及**实时的桥接能力**。出问题时先跑它。
+- `echo $FLIWRIGHT_VM_URL` 非空，且指向正在运行的应用。
+- 应用暴露的是**当前**桥接（`ext.fliwright.snap` 能响应）。
+- `.fliwright/` 存在且有 `forms/` 和 `mocks/`（`fliwright init` 会创建）。
 
-## Escalation order
+## 升级排查顺序
 
-1. Read the failure's `contextDump` / `widgetTree` / `source`.
-2. `fliwright doctor --vm-url …` for capability/version checks.
-3. `fliwright_snap` / `page.snapshot()` to see the current tree.
-4. Harden the selector (key/semantics/scope) or wait primitive.
-5. If the app itself is unstable/crashing → restart/rebuild before more E2E.
+1. 读该次失败的 `contextDump` / `widgetTree` / `source`。
+2. `fliwright doctor --vm-url …` 做能力/版本检查。
+3. `fliwright_snap` / `page.snapshot()` 看当前控件树。
+4. 加固选择器（key/semantics/限定范围）或等待原语。
+5. 如果应用本身不稳定/崩溃 → 先重启/重新构建，再继续 E2E。
