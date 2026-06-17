@@ -85,6 +85,7 @@ export class SandboxService {
     rebuilt: boolean;
     reconciled: AppliedMockRule[];
     skipped: number;
+    pruned: number;
   }> {
     let sync = await this.syncFromFlutter(driver, discovery);
     let rebuilt = false;
@@ -113,6 +114,21 @@ export class SandboxService {
     const selectedByKey = new Map(
       (options.selectedEntries ?? []).map((entry) => [appliedKey(entry.method, entry.endpoint), entry] as const),
     );
+    // Desired state = endpoints that SHOULD have an active route: restored selections
+    // plus (when applyDefaultRules) endpoints that resolve to a default rule. Routes
+    // merely observed in Flutter are not desired on their own — only what VSCode
+    // selects is. This set drives the prune pass below.
+    const desiredActiveKeys = new Set<string>();
+    for (const entry of options.selectedEntries ?? []) {
+      desiredActiveKeys.add(appliedKey(entry.method, entry.endpoint));
+    }
+    if (options.applyDefaultRules) {
+      for (const endpoint of discovery.endpoints) {
+        if (selectDefaultRule(endpoint)) {
+          desiredActiveKeys.add(appliedKey(endpoint.endpointFile.method, endpoint.endpointFile.endpoint));
+        }
+      }
+    }
     const reconciled: AppliedMockRule[] = [];
     let skipped = 0;
 
@@ -155,11 +171,29 @@ export class SandboxService {
       reconciled.push(applied);
     }
 
+    // Prune to desired state: remove VSCode-managed Flutter routes (id prefixed
+    // `fliwright-vscode:`) that are neither a restored selection nor a default
+    // target. Routes registered by tests/scripts (no prefix) are left untouched.
+    // Removal flows through to removeFlutterRoute -> Hive save(), so cold starts
+    // no longer resurrect pruned routes.
+    let pruned = 0;
+    for (const route of sync.routes) {
+      const parsed = parseRouteId(route.id);
+      if (!parsed) continue;
+      const key = appliedKey(parsed.method, parsed.endpoint);
+      if (desiredActiveKeys.has(key)) continue;
+      if (suppressedKeys.has(key)) continue;
+      await driver.mock.removeFlutterRoute(route.path, parsed.method);
+      this.applied.delete(key);
+      pruned += 1;
+    }
+
     return {
       ...sync,
       rebuilt,
       reconciled,
       skipped,
+      pruned,
     };
   }
 
@@ -395,7 +429,7 @@ async function assertFlutterMockReady(
   const routeList = unwrapExtensionPayload<MockListRoutesResult>(
     await driver.sendRequest('ext.fliwright.mock.listRoutes', {}),
   );
-  const routeRegistered = isSuccessfulRouteResult(routeResult);
+  const routeRegistered = isCompletedRouteResult(routeResult);
   const routes = [
     ...(Array.isArray(state.routes) ? state.routes : []),
     ...(Array.isArray(routeList?.routes) ? routeList.routes : []),
@@ -420,11 +454,18 @@ function formatFlutterRouteForError(route: { id?: string; method?: string; path?
   return route.id ? `${label} id=${route.id}` : label;
 }
 
-function isSuccessfulRouteResult(value: unknown): boolean {
+function isCompletedRouteResult(value: unknown): boolean {
+  // routeFlutter is strict and throws for extension errors; route lists can lag behind a completed addRoute call.
   const payload = unwrapExtensionPayload<Record<string, unknown>>(value);
-  if (!payload || typeof payload !== 'object') return false;
+  if (payload == null) return true;
+  if (typeof payload !== 'object') return false;
+  if (Object.keys(payload).length === 0) return true;
+  if (typeof payload.error === 'string') return false;
+  if (payload.success === false) return false;
   if (payload.success === true) return true;
-  return typeof payload.id === 'string' && payload.id.length > 0;
+  if (typeof payload.id === 'string' && payload.id.length > 0) return true;
+  if (payload.type === 'Success') return true;
+  return true;
 }
 
 function normalizeRouteResult(value: unknown): unknown {

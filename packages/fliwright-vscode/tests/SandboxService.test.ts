@@ -248,6 +248,69 @@ describe('SandboxService', () => {
     expect(service.getAppliedRules()).toHaveLength(0);
   });
 
+  it('prunes VSCode-managed Flutter routes that are not in the restored selection', async () => {
+    const service = new SandboxService();
+    const removeFlutterRoute = vi.fn().mockResolvedValue(undefined);
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success', method: 'GET', path: '/v1/token' },
+    ]);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
+
+    const sync = await service.reconcileFromFlutter(
+      { mock: { listFlutterRoutes, removeFlutterRoute }, sendRequest } as any,
+      discovery(),
+      { restoreSelections: true, selectedEntries: [] },
+    );
+
+    expect(removeFlutterRoute).toHaveBeenCalledWith('/v1/token', 'GET');
+    expect(sync.pruned).toBe(1);
+    expect(service.getAppliedRules()).toHaveLength(0);
+  });
+
+  it('leaves foreign (non-VSCode) Flutter routes untouched during prune', async () => {
+    const service = new SandboxService();
+    const removeFlutterRoute = vi.fn().mockResolvedValue(undefined);
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'test-script-route', method: 'GET', path: '/v1/token' },
+    ]);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
+    const result = discovery();
+    // Single-rule endpoint so the foreign route is adopted (matched), not treated as stale.
+    result.endpoints[0]!.endpointFile.rules = [{ name: 'success', status: 200 }];
+    result.endpoints[0]!.defaultRule = undefined;
+
+    const sync = await service.reconcileFromFlutter(
+      { mock: { listFlutterRoutes, removeFlutterRoute }, sendRequest } as any,
+      result,
+      { restoreSelections: true, selectedEntries: [] },
+    );
+
+    expect(removeFlutterRoute).not.toHaveBeenCalled();
+    expect(sync.pruned).toBe(0);
+  });
+
+  it('keeps VSCode-managed Flutter routes that match a restored selection', async () => {
+    const service = new SandboxService();
+    const removeFlutterRoute = vi.fn().mockResolvedValue(undefined);
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success', method: 'GET', path: '/v1/token' },
+    ]);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
+    const selected = mockRule('success');
+
+    const sync = await service.reconcileFromFlutter(
+      { mock: { listFlutterRoutes, removeFlutterRoute }, sendRequest } as any,
+      discovery(),
+      { restoreSelections: true, selectedEntries: [selected] },
+    );
+
+    expect(removeFlutterRoute).not.toHaveBeenCalled();
+    expect(sync.pruned).toBe(0);
+    expect(service.getAppliedRules()).toMatchObject([
+      { endpoint: '/v1/token', method: 'GET', ruleName: 'success' },
+    ]);
+  });
+
   it('accepts wrapped VM service extension payloads', async () => {
     const routeFlutter = vi.fn().mockResolvedValue(undefined);
     const sendRequest = vi.fn().mockImplementation(async (method: string) => {
@@ -549,6 +612,37 @@ describe('SandboxService', () => {
     const routeFlutter = vi.fn().mockResolvedValue({
       result: JSON.stringify({ success: true, id: 'registered-route' }),
     });
+    const sendRequest = vi.fn().mockImplementation(async (method: string) => {
+      if (method === 'ext.fliwright.mock.debugState') {
+        return {
+          result: JSON.stringify({
+            mode: 'dio',
+            interceptorInjected: true,
+            routes: [],
+          }),
+        };
+      }
+      return {
+        result: JSON.stringify({ routes: [] }),
+      };
+    });
+    const service = new SandboxService();
+    const entry = mockRule('success');
+    entry.endpoint = '/api/v1/user/info';
+    entry.method = 'POST';
+
+    const applied = await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, entry);
+
+    expect(applied).toMatchObject({
+      endpoint: '/api/v1/user/info',
+      method: 'POST',
+      ruleName: 'success',
+    });
+    expect(service.getAppliedRules()).toHaveLength(1);
+  });
+
+  it('accepts completed routeFlutter calls with a VM Success envelope when the immediate route list is stale', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue({ type: 'Success' });
     const sendRequest = vi.fn().mockImplementation(async (method: string) => {
       if (method === 'ext.fliwright.mock.debugState') {
         return {

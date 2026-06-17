@@ -322,7 +322,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Reload Mock Configs', async () => {
         await mockTree.refresh();
         await requestMockStateSync('mock configs reloaded', {
-          restoreSelections: false,
+          restoreSelections: true,
           applyDefaultRules: false,
         });
       });
@@ -483,6 +483,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
         const result = await sandboxService.applyDefaultMocks(session.connectedDriver, discovery);
         await mockSelectionStore.clear();
+        for (const applied of result.applied) {
+          await mockSelectionStore.saveAppliedRule(applied);
+        }
         mockTree.setAppliedRules(sandboxService.getAppliedRules());
         output.appendLine(`Applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);
         await appendMockControllerDebug('Flutter mock routes after apply-default:');
@@ -957,7 +960,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     if (!mockTree.currentResult) await mockTree.refresh();
-    await requestMockStateSync('VM Service connected');
+    await requestMockStateSync('VM Service connected', { restoreSelections: true });
   }
 
   async function synchronizeMockStateAfterConnect(
@@ -1009,7 +1012,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     output.appendLine(
       `[MockStateSync] flutterRoutes=${sync.routes.length} `
       + `matched=${sync.applied.length} unmatched=${sync.unmatched.length} `
-      + `rebuilt=${sync.rebuilt} reconciled=${sync.reconciled.length} skipped=${sync.skipped}`,
+      + `rebuilt=${sync.rebuilt} reconciled=${sync.reconciled.length} skipped=${sync.skipped} pruned=${sync.pruned}`,
     );
     logMockRouteSample('flutter.matched', sync.applied);
     logFlutterRouteSample('flutter.unmatched', sync.unmatched);
