@@ -70,6 +70,7 @@ export class SandboxService {
     discovery: MockDiscoveryResult,
     options: {
       selectedEntries?: MockRuleEntry[];
+      suppressedEndpoints?: Array<{ endpoint: string; method: string }>;
       applyDefaultRules?: boolean;
       onStaleRoutes?: (summary: {
         routes: Array<{ id?: string; method?: string; path: string }>;
@@ -87,6 +88,18 @@ export class SandboxService {
   }> {
     let sync = await this.syncFromFlutter(driver, discovery);
     let rebuilt = false;
+    const suppressedKeys = new Set(
+      (options.suppressedEndpoints ?? []).map((entry) => appliedKey(entry.method, entry.endpoint)),
+    );
+    const suppressedRoutes = sync.routes.filter((route) => isSuppressedFlutterRoute(route, suppressedKeys));
+    if (suppressedRoutes.length > 0) {
+      for (const route of suppressedRoutes) {
+        await driver.mock.removeFlutterRoute(route.path, route.method);
+        const method = routeMethod(route);
+        if (method) this.applied.delete(appliedKey(method, route.path));
+      }
+      sync = await this.syncFromFlutter(driver, discovery);
+    }
     if (sync.unmatched.length > 0) {
       await options.onStaleRoutes?.(sync);
       await this.clear(driver);
@@ -106,6 +119,10 @@ export class SandboxService {
     for (const endpoint of discovery.endpoints) {
       const key = appliedKey(endpoint.endpointFile.method, endpoint.endpointFile.endpoint);
       if (activeKeys.has(key)) continue;
+      if (suppressedKeys.has(key)) {
+        skipped++;
+        continue;
+      }
 
       const selected = selectedByKey.get(key);
       if (selected) {
@@ -157,6 +174,12 @@ export class SandboxService {
       if (parsed && parsed.ruleName !== entry.rule.name) return false;
     }
     await driver.mock.removeFlutterRoute(entry.endpoint, entry.method);
+    const stillActive = await findFlutterRoute(driver, entry.endpoint, entry.method);
+    if (stillActive) {
+      throw new Error(
+        `Flutter mock route is still active after stop: ${entry.method.toUpperCase()} ${entry.endpoint}`,
+      );
+    }
     this.applied.delete(key);
     return true;
   }
@@ -242,11 +265,28 @@ async function routeRule(
     headers: rule.headers,
     body: rule.body,
   };
-  return (await driver.mock.routeFlutter(endpoint, response)) ?? { success: true };
+  return normalizeRouteResult(await driver.mock.routeFlutter(endpoint, response));
 }
 
 function appliedKey(method: string, endpoint: string): string {
   return `${method.toUpperCase()} ${endpoint}`;
+}
+
+function routeMethod(route: { id?: string; method?: string }): string | undefined {
+  return (parseRouteId(route.id)?.method ?? route.method)?.toUpperCase();
+}
+
+function isSuppressedFlutterRoute(
+  route: { id?: string; method?: string; path: string },
+  suppressedKeys: Set<string>,
+): boolean {
+  if (suppressedKeys.size === 0) return false;
+  const method = routeMethod(route);
+  if (method) return suppressedKeys.has(appliedKey(method, route.path));
+  for (const key of suppressedKeys) {
+    if (key.endsWith(` ${route.path}`)) return true;
+  }
+  return false;
 }
 
 function routeId(endpoint: string, method: string, ruleName: string): string {
@@ -387,12 +427,21 @@ function isSuccessfulRouteResult(value: unknown): boolean {
   return typeof payload.id === 'string' && payload.id.length > 0;
 }
 
+function normalizeRouteResult(value: unknown): unknown {
+  const payload = unwrapExtensionPayload<Record<string, unknown>>(value);
+  if (payload == null) return { success: true };
+  if (typeof payload === 'object' && Object.keys(payload).length === 0) {
+    return { success: true };
+  }
+  return payload;
+}
+
 function unwrapExtensionPayload<T>(value: unknown): T {
   if (value && typeof value === 'object' && 'result' in value) {
     const result = (value as { result?: unknown }).result;
     if (typeof result === 'string') {
       try {
-        return JSON.parse(result) as T;
+        return unwrapExtensionPayload<T>(JSON.parse(result));
       } catch {
         return value as T;
       }
@@ -405,7 +454,7 @@ function unwrapExtensionPayload<T>(value: unknown): T {
     const response = (value as { response?: unknown }).response;
     if (typeof response === 'string') {
       try {
-        return JSON.parse(response) as T;
+        return unwrapExtensionPayload<T>(JSON.parse(response));
       } catch {
         return value as T;
       }

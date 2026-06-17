@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "name": "Register User",
+  "description": "Form demo registration endpoint used by integrated mock + form E2E scripts.",
+  "method": "POST",
+  "endpoint": "/api/register",
+  "rules": [
+    {
+      "name": "success",
+      "status": 200,
+      "delay": 0,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "success": true,
+        "message": "注册成功，欢迎加入！",
+        "userId": 42
+      }
+    },
+    {
+      "name": "validation_error",
+      "status": 422,
+      "delay": 0,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "success": false,
+        "message": "手机号格式不正确",
+        "errors": {
+          "phone": "invalid_phone"
+        }
+      }
+    },
+    {
+      "name": "server_error",
+      "status": 500,
+      "delay": 0,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "success": false,
+        "message": "注册服务暂不可用"
+      }
+    }
+  ]
+}

@@ -181,6 +181,7 @@ class DioMockExtension {
   static Future<Map<String, dynamic>> _listRoutes(
     Map<String, String> params,
   ) async {
+    _syncInterceptorToStore();
     final routes = _store
         .getAllRoutes()
         .map((r) => {

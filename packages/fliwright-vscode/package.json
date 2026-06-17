@@ -548,16 +548,6 @@
           "default": true,
           "description": "Automatically start and configure the tool-side mock controller after connecting to a Flutter VM Service."
         },
-        "fliwright.autoApplyDefaultMocksOnConnect": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically apply default API mocks after connecting to a Flutter VM Service."
-        },
-        "fliwright.restoreSelectedMocksOnConnect": {
-          "type": "boolean",
-          "default": true,
-          "description": "Restore previously selected API mock rules after connecting to a Flutter VM Service. Restored selections override default mocks for the same endpoint."
-        },
         "fliwright.vmServiceUrl": {
           "type": [
             "string",

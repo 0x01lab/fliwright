@@ -997,6 +997,42 @@ void main() {
       expect(state.containsKey('interceptorStates'), isFalse);
     });
 
+    test('listRoutes resyncs a stale Dio interceptor store', () async {
+      final staleStore = MockRuleStore();
+      await staleStore.addRoute(MockRoute(
+        id: 'stale-route',
+        method: 'POST',
+        pathPattern: '/api/v1/user/onboard/knowledge-test',
+        status: 200,
+        body: {'stale': true},
+      ));
+      interceptor.ruleStore = staleStore;
+
+      final list = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.listRoutes',
+        {},
+      );
+
+      expect((list['routes'] as List<dynamic>), isEmpty);
+      expect(interceptor.routes, isEmpty);
+
+      await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.setPassthrough',
+        {'enabled': 'false'},
+      );
+      final dio = Dio()..interceptors.add(interceptor);
+      await expectLater(
+        dio.post<void>(
+          'https://dev.ex.io/api/v1/user/onboard/knowledge-test',
+        ),
+        throwsA(isA<DioException>().having(
+          (error) => error.response?.statusCode,
+          'statusCode',
+          404,
+        )),
+      );
+    });
+
     test('unsetInterceptor neutralizes stale Dio interceptor routes', () async {
       final staleStore = MockRuleStore();
       await staleStore.addRoute(MockRoute(

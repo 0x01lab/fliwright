@@ -41,6 +41,7 @@ import type { TraceMode } from '@fliwright/core';
 let output: vscode.OutputChannel;
 const LAST_VM_SERVICE_URL_KEY = 'fliwright.vmServiceUrl.lastSuccess';
 const MOCK_AUTO_DEFAULTS_SUPPRESSED_KEY = 'fliwright.mock.autoDefaultsSuppressed.v1';
+const MOCK_SUPPRESSED_ENDPOINTS_KEY = 'fliwright.mock.suppressedEndpoints.v1';
 const DEBUG_LOG_BUFFER_LIMIT = 20000;
 const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 5000;
 
@@ -161,7 +162,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }, CONNECTION_HEALTH_CHECK_INTERVAL_MS);
   };
 
-  const requestMockStateSync = async (reason: string): Promise<void> => {
+  const requestMockStateSync = async (
+    reason: string,
+    options: { restoreSelections?: boolean; applyDefaultRules?: boolean } = {},
+  ): Promise<void> => {
     if (mockSyncInFlight) {
       mockSyncQueued = true;
       output.appendLine(`Mock state sync queued (${reason}); another sync is running.`);
@@ -173,7 +177,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       do {
         mockSyncQueued = false;
         if (!isActiveSessionState(session.state.status)) {
-          output.appendLine(`Mock state sync skipped (${reason}): VM Service is not connected.`);
+          output.appendLine(
+            `Mock state sync skipped (${reason}): VM Service is not connected `
+            + `(status=${session.state.status}). Clearing local mock active markers.`,
+          );
+          sandboxService.resetController();
+          mockTree.setAppliedRules([]);
           return;
         }
 
@@ -192,7 +201,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           `Mock state sync started (${reason}): `
           + `${discovery.endpoints.length} endpoint file(s), ${discovery.invalid.length} invalid file(s).`,
         );
-        await synchronizeMockStateAfterConnect(discovery);
+        output.appendLine(
+          `[MockStateSync] request reason=${reason} `
+          + `restoreSelections=${options.restoreSelections === true} `
+          + `applyDefaultRules=${options.applyDefaultRules === true}`,
+        );
+        await synchronizeMockStateAfterConnect(discovery, options);
       } while (mockSyncQueued);
     })().finally(() => {
       mockSyncInFlight = undefined;
@@ -307,7 +321,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.reloadMocks', async () => {
       await runCommand('Reload Mock Configs', async () => {
         await mockTree.refresh();
-        await requestMockStateSync('mock configs reloaded');
+        await requestMockStateSync('mock configs reloaded', {
+          restoreSelections: false,
+          applyDefaultRules: false,
+        });
       });
     }),
     vscode.commands.registerCommand('fliwright.reloadFormRules', async () => {
@@ -414,6 +431,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Apply Mock Rule', async () => {
         if (!node || node.kind !== 'rule') throw new Error('Select a mock rule to apply.');
         await setMockAutoDefaultsSuppressed(false);
+        await unsuppressMockEndpoint(node);
         output.appendLine(`Applying mock ${formatMockRuleDebug(node)}`);
         const applied = await sandboxService.applyRule(session.connectedDriver, node);
         await mockSelectionStore.saveAppliedRule(applied);
@@ -434,6 +452,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           vscode.window.showWarningMessage(`Mock rule is not active: ${node.method} ${node.endpoint} -> ${node.rule.name}`);
           return;
         }
+        await suppressMockEndpoint(node);
         await mockSelectionStore.removeRule(node);
         output.appendLine(`Stopped mock ${node.method} ${node.endpoint} -> ${node.rule.name}`);
         await appendMockControllerDebug('Flutter mock routes after stop:');
@@ -443,6 +462,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.applyDefaultMocks', async () => {
       await runCommand('Apply Default Mocks', async () => {
         await setMockAutoDefaultsSuppressed(false);
+        await clearSuppressedMockEndpoints();
         if (!mockTree.currentResult) await mockTree.refresh();
         const discovery = mockTree.currentResult;
         if (!discovery) throw new Error('Open a workspace to use Fliwright.');
@@ -473,6 +493,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Stop All Mock Routes', async () => {
         const count = await sandboxService.clear(session.connectedDriver);
         await setMockAutoDefaultsSuppressed(true);
+        await clearSuppressedMockEndpoints();
         await mockSelectionStore.clear();
         mockTree.setAppliedRules([]);
         output.appendLine(`Stopped all mock routes (${count} tracked route(s)).`);
@@ -939,30 +960,60 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await requestMockStateSync('VM Service connected');
   }
 
-  async function synchronizeMockStateAfterConnect(discovery: MockDiscoveryResult): Promise<void> {
-    const config = loadConfig();
-    const selectedEntries = config.restoreSelectedMocksOnConnect
+  async function synchronizeMockStateAfterConnect(
+    discovery: MockDiscoveryResult,
+    options: { restoreSelections?: boolean; applyDefaultRules?: boolean } = {},
+  ): Promise<void> {
+    const shouldRestoreSelections = options.restoreSelections === true;
+    const shouldApplyDefaultRules = options.applyDefaultRules === true;
+    const selectedEntries = shouldRestoreSelections
       ? mockSelectionStore.resolveSelections(discovery)
         .filter((resolved) => resolved.entry)
         .map((resolved) => resolved.entry!)
       : [];
     const autoDefaultsSuppressed = isMockAutoDefaultsSuppressed();
-    if (autoDefaultsSuppressed && config.autoApplyDefaultMocksOnConnect) {
+    output.appendLine(
+      `[MockStateSync] plan restoreSelections=${shouldRestoreSelections} `
+      + `selectedEntries=${selectedEntries.length} `
+      + `applyDefaultRules=${shouldApplyDefaultRules} `
+      + `autoDefaultsSuppressed=${autoDefaultsSuppressed}`,
+    );
+    if (autoDefaultsSuppressed && shouldApplyDefaultRules) {
       output.appendLine(
         'Auto-apply default mocks is suppressed because all mock routes were stopped manually.',
       );
     }
+    const suppressedEndpoints = suppressedMockEndpointsForDiscovery(discovery, autoDefaultsSuppressed);
+    if (suppressedEndpoints.length > 0) {
+      output.appendLine(
+        `Mock state sync will keep ${suppressedEndpoints.length} stopped endpoint(s) inactive.`,
+      );
+    }
+    output.appendLine(
+      `[MockStateSync] suppressedEndpoints=${suppressedEndpoints.length}`,
+    );
     const sync = await sandboxService.reconcileFromFlutter(session.connectedDriver, discovery, {
       selectedEntries,
-      applyDefaultRules: config.autoApplyDefaultMocksOnConnect && !autoDefaultsSuppressed,
+      suppressedEndpoints,
+      applyDefaultRules: shouldApplyDefaultRules && !autoDefaultsSuppressed,
       onStaleRoutes: async (stale) => {
+        const rebuildsRoutes = selectedEntries.length > 0 || (shouldApplyDefaultRules && !autoDefaultsSuppressed);
         output.appendLine(
           `Flutter mock cache is out of sync with workspace mocks: `
-          + `${stale.unmatched.length} stale route(s), ${stale.applied.length} reusable route(s). Rebuilding Flutter mock routes.`,
+          + `${stale.unmatched.length} stale route(s), ${stale.applied.length} reusable route(s). `
+          + (rebuildsRoutes ? 'Rebuilding Flutter mock routes.' : 'Clearing stale Flutter mock routes.'),
         );
         await appendMockControllerDebug('Flutter stale mock routes before rebuild:');
       },
     });
+    output.appendLine(
+      `[MockStateSync] flutterRoutes=${sync.routes.length} `
+      + `matched=${sync.applied.length} unmatched=${sync.unmatched.length} `
+      + `rebuilt=${sync.rebuilt} reconciled=${sync.reconciled.length} skipped=${sync.skipped}`,
+    );
+    logMockRouteSample('flutter.matched', sync.applied);
+    logFlutterRouteSample('flutter.unmatched', sync.unmatched);
+    logMockRouteSample('workspace.reconciled', sync.reconciled);
 
     if (sync.applied.length > 0) {
       for (const applied of sync.applied) {
@@ -986,7 +1037,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       );
     }
 
-    mockTree.setAppliedRules(sandboxService.getAppliedRules());
+    const appliedRules = sandboxService.getAppliedRules();
+    output.appendLine(`[MockStateSync] treeAppliedRules=${appliedRules.length}`);
+    logMockRouteSample('tree.applied', appliedRules);
+    mockTree.setAppliedRules(appliedRules);
     await appendMockControllerDebug(
       sync.rebuilt ? 'Flutter mock routes after rebuild:' : 'Flutter mock routes after sync:',
     );
@@ -1204,6 +1258,85 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       suppressed ? true : undefined,
     );
   }
+
+  function getSuppressedMockEndpoints(): Array<{ endpoint: string; method: string; updatedAt: number }> {
+    const value = context.workspaceState.get<unknown>(MOCK_SUPPRESSED_ENDPOINTS_KEY);
+    if (!value || typeof value !== 'object') return [];
+    const candidate = value as { version?: unknown; endpoints?: unknown };
+    if (candidate.version !== 1 || !Array.isArray(candidate.endpoints)) return [];
+    return candidate.endpoints.filter((entry): entry is { endpoint: string; method: string; updatedAt: number } => (
+      entry != null &&
+      typeof entry === 'object' &&
+      typeof (entry as { endpoint?: unknown }).endpoint === 'string' &&
+      typeof (entry as { method?: unknown }).method === 'string' &&
+      typeof (entry as { updatedAt?: unknown }).updatedAt === 'number'
+    )).map((entry) => ({
+      endpoint: entry.endpoint,
+      method: entry.method.toUpperCase(),
+      updatedAt: entry.updatedAt,
+    }));
+  }
+
+  async function writeSuppressedMockEndpoints(
+    endpoints: Array<{ endpoint: string; method: string; updatedAt: number }>,
+  ): Promise<void> {
+    const byKey = new Map<string, { endpoint: string; method: string; updatedAt: number }>();
+    for (const endpoint of endpoints) {
+      byKey.set(mockEndpointKey(endpoint.method, endpoint.endpoint), {
+        endpoint: endpoint.endpoint,
+        method: endpoint.method.toUpperCase(),
+        updatedAt: endpoint.updatedAt,
+      });
+    }
+    const normalized = Array.from(byKey.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+    await context.workspaceState.update(
+      MOCK_SUPPRESSED_ENDPOINTS_KEY,
+      normalized.length > 0 ? { version: 1, endpoints: normalized } : undefined,
+    );
+  }
+
+  async function suppressMockEndpoint(endpoint: { endpoint: string; method: string }): Promise<void> {
+    await writeSuppressedMockEndpoints([
+      ...getSuppressedMockEndpoints().filter((entry) => (
+        mockEndpointKey(entry.method, entry.endpoint) !== mockEndpointKey(endpoint.method, endpoint.endpoint)
+      )),
+      {
+        endpoint: endpoint.endpoint,
+        method: endpoint.method,
+        updatedAt: Date.now(),
+      },
+    ]);
+  }
+
+  async function unsuppressMockEndpoint(endpoint: { endpoint: string; method: string }): Promise<void> {
+    await writeSuppressedMockEndpoints(getSuppressedMockEndpoints().filter((entry) => (
+      mockEndpointKey(entry.method, entry.endpoint) !== mockEndpointKey(endpoint.method, endpoint.endpoint)
+    )));
+  }
+
+  async function clearSuppressedMockEndpoints(): Promise<void> {
+    await writeSuppressedMockEndpoints([]);
+  }
+
+  function suppressedMockEndpointsForDiscovery(
+    discovery: MockDiscoveryResult,
+    suppressAll: boolean,
+  ): Array<{ endpoint: string; method: string }> {
+    if (suppressAll) {
+      return discovery.endpoints.map((endpoint) => ({
+        endpoint: endpoint.endpointFile.endpoint,
+        method: endpoint.endpointFile.method,
+      }));
+    }
+    const discoveredKeys = new Set(
+      discovery.endpoints.map((endpoint) => (
+        mockEndpointKey(endpoint.endpointFile.method, endpoint.endpointFile.endpoint)
+      )),
+    );
+    return getSuppressedMockEndpoints().filter((entry) => (
+      discoveredKeys.has(mockEndpointKey(entry.method, entry.endpoint))
+    ));
+  }
 }
 
 function stateProvidersEmptyMessage(status?: { observerInstalled: boolean; containerReady: boolean; providerCount: number }): string {
@@ -1390,6 +1523,34 @@ function isActiveSessionState(status: string): boolean {
   return status === 'connected' || status === 'recording' || status === 'running';
 }
 
+function mockEndpointKey(method: string, endpoint: string): string {
+  return `${method.toUpperCase()} ${endpoint}`;
+}
+
+function logMockRouteSample(label: string, routes: Array<{ method: string; endpoint: string; ruleName: string }>): void {
+  if (routes.length === 0) {
+    output.appendLine(`[MockStateSync] ${label}: (none)`);
+    return;
+  }
+  output.appendLine(
+    `[MockStateSync] ${label}: `
+    + routes.slice(0, 10).map((route) => `${route.method.toUpperCase()} ${route.endpoint} -> ${route.ruleName}`).join(' | ')
+    + (routes.length > 10 ? ` | ... +${routes.length - 10} more` : ''),
+  );
+}
+
+function logFlutterRouteSample(label: string, routes: Array<{ id?: string; method?: string; path: string }>): void {
+  if (routes.length === 0) {
+    output.appendLine(`[MockStateSync] ${label}: (none)`);
+    return;
+  }
+  output.appendLine(
+    `[MockStateSync] ${label}: `
+    + routes.slice(0, 10).map((route) => formatFlutterMockRoute(route)).join(' | ')
+    + (routes.length > 10 ? ` | ... +${routes.length - 10} more` : ''),
+  );
+}
+
 interface FlutterMockDebugState {
   mode?: string;
   serverPort?: number | null;
@@ -1491,7 +1652,7 @@ function unwrapExtensionPayload<T>(value: unknown): T {
     const result = (value as { result?: unknown }).result;
     if (typeof result === 'string') {
       try {
-        return JSON.parse(result) as T;
+        return unwrapExtensionPayload<T>(JSON.parse(result));
       } catch {
         return value as T;
       }
@@ -1504,7 +1665,7 @@ function unwrapExtensionPayload<T>(value: unknown): T {
     const response = (value as { response?: unknown }).response;
     if (typeof response === 'string') {
       try {
-        return JSON.parse(response) as T;
+        return unwrapExtensionPayload<T>(JSON.parse(response));
       } catch {
         return value as T;
       }

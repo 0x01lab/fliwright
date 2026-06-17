@@ -7,8 +7,6 @@ export interface ExtensionConfig {
   mockDir: string;
   mockIndex: string;
   autoStartMockController: boolean;
-  autoApplyDefaultMocksOnConnect: boolean;
-  restoreSelectedMocksOnConnect: boolean;
   vmServiceUrl: string | null;
   autoDiscoverVmService: boolean;
   testGlob: string;

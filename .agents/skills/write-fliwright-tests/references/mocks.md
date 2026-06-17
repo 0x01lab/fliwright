@@ -155,6 +155,16 @@ await driver.mock.switchRule('/v1/public/token', 'server-error');
 // trigger the request in the UI, then assert the error UI
 ```
 
+`loadRules()` applies every endpoint's current active rule immediately, so test scripts can reuse
+project mock files instead of duplicating response bodies inline:
+
+```typescript
+await driver.mock.clearFlutterRoutes();
+await driver.mock.clearCalls();
+await driver.mock.loadRules('.fliwright/mocks');
+await driver.mock.switchRule('/api/register', 'success', 'POST');
+```
+
 The VS Code extension scans `.fliwright/mocks/api/*.json`, lets you pick a rule, and applies it via
 `driver.mock.route(endpoint, response)`.
 
@@ -175,12 +185,10 @@ the URL to `driver.mock.configureFlutterController(url)`. See [cli.md](./cli.md)
 
 ```typescript
 test('register flow: mock API → fill form → submit → assert request', async ({ page, driver }) => {
-  await driver.mock.clear();
+  await driver.mock.clearFlutterRoutes();
   await driver.mock.clearCalls();
-  await driver.mock.route('/api/register', {
-    method: 'POST', status: 200,
-    body: { success: true, message: '注册成功', userId: 42 },
-  });
+  await driver.mock.loadRules('.fliwright/mocks');
+  await driver.mock.switchRule('/api/register', 'success', 'POST');
 
   await page.formHelper.fill({ skipObscureFields: false });   // fill all fields
   await page.locator({ text: '提交' }).click();
@@ -197,7 +205,7 @@ test('register flow: mock API → fill form → submit → assert request', asyn
 ## Gotchas
 
 - **Clear before you set.** Leftover routes from a previous test bleed across the shared driver.
-  Start each mock test with `await driver.mock.clear(); await driver.mock.clearCalls();`.
+  Start app-visible mock tests with `await driver.mock.clearFlutterRoutes(); await driver.mock.clearCalls();`.
 - **Body may be a string.** Dio JSON-encodes request bodies; `JSON.parse` before asserting fields.
 - **`route()` is best-effort; `routeFlutter()` is strict.** Use `routeFlutter()` when a UI action
   must observe the rule, or the test can pass against the mirror while the app sees nothing.

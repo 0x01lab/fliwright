@@ -60,6 +60,11 @@ describe('VS Code manifest', () => {
     });
   });
 
+  it('does not expose settings that auto-activate mock rules', () => {
+    expect(manifest.contributes.configuration.properties['fliwright.autoApplyDefaultMocksOnConnect']).toBeUndefined();
+    expect(manifest.contributes.configuration.properties['fliwright.restoreSelectedMocksOnConnect']).toBeUndefined();
+  });
+
   it('guards recording commands with VS Code context keys', () => {
     const commands = new Map(manifest.contributes.commands.map((entry: { command: string }) => [entry.command, entry]));
 
