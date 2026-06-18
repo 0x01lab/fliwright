@@ -22,6 +22,7 @@ import {
   fallbackCriteriaSchema,
   positionFilterSchema,
   parseSelectorJson,
+  widgetInfoSchema,
 } from '../src/wire-protocol.js';
 
 /** Helper: get parsed JSON from a Selector's wire output */
@@ -44,6 +45,7 @@ describe('wire protocol JSON Schema export', () => {
     const filterCriteriaJson = zodToJsonSchema(filterCriteriaSchema, { target: 'draft7' });
     const fallbackCriteriaJson = zodToJsonSchema(fallbackCriteriaSchema, { target: 'draft7' });
     const positionFilterJson = zodToJsonSchema(positionFilterSchema, { target: 'draft7' });
+    const widgetInfoJson = zodToJsonSchema(widgetInfoSchema, { target: 'draft7' });
 
     const schema = {
       $schema: 'http://json-schema.org/draft-07/schema#',
@@ -54,6 +56,7 @@ describe('wire protocol JSON Schema export', () => {
         FilterCriteria: filterCriteriaJson,
         FallbackCriteria: fallbackCriteriaJson,
         PositionFilter: positionFilterJson,
+        WidgetInfo: widgetInfoJson,
       },
     };
 
@@ -258,5 +261,34 @@ describe('wire protocol: schema validation rejects invalid', () => {
 
   it('rejects non-integer nth', () => {
     expect(() => positionFilterSchema.parse({ nth: 1.5 })).toThrow();
+  });
+});
+
+describe('wire protocol: WidgetInfo schema', () => {
+  it('parses a hitTest payload with recorder enrichment fields', () => {
+    const payload = {
+      id: '42',
+      type: 'GestureDetector',
+      tooltip: 'Open menu',
+      descendantText: 'Login',
+      descendantIcon: { codePoint: 59526, fontFamily: 'MaterialIcons' },
+      keyedAncestors: [{ key: 'appBar', type: 'Scaffold' }],
+      properties: {},
+    };
+    const parsed = widgetInfoSchema.parse(payload);
+    expect(parsed.type).toBe('GestureDetector');
+    expect(parsed.descendantText).toBe('Login');
+    expect(parsed.descendantIcon?.codePoint).toBe(59526);
+    expect(parsed.keyedAncestors).toEqual([{ key: 'appBar', type: 'Scaffold' }]);
+  });
+
+  it('accepts a minimal WidgetInfo without enrichment fields', () => {
+    const parsed = widgetInfoSchema.parse({ id: '1', type: 'Text', properties: {} });
+    expect(parsed.descendantText).toBeUndefined();
+    expect(parsed.keyedAncestors).toBeUndefined();
+  });
+
+  it('rejects a WidgetInfo missing required id', () => {
+    expect(() => widgetInfoSchema.parse({ type: 'Text', properties: {} })).toThrow();
   });
 });

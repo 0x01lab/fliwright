@@ -10,6 +10,8 @@ import { RecorderService } from './recording/RecorderService.js';
 import { FliwrightCodeLensProvider } from './runner/FliwrightCodeLensProvider.js';
 import { TestDiscoveryService } from './runner/TestDiscoveryService.js';
 import { VitestRunner } from './runner/VitestRunner.js';
+import { ScriptDiscoveryService } from './scripts/ScriptDiscoveryService.js';
+import { ScriptRunner } from './scripts/ScriptRunner.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
@@ -18,11 +20,12 @@ import { formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js
 import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
-import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRule, FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunEntry, StateProviderEntry, TestFileEntry } from './types.js';
+import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRule, FormRulesEntry, InvalidFileEntry, MockDiscoveryResult, MockEndpointEntry, MockRuleEntry, RunEntry, RunResult, ScriptFileEntry, StateProviderEntry, TestFileEntry } from './types.js';
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
 import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
 import { RunsTreeProvider } from './views/RunsTreeProvider.js';
+import { ScriptsTreeProvider } from './views/ScriptsTreeProvider.js';
 import { StateTreeProvider } from './views/StateTreeProvider.js';
 import { TestsTreeProvider } from './views/TestsTreeProvider.js';
 import { FailurePanel } from './webview/FailurePanel.js';
@@ -37,6 +40,8 @@ import type { TraceMode } from '@fliwright/core';
 
 let output: vscode.OutputChannel;
 const LAST_VM_SERVICE_URL_KEY = 'fliwright.vmServiceUrl.lastSuccess';
+const MOCK_AUTO_DEFAULTS_SUPPRESSED_KEY = 'fliwright.mock.autoDefaultsSuppressed.v1';
+const MOCK_SUPPRESSED_ENDPOINTS_KEY = 'fliwright.mock.suppressedEndpoints.v1';
 const DEBUG_LOG_BUFFER_LIMIT = 20000;
 const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 5000;
 
@@ -55,7 +60,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const sandboxService = new SandboxService();
   const formHelperService = new FormHelperService();
   const testDiscoveryService = new TestDiscoveryService();
+  const scriptDiscoveryService = new ScriptDiscoveryService();
   const runner = new VitestRunner();
+  const scriptRunner = new ScriptRunner();
   const failureStore = new FailureContextStore();
   const recorderService = new RecorderService();
   const stateService = new StateInjectionService();
@@ -64,6 +71,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const mockTree = new MockApiTreeProvider(mockService);
   const formTree = new FormDataTreeProvider(formService);
   const testsTree = new TestsTreeProvider(testDiscoveryService);
+  const scriptsTree = new ScriptsTreeProvider(scriptDiscoveryService);
   const runsTree = new RunsTreeProvider();
   const stateTree = new StateTreeProvider();
   const statusBar = new StatusBarService();
@@ -99,6 +107,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let autoConnectTimer: ReturnType<typeof setTimeout> | undefined;
   let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
   let healthCheckInFlight = false;
+  let mockSyncInFlight: Promise<void> | undefined;
+  let mockSyncQueued = false;
   const stateProviderWatches = new Map<string, () => void>();
 
   const rememberDebugOutput = (text: string) => {
@@ -152,6 +162,59 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }, CONNECTION_HEALTH_CHECK_INTERVAL_MS);
   };
 
+  const requestMockStateSync = async (
+    reason: string,
+    options: { restoreSelections?: boolean; applyDefaultRules?: boolean } = {},
+  ): Promise<void> => {
+    if (mockSyncInFlight) {
+      mockSyncQueued = true;
+      output.appendLine(`Mock state sync queued (${reason}); another sync is running.`);
+      await mockSyncInFlight;
+      return;
+    }
+
+    mockSyncInFlight = (async () => {
+      do {
+        mockSyncQueued = false;
+        if (!isActiveSessionState(session.state.status)) {
+          output.appendLine(
+            `Mock state sync skipped (${reason}): VM Service is not connected `
+            + `(status=${session.state.status}). Clearing local mock active markers.`,
+          );
+          sandboxService.resetController();
+          mockTree.setAppliedRules([]);
+          return;
+        }
+
+        if (!mockTree.currentResult) {
+          output.appendLine(`Mock state sync (${reason}): loading workspace mock configs.`);
+          await mockTree.refresh();
+        }
+        const discovery = mockTree.currentResult;
+        if (!discovery) {
+          output.appendLine(`Mock state sync skipped (${reason}): no workspace mock discovery result.`);
+          return;
+        }
+
+        await waitForFlutterMockExtension(session.connectedDriver, reason);
+        output.appendLine(
+          `Mock state sync started (${reason}): `
+          + `${discovery.endpoints.length} endpoint file(s), ${discovery.invalid.length} invalid file(s).`,
+        );
+        output.appendLine(
+          `[MockStateSync] request reason=${reason} `
+          + `restoreSelections=${options.restoreSelections === true} `
+          + `applyDefaultRules=${options.applyDefaultRules === true}`,
+        );
+        await synchronizeMockStateAfterConnect(discovery, options);
+      } while (mockSyncQueued);
+    })().finally(() => {
+      mockSyncInFlight = undefined;
+    });
+
+    await mockSyncInFlight;
+  };
+
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterTrackerFactory('*', {
       createDebugAdapterTracker(debugSession) {
@@ -185,6 +248,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerTreeDataProvider('fliwright.devices', devicesTree),
     vscode.window.registerTreeDataProvider('fliwright.mockApis', mockTree),
     vscode.window.registerTreeDataProvider('fliwright.formData', formTree),
+    vscode.window.registerTreeDataProvider('fliwright.scripts', scriptsTree),
     vscode.window.registerTreeDataProvider('fliwright.tests', testsTree),
     vscode.window.registerTreeDataProvider('fliwright.runs', runsTree),
     vscode.window.registerTreeDataProvider('fliwright.state', stateTree),
@@ -257,11 +321,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.reloadMocks', async () => {
       await runCommand('Reload Mock Configs', async () => {
         await mockTree.refresh();
+        await requestMockStateSync('mock configs reloaded', {
+          restoreSelections: true,
+          applyDefaultRules: false,
+        });
       });
     }),
     vscode.commands.registerCommand('fliwright.reloadFormRules', async () => {
       await runCommand('Reload Form Rules', async () => {
         await formTree.refresh();
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.reloadScripts', async () => {
+      await runCommand('Reload Scripts', async () => {
+        scriptsTree.refresh();
       });
     }),
     vscode.commands.registerCommand('fliwright.connect', async () => {
@@ -341,6 +414,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.openFormRules', async (node?: FormRulesEntry | InvalidFileEntry) => {
       await openUriFromNode(node);
     }),
+    vscode.commands.registerCommand('fliwright.openScript', async (node?: ScriptFileEntry) => {
+      await openUriFromNode(node);
+    }),
     vscode.commands.registerCommand('fliwright.copyMockEndpoint', async (node?: MockEndpointEntry) => {
       if (!node || node.kind !== 'endpoint') return;
       await vscode.env.clipboard.writeText(node.endpointFile.endpoint);
@@ -354,12 +430,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.applyMockRule', async (node?: MockRuleEntry) => {
       await runCommand('Apply Mock Rule', async () => {
         if (!node || node.kind !== 'rule') throw new Error('Select a mock rule to apply.');
+        await setMockAutoDefaultsSuppressed(false);
+        await unsuppressMockEndpoint(node);
         output.appendLine(`Applying mock ${formatMockRuleDebug(node)}`);
         const applied = await sandboxService.applyRule(session.connectedDriver, node);
         await mockSelectionStore.saveAppliedRule(applied);
         mockTree.setAppliedRules(sandboxService.getAppliedRules());
         output.appendLine(`Applied mock ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
-        await appendMockControllerDebug();
+        await appendMockControllerDebug('Flutter mock routes after apply:');
         vscode.window.showInformationMessage(`Applied ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
       });
     }),
@@ -370,17 +448,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         mockTree.setAppliedRules(sandboxService.getAppliedRules());
         if (!stopped) {
           output.appendLine(`Skipped stopping inactive mock ${formatMockRuleDebug(node)}`);
+          await appendMockControllerDebug('Flutter mock routes remain:');
           vscode.window.showWarningMessage(`Mock rule is not active: ${node.method} ${node.endpoint} -> ${node.rule.name}`);
           return;
         }
+        await suppressMockEndpoint(node);
         await mockSelectionStore.removeRule(node);
         output.appendLine(`Stopped mock ${node.method} ${node.endpoint} -> ${node.rule.name}`);
-        await appendMockControllerDebug();
+        await appendMockControllerDebug('Flutter mock routes after stop:');
         vscode.window.showInformationMessage(`Stopped ${node.method} ${node.endpoint} -> ${node.rule.name}`);
       });
     }),
     vscode.commands.registerCommand('fliwright.applyDefaultMocks', async () => {
       await runCommand('Apply Default Mocks', async () => {
+        await setMockAutoDefaultsSuppressed(false);
+        await clearSuppressedMockEndpoints();
         if (!mockTree.currentResult) await mockTree.refresh();
         const discovery = mockTree.currentResult;
         if (!discovery) throw new Error('Open a workspace to use Fliwright.');
@@ -401,19 +483,63 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
         const result = await sandboxService.applyDefaultMocks(session.connectedDriver, discovery);
         await mockSelectionStore.clear();
+        for (const applied of result.applied) {
+          await mockSelectionStore.saveAppliedRule(applied);
+        }
         mockTree.setAppliedRules(sandboxService.getAppliedRules());
         output.appendLine(`Applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);
-        await appendMockControllerDebug();
+        await appendMockControllerDebug('Flutter mock routes after apply-default:');
         vscode.window.showInformationMessage(`Applied ${result.applied.length} default mock route(s).`);
       });
     }),
     vscode.commands.registerCommand('fliwright.stopSandbox', async () => {
       await runCommand('Stop All Mock Routes', async () => {
-        const count = await sandboxService.clear(session.connectedDriver);
+        const driver = session.connectedDriver;
+        const count = await sandboxService.clear(driver);
+        await setMockAutoDefaultsSuppressed(true);
+        await clearSuppressedMockEndpoints();
         await mockSelectionStore.clear();
         mockTree.setAppliedRules([]);
-        output.appendLine(`Stopped all mock routes (${count} tracked route(s)).`);
-        vscode.window.showInformationMessage('Stopped all mock routes.');
+
+        // Hard-clear fallback: verify the Flutter store is actually empty —
+        // including the Dio interceptor's store (covers store-identity split) —
+        // retry once if not, and never report success silently. This is the
+        // user-facing guarantee that "Stop All" leaves nothing mocking even if
+        // auto-clear/reconcile has a hole.
+        const remainingRoutes = (state?: FlutterMockDebugState) =>
+          (state?.routes?.length ?? 0) + (state?.interceptorState?.routes?.length ?? 0);
+
+        let state = await readFlutterMockDebugState(driver);
+        if (remainingRoutes(state) > 0) {
+          output.appendLine(
+            `[MockStateSync] Flutter store still had ${remainingRoutes(state)} route(s) after clear; retrying clearFlutterRoutes().`,
+          );
+          try {
+            await driver.mock.clearFlutterRoutes();
+          } catch (error) {
+            output.appendLine(
+              `[MockStateSync] Retry clearFlutterRoutes() failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          state = await readFlutterMockDebugState(driver);
+        }
+        const remaining = remainingRoutes(state);
+        output.appendLine(
+          `[MockStateSync] stop-all result: tracked=${count} remaining=${remaining} `
+          + `storeId=#${state?.storeId ?? 'unknown'} sharedStore=${state?.interceptorState?.sharedStore === true}`,
+        );
+        await appendMockControllerDebug('Flutter mock routes after clear:');
+        if (remaining > 0) {
+          output.appendLine(
+            `[MockStateSync] WARNING: Flutter 端仍有 ${remaining} 条路由未清除。${formatFlutterMockDebugState(state).join(' | ')}`,
+          );
+          vscode.window.showWarningMessage(
+            `Flutter 端仍有 ${remaining} 条 mock 路由未清除（store=#${state?.storeId ?? 'unknown'}）。请检查 Dio 拦截器与扩展是否共享同一 store。`,
+          );
+          return;
+        }
+        output.appendLine(`Stopped all mock routes (${count} tracked route(s)); Flutter store cleared.`);
+        vscode.window.showInformationMessage('已清空 Flutter 端全部 mock 配置（store routes=0）。');
       });
     }),
     vscode.commands.registerCommand('fliwright.analyzeForm', async (node?: FormRulesEntry) => {
@@ -448,6 +574,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.runWorkspaceTests', async () => {
       await runTests(undefined, true);
+    }),
+    vscode.commands.registerCommand('fliwright.runScript', async (node?: ScriptFileEntry) => {
+      await runScript(node);
     }),
     vscode.commands.registerCommand('fliwright.openFailure', async (node?: FailureTreeEntry) => {
       const failure = node?.kind === 'failure' ? node.failure : runsTree.failuresList[0];
@@ -695,7 +824,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
-  await Promise.all([mockTree.refresh(), formTree.refresh()]);
+  await Promise.all([mockTree.refresh(), formTree.refresh(), Promise.resolve(scriptsTree.refresh())]);
   output.appendLine('Fliwright extension activated.');
 
   async function fillFormWithRules(node?: FormRulesEntry): Promise<void> {
@@ -852,6 +981,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   async function onConnected(url: string, notify: boolean): Promise<void> {
     await context.workspaceState.update(LAST_VM_SERVICE_URL_KEY, url);
     startHealthCheck();
+    await appendMockStartupDebug();
     await configureMocksAfterConnect();
     output.appendLine(`Connected to VM Service: ${url}`);
     if (notify) {
@@ -861,11 +991,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   async function configureMocksAfterConnect(): Promise<void> {
     const config = loadConfig();
-    if (
-      !config.autoStartMockController &&
-      !config.autoApplyDefaultMocksOnConnect &&
-      !config.restoreSelectedMocksOnConnect
-    ) return;
 
     if (config.autoStartMockController) {
       await sandboxService.ensureController(session.connectedDriver);
@@ -873,74 +998,141 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     if (!mockTree.currentResult) await mockTree.refresh();
-    const discovery = mockTree.currentResult;
-    if (!discovery) return;
+    await requestMockStateSync('VM Service connected', { restoreSelections: true });
+  }
 
-    const flutterSync = await sandboxService.syncFromFlutter(session.connectedDriver, discovery);
-    if (flutterSync.routes.length > 0) {
-      for (const applied of flutterSync.applied) {
+  async function synchronizeMockStateAfterConnect(
+    discovery: MockDiscoveryResult,
+    options: { restoreSelections?: boolean; applyDefaultRules?: boolean } = {},
+  ): Promise<void> {
+    const shouldRestoreSelections = options.restoreSelections === true;
+    const shouldApplyDefaultRules = options.applyDefaultRules === true;
+    const selectedEntries = shouldRestoreSelections
+      ? mockSelectionStore.resolveSelections(discovery)
+        .filter((resolved) => resolved.entry)
+        .map((resolved) => resolved.entry!)
+      : [];
+    const autoDefaultsSuppressed = isMockAutoDefaultsSuppressed();
+    output.appendLine(
+      `[MockStateSync] plan restoreSelections=${shouldRestoreSelections} `
+      + `selectedEntries=${selectedEntries.length} `
+      + `applyDefaultRules=${shouldApplyDefaultRules} `
+      + `autoDefaultsSuppressed=${autoDefaultsSuppressed}`,
+    );
+    if (autoDefaultsSuppressed && shouldApplyDefaultRules) {
+      output.appendLine(
+        'Auto-apply default mocks is suppressed because all mock routes were stopped manually.',
+      );
+    }
+    const suppressedEndpoints = suppressedMockEndpointsForDiscovery(discovery, autoDefaultsSuppressed);
+    if (suppressedEndpoints.length > 0) {
+      output.appendLine(
+        `Mock state sync will keep ${suppressedEndpoints.length} stopped endpoint(s) inactive.`,
+      );
+    }
+    output.appendLine(
+      `[MockStateSync] suppressedEndpoints=${suppressedEndpoints.length}`,
+    );
+    const sync = await sandboxService.reconcileFromFlutter(session.connectedDriver, discovery, {
+      selectedEntries,
+      suppressedEndpoints,
+      applyDefaultRules: shouldApplyDefaultRules && !autoDefaultsSuppressed,
+      onStaleRoutes: async (stale) => {
+        const rebuildsRoutes = selectedEntries.length > 0 || (shouldApplyDefaultRules && !autoDefaultsSuppressed);
+        output.appendLine(
+          `Flutter mock cache is out of sync with workspace mocks: `
+          + `${stale.unmatched.length} stale route(s), ${stale.applied.length} reusable route(s). `
+          + (rebuildsRoutes ? 'Rebuilding Flutter mock routes.' : 'Clearing stale Flutter mock routes.'),
+        );
+        await appendMockControllerDebug('Flutter stale mock routes before rebuild:');
+      },
+    });
+    output.appendLine(
+      `[MockStateSync] flutterRoutes=${sync.routes.length} `
+      + `matched=${sync.applied.length} unmatched=${sync.unmatched.length} `
+      + `rebuilt=${sync.rebuilt} reconciled=${sync.reconciled.length} skipped=${sync.skipped} pruned=${sync.pruned}`,
+    );
+    logMockRouteSample('flutter.matched', sync.applied);
+    logFlutterRouteSample('flutter.unmatched', sync.unmatched);
+    logMockRouteSample('workspace.reconciled', sync.reconciled);
+
+    // Post-sync diagnostics: confirm the Flutter store reflects the desired
+    // state and surface store-identity split / ineffective-clear failures that
+    // would otherwise silently leave routes mocking.
+    const postState = await readFlutterMockDebugState(session.connectedDriver);
+    const postRoutes = (postState?.routes?.length ?? 0) + (postState?.interceptorState?.routes?.length ?? 0);
+    output.appendLine(
+      `[MockStateSync] post-sync store=#${postState?.storeId ?? 'unknown'} `
+      + `sharedStore=${postState?.interceptorState?.sharedStore === true} flutterRoutes=${postRoutes}`,
+    );
+    if (postState?.interceptorState && postState.interceptorState.sharedStore === false) {
+      output.appendLine(
+        '[MockStateSync] WARNING: Dio 拦截器与扩展未共享同一 store（sharedStore=false），'
+        + 'VSCode 的增删可能不影响实际匹配的路由表。',
+      );
+    }
+    if (postRoutes > 0 && sandboxService.getAppliedRules().length === 0) {
+      output.appendLine(
+        `[MockStateSync] WARNING: 期望 0 条路由但 Flutter 仍有 ${postRoutes} 条，`
+        + '可能存在 store 分裂或清理未生效；可用「Stop All Mock Routes」强制清空。',
+      );
+    }
+
+    if (sync.applied.length > 0) {
+      for (const applied of sync.applied) {
         await mockSelectionStore.saveAppliedRule(applied);
       }
-      mockTree.setAppliedRules(sandboxService.getAppliedRules());
       output.appendLine(
-        `Synced ${flutterSync.applied.length} mock route(s) from Flutter, `
-        + `left ${flutterSync.unmatched.length} unmatched Flutter route(s).`,
+        `Synced ${sync.applied.length} mock route(s) from Flutter, `
+        + `left ${sync.unmatched.length} unmatched Flutter route(s).`,
       );
-      await appendMockControllerDebug();
-      return;
+    } else if (sync.routes.length === 0 && sync.reconciled.length === 0) {
+      output.appendLine('No Flutter mock routes were cached at startup.');
     }
 
-    if (config.autoApplyDefaultMocksOnConnect) {
-      const result = await sandboxService.applyDefaultMocks(session.connectedDriver, discovery);
-      mockTree.setAppliedRules(sandboxService.getAppliedRules());
-      output.appendLine(`Auto-applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);
-      await appendMockControllerDebug();
-    }
-
-    if (config.restoreSelectedMocksOnConnect) {
-      await restoreSelectedMocksAfterConnect();
-    }
-  }
-
-  async function restoreSelectedMocksAfterConnect(): Promise<void> {
-    const selections = mockSelectionStore.getSelections();
-    if (selections.length === 0) return;
-
-    if (!mockTree.currentResult) await mockTree.refresh();
-    const discovery = mockTree.currentResult;
-    if (!discovery) return;
-
-    let restored = 0;
-    let skipped = 0;
-    for (const resolved of mockSelectionStore.resolveSelections(discovery)) {
-      if (!resolved.entry) {
-        skipped++;
-        output.appendLine(
-          `Skipped restoring selected mock ${resolved.selection.method} ${resolved.selection.endpoint} -> ${resolved.selection.ruleName}: ${resolved.reason ?? 'unavailable'}`,
-        );
-        continue;
+    if (sync.reconciled.length > 0) {
+      for (const applied of sync.reconciled) {
+        await mockSelectionStore.saveAppliedRule(applied);
       }
-
-      const applied = await sandboxService.applyRule(session.connectedDriver, resolved.entry);
-      await mockSelectionStore.saveAppliedRule(applied);
-      restored++;
-      output.appendLine(`Restored selected mock ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
+      output.appendLine(
+        `Reconciled ${sync.reconciled.length} missing mock route(s) from workspace config, `
+        + `skipped ${sync.skipped}.`,
+      );
     }
 
-    mockTree.setAppliedRules(sandboxService.getAppliedRules());
-    output.appendLine(`Restored ${restored} selected mock route(s), skipped ${skipped}.`);
-    if (restored > 0) await appendMockControllerDebug();
+    const appliedRules = sandboxService.getAppliedRules();
+    output.appendLine(`[MockStateSync] treeAppliedRules=${appliedRules.length}`);
+    logMockRouteSample('tree.applied', appliedRules);
+    mockTree.setAppliedRules(appliedRules);
+    await appendMockControllerDebug(
+      sync.rebuilt ? 'Flutter mock routes after rebuild:' : 'Flutter mock routes after sync:',
+    );
   }
 
-  async function appendMockControllerDebug(): Promise<void> {
-    const routes = await session.connectedDriver.mock.listRoutes();
-    if (routes.length === 0) {
-      output.appendLine('Mock routes: (none)');
-      return;
+  async function appendMockStartupDebug(): Promise<void> {
+    try {
+      await appendMockControllerDebug('Flutter cached mock routes on startup:');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      output.appendLine(`Flutter cached mock routes on startup: unavailable (${message})`);
     }
-    output.appendLine(`Mock routes (${routes.length}):`);
-    for (const route of routes) {
-      output.appendLine(`  ${(route.method ?? '*').toUpperCase()} ${route.path}`);
+  }
+
+  async function appendMockControllerDebug(title = 'Flutter mock routes:'): Promise<void> {
+    const [routes, state] = await Promise.all([
+      session.connectedDriver.mock.listFlutterRoutes(),
+      readFlutterMockDebugState(session.connectedDriver),
+    ]);
+    if (routes.length === 0) {
+      output.appendLine(`${title} (none)`);
+    } else {
+      output.appendLine(`${title} (${routes.length}):`);
+      for (const route of routes) {
+        output.appendLine(`  ${formatFlutterMockRoute(route)}`);
+      }
+    }
+    for (const line of formatFlutterMockDebugState(state)) {
+      output.appendLine(`  ${line}`);
     }
   }
 
@@ -1011,6 +1203,84 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
   }
 
+  async function runScript(node?: ScriptFileEntry): Promise<void> {
+    await runCommand('Run Script', async () => {
+      const root = requireWorkspaceRoot();
+      const script = node ?? await pickScript(root);
+      if (!script) return;
+
+      if (!isActiveSessionState(session.state.status)) {
+        const connected = await discoverAndConnect({ reason: 'Run script', interactive: true });
+        if (!connected) {
+          throw new Error('Connect to a Flutter VM Service before running a script.');
+        }
+      }
+
+      output.show(true);
+      output.appendLine(`Running script: ${script.uri.fsPath}`);
+      output.appendLine(`VM Service: ${session.currentUrl ?? '(none)'}`);
+
+      session.setRunning(`script ${script.label}`);
+      let result: RunResult;
+      try {
+        result = await scriptRunner.run({
+          workspaceRoot: root,
+          script,
+          vmServiceUrl: session.currentUrl,
+          onOutput: appendScriptOutput,
+        });
+      } finally {
+        session.setConnectedIdle();
+      }
+
+      const run: RunEntry = {
+        kind: 'run',
+        id: `${Date.now()}`,
+        label: `Script: ${script.label}`,
+        filePath: script.uri.fsPath,
+        result,
+        ranAt: Date.now(),
+      };
+      runsTree.prependRun(run);
+      statusBar.setRunResult(result);
+      scriptsTree.refresh();
+
+      output.appendLine(`Script complete: ${result.passed ? 'passed' : 'failed'} (${result.duration}ms).`);
+      if (result.passed) {
+        vscode.window.showInformationMessage(`Fliwright script passed: ${script.label}`);
+      } else {
+        vscode.window.showErrorMessage(`Fliwright script failed: ${script.label}`, 'Open Output').then((selection) => {
+          if (selection === 'Open Output') output.show();
+        });
+      }
+    });
+  }
+
+  async function pickScript(root: vscode.Uri): Promise<ScriptFileEntry | undefined> {
+    const scripts = await scriptDiscoveryService.discover(root);
+    if (scripts.length === 0) {
+      vscode.window.showInformationMessage('No Fliwright scripts found under .fliwright/scripts.');
+      return undefined;
+    }
+    const picked = await vscode.window.showQuickPick(scripts.map((script) => ({
+      label: script.label,
+      description: script.description,
+      detail: script.uri.fsPath,
+      script,
+    })), {
+      title: 'Run Fliwright Script',
+      placeHolder: 'Select a script from .fliwright/scripts',
+    });
+    return picked?.script;
+  }
+
+  function appendScriptOutput(text: string, stream: 'stdout' | 'stderr'): void {
+    for (const line of text.replace(/\r\n/g, '\n').split('\n')) {
+      if (line.length === 0) continue;
+      output.appendLine(`[script ${stream}] ${line}`);
+    }
+  }
+
   function getTraceMode(): TraceMode {
     const config = vscode.workspace.getConfiguration('fliwright');
     const value = config.get<string>('traceMode', 'on-failure');
@@ -1039,6 +1309,96 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ...provider,
       watching: false,
     })));
+  }
+
+  function isMockAutoDefaultsSuppressed(): boolean {
+    return context.workspaceState.get<boolean>(MOCK_AUTO_DEFAULTS_SUPPRESSED_KEY, false);
+  }
+
+  async function setMockAutoDefaultsSuppressed(suppressed: boolean): Promise<void> {
+    await context.workspaceState.update(
+      MOCK_AUTO_DEFAULTS_SUPPRESSED_KEY,
+      suppressed ? true : undefined,
+    );
+  }
+
+  function getSuppressedMockEndpoints(): Array<{ endpoint: string; method: string; updatedAt: number }> {
+    const value = context.workspaceState.get<unknown>(MOCK_SUPPRESSED_ENDPOINTS_KEY);
+    if (!value || typeof value !== 'object') return [];
+    const candidate = value as { version?: unknown; endpoints?: unknown };
+    if (candidate.version !== 1 || !Array.isArray(candidate.endpoints)) return [];
+    return candidate.endpoints.filter((entry): entry is { endpoint: string; method: string; updatedAt: number } => (
+      entry != null &&
+      typeof entry === 'object' &&
+      typeof (entry as { endpoint?: unknown }).endpoint === 'string' &&
+      typeof (entry as { method?: unknown }).method === 'string' &&
+      typeof (entry as { updatedAt?: unknown }).updatedAt === 'number'
+    )).map((entry) => ({
+      endpoint: entry.endpoint,
+      method: entry.method.toUpperCase(),
+      updatedAt: entry.updatedAt,
+    }));
+  }
+
+  async function writeSuppressedMockEndpoints(
+    endpoints: Array<{ endpoint: string; method: string; updatedAt: number }>,
+  ): Promise<void> {
+    const byKey = new Map<string, { endpoint: string; method: string; updatedAt: number }>();
+    for (const endpoint of endpoints) {
+      byKey.set(mockEndpointKey(endpoint.method, endpoint.endpoint), {
+        endpoint: endpoint.endpoint,
+        method: endpoint.method.toUpperCase(),
+        updatedAt: endpoint.updatedAt,
+      });
+    }
+    const normalized = Array.from(byKey.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+    await context.workspaceState.update(
+      MOCK_SUPPRESSED_ENDPOINTS_KEY,
+      normalized.length > 0 ? { version: 1, endpoints: normalized } : undefined,
+    );
+  }
+
+  async function suppressMockEndpoint(endpoint: { endpoint: string; method: string }): Promise<void> {
+    await writeSuppressedMockEndpoints([
+      ...getSuppressedMockEndpoints().filter((entry) => (
+        mockEndpointKey(entry.method, entry.endpoint) !== mockEndpointKey(endpoint.method, endpoint.endpoint)
+      )),
+      {
+        endpoint: endpoint.endpoint,
+        method: endpoint.method,
+        updatedAt: Date.now(),
+      },
+    ]);
+  }
+
+  async function unsuppressMockEndpoint(endpoint: { endpoint: string; method: string }): Promise<void> {
+    await writeSuppressedMockEndpoints(getSuppressedMockEndpoints().filter((entry) => (
+      mockEndpointKey(entry.method, entry.endpoint) !== mockEndpointKey(endpoint.method, endpoint.endpoint)
+    )));
+  }
+
+  async function clearSuppressedMockEndpoints(): Promise<void> {
+    await writeSuppressedMockEndpoints([]);
+  }
+
+  function suppressedMockEndpointsForDiscovery(
+    discovery: MockDiscoveryResult,
+    suppressAll: boolean,
+  ): Array<{ endpoint: string; method: string }> {
+    if (suppressAll) {
+      return discovery.endpoints.map((endpoint) => ({
+        endpoint: endpoint.endpointFile.endpoint,
+        method: endpoint.endpointFile.method,
+      }));
+    }
+    const discoveredKeys = new Set(
+      discovery.endpoints.map((endpoint) => (
+        mockEndpointKey(endpoint.endpointFile.method, endpoint.endpointFile.endpoint)
+      )),
+    );
+    return getSuppressedMockEndpoints().filter((entry) => (
+      discoveredKeys.has(mockEndpointKey(entry.method, entry.endpoint))
+    ));
   }
 }
 
@@ -1224,6 +1584,173 @@ async function runCommand(label: string, action: () => Promise<void>): Promise<v
 
 function isActiveSessionState(status: string): boolean {
   return status === 'connected' || status === 'recording' || status === 'running';
+}
+
+function mockEndpointKey(method: string, endpoint: string): string {
+  return `${method.toUpperCase()} ${endpoint}`;
+}
+
+function logMockRouteSample(label: string, routes: Array<{ method: string; endpoint: string; ruleName: string }>): void {
+  if (routes.length === 0) {
+    output.appendLine(`[MockStateSync] ${label}: (none)`);
+    return;
+  }
+  output.appendLine(
+    `[MockStateSync] ${label}: `
+    + routes.slice(0, 10).map((route) => `${route.method.toUpperCase()} ${route.endpoint} -> ${route.ruleName}`).join(' | ')
+    + (routes.length > 10 ? ` | ... +${routes.length - 10} more` : ''),
+  );
+}
+
+function logFlutterRouteSample(label: string, routes: Array<{ id?: string; method?: string; path: string }>): void {
+  if (routes.length === 0) {
+    output.appendLine(`[MockStateSync] ${label}: (none)`);
+    return;
+  }
+  output.appendLine(
+    `[MockStateSync] ${label}: `
+    + routes.slice(0, 10).map((route) => formatFlutterMockRoute(route)).join(' | ')
+    + (routes.length > 10 ? ` | ... +${routes.length - 10} more` : ''),
+  );
+}
+
+interface FlutterMockDebugState {
+  mode?: string;
+  serverPort?: number | null;
+  interceptorInjected?: boolean;
+  interceptors?: number;
+  passthrough?: boolean;
+  storeId?: number;
+  routes?: Array<{ id?: string; method?: string; path?: string; status?: number }>;
+  interceptorState?: {
+    storeId?: number;
+    sharedStore?: boolean;
+    passthrough?: boolean;
+    routes?: Array<{ id?: string; method?: string; path?: string; status?: number }>;
+    calls?: number;
+  };
+  calls?: number;
+}
+
+async function waitForFlutterMockExtension(
+  driver: { sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> },
+  reason: string,
+): Promise<void> {
+  // The bridge re-registers the mock VM-service extensions asynchronously
+  // during (hot-)restart. A single probe races that re-registration and, on
+  // failure, aborts the whole reconcile — leaving Hive-resurrected routes
+  // active while VSCode shows no applied rules. Poll until the extension
+  // responds (or the deadline elapses) before proceeding.
+  const maxAttempts = 25; // ~5s at 200ms intervals
+  const intervalMs = 200;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await driver.sendRequest('ext.fliwright.mock.debugState', {});
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Flutter mock extension is not ready for mock sync after ~5s (${reason}): ${message}`);
+}
+
+async function readFlutterMockDebugState(
+  driver: { sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> },
+): Promise<FlutterMockDebugState | undefined> {
+  try {
+    return unwrapExtensionPayload<FlutterMockDebugState>(
+      await driver.sendRequest('ext.fliwright.mock.debugState', {}),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function formatFlutterMockDebugState(state: FlutterMockDebugState | undefined): string[] {
+  if (!state) return ['debugState: unavailable'];
+  const lines = [
+    `debugState: mode=${state.mode ?? 'unknown'} store=#${state.storeId ?? 'unknown'} `
+    + `routes=${state.routes?.length ?? 0} passthrough=${state.passthrough ?? 'unknown'} calls=${state.calls ?? 0}`,
+  ];
+  if (state.mode === 'http') {
+    lines.push(`http: serverPort=${state.serverPort ?? 'none'}`);
+  }
+  if (state.mode === 'dio') {
+    lines.push(
+      `dio: interceptorInjected=${state.interceptorInjected === true} `
+      + `interceptors=${state.interceptors ?? (state.interceptorState ? 1 : 0)}`,
+    );
+    const interceptor = state.interceptorState;
+    if (interceptor) {
+      lines.push(
+        `dio.interceptor: store=#${interceptor.storeId ?? 'unknown'} `
+        + `sharedStore=${interceptor.sharedStore === true} routes=${interceptor.routes?.length ?? 0} `
+        + `passthrough=${interceptor.passthrough ?? 'unknown'} calls=${interceptor.calls ?? 0}`,
+      );
+      for (const route of interceptor.routes ?? []) {
+        lines.push(`  ${formatFlutterMockRoute(route)}`);
+      }
+    }
+  }
+  return lines;
+}
+
+function formatFlutterMockRoute(route: { id?: string; method?: string; path?: string }): string {
+  const method = (route.method ?? '*').toUpperCase();
+  const label = `${method} ${route.path ?? '(unknown)'}`;
+  const parsed = parseFlutterMockRouteId(route.id);
+  if (parsed) {
+    return `${label} -> ${parsed.ruleName} id=${route.id}`;
+  }
+  return route.id ? `${label} id=${route.id}` : label;
+}
+
+function parseFlutterMockRouteId(id: string | undefined): { method: string; endpoint: string; ruleName: string } | undefined {
+  if (!id?.startsWith('fliwright-vscode:')) return undefined;
+  const parts = id.split(':');
+  if (parts.length !== 4) return undefined;
+  try {
+    return {
+      method: decodeURIComponent(parts[1] ?? '').toUpperCase(),
+      endpoint: decodeURIComponent(parts[2] ?? ''),
+      ruleName: decodeURIComponent(parts[3] ?? ''),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function unwrapExtensionPayload<T>(value: unknown): T {
+  if (value && typeof value === 'object' && 'result' in value) {
+    const result = (value as { result?: unknown }).result;
+    if (typeof result === 'string') {
+      try {
+        return unwrapExtensionPayload<T>(JSON.parse(result));
+      } catch {
+        return value as T;
+      }
+    }
+    if (result && typeof result === 'object') {
+      return unwrapExtensionPayload<T>(result);
+    }
+  }
+  if (value && typeof value === 'object' && 'response' in value) {
+    const response = (value as { response?: unknown }).response;
+    if (typeof response === 'string') {
+      try {
+        return unwrapExtensionPayload<T>(JSON.parse(response));
+      } catch {
+        return value as T;
+      }
+    }
+    if (response && typeof response === 'object') {
+      return response as T;
+    }
+  }
+  return value as T;
 }
 
 async function withWindowProgress<T>(title: string, task: () => Promise<T>): Promise<T> {

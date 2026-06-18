@@ -4,6 +4,7 @@ import { AiAssertionError, AiDisabledError, AiInvocationError, AiParseError, AiT
 import type {
   AiAdapter,
   AiArtifactMeta,
+  AiCallContext,
   AiClassifyRequest,
   AiGenerateRequest,
   AiInspectRequest,
@@ -23,13 +24,17 @@ export class AiRuntime {
     private readonly context: AiRuntimeContext = {},
   ) {}
 
-  async ask(input: AiRequest): Promise<AiResponse> {
+  async ask(input: AiRequest, call?: AiCallContext): Promise<AiResponse> {
     const adapter = this.resolveAdapter();
     const callId = `ai-${++this.callCounter}`;
     const timeoutMs = input.timeoutMs ?? this.config.timeoutMs ?? 60_000;
     const store = this.config.artifactsDir ? new AiArtifactStore(this.config.artifactsDir) : undefined;
     const artifactsDir = store
-      ? await store.createInvocationDir({ runId: this.context.runId, testName: this.context.testName, callId })
+      ? await store.createInvocationDir({
+          runId: call?.runId ?? this.context.runId,
+          testName: call?.testName ?? this.context.testName,
+          callId,
+        })
       : undefined;
     const startedAt = Date.now();
     const controller = new AbortController();
@@ -42,7 +47,11 @@ export class AiRuntime {
         callId,
         timeoutMs,
         signal: controller.signal,
-        runtime: this.context,
+        runtime: {
+          ...this.context,
+          page: call?.page ?? this.context.page,
+          driver: call?.driver ?? this.context.driver,
+        },
         artifactsDir,
       });
       const response = await withTimeout(invocation, timeoutMs, controller, artifactsDir, (handle) => {
@@ -67,9 +76,9 @@ export class AiRuntime {
     }
   }
 
-  async generate<T = unknown>(input: AiGenerateRequest<T>): Promise<T> {
+  async generate<T = unknown>(input: AiGenerateRequest<T>, call?: AiCallContext): Promise<T> {
     try {
-      const response = await this.ask({ ...input, responseFormat: 'json' });
+      const response = await this.ask({ ...input, responseFormat: 'json' }, call);
       const json = response.json ?? parseJsonIfNeeded(response.text, 'json', response.artifactsDir);
       return input.schema ? validateJsonSchema<T>(json, input.schema) : json as T;
     } catch (error) {
@@ -78,7 +87,7 @@ export class AiRuntime {
     }
   }
 
-  async visible(prompt: string, options: AiVisibleOptions = {}): Promise<void> {
+  async visible(prompt: string, options: AiVisibleOptions = {}, call?: AiCallContext): Promise<void> {
     const result = await this.inspect<{ pass: boolean; reason: string }>({
       prompt,
       responseFormat: 'json',
@@ -87,18 +96,18 @@ export class AiRuntime {
       includeSnapshot: options.includeSnapshot ?? false,
       screenshot: options.screenshot,
       timeoutMs: options.timeoutMs,
-    });
+    }, call);
     if (!result.pass) throw new AiAssertionError(result.reason || 'provider returned pass=false');
   }
 
-  async inspect<T = unknown>(input: AiInspectRequest): Promise<T> {
-    const request = await this.withVisionContext(input);
-    const response = await this.ask({ ...request, responseFormat: 'json' });
+  async inspect<T = unknown>(input: AiInspectRequest, call?: AiCallContext): Promise<T> {
+    const request = await this.withVisionContext(input, call);
+    const response = await this.ask({ ...request, responseFormat: 'json' }, call);
     const json = response.json ?? parseJsonIfNeeded(response.text, 'json', response.artifactsDir);
     return input.schema ? validateJsonSchema<T>(json, input.schema) : json as T;
   }
 
-  async classify(input: AiClassifyRequest): Promise<string> {
+  async classify(input: AiClassifyRequest, call?: AiCallContext): Promise<string> {
     const response = await this.generate<{ label: string }>({
       ...input,
       responseFormat: 'json',
@@ -107,25 +116,26 @@ export class AiRuntime {
         properties: { label: { type: 'string', enum: input.choices } },
         required: ['label'],
       },
-    });
+    }, call);
     return response.label;
   }
 
-  private async withVisionContext(input: AiInspectRequest): Promise<AiRequest> {
+  private async withVisionContext(input: AiInspectRequest, call?: AiCallContext): Promise<AiRequest> {
     const includeScreenshot = input.includeScreenshot ?? this.config.defaultVisionContext?.includeScreenshot ?? true;
     const includeSnapshot = input.includeSnapshot ?? this.config.defaultVisionContext?.includeSnapshot ?? false;
+    const page = call?.page ?? this.context.page;
     const images = [...(input.images ?? [])];
     const metadata = { ...(input.metadata ?? {}) };
 
     if (includeScreenshot) {
-      if (!this.context.page) throw new AiInvocationError('AI vision request requires a Page in runtime context');
-      const screenshot = await this.context.page.screenshot(input.screenshot ?? { pixelRatio: 1 });
+      if (!page) throw new AiInvocationError('AI vision request requires a Page in runtime context');
+      const screenshot = await page.screenshot(input.screenshot ?? { pixelRatio: 1 });
       images.push({ name: 'screenshot.png', mimeType: 'image/png', data: screenshot });
     }
 
     if (includeSnapshot) {
-      if (!this.context.page) throw new AiInvocationError('AI snapshot request requires a Page in runtime context');
-      metadata.snapshot = await this.context.page.snapshot();
+      if (!page) throw new AiInvocationError('AI snapshot request requires a Page in runtime context');
+      metadata.snapshot = await page.snapshot();
     }
 
     return { ...input, images, metadata };
@@ -133,7 +143,7 @@ export class AiRuntime {
 
   private resolveAdapter(): AiAdapter {
     if (this.config.enabled === false || this.config.provider === 'none') {
-      throw new AiDisabledError('AI runtime is disabled. Configure FLIWRIGHT_AI_PROVIDER or createFliwrightTest({ ai }).');
+      throw new AiDisabledError('AI runtime is disabled. Configure FLIWRIGHT_AI_PROVIDER, call configureAi(...), or createFliwrightTest({ ai }).');
     }
     const adapter = this.config.adapter;
     if (!adapter || !('invoke' in adapter)) {

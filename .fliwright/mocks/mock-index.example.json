@@ -2,7 +2,7 @@
   "version": 1,
   "defaultRule": "success",
   "files": [
-    "api/get-token.example.json"
+    "api/get-token.example.json",
+    "api/register.example.json"
   ]
 }
-

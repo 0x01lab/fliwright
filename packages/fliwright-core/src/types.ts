@@ -129,6 +129,11 @@ export interface ProviderInfo {
   error?: string;
 }
 
+export interface KeyedAncestor {
+  key: string;
+  type: string;
+}
+
 export interface WidgetInfo {
   id: string;
   type: string;
@@ -143,6 +148,10 @@ export interface WidgetInfo {
   rect?: { x: number; y: number; width: number; height: number };
   hitTestable?: boolean;
   properties: Record<string, unknown>;
+  tooltip?: string;
+  descendantText?: string;
+  descendantIcon?: { codePoint: number; fontFamily?: string; fontPackage?: string };
+  keyedAncestors?: KeyedAncestor[];
 }
 
 export interface WidgetSnapshot {
@@ -202,6 +211,12 @@ export interface HealingResult {
   suggestedSelector: string;
   confidence: number;
   matchedWidget: WidgetInfo;
+}
+
+export interface ResolvedSelector {
+  query: SelectorQuery;
+  ambiguous: boolean;
+  matchCount: number;
 }
 
 export interface HealingReport {

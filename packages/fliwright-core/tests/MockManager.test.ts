@@ -37,6 +37,22 @@ describe('MockManager', () => {
     expect(await mock.listRoutes()).toEqual([]);
   });
 
+  it('removeFlutterRoute() always forwards removal to Flutter', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.removeRoute': { removed: true },
+      'ext.fliwright.mock.listRoutes': { routes: [] },
+    });
+    const mock = new MockManager(sendRequest);
+    await mock.route('/api/a', { status: 200 });
+
+    await mock.removeFlutterRoute('/api/a');
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.removeRoute', {
+      path: '/api/a',
+    });
+    expect(await mock.listRoutes()).toEqual([]);
+  });
+
   it('removeRoute() can remove only one method for a path', async () => {
     const mock = new MockManager(createMockSendRequest());
     await mock.route('/api/user', { method: 'GET', status: 200 });
@@ -84,6 +100,45 @@ describe('MockManager', () => {
     expect(store.loadFromDirectory).toHaveBeenCalledWith('/mocks');
     expect(await mock.listRoutes()).toEqual([
       expect.objectContaining({ method: 'GET', path: '/api/test' }),
+    ]);
+  });
+
+  it('loadRules() syncs active rules from .fliwright/mocks to the Flutter rule store', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': { success: true },
+    });
+    const mock = new MockManager(sendRequest);
+    const store = new MockRuleStore();
+    vi.spyOn(store, 'loadFromDirectory').mockResolvedValue(undefined);
+    vi.spyOn(store, 'listEndpoints').mockReturnValue([
+      { endpoint: '/api/register', method: 'POST', rules: ['success', 'error'], activeRule: 'success' },
+    ]);
+    vi.spyOn(store, 'getActiveResponse').mockReturnValue({
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: { success: true, message: '注册成功' },
+    });
+    mock['_server'].ruleStore.loadFromDirectory = store.loadFromDirectory.bind(store);
+    mock['_server'].ruleStore.listEndpoints = store.listEndpoints.bind(store);
+    mock['_server'].ruleStore.getActiveResponse = store.getActiveResponse.bind(store);
+
+    await mock.loadRules('/workspace/.fliwright/mocks');
+
+    expect(store.loadFromDirectory).toHaveBeenCalledWith('/workspace/.fliwright/mocks');
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.addRoute', {
+      route: JSON.stringify({
+        path: '/api/register',
+        method: 'POST',
+        response: {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: { success: true, message: '注册成功' },
+          delay: undefined,
+        },
+      }),
+    });
+    expect(mock.listRules()).toEqual([
+      { endpoint: '/api/register', method: 'POST', rules: ['success', 'error'], activeRule: 'success' },
     ]);
   });
 
@@ -206,6 +261,43 @@ describe('MockManager', () => {
 
     await expect(mock.routeFlutter('/api/test', { method: 'GET', status: 200 })).rejects.toThrow(
       'Flutter mock route registration failed: Missing parameter: route',
+    );
+  });
+
+  it('routeFlutter() accepts empty success payloads from Flutter extensions', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': {},
+      'ext.fliwright.mock.listRoutes': { routes: [] },
+    });
+    const mock = new MockManager(sendRequest);
+
+    await expect(mock.routeFlutter('/api/test', { method: 'GET', status: 200 })).resolves.toEqual({
+      success: true,
+    });
+  });
+
+  it('routeFlutter() unwraps stringified VM service extension payloads', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': {
+        result: JSON.stringify(vmExtensionResult({ success: true, id: 'registered-route' })),
+      },
+    });
+    const mock = new MockManager(sendRequest);
+
+    await expect(mock.routeFlutter('/api/test', { method: 'GET', status: 200 })).resolves.toEqual({
+      success: true,
+      id: 'registered-route',
+    });
+  });
+
+  it('routeFlutter() fails when Flutter reports success=false', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.addRoute': { success: false },
+    });
+    const mock = new MockManager(sendRequest);
+
+    await expect(mock.routeFlutter('/api/test', { method: 'GET', status: 200 })).rejects.toThrow(
+      'Flutter mock route registration failed: success=false',
     );
   });
 
@@ -336,6 +428,20 @@ describe('MockManager', () => {
         },
       }),
     });
+  });
+
+  it('clearFlutterRoutes() always forwards route clearing to Flutter', async () => {
+    const sendRequest = createMockSendRequest({
+      'ext.fliwright.mock.clearRoutes': { cleared: 1 },
+      'ext.fliwright.mock.listRoutes': { routes: [] },
+    });
+    const mock = new MockManager(sendRequest);
+    await mock.route('/api/a', { status: 200 });
+
+    await mock.clearFlutterRoutes();
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.clearRoutes');
+    expect(await mock.listRoutes()).toEqual([]);
   });
 });
 

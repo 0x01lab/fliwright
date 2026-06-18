@@ -1,25 +1,23 @@
-# Assertions
+# 断言（Assertions）
 
-`expect(locator)` returns an `Assertion` with **Playwright-style auto-wait**: it polls the locator
-until the condition holds or the timeout elapses, so you almost never need a manual `sleep` before
-an assertion.
+`expect(locator)` 返回一个 `Assertion`，带有 **Playwright 风格的自动等待**：它会轮询 locator，直到条件成立或超时，因此你几乎从不需要在断言前手动 `sleep`。
 
 ```typescript
 import { expect } from '@fliwright/vitest';          // Fliwright expect (auto-wait + healing)
 import { expect as viExpect } from 'vitest';          // raw Vitest for non-locator checks
 ```
 
-## Matchers
+## 匹配器（Matchers）
 
-Every matcher accepts `options?: { timeout?: number }` (default `5000` ms).
+每个匹配器都接受 `options?: { timeout?: number }`（默认 `5000` 毫秒）。
 
-| Matcher | Passes when… |
+| 匹配器 | 何时通过 |
 | --- | --- |
-| `toBeVisible(options?)` | the locator resolves to a hit-testable widget |
-| `toHaveText(text, options?)` | the first match has exactly this text |
-| `toContainText(text, options?)` | the first match's text contains the substring |
-| `toBeEnabled(options?)` | the first match is enabled (`properties.enabled !== false`) |
-| `toBeDisabled(options?)` | the first match is disabled (negation of `toBeEnabled`) |
+| `toBeVisible(options?)` | locator 解析到一个可命中测试（hit-testable）的控件 |
+| `toHaveText(text, options?)` | 第一个匹配项的文本恰好等于该值 |
+| `toContainText(text, options?)` | 第一个匹配项的文本包含该子串 |
+| `toBeEnabled(options?)` | 第一个匹配项处于启用状态（`properties.enabled !== false`） |
+| `toBeDisabled(options?)` | 第一个匹配项处于禁用状态（`toBeEnabled` 的否定） |
 
 ```typescript
 await expect(page.getByText('Welcome')).toBeVisible();
@@ -28,18 +26,18 @@ await expect(page.getByText('Saved')).toContainText('Saved');
 await expect(page.getByText('Count: 1')).toHaveText('Count: 1');
 ```
 
-## Negation: `.not`
+## 否定：`.not`
 
 ```typescript
 await expect(page.getByKey('passwordError')).not.toBeVisible();
 await expect(page.getByText('Loading')).not.toBeVisible();
 ```
 
-`.not` returns a new negated `Assertion`. It disables self-healing (healing only applies to positive assertions).
+`.not` 返回一个新的否定 `Assertion`。它会关闭自愈（自愈只对正向断言生效）。
 
-## Auto-wait behavior
+## 自动等待行为
 
-`Assertion` polls the locator roughly every 100 ms:
+`Assertion` 大约每 100 毫秒轮询一次 locator：
 
 ```typescript
 // Polls until "Done" is visible, up to 5s — no sleep needed.
@@ -47,36 +45,32 @@ await page.getByKey('submit').click();
 await expect(page.getByText('Done')).toBeVisible();
 ```
 
-If you need a longer window (slow animations, network), pass `timeout`:
+如果需要更长的窗口（动画慢、网络慢），传入 `timeout`：
 
 ```typescript
 await expect(page.getByText('Synced')).toBeVisible({ timeout: 15_000 });
 ```
 
-For boolean checks that are **not** a single-widget visibility/text claim, drop to Vitest:
+对于**不是**单一控件可见性/文本声明的布尔判断，请降级到 Vitest：
 
 ```typescript
 viExpect(await page.getByText('Ready').count()).toBe(1);
 viExpect(await page.getByText('Ready').isVisible()).toBe(true);
 ```
 
-## Self-healing
+## 自愈（Self-healing）
 
-Positive `expect(...).toBeVisible()` participates in self-healing when the fixture wires a
-`SelfHealingEngine` (the default fixture does). On failure it:
+当 fixture 装配了 `SelfHealingEngine`（默认 fixture 就这么做）时，正向的 `expect(...).toBeVisible()` 会参与自愈。失败时它会：
 
-1. records a **success snapshot** the first time this `(testName, selector)` passes — the baseline,
-2. on a later failure, compares the current snapshot against stored baselines via a
-   multi-dimensional healing strategy (n-gram similarity across text/type/semantics),
-3. if a confident alternative selector is found, re-runs the assertion against the healed locator.
+1. 在某个 `(testName, selector)` 首次通过时记录一张**成功快照**，作为基准；
+2. 在之后的失败中，通过多维自愈策略（跨 text/type/semantics 的 n-gram 相似度）把当前快照与已存基准做比较；
+3. 若找到一个有把握的替代选择器，就用自愈后的 locator 重新跑一次断言。
 
-This makes assertions resilient to small UI changes. Healing is **off** for negated assertions and
-for raw-driver scripts that don't wire the engine. The latest healing suggestion for a test is also
-surfaced in the failure report (see [troubleshooting.md](./troubleshooting.md)).
+这让断言对小幅 UI 变更有韧性。自愈对否定断言、以及没有装配引擎的裸 driver 脚本是**关闭**的。某条测试最新的自愈建议也会出现在失败报告中（见 [troubleshooting.md](./troubleshooting.md)）。
 
-## What to assert
+## 该断言什么
 
-Assert through the **UI**, the same thing a user would see — not through internal state.
+通过 **UI** 来断言——也就是用户实际能看到的东西——而不是内部状态。
 
 ```typescript
 // ✅ visible outcome
@@ -89,9 +83,9 @@ await expect(page.getByText('Subscribed')).toBeVisible();
 await expect(page.getByText('Subscribe')).not.toBeVisible();
 ```
 
-## Asserting on mocks
+## 对 mock 做断言
 
-Assert on intercepted HTTP via `driver.mock` (see [mocks.md](./mocks.md)):
+通过 `driver.mock` 对被拦截的 HTTP 请求做断言（见 [mocks.md](./mocks.md)）：
 
 ```typescript
 const calls = await driver.mock.getCalls('/api/register');
@@ -99,9 +93,9 @@ viExpect(calls.length).toBeGreaterThanOrEqual(1);
 viExpect(calls.at(-1)!.method).toBe('POST');
 ```
 
-## Failure context
+## 失败上下文
 
-When an `AssertionError` is thrown, it carries structured fields used in reports:
+抛出 `AssertionError` 时，它带有用于报告的结构化字段：
 
 ```typescript
 class AssertionError extends Error {
@@ -113,6 +107,4 @@ class AssertionError extends Error {
 // message: `${matcher} failed for "${selector}": expected ${expected}, got ${actual}`
 ```
 
-When run through `fliwright run` or MCP, the fixture also captures: a screenshot, the widget tree,
-recent VM diagnostics, the source location, and any healing suggestion — all persisted to the run's
-failure context file. See [cli.md](./cli.md) and [mcp-workflow.md](./mcp-workflow.md).
+通过 `fliwright run` 或 MCP 运行时，fixture 还会捕获：一张截图、控件树、最近的 VM 诊断、源码位置，以及任何自愈建议——这些都会写入本次运行的失败上下文文件。详见 [cli.md](./cli.md) 与 [mcp-workflow.md](./mcp-workflow.md)。

@@ -65,6 +65,153 @@ export class SandboxService {
     return { applied, routes, unmatched };
   }
 
+  async reconcileFromFlutter(
+    driver: FliwrightDriver,
+    discovery: MockDiscoveryResult,
+    options: {
+      selectedEntries?: MockRuleEntry[];
+      suppressedEndpoints?: Array<{ endpoint: string; method: string }>;
+      applyDefaultRules?: boolean;
+      onStaleRoutes?: (summary: {
+        routes: Array<{ id?: string; method?: string; path: string }>;
+        applied: AppliedMockRule[];
+        unmatched: Array<{ id?: string; method?: string; path: string }>;
+      }) => Promise<void> | void;
+    } = {},
+  ): Promise<{
+    applied: AppliedMockRule[];
+    routes: Array<{ id?: string; method?: string; path: string }>;
+    unmatched: Array<{ id?: string; method?: string; path: string }>;
+    rebuilt: boolean;
+    reconciled: AppliedMockRule[];
+    skipped: number;
+    pruned: number;
+  }> {
+    let sync = await this.syncFromFlutter(driver, discovery);
+    let rebuilt = false;
+    const suppressedKeys = new Set(
+      (options.suppressedEndpoints ?? []).map((entry) => appliedKey(entry.method, entry.endpoint)),
+    );
+    const suppressedRoutes = sync.routes.filter((route) => isSuppressedFlutterRoute(route, suppressedKeys));
+    if (suppressedRoutes.length > 0) {
+      for (const route of suppressedRoutes) {
+        await driver.mock.removeFlutterRoute(route.path, route.method);
+        const method = routeMethod(route);
+        if (method) this.applied.delete(appliedKey(method, route.path));
+      }
+      sync = await this.syncFromFlutter(driver, discovery);
+    }
+    if (sync.unmatched.length > 0) {
+      await options.onStaleRoutes?.(sync);
+      await this.clear(driver);
+      rebuilt = true;
+      sync = { applied: [], routes: [], unmatched: [] };
+    }
+
+    const activeKeys = new Set(
+      this.getAppliedRules().map((rule) => appliedKey(rule.method, rule.endpoint)),
+    );
+    const selectedByKey = new Map(
+      (options.selectedEntries ?? []).map((entry) => [appliedKey(entry.method, entry.endpoint), entry] as const),
+    );
+    // Desired state = endpoints that SHOULD have an active route: restored selections
+    // plus (when applyDefaultRules) endpoints that resolve to a default rule. Routes
+    // merely observed in Flutter are not desired on their own — only what VSCode
+    // selects is. This set drives the prune pass below.
+    const desiredActiveKeys = new Set<string>();
+    for (const entry of options.selectedEntries ?? []) {
+      desiredActiveKeys.add(appliedKey(entry.method, entry.endpoint));
+    }
+    if (options.applyDefaultRules) {
+      for (const endpoint of discovery.endpoints) {
+        if (selectDefaultRule(endpoint)) {
+          desiredActiveKeys.add(appliedKey(endpoint.endpointFile.method, endpoint.endpointFile.endpoint));
+        }
+      }
+    }
+    const reconciled: AppliedMockRule[] = [];
+    let skipped = 0;
+
+    for (const endpoint of discovery.endpoints) {
+      const key = appliedKey(endpoint.endpointFile.method, endpoint.endpointFile.endpoint);
+      if (activeKeys.has(key)) continue;
+      if (suppressedKeys.has(key)) {
+        skipped++;
+        continue;
+      }
+
+      const selected = selectedByKey.get(key);
+      if (selected) {
+        const applied = await this.applyRule(driver, selected);
+        activeKeys.add(key);
+        reconciled.push(applied);
+        continue;
+      }
+
+      if (!options.applyDefaultRules) {
+        skipped++;
+        continue;
+      }
+
+      const rule = selectDefaultRule(endpoint);
+      if (!rule) {
+        skipped++;
+        continue;
+      }
+
+      const applied = await this.applyRule(driver, {
+        kind: 'rule',
+        uri: endpoint.uri,
+        endpoint: endpoint.endpointFile.endpoint,
+        method: endpoint.endpointFile.method,
+        rule,
+        isDefault: true,
+      });
+      activeKeys.add(key);
+      reconciled.push(applied);
+    }
+
+    // Prune to desired state: remove every Flutter route whose endpoint is NOT
+    // in the desired active set. This is desired-state driven (not id-prefix
+    // driven), so when VSCode has no selected/default rules the Flutter store is
+    // fully cleared — including stale or non-prefixed routes — which is what
+    // makes "no active rule in VSCode" actually mean "nothing is mocked".
+    // Suppressed endpoints are not exempt: suppression only prevents re-applying
+    // a route, it must not spare a route from being cleared. Removal flows
+    // through removeFlutterRoute -> Hive save(), so cold starts no longer
+    // resurrect pruned routes.
+    let pruned = 0;
+    const prunedKeys = new Set<string>();
+    for (const route of sync.routes) {
+      const parsed = parseRouteId(route.id);
+      const method = (parsed?.method ?? route.method)?.toUpperCase();
+      if (!method) continue;
+      const endpoint = parsed?.endpoint ?? route.path;
+      const key = appliedKey(method, endpoint);
+      if (desiredActiveKeys.has(key)) continue;
+      await driver.mock.removeFlutterRoute(route.path, method);
+      this.applied.delete(key);
+      prunedKeys.add(key);
+      pruned += 1;
+    }
+
+    // Reflect prune in the returned applied set. sync.applied is a pre-prune
+    // snapshot; returning it verbatim would let callers re-save pruned routes
+    // into the selection store, which then resurrects them on the next reconnect.
+    const finalApplied = sync.applied.filter(
+      (rule) => !prunedKeys.has(appliedKey(rule.method, rule.endpoint)),
+    );
+
+    return {
+      ...sync,
+      applied: finalApplied,
+      rebuilt,
+      reconciled,
+      skipped,
+      pruned,
+    };
+  }
+
   async stopRule(driver: FliwrightDriver, entry: MockRuleEntry): Promise<boolean> {
     const key = appliedKey(entry.method, entry.endpoint);
     const applied = this.applied.get(key);
@@ -75,7 +222,13 @@ export class SandboxService {
       const parsed = parseRouteId(flutterRoute.id);
       if (parsed && parsed.ruleName !== entry.rule.name) return false;
     }
-    await driver.mock.removeRoute(entry.endpoint, entry.method);
+    await driver.mock.removeFlutterRoute(entry.endpoint, entry.method);
+    const stillActive = await findFlutterRoute(driver, entry.endpoint, entry.method);
+    if (stillActive) {
+      throw new Error(
+        `Flutter mock route is still active after stop: ${entry.method.toUpperCase()} ${entry.endpoint}`,
+      );
+    }
     this.applied.delete(key);
     return true;
   }
@@ -119,7 +272,7 @@ export class SandboxService {
 
   async clear(driver: FliwrightDriver): Promise<number> {
     const count = this.applied.size;
-    await driver.mock.clear();
+    await driver.mock.clearFlutterRoutes();
     this.applied.clear();
     return count;
   }
@@ -161,11 +314,28 @@ async function routeRule(
     headers: rule.headers,
     body: rule.body,
   };
-  return (await driver.mock.routeFlutter(endpoint, response)) ?? { success: true };
+  return normalizeRouteResult(await driver.mock.routeFlutter(endpoint, response));
 }
 
 function appliedKey(method: string, endpoint: string): string {
   return `${method.toUpperCase()} ${endpoint}`;
+}
+
+function routeMethod(route: { id?: string; method?: string }): string | undefined {
+  return (parseRouteId(route.id)?.method ?? route.method)?.toUpperCase();
+}
+
+function isSuppressedFlutterRoute(
+  route: { id?: string; method?: string; path: string },
+  suppressedKeys: Set<string>,
+): boolean {
+  if (suppressedKeys.size === 0) return false;
+  const method = routeMethod(route);
+  if (method) return suppressedKeys.has(appliedKey(method, route.path));
+  for (const key of suppressedKeys) {
+    if (key.endsWith(` ${route.path}`)) return true;
+  }
+  return false;
 }
 
 function routeId(endpoint: string, method: string, ruleName: string): string {
@@ -189,7 +359,7 @@ function resolveFlutterRoute(
 
   const rule = parsed?.ruleName
     ? endpointEntry.endpointFile.rules.find((candidate) => candidate.name === parsed.ruleName)
-    : selectDefaultRule(endpointEntry);
+    : singleRule(endpointEntry);
   if (!rule) return undefined;
 
   return {
@@ -214,6 +384,10 @@ function parseRouteId(id: string | undefined): { method: string; endpoint: strin
   } catch {
     return undefined;
   }
+}
+
+function singleRule(endpoint: MockEndpointEntry): MockRule | undefined {
+  return endpoint.endpointFile.rules.length === 1 ? endpoint.endpointFile.rules[0] : undefined;
 }
 
 async function findFlutterRoute(
@@ -270,7 +444,7 @@ async function assertFlutterMockReady(
   const routeList = unwrapExtensionPayload<MockListRoutesResult>(
     await driver.sendRequest('ext.fliwright.mock.listRoutes', {}),
   );
-  const routeRegistered = isSuccessfulRouteResult(routeResult);
+  const routeRegistered = isCompletedRouteResult(routeResult);
   const routes = [
     ...(Array.isArray(state.routes) ? state.routes : []),
     ...(Array.isArray(routeList?.routes) ? routeList.routes : []),
@@ -280,7 +454,7 @@ async function assertFlutterMockReady(
     (!route.method || route.method.toUpperCase() === method.toUpperCase())
   ));
   if (!routeSynced && !routeRegistered) {
-    const available = routes.map((route) => `${(route.method ?? '*').toUpperCase()} ${route.path ?? '(unknown)'}`);
+    const available = routes.map(formatFlutterRouteForError);
     throw new Error(
       `Flutter mock route was not registered: ${method.toUpperCase()} ${endpoint}. `
       + `Available Flutter routes: ${available.length ? available.join(', ') : '(none)'}`,
@@ -288,11 +462,34 @@ async function assertFlutterMockReady(
   }
 }
 
-function isSuccessfulRouteResult(value: unknown): boolean {
+function formatFlutterRouteForError(route: { id?: string; method?: string; path?: string }): string {
+  const label = `${(route.method ?? '*').toUpperCase()} ${route.path ?? '(unknown)'}`;
+  const parsed = parseRouteId(route.id);
+  if (parsed) return `${label} -> ${parsed.ruleName}`;
+  return route.id ? `${label} id=${route.id}` : label;
+}
+
+function isCompletedRouteResult(value: unknown): boolean {
+  // routeFlutter is strict and throws for extension errors; route lists can lag behind a completed addRoute call.
   const payload = unwrapExtensionPayload<Record<string, unknown>>(value);
-  if (!payload || typeof payload !== 'object') return false;
+  if (payload == null) return true;
+  if (typeof payload !== 'object') return false;
+  if (Object.keys(payload).length === 0) return true;
+  if (typeof payload.error === 'string') return false;
+  if (payload.success === false) return false;
   if (payload.success === true) return true;
-  return typeof payload.id === 'string' && payload.id.length > 0;
+  if (typeof payload.id === 'string' && payload.id.length > 0) return true;
+  if (payload.type === 'Success') return true;
+  return true;
+}
+
+function normalizeRouteResult(value: unknown): unknown {
+  const payload = unwrapExtensionPayload<Record<string, unknown>>(value);
+  if (payload == null) return { success: true };
+  if (typeof payload === 'object' && Object.keys(payload).length === 0) {
+    return { success: true };
+  }
+  return payload;
 }
 
 function unwrapExtensionPayload<T>(value: unknown): T {
@@ -300,7 +497,7 @@ function unwrapExtensionPayload<T>(value: unknown): T {
     const result = (value as { result?: unknown }).result;
     if (typeof result === 'string') {
       try {
-        return JSON.parse(result) as T;
+        return unwrapExtensionPayload<T>(JSON.parse(result));
       } catch {
         return value as T;
       }
@@ -313,7 +510,7 @@ function unwrapExtensionPayload<T>(value: unknown): T {
     const response = (value as { response?: unknown }).response;
     if (typeof response === 'string') {
       try {
-        return JSON.parse(response) as T;
+        return unwrapExtensionPayload<T>(JSON.parse(response));
       } catch {
         return value as T;
       }

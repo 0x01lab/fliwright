@@ -1,12 +1,11 @@
-# Screenshots & Snapshots
+# 截图与快照（Screenshots & Snapshots）
 
-Two distinct capabilities, both on `page`:
+`page` 上有两种不同的能力：
 
-- **Screenshots** (`page.screenshot()`) — capture the rendered pixels as a PNG `Buffer`.
-- **Snapshots** (`page.snapshot()`) — capture the **semantic widget tree** as structured refs you can
-  query and act on.
+- **截图（Screenshots）**（`page.screenshot()`）——把渲染出的像素捕获成 PNG `Buffer`。
+- **快照（Snapshots）**（`page.snapshot()`）——捕获**语义化的控件树**，得到结构化的、可查询、可操作的一组 ref。
 
-## Screenshots
+## 截图
 
 ### `screenshot(options?)`
 
@@ -18,13 +17,13 @@ screenshot(options?: {
 }): Promise<Buffer>                                   // PNG bytes
 ```
 
-Capture strategies:
+捕获策略：
 
-| `mode` | When to use |
+| `mode` | 何时使用 |
 | --- | --- |
-| `'auto'` (default) | Detects PlatformView (WebView) and picks the best path automatically |
-| `'boundary'` | Forces `RepaintBoundary.toImage()` — fast, but can't see PlatformView content |
-| `'canvas'` | Forces `OffsetLayer` painting — works around WebView `debugNeedsPaint` issues |
+| `'auto'`（默认） | 自动检测 PlatformView（WebView）并挑选最佳路径 |
+| `'boundary'` | 强制走 `RepaintBoundary.toImage()`——速度快，但看不到 PlatformView 内容 |
+| `'canvas'` | 强制走 `OffsetLayer` 绘制——可绕过 WebView 的 `debugNeedsPaint` 问题 |
 
 ```typescript
 const png = await page.screenshot();                       // full screen
@@ -39,22 +38,19 @@ const region = await page.screenshot({
 
 ### `screenshotFullPage(options?)`
 
-Scroll through scrollable content, capture segments, and stitch into one tall PNG.
+滚动可滚动内容、捕获多段、并拼接成一张很高的 PNG。
 
 ```typescript
 screenshotFullPage(options?: { pixelRatio?: number }): Promise<Buffer>
 ```
 
-> **Note:** the bridge returns multiple segments; multi-segment PNG stitching is currently partial
-> (returns the first segment when more than one is produced). Prefer `screenshot()` with a known
-> scroll position, or expect a single segment, until a stitcher dependency is added.
+> **注意：** 桥接会返回多段；多段 PNG 拼接目前尚不完整（产生多于一段时只返回第一段）。在加入拼接器依赖之前，请优先用已知滚动位置的 `screenshot()`，或预期只会得到单段。
 
-## Snapshots (semantic tree)
+## 快照（语义树）
 
 ### `snapshot(options?)`
 
-Returns a structured snapshot of interactive widgets with stable `ref` handles. Requires the current
-bridge (`ext.fliwright.snap`).
+返回一份交互控件的结构化快照，每个控件带有稳定的 `ref` 句柄。需要当前的桥接支持（`ext.fliwright.snap`）。
 
 ```typescript
 snapshot(options?: {
@@ -64,7 +60,7 @@ snapshot(options?: {
 }): Promise<AgentSnapshotResult>
 ```
 
-`AgentSnapshotResult.refs[]` each expose `{ ref, label, role, type, key, rect?, … }`.
+`AgentSnapshotResult.refs[]` 每个元素暴露 `{ ref, label, role, type, key, rect?, … }`。
 
 ```typescript
 const snap = await page.snapshot({ depth: 4, includeRects: true });
@@ -73,10 +69,9 @@ for (const r of snap.refs) {
 }
 ```
 
-### `ref(ref)` — pin a specific widget
+### `ref(ref)` —— 锁定某个具体控件
 
-Act on a ref returned by a snapshot. Refs are **ephemeral per snapshot** — never hard-code `e<N>`
-across runs.
+对快照返回的 ref 执行操作。ref **仅在单次快照内有效**——绝不要跨运行硬编码 `e<N>`。
 
 ```typescript
 ref(ref: string): Locator
@@ -87,9 +82,9 @@ const first = snap.refs[0]?.ref;
 if (first) await page.ref(first).click();
 ```
 
-### `findRef(query)` — look up a ref by predicate against a fresh snapshot
+### `findRef(query)` —— 用谓词在一份新鲜快照里查找 ref
 
-When a fresh snapshot is more precise than a selector, find the ref and act on it in one step.
+当一份新鲜快照比选择器更精确时，可以用它一步查到 ref 并对其操作。
 
 ```typescript
 findRef(query: {
@@ -103,40 +98,34 @@ const confirm = await page.findRef({ text: 'Confirm', role: 'button' });
 await confirm.click();
 ```
 
-### Exploration workflow (current bridge)
+### 探索式工作流（当前桥接）
 
-1. `page.snapshot({ depth, includeRects })` to see what's on screen,
-2. pick a stable **query** (role + text + key) rather than an `e<N>` ref,
-3. commit a resilient locator: `page.getBySemantics({ label: 'Confirm', role: 'button' })`, or
-   `await page.findRef({ text: 'Confirm', role: 'button' })` captured in the same run.
+1. `page.snapshot({ depth, includeRects })` 查看屏幕上有什么；
+2. 选一个稳定的**查询**（role + text + key），而不是某个 `e<N>` ref；
+3. 提交一个有韧性的 locator：`page.getBySemantics({ label: 'Confirm', role: 'button' })`，或者在同一次运行内捕获的 `await page.findRef({ text: 'Confirm', role: 'button' })`。
 
-MCP tools `fliwright_snap` / `fliwright_observe` use this same snapshot path — see
-[mcp-workflow.md](./mcp-workflow.md).
+MCP 工具 `fliwright_snap` / `fliwright_observe` 走的就是这条同样的快照路径——见 [mcp-workflow.md](./mcp-workflow.md)。
 
-## Bridge capability checklist
+## 桥接能力清单
 
-Snapshot/ref flows depend on specific extensions. If the VM returns `Unknown method "ext.fliwright.X"`,
-the app is on an older bridge — upgrade/rebuild it before using that feature.
+快照/ref 相关流程依赖特定的扩展。如果 VM 返回 `Unknown method "ext.fliwright.X"`，说明应用接的是更旧的桥接——先升级/重新构建它，再用该特性。
 
-| Capability | Required for |
+| 能力 | 所需场景 |
 | --- | --- |
-| `ext.fliwright.snap` | `page.snapshot()`, `page.findRef()`, MCP `fliwright_snap` / `fliwright_observe` |
-| `ext.fliwright.action` | ref-backed tap/type/wait, all `Locator` actions, actionability diagnostics |
-| `ext.fliwright.extractForm` | `page.formHelper.*`, `fill()`, `fillFields()` |
-| `ext.fliwright.screenshot` | `page.screenshot()`, AI run-report screenshots |
+| `ext.fliwright.snap` | `page.snapshot()`、`page.findRef()`、MCP `fliwright_snap` / `fliwright_observe` |
+| `ext.fliwright.action` | ref 支撑的 tap/type/wait，所有 `Locator` 动作，actionability 诊断 |
+| `ext.fliwright.extractForm` | `page.formHelper.*`、`fill()`、`fillFields()` |
+| `ext.fliwright.screenshot` | `page.screenshot()`、AI 运行报告截图 |
 | `ext.fliwright.resolve` | `Locator.resolveAll()` / `count()` / `isVisible()` |
-| mock extensions (`ext.fliwright.mock.*`) | `driver.mock.*`, tool-side mock integration |
+| mock 扩展（`ext.fliwright.mock.*`） | `driver.mock.*`、工具侧 mock 集成 |
 
-## Legacy snapshots (older bridge)
+## 遗留快照（更旧的桥接）
 
-Older bridges expose `ext.fliwright.snapshot` (note: **snapshot**, not **snap**) returning a flat
-`{ widgets: [...] }` list with `{ id, type, key, rect, parentType, adjacentText, description }`. The
-`exio-app-e2e.test.ts` shows the legacy fallback path:
+更旧的桥接暴露的是 `ext.fliwright.snapshot`（注意是 **snapshot**，不是 **snap**），返回一个扁平的 `{ widgets: [...] }` 列表，元素形如 `{ id, type, key, rect, parentType, adjacentText, description }`。`exio-app-e2e.test.ts` 演示了这条遗留兜底路径：
 
 ```typescript
 const resp = await driver.sendRequest('ext.fliwright.snapshot') as { widgets?: LegacyWidget[] };
 const widgets = resp.widgets ?? [];
 ```
 
-Label these scripts as **legacy**, keep them isolated, and migrate to `ext.fliwright.snap` once the
-app upgrades its bridge.
+请把这些脚本标注为**遗留**、保持隔离，并在应用升级桥接后迁移到 `ext.fliwright.snap`。

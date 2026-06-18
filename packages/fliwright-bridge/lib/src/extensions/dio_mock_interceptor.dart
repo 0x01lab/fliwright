@@ -28,6 +28,8 @@ class FliwrightDioMockInterceptor extends Interceptor {
 
   List<MockRoute> get routes => ruleStore.getAllRoutes();
 
+  int get ruleStoreDebugId => ruleStore.debugId;
+
   void _log(String message) {
     developer.log(message, name: 'fliwright.mock.dio');
   }
@@ -36,17 +38,22 @@ class FliwrightDioMockInterceptor extends Interceptor {
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final requestPath =
         options.uri.path.isEmpty ? options.path : options.uri.path;
-    _log('Incoming Dio ${options.method} $requestPath url=${options.uri}');
+    _log(
+      'Incoming Dio ${options.method} $requestPath url=${options.uri} '
+      'store=#${ruleStore.debugId} routes=${routes.length}',
+    );
     final route = ruleStore.findRoute(options.method, requestPath);
     if (route == null) {
       if (passthrough) {
         _log(
-            'No Dio route matched ${options.method} $requestPath; passthrough enabled');
+          'No Dio route matched ${options.method} $requestPath; '
+          'passthrough enabled store=#${ruleStore.debugId} routes=${routes.length}',
+        );
         handler.next(options);
       } else {
         _log(
           'No Dio route matched ${options.method} $requestPath; returning 404. '
-          'Registered routes: ${routes.map((r) => '${r.method ?? '*'} ${r.pathPattern}').join(', ')}',
+          'store=#${ruleStore.debugId} Registered routes: ${routes.map((r) => '${r.method ?? '*'} ${r.pathPattern}').join(', ')}',
         );
         handler.reject(
           DioException(
@@ -84,13 +91,17 @@ class FliwrightDioMockInterceptor extends Interceptor {
 
     if (route.delayMs > 0) {
       _log(
-          'Matched Dio route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status}; delaying ${route.delayMs}ms');
+        'Matched Dio route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status}; '
+        'delaying ${route.delayMs}ms store=#${ruleStore.debugId} routes=${routes.length}',
+      );
       Future.delayed(Duration(milliseconds: route.delayMs), () {
         handler.resolve(response);
       });
     } else {
       _log(
-          'Matched Dio route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status}');
+        'Matched Dio route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status} '
+        'store=#${ruleStore.debugId} routes=${routes.length}',
+      );
       handler.resolve(response);
     }
   }

@@ -1,15 +1,12 @@
-# Actions
+# 操作（Actions）
 
-Act on a `Locator`. Every action returns `Promise<void>` and throws an `Error` whose message includes
-the bridge's diagnostic `contextDump` (up to 10 visible widgets) when no widget is found — read it
-when a tap mysteriously fails.
+对 `Locator` 执行操作。每个操作都返回 `Promise<void>`；当找不到控件时抛出的 `Error`，其 message 会包含桥接层的诊断 `contextDump`（最多 10 个可见控件）—— 当一次点击莫名失败时，先读它。
 
-All actions send to `ext.fliwright.action` with `{ action, ...selectorParams, ...options }`.
-`alignment` (default `'center'`) controls the tap point within the matched rect:
+所有操作都发送到 `ext.fliwright.action`，载荷为 `{ action, ...selectorParams, ...options }`。`alignment`（默认 `'center'`）控制在匹配到的 rect 内的点击点：
 `'center' | 'topLeft' | 'topCenter' | 'topRight' | 'centerLeft' | 'centerRight' |
-'bottomLeft' | 'bottomCenter' | 'bottomRight'`.
+'bottomLeft' | 'bottomCenter' | 'bottomRight'`。
 
-## Taps & presses
+## 点击与按压
 
 ```typescript
 click(options?: {
@@ -35,10 +32,10 @@ await loc.focus();
 await loc.blur();
 ```
 
-`doubleClick` / `tripleClick` / `rightClick` / `hover` / `focus` take `{ alignment?, timeout? }`.
-`blur` takes `{ timeout? }`.
+`doubleClick` / `tripleClick` / `rightClick` / `hover` / `focus` 接受 `{ alignment?, timeout? }`。
+`blur` 接受 `{ timeout? }`。
 
-## Long press
+## 长按（Long press）
 
 ```typescript
 longPress(options?: { duration?: number; alignment?: AlignmentOption; timeout?: number }): Promise<void>
@@ -48,9 +45,9 @@ longPress(options?: { duration?: number; alignment?: AlignmentOption; timeout?: 
 await page.getByText('Delete').longPress({ duration: 700 });
 ```
 
-## Drag (relative, by delta)
+## 拖拽（Drag，按相对位移）
 
-Drag the element from its center by a delta. Positive Y is down.
+从控件中心按位移进行拖拽。Y 轴正方向向下。
 
 ```typescript
 drag(deltaX: number, deltaY: number, options?: {
@@ -67,7 +64,7 @@ await page.getByType('Slider').drag(120, 0, { steps: 12 });        // 120px righ
 await listTile.dragTo('left', 160);                                // swipe-to-reveal action
 ```
 
-## Pinch (zoom)
+## 双指缩放（Pinch / zoom）
 
 ```typescript
 pinch(scale: number, options?: {
@@ -80,9 +77,9 @@ await page.getByType('InteractiveViewer').pinch(1.25);   // zoom in
 await page.getByType('InteractiveViewer').pinch(0.8);    // zoom out
 ```
 
-## Slider / captcha: `slideTo`
+## 滑块 / 验证码：`slideTo`
 
-Slide an element to an absolute X coordinate (e.g. a slider knob for a captcha).
+把一个控件滑动到绝对 X 坐标（例如验证码滑块上的滑块旋钮）。
 
 ```typescript
 slideTo(targetX: number, options?: {
@@ -94,7 +91,7 @@ slideTo(targetX: number, options?: {
 await page.getByKey('sliderKnob').slideTo(340, { steps: 25 });
 ```
 
-## Text input
+## 文本输入
 
 ```typescript
 type(text: string, options?: { delay?: number; charDelay?: number; timeout?: number }): Promise<void>
@@ -102,9 +99,9 @@ fill(text: string, options?: { delay?: number; charDelay?: number; timeout?: num
 clear(options?: { timeout?: number }): Promise<void>
 ```
 
-- **`fill()`** replaces the field's current value (`replaceAll: true`). Use for setting a known value.
-- **`type()`** appends/types (`replaceAll: false`). Use when you want real keystroke behavior.
-- `charDelay` (alias: `delay`) sets per-character delay in ms.
+- **`fill()`** 会替换字段当前值（`replaceAll: true`）。用于设置一个已知值。
+- **`type()`** 是追加/键入（`replaceAll: false`）。当你想要真实的按键行为时使用。
+- `charDelay`（别名：`delay`）设置每个字符之间的延迟，单位毫秒。
 
 ```typescript
 await page.getByKey('email').fill('alice@example.com');
@@ -112,7 +109,7 @@ await page.getByKey('search').type('hello', { charDelay: 30 });
 await page.getByKey('email').clear();
 ```
 
-## Keys, checkboxes, options
+## 按键、复选框、选项
 
 ```typescript
 pressKey(key: string, options?: { timeout?: number }): Promise<void>          // e.g. 'Enter', 'Backspace'
@@ -126,22 +123,22 @@ await page.getByKey('country').selectOption('CN');
 await page.getByKey('search').pressKey('Enter');
 ```
 
-## Scroll into view
+## 滚动到可视区域（Scroll into view）
 
 ```typescript
 scrollIntoView(options?: { alignment?: number; duration?: number; timeout?: number }): Promise<void>
 ```
 
-`alignment` (default `0.5`) is where within the viewport the widget should settle (0 = top, 1 = bottom).
+`alignment`（默认 `0.5`）决定控件应该在 viewport 的哪个位置停下（0 = 顶部，1 = 底部）。
 
 ```typescript
 await page.getByText('Checkout').scrollIntoView();
 await page.getByText('Checkout').scrollIntoView({ alignment: 0.2, duration: 400 });
 ```
 
-## Raw coordinates (outside the widget tree)
+## 原始坐标（控件树之外）
 
-Use these for surfaces **not** in the Flutter widget tree — WebView overlays, captcha sliders, ads.
+对那些**不在** Flutter 控件树里的表面使用这些方法 —— WebView 覆盖层、验证码滑块、广告等。
 
 ```typescript
 // on Page:
@@ -149,29 +146,27 @@ page.clickAt(x: number, y: number): Promise<void>
 page.dragFrom(x: number, y: number, deltaX: number, deltaY: number, options?: { steps?: number }): Promise<void>
 ```
 
-`clickAt` sends `ext.fliwright.click`; `dragFrom` sends `ext.fliwright.dragFrom` (default 20 steps).
+`clickAt` 发送 `ext.fliwright.click`；`dragFrom` 发送 `ext.fliwright.dragFrom`（默认 20 步）。
 
 ```typescript
 await page.clickAt(114, 204);
 await page.dragFrom(120, 420, 0, -280, { steps: 16 });   // swipe up
 ```
 
-> Coordinate-based tests are inherently brittle (resolution/scale-dependent). Reach for them only
-> when a locator cannot represent the target, and prefer environment-overridable coordinates
-> (`process.env.MY_TAP_X`) so the test can be tuned without code edits.
+> 基于坐标的测试天生脆弱（依赖分辨率/缩放）。只在 locator 无法表达目标时才使用，并且优先选用可由环境变量覆盖的坐标（`process.env.MY_TAP_X`），这样无需改代码就能微调测试。
 
-## Acting on a pre-resolved widget (fast path)
+## 对已解析控件做操作（fast path）
 
-When you already resolved a widget (e.g. via `formHelper.analyze()`), avoid re-resolving:
+当你已经解析过某个控件（例如通过 `formHelper.analyze()`），就别再重新解析一次：
 
 ```typescript
 await loc.fillWithResolved(text, resolvedWidget, options?: { charDelay?: number });
 await loc.clickResolved(resolvedWidget);
 ```
 
-## Failure diagnostics
+## 失败诊断
 
-When an action can't find its target, the thrown error includes the bridge's `contextDump`:
+当某个操作找不到目标时，抛出的错误会包含桥接层的 `contextDump`：
 
 ```
 tap failed debug=… 
@@ -182,4 +177,4 @@ Visible widgets on screen:
   ...
 ```
 
-Read this list first — it tells you what is actually on screen and why your selector missed.
+先读这个列表 —— 它告诉你屏幕上实际有什么、以及为什么你的选择器没匹配到。

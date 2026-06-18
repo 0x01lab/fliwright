@@ -10,6 +10,10 @@ export interface InteractionDriver {
 export interface InteractionPage {
   snapshot(options?: SnapshotOptions): Promise<SnapshotResult>;
   screenshot?(options?: { pixelRatio?: number }): Promise<Buffer>;
+  goto?(path: string, options?: NavigationOptions): Promise<void>;
+  navigate?(path: string, options?: { extra?: Record<string, unknown> }): Promise<void>;
+  resetRouteStack?(path: string, options?: NavigationOptions): Promise<void>;
+  resetToHome?(options?: ResetToHomeOptions): Promise<void>;
   waitFor?(selector: Record<string, unknown>, timeout?: number): Promise<unknown>;
   dismissModal?(): Promise<void>;
   waitForNetworkIdle?(options?: { quietMs?: number; timeout?: number }): Promise<void>;
@@ -75,6 +79,31 @@ export interface ObserveOptions {
   roles?: string;
   limit?: number;
   includeDiagnostics?: boolean;
+}
+
+export type NavigationAction = 'goto' | 'resetRouteStack' | 'resetToHome';
+
+export type NavigationWaitUntil = 'none' | 'settled';
+
+export interface NavigationOptions {
+  extra?: Record<string, unknown>;
+  waitUntil?: NavigationWaitUntil;
+  settleTimeout?: number;
+  stableFrames?: number;
+  waitFor?: Record<string, unknown>;
+  waitForTimeout?: number;
+  throwOnSettleTimeout?: boolean;
+}
+
+export interface ResetToHomeOptions extends Omit<NavigationOptions, 'extra'> {
+  homeRoute?: string;
+}
+
+export interface NavigateOptions extends NavigationOptions {
+  action?: NavigationAction;
+  path?: string;
+  homeRoute?: string;
+  includeSnapshot?: boolean;
 }
 
 export interface ActionOptions {
@@ -174,6 +203,61 @@ export async function observeInteraction(
     }));
 
   return { candidates, count: candidates.length };
+}
+
+export async function navigateInteraction(
+  driver: InteractionDriver,
+  options: NavigateOptions,
+): Promise<{ success: boolean; action: NavigationAction; path: string; snapshot?: SnapshotResult }> {
+  const action = options.action ?? 'goto';
+  const path = action === 'resetToHome' ? options.homeRoute ?? options.path ?? '/' : options.path;
+  if (!path) {
+    throw new Error(`${action} requires path`);
+  }
+
+  const navigationOptions: NavigationOptions = {
+    extra: options.extra,
+    waitUntil: options.waitUntil,
+    settleTimeout: options.settleTimeout,
+    stableFrames: options.stableFrames,
+    waitFor: options.waitFor,
+    waitForTimeout: options.waitForTimeout,
+    throwOnSettleTimeout: options.throwOnSettleTimeout,
+  };
+
+  if (action === 'resetToHome') {
+    if (driver.page.resetToHome) {
+      await driver.page.resetToHome({
+        homeRoute: path,
+        waitUntil: options.waitUntil,
+        settleTimeout: options.settleTimeout,
+        stableFrames: options.stableFrames,
+        waitFor: options.waitFor,
+        waitForTimeout: options.waitForTimeout,
+        throwOnSettleTimeout: options.throwOnSettleTimeout,
+      });
+    } else if (driver.page.resetRouteStack) {
+      await driver.page.resetRouteStack(path, navigationOptions);
+    } else {
+      await resetRouteStackViaRpc(driver, path, options);
+    }
+  } else if (action === 'resetRouteStack') {
+    if (driver.page.resetRouteStack) {
+      await driver.page.resetRouteStack(path, navigationOptions);
+    } else {
+      await resetRouteStackViaRpc(driver, path, options);
+    }
+  } else if (driver.page.goto) {
+    await driver.page.goto(path, navigationOptions);
+  } else if (driver.page.navigate) {
+    await driver.page.navigate(path, { extra: options.extra });
+    await waitForNavigationFallback(driver, options);
+  } else {
+    await navigateViaRpc(driver, path, options);
+  }
+
+  const result = await withOptionalSnapshot(driver.page, options.includeSnapshot);
+  return { ...result, success: true, action, path };
 }
 
 export async function tapInteraction(
@@ -448,6 +532,48 @@ function matchesFindQuery(candidate: SnapshotRef, query: FindQuery): boolean {
   if (query.role != null && candidate.role !== query.role) return false;
   if (query.type != null && candidate.type !== query.type) return false;
   return true;
+}
+
+async function navigateViaRpc(
+  driver: InteractionDriver,
+  path: string,
+  options: NavigateOptions,
+): Promise<void> {
+  assertActionSuccess(await driver.sendRequest('ext.fliwright.navigate', stringifyDefined({
+    path,
+    extra: options.extra == null ? undefined : JSON.stringify(options.extra),
+  })), 'navigate');
+  await waitForNavigationFallback(driver, options);
+}
+
+async function resetRouteStackViaRpc(
+  driver: InteractionDriver,
+  path: string,
+  options: NavigateOptions,
+): Promise<void> {
+  assertActionSuccess(await driver.sendRequest('ext.fliwright.resetRouteStack', stringifyDefined({
+    path,
+    extra: options.extra == null ? undefined : JSON.stringify(options.extra),
+  })), 'resetRouteStack');
+  await waitForNavigationFallback(driver, options);
+}
+
+async function waitForNavigationFallback(
+  driver: InteractionDriver,
+  options: NavigateOptions,
+): Promise<void> {
+  if (options.waitFor && driver.page.waitFor) {
+    await driver.page.waitFor(options.waitFor, options.waitForTimeout);
+  }
+  if ((options.waitUntil ?? 'settled') !== 'settled') return;
+  const result = await driver.sendRequest('ext.fliwright.settle', stringifyDefined({
+    timeout: options.settleTimeout ?? 3000,
+    stableFrames: options.stableFrames,
+  })) as { success?: boolean; error?: string; timedOut?: boolean; settledAfterMs?: number };
+  assertActionSuccess(result, 'settle');
+  if ((options.throwOnSettleTimeout ?? true) && result.timedOut) {
+    throw new Error(`settle timed out after ${result.settledAfterMs ?? options.settleTimeout ?? 3000}ms`);
+  }
 }
 
 function parseRoles(input?: string): Set<string> {

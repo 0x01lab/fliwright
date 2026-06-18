@@ -38,6 +38,7 @@
   "activationEvents": [
     "onCommand:fliwright.reloadMocks",
     "onCommand:fliwright.reloadFormRules",
+    "onCommand:fliwright.reloadScripts",
     "onCommand:fliwright.connect",
     "onCommand:fliwright.disconnect",
     "onCommand:fliwright.discoverVmService",
@@ -48,6 +49,7 @@
     "onCommand:fliwright.copyMockRuleJson",
     "onCommand:fliwright.createFormRules",
     "onCommand:fliwright.openFormRules",
+    "onCommand:fliwright.openScript",
     "onCommand:fliwright.insertFormFieldSelector",
     "onCommand:fliwright.applyMockRule",
     "onCommand:fliwright.stopMockRule",
@@ -58,6 +60,7 @@
     "onCommand:fliwright.fillFormWithRules",
     "onCommand:fliwright.runCurrentTest",
     "onCommand:fliwright.runWorkspaceTests",
+    "onCommand:fliwright.runScript",
     "onCommand:fliwright.openFailure",
     "onCommand:fliwright.startRecording",
     "onCommand:fliwright.stopRecording",
@@ -97,6 +100,10 @@
         {
           "id": "fliwright.formData",
           "name": "Form Data"
+        },
+        {
+          "id": "fliwright.scripts",
+          "name": "Scripts"
         },
         {
           "id": "fliwright.tests",
@@ -192,6 +199,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "fliwright.reloadScripts",
+        "title": "Fliwright: Reload Scripts",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "fliwright.createFormRules",
         "title": "Fliwright: Create Form Rules",
         "icon": "$(add)"
@@ -199,6 +211,10 @@
       {
         "command": "fliwright.openFormRules",
         "title": "Fliwright: Open Form Rules"
+      },
+      {
+        "command": "fliwright.openScript",
+        "title": "Fliwright: Open Script"
       },
       {
         "command": "fliwright.insertFormFieldSelector",
@@ -228,6 +244,11 @@
         "command": "fliwright.runWorkspaceTests",
         "title": "Fliwright: Run Workspace Tests",
         "icon": "$(run-all)"
+      },
+      {
+        "command": "fliwright.runScript",
+        "title": "Fliwright: Run Script",
+        "icon": "$(run)"
       },
       {
         "command": "fliwright.openFailure",
@@ -371,6 +392,16 @@
           "group": "navigation@4"
         },
         {
+          "command": "fliwright.runScript",
+          "when": "view == fliwright.scripts",
+          "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.reloadScripts",
+          "when": "view == fliwright.scripts",
+          "group": "navigation@2"
+        },
+        {
           "command": "fliwright.runCurrentTest",
           "when": "view == fliwright.tests",
           "group": "navigation@1"
@@ -453,6 +484,16 @@
           "group": "inline@3"
         },
         {
+          "command": "fliwright.runScript",
+          "when": "view == fliwright.scripts && viewItem == scriptFile",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.openScript",
+          "when": "view == fliwright.scripts && viewItem == scriptFile",
+          "group": "inline@2"
+        },
+        {
           "command": "fliwright.runCurrentTest",
           "when": "view == fliwright.tests && viewItem == testFile",
           "group": "inline@1"
@@ -506,16 +547,6 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically start and configure the tool-side mock controller after connecting to a Flutter VM Service."
-        },
-        "fliwright.autoApplyDefaultMocksOnConnect": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically apply default API mocks after connecting to a Flutter VM Service."
-        },
-        "fliwright.restoreSelectedMocksOnConnect": {
-          "type": "boolean",
-          "default": true,
-          "description": "Restore previously selected API mock rules after connecting to a Flutter VM Service. Restored selections override default mocks for the same endpoint."
         },
         "fliwright.vmServiceUrl": {
           "type": [
@@ -591,6 +622,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show Fliwright CodeLens actions in TypeScript test files."
+        },
+        "fliwright.scriptGlob": {
+          "type": "string",
+          "default": ".fliwright/scripts/**/*.{js,mjs,cjs}",
+          "description": "Workspace glob used to discover runnable Fliwright scripts. Scripts are expected under .fliwright/scripts/."
         },
         "fliwright.traceMode": {
           "type": "string",

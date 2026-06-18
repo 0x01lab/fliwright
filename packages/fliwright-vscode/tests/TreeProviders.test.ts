@@ -4,9 +4,11 @@ import { MockApiTreeProvider } from '../src/views/MockApiTreeProvider.js';
 import { FormDataTreeProvider } from '../src/views/FormDataTreeProvider.js';
 import { StateTreeProvider } from '../src/views/StateTreeProvider.js';
 import { DevicesTreeProvider } from '../src/views/DevicesTreeProvider.js';
+import { ScriptDiscoveryService } from '../src/scripts/ScriptDiscoveryService.js';
+import { ScriptsTreeProvider } from '../src/views/ScriptsTreeProvider.js';
 import type { FormRuleService } from '../src/form/FormRuleService.js';
 import type { MockConfigService } from '../src/sandbox/MockConfigService.js';
-import { createWorkspace } from './helpers/workspace.js';
+import { createWorkspace, writeText } from './helpers/workspace.js';
 
 describe('tree providers', () => {
   it('nests connected device capabilities under the status row', () => {
@@ -202,6 +204,34 @@ describe('tree providers', () => {
     const item = provider.getTreeItem(fields[0]!);
     expect(item.contextValue).toBe('formAnalyzeField');
     expect(item.command).toMatchObject({ command: 'fliwright.insertFormFieldSelector' });
+  });
+
+  it('discovers runnable scripts only under .fliwright/scripts', async () => {
+    const root = await createWorkspace();
+    await writeText(root, '.fliwright/auto-register-fill.mjs', 'console.log("root");\n');
+    await writeText(root, '.fliwright/scripts/auto-register-fill.mjs', 'console.log("script");\n');
+
+    const scripts = await new ScriptDiscoveryService().discover(Uri.file(root));
+
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]).toMatchObject({
+      kind: 'scriptFile',
+      label: 'auto-register-fill.mjs',
+      description: '.fliwright/scripts/auto-register-fill.mjs',
+    });
+  });
+
+  it('shows script rows as runnable tree items', async () => {
+    const root = await createWorkspace();
+    await writeText(root, '.fliwright/scripts/auto-register-fill.mjs', 'console.log("script");\n');
+    const provider = new ScriptsTreeProvider(new ScriptDiscoveryService());
+
+    const [script] = await provider.getChildren();
+    expect(script).toMatchObject({ kind: 'scriptFile', label: 'auto-register-fill.mjs' });
+
+    const item = provider.getTreeItem(script!);
+    expect(item.contextValue).toBe('scriptFile');
+    expect(item.command).toMatchObject({ command: 'fliwright.runScript' });
   });
 
   it('updates state provider rows without replacing the whole tree', () => {

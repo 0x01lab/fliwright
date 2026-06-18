@@ -56,21 +56,41 @@ export class MockManager implements MockAdapter {
 
   async removeRoute(path: string, method?: string): Promise<void> {
     if (this.usesFlutterStore) {
-      await this.sendRequest('ext.fliwright.mock.removeRoute', {
-        path,
-        ...(method ? { method } : {}),
-      });
+      await this.removeFlutterRoute(path, method);
       return;
     }
     this._server.removeRoute(path, method);
   }
 
+  /**
+   * Remove a route from the Flutter mock store regardless of whether this
+   * manager has already switched into Flutter-backed mode.
+   */
+  async removeFlutterRoute(path: string, method?: string): Promise<void> {
+    await this.sendRequest('ext.fliwright.mock.removeRoute', {
+      path,
+      ...(method ? { method } : {}),
+    });
+    this._server.removeRoute(path, method);
+    this.usesFlutterStore = true;
+  }
+
   async clear(): Promise<void> {
     if (this.usesFlutterStore) {
-      await this.sendRequest('ext.fliwright.mock.clearRoutes');
+      await this.clearFlutterRoutes();
       return;
     }
     this._server.clear();
+  }
+
+  /**
+   * Clear all Flutter mock routes regardless of whether this manager has
+   * already switched into Flutter-backed mode.
+   */
+  async clearFlutterRoutes(): Promise<void> {
+    await this.sendRequest('ext.fliwright.mock.clearRoutes');
+    this._server.clear();
+    this.usesFlutterStore = true;
   }
 
   async setPassthrough(enabled: boolean): Promise<void> {
@@ -198,7 +218,7 @@ export class MockManager implements MockAdapter {
     });
     const error = extensionError(result);
     if (error) throw new Error(`Flutter mock route registration failed: ${error}`);
-    return result;
+    return normalizeSuccessfulExtensionResult(result);
   }
 
   private async trySyncFlutterRoute(path: string, response: MockRouteResponse & { method?: string; id?: string }): Promise<boolean> {
@@ -240,7 +260,24 @@ function extensionError(result: unknown): string | null {
   ) {
     return (payload as { error: string }).error;
   }
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'success' in payload &&
+    (payload as { success?: unknown }).success === false
+  ) {
+    return 'success=false';
+  }
   return null;
+}
+
+function normalizeSuccessfulExtensionResult(result: unknown): unknown {
+  const payload = unwrapExtensionPayload(result);
+  if (payload == null) return { success: true };
+  if (typeof payload === 'object' && Object.keys(payload).length === 0) {
+    return { success: true };
+  }
+  return payload;
 }
 
 function unwrapExtensionPayload(value: unknown): unknown {
@@ -248,7 +285,7 @@ function unwrapExtensionPayload(value: unknown): unknown {
     const result = (value as { result?: unknown }).result;
     if (typeof result === 'string') {
       try {
-        return JSON.parse(result);
+        return unwrapExtensionPayload(JSON.parse(result));
       } catch {
         return value;
       }
@@ -259,7 +296,7 @@ function unwrapExtensionPayload(value: unknown): unknown {
     const response = (value as { response?: unknown }).response;
     if (typeof response === 'string') {
       try {
-        return JSON.parse(response);
+        return unwrapExtensionPayload(JSON.parse(response));
       } catch {
         return value;
       }

@@ -13,6 +13,7 @@ import { registerSnapTool } from './tools/snap.js';
 import { registerFindTool } from './tools/find.js';
 import { registerObserveTool } from './tools/observe.js';
 import { registerHotReloadAndSnapTool } from './tools/hotReloadAndSnap.js';
+import { registerNavigateTool } from './tools/navigate.js';
 import { registerTapTool } from './tools/tap.js';
 import { registerTypeTool } from './tools/type.js';
 import { registerDragTool } from './tools/drag.js';
@@ -44,6 +45,7 @@ export function createFliwrightServer() {
   registerFindTool(server, state);
   registerObserveTool(server, state);
   registerHotReloadAndSnapTool(server, state);
+  registerNavigateTool(server, state);
   registerTapTool(server, state);
   registerTypeTool(server, state);
   registerDragTool(server, state);

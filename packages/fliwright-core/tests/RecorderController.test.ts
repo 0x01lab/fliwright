@@ -603,4 +603,70 @@ describe('RecorderController', () => {
       delta: { x: 0, y: 200 },
     }));
   });
+
+  it('disambiguates an ambiguous GestureDetector with descendant text', async () => {
+    const sendRequest = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
+      if (method === 'streamListen') return Promise.resolve({});
+      if (method === 'ext.fliwright.startRecording') return Promise.resolve({ recording: true });
+      if (method === 'ext.fliwright.stopRecording') return Promise.resolve({ recording: false });
+      if (method === 'ext.fliwright.hitTest') {
+        return Promise.resolve({
+          widget: { id: '1', type: 'GestureDetector', descendantText: 'Login', properties: {} },
+        });
+      }
+      if (method === 'ext.fliwright.resolve') {
+        const q = JSON.parse((params as { selector: string }).selector);
+        if (q.containing) return Promise.resolve({ count: 1 });
+        return Promise.resolve({ count: 4 });
+      }
+      return Promise.resolve({});
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((cb) => { eventCallback = cb; return () => {}; }),
+    );
+
+    await controller.start();
+    eventCallback?.({ kind: 'FliwrightRecording', timestamp: Date.now(), data: { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 5, y: 5 }, timestamp: 1000, buttons: 1 } });
+    eventCallback?.({ kind: 'FliwrightRecording', timestamp: Date.now(), data: { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 5, y: 5 }, timestamp: 1100, buttons: 0 } });
+
+    const code = await controller.stop();
+    expect(code).toContain("containing: { text: 'Login' }");
+    expect(code).not.toContain('// ambiguous');
+  });
+
+  it('emits distinct selectors for two GestureDetectors distinguished by inner text', async () => {
+    const widgets = [
+      { id: '1', type: 'GestureDetector', descendantText: 'Login', properties: {} },
+      { id: '2', type: 'GestureDetector', descendantText: 'Sign up', properties: {} },
+    ];
+    let hit = 0;
+    const sendRequest = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
+      if (method === 'ext.fliwright.hitTest') return Promise.resolve({ widget: widgets[hit++ % widgets.length] });
+      if (method === 'ext.fliwright.resolve') {
+        const q = JSON.parse((params as { selector: string }).selector);
+        // Each containing-scoped query is unique; bare matches are ambiguous.
+        if (q.containing) return Promise.resolve({ count: 1 });
+        return Promise.resolve({ count: 2 });
+      }
+      return Promise.resolve({});
+    });
+    let eventCallback: ((event: { kind: string; timestamp: number; data: Record<string, unknown> }) => void) | null = null;
+    const controller = new RecorderController(
+      sendRequest,
+      vi.fn().mockImplementation((cb) => { eventCallback = cb; return () => {}; }),
+    );
+
+    await controller.start();
+    for (const [x, ts] of [[10, 1000], [12, 1100]] as const) {
+      eventCallback?.({ kind: 'FliwrightRecording', timestamp: Date.now(), data: { type: 'pointerEvent', kind: 'down', pointer: ts, position: { x, y: 5 }, timestamp: ts, buttons: 1 } });
+      eventCallback?.({ kind: 'FliwrightRecording', timestamp: Date.now(), data: { type: 'pointerEvent', kind: 'up', pointer: ts, position: { x, y: 5 }, timestamp: ts + 50, buttons: 0 } });
+    }
+
+    const code = await controller.stop();
+    expect(code).toContain("containing: { text: 'Login' }");
+    expect(code).toContain("containing: { text: 'Sign up' }");
+    expect(code).not.toContain('// ambiguous');
+  });
 });

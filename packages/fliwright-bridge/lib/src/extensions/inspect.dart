@@ -918,7 +918,8 @@ class InspectExtension {
       case 'state':
         final property = selector.stringValue('property');
         final expected = selector.boolValue('value');
-        if (property == 'enabled') return _enabledForElement(element) == expected;
+        if (property == 'enabled')
+          return _enabledForElement(element) == expected;
         if (property == 'checked') return _checkedValueOf(widget) == expected;
         return false;
       case 'semantics':
@@ -1023,6 +1024,10 @@ class InspectExtension {
     bool includeAncestorKey = true,
     bool includeName = true,
     bool includeSemantics = true,
+    bool includeDescendantText = false,
+    bool includeDescendantIcon = false,
+    bool includeTooltip = false,
+    bool includeKeyedAncestors = false,
   }) {
     final widget = element.widget;
     final renderObject = element.findRenderObject();
@@ -1060,6 +1065,15 @@ class InspectExtension {
       };
     }
 
+    final descendantText =
+        includeDescendantText ? findDescendantText(element) : null;
+    final descendantIcon =
+        includeDescendantIcon ? findDescendantIcon(element) : null;
+    final tooltip = includeTooltip ? extractTooltip(element) : null;
+    final keyedAncestors = includeKeyedAncestors
+        ? findKeyedAncestors(element)
+        : const <Map<String, dynamic>>[];
+
     return {
       'id': '${element.hashCode}',
       'type': widget.runtimeType.toString(),
@@ -1072,6 +1086,10 @@ class InspectExtension {
       if (semantics.hint != null) 'semanticsHint': semantics.hint,
       if (semantics.role != null) 'role': semantics.role,
       if (rect != null) 'rect': rect,
+      if (descendantText != null) 'descendantText': descendantText,
+      if (descendantIcon != null) 'descendantIcon': descendantIcon,
+      if (tooltip != null) 'tooltip': tooltip,
+      if (keyedAncestors.isNotEmpty) 'keyedAncestors': keyedAncestors,
       'properties': <String, dynamic>{},
     };
   }
@@ -1098,7 +1116,8 @@ class InspectExtension {
     final intVal = int.tryParse(expected);
     if (intVal != null && key is ValueKey<int>) return key.value == intVal;
     final doubleVal = double.tryParse(expected);
-    if (doubleVal != null && key is ValueKey<double>) return key.value == doubleVal;
+    if (doubleVal != null && key is ValueKey<double>)
+      return key.value == doubleVal;
     // Fallback: toString comparison for other ValueKey types
     if (key is ValueKey) return key.value.toString() == expected;
     return false;
@@ -1135,6 +1154,100 @@ class InspectExtension {
       if (ancestor.widget is Scaffold || ancestor.widget is WidgetsApp) {
         return false;
       }
+      return true;
+    });
+    return result;
+  }
+
+  /// First plain text rendered anywhere in this element's subtree.
+  static String? findDescendantText(Element element) {
+    String? found;
+    void search(Element e) {
+      if (found != null) return;
+      final w = e.widget;
+      if (w is Text) {
+        found = w.data;
+        return;
+      }
+      if (w is RichText) {
+        found = w.text.toPlainText();
+        return;
+      }
+      if (w is EditableText) {
+        found = w.controller.text;
+        return;
+      }
+      e.visitChildren(search);
+    }
+    element.visitChildren(search);
+    return found;
+  }
+
+  /// First Icon in this element's subtree, as a wire-protocol map.
+  static Map<String, dynamic>? findDescendantIcon(Element element) {
+    Map<String, dynamic>? found;
+    void search(Element e) {
+      if (found != null) return;
+      final w = e.widget;
+      if (w is Icon && w.icon != null) {
+        final data = w.icon!;
+        found = {
+          'codePoint': data.codePoint,
+          'fontFamily': data.fontFamily,
+          if (data.fontPackage != null) 'fontPackage': data.fontPackage,
+        };
+        return;
+      }
+      e.visitChildren(search);
+    }
+    element.visitChildren(search);
+    return found;
+  }
+
+  /// Tooltip exposed by this widget (e.g. IconButton.tooltip) or the
+  /// nearest ancestor Tooltip.
+  static String? extractTooltip(Element element) {
+    final w = element.widget;
+    try {
+      final t = (w as dynamic).tooltip;
+      if (t is String && t.isNotEmpty) return t;
+    } catch (_) {
+      // Widget exposes no tooltip property.
+    }
+    String? found;
+    element.visitAncestorElements((ancestor) {
+      if (ancestor.widget is Tooltip) {
+        final message = (ancestor.widget as Tooltip).message;
+        if (message is String && message.isNotEmpty) {
+          found = message;
+          return false;
+        }
+      }
+      if (ancestor.widget is Scaffold || ancestor.widget is WidgetsApp) {
+        return false;
+      }
+      return true;
+    });
+    return found;
+  }
+
+  /// Up to [maxDepth] ancestors that carry a ValueKey, nearest-first.
+  /// Records the keyed ancestor (including a keyed Scaffold) before stopping
+  /// at the Scaffold/App boundary, so a Scaffold-supplied key is exposed to
+  /// the recorder. Framework plumbing keys (e.g. `_ScaffoldSlot.body`) are
+  /// skipped because they are not useful selector anchors.
+  static List<Map<String, dynamic>> findKeyedAncestors(Element element,
+      {int maxDepth = 3}) {
+    final result = <Map<String, dynamic>>[];
+    element.visitAncestorElements((ancestor) {
+      if (result.length >= maxDepth) return false;
+      final isBoundary =
+          ancestor.widget is Scaffold || ancestor.widget is WidgetsApp;
+      final key = extractKeyValue(ancestor.widget.key);
+      if (key != null && !key.startsWith('_')) {
+        result.add({'key': key, 'type': ancestor.widget.runtimeType.toString()});
+      }
+      if (isBoundary) return false;
       return true;
     });
     return result;
@@ -1220,10 +1333,14 @@ class InspectExtension {
     if (SemanticsCompat.hasFlag(data, SemanticsFlag.isButton)) return 'button';
     if (SemanticsCompat.hasFlag(data, SemanticsFlag.isLink)) return 'link';
     if (SemanticsCompat.hasFlag(data, SemanticsFlag.isHeader)) return 'header';
-    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isTextField)) return 'textField';
-    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isFocused)) return 'focused';
-    if (SemanticsCompat.hasFlag(data, SemanticsFlag.hasCheckedState)) return 'checkbox';
-    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isSelected)) return 'selected';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isTextField))
+      return 'textField';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isFocused))
+      return 'focused';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.hasCheckedState))
+      return 'checkbox';
+    if (SemanticsCompat.hasFlag(data, SemanticsFlag.isSelected))
+      return 'selected';
     return null;
   }
 
@@ -1254,7 +1371,10 @@ class InspectExtension {
       final role = info['role'] as String?;
       final semanticsLabel = info['semanticsLabel'] as String?;
 
-      if (text != null || key != null || role != null || semanticsLabel != null) {
+      if (text != null ||
+          key != null ||
+          role != null ||
+          semanticsLabel != null) {
         widgets.add({
           'type': info['type'],
           if (text != null) 'text': text,
@@ -1498,8 +1618,18 @@ class InspectExtension {
       'ListView': {'BoxScrollView', 'ScrollView', 'StatelessWidget', 'Widget'},
       'GridView': {'BoxScrollView', 'ScrollView', 'StatelessWidget', 'Widget'},
       'SingleChildScrollView': {'StatelessWidget', 'Widget'},
-      'Column': {'Flex', 'MultiChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
-      'Row': {'Flex', 'MultiChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
+      'Column': {
+        'Flex',
+        'MultiChildRenderObjectWidget',
+        'RenderObjectWidget',
+        'Widget'
+      },
+      'Row': {
+        'Flex',
+        'MultiChildRenderObjectWidget',
+        'RenderObjectWidget',
+        'Widget'
+      },
       'Container': {'StatelessWidget', 'Widget'},
       'Scaffold': {'StatefulWidget', 'Widget'},
       'AppBar': {'StatefulWidget', 'Widget'},
@@ -1511,18 +1641,43 @@ class InspectExtension {
       'DropdownButton': {'StatefulWidget', 'Widget'},
       'InkWell': {'StatefulWidget', 'Widget'},
       'GestureDetector': {'StatelessWidget', 'Widget'},
-      'Padding': {'SingleChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
-      'Align': {'SingleChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
-      'Center': {'Align', 'SingleChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
-      'SizedBox': {'SingleChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
+      'Padding': {
+        'SingleChildRenderObjectWidget',
+        'RenderObjectWidget',
+        'Widget'
+      },
+      'Align': {
+        'SingleChildRenderObjectWidget',
+        'RenderObjectWidget',
+        'Widget'
+      },
+      'Center': {
+        'Align',
+        'SingleChildRenderObjectWidget',
+        'RenderObjectWidget',
+        'Widget'
+      },
+      'SizedBox': {
+        'SingleChildRenderObjectWidget',
+        'RenderObjectWidget',
+        'Widget'
+      },
       'Expanded': {'Flexible', 'ParentDataWidget', 'ProxyWidget', 'Widget'},
       'Flexible': {'ParentDataWidget', 'ProxyWidget', 'Widget'},
       'Stack': {'MultiChildRenderObjectWidget', 'RenderObjectWidget', 'Widget'},
       'Positioned': {'ParentDataWidget', 'ProxyWidget', 'Widget'},
       'Icon': {'StatelessWidget', 'Widget'},
       'Image': {'StatefulWidget', 'Widget'},
-      'CircularProgressIndicator': {'ProgressIndicator', 'StatefulWidget', 'Widget'},
-      'LinearProgressIndicator': {'ProgressIndicator', 'StatefulWidget', 'Widget'},
+      'CircularProgressIndicator': {
+        'ProgressIndicator',
+        'StatefulWidget',
+        'Widget'
+      },
+      'LinearProgressIndicator': {
+        'ProgressIndicator',
+        'StatefulWidget',
+        'Widget'
+      },
       'BottomNavigationBar': {'StatefulWidget', 'Widget'},
       'TabBar': {'StatefulWidget', 'Widget'},
       'TabBarView': {'StatefulWidget', 'Widget'},
@@ -1551,10 +1706,12 @@ class InspectExtension {
     if (filter['checked'] == false && _checkedValueOf(widget) != false) {
       return false;
     }
-    if (filter['visible'] == true && !_isHitTestable(element, Alignment.center)) {
+    if (filter['visible'] == true &&
+        !_isHitTestable(element, Alignment.center)) {
       return false;
     }
-    if (filter['visible'] == false && _isHitTestable(element, Alignment.center)) {
+    if (filter['visible'] == false &&
+        _isHitTestable(element, Alignment.center)) {
       return false;
     }
     final hasText = filter['hasText'];

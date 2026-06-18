@@ -1,12 +1,12 @@
-# Examples
+# 示例
 
-Copyable, commented full test scripts. Each is adapted from a real file in `e2e/` or
-`.agents/skills/write-fliwright-tests/examples/`. Strip the explanatory comments when you adapt.
+可直接复制、带注释的完整测试脚本。每个都改编自 `e2e/` 或
+`.agents/skills/write-fliwright-tests/examples/` 下的真实文件。套用时请去掉解释性注释。
 
-## 1. Minimal counter (default fixture)
+## 1. 最小计数器（默认 fixture）
 
-Standard `@fliwright/vitest` fixture — shared driver, auto-wait assertions. Adapted from
-`examples/basic-counter.test.ts`.
+标准的 `@fliwright/vitest` fixture —— 共享 driver、自带自动等待断言。改编自
+`examples/basic-counter.test.ts`。
 
 ```typescript
 import { test, expect } from '@fliwright/vitest';
@@ -18,9 +18,9 @@ test('counter increments when the increment button is tapped', async ({ page }) 
 });
 ```
 
-## 2. Custom config login (explicit timeout + screenshot mode)
+## 2. 自定义配置登录（显式超时 + 截图模式）
 
-Adapted from `examples/custom-config-login.test.ts`. Use when a file needs explicit VM URL handling.
+改编自 `examples/custom-config-login.test.ts`。当某个文件需要显式处理 VM URL 时使用。
 
 ```typescript
 import { createFliwrightTest, defineConfig, expect } from '@fliwright/vitest';
@@ -39,10 +39,10 @@ test('user can sign in', async ({ page }) => {
 });
 ```
 
-## 3. Mock + form + submit + assert request (fixture `driver`)
+## 3. Mock + 表单 + 提交 + 断言请求（fixture `driver`）
 
-Adapted from `e2e/form-mock-e2e.test.ts`. The canonical "full E2E" shape: mock an API, fill a form
-through the UI, submit, assert the visible result **and** the intercepted request.
+改编自 `e2e/form-mock-e2e.test.ts`。这是典型的“完整 E2E”形态：mock 一个 API，通过 UI 填表单，
+提交，再断言**可见结果**和**被拦截到的请求**。
 
 ```typescript
 import { expect } from 'vitest';
@@ -80,10 +80,10 @@ liveTest('register flow: mock → fill → submit → verify request', async ({ 
 });
 ```
 
-## 4. Navigation across routes (go_router)
+## 4. 跨路由导航（go_router）
 
-Adapted from `e2e/go-router-navigation-e2e.test.ts`. Requires the app to pass its router to
-`FliwrightBridge.init(router: …)`.
+改编自 `e2e/go-router-navigation-e2e.test.ts`。要求应用把它的 router 传给
+`FliwrightBridge.init(router: …)`。
 
 ```typescript
 import { expect } from 'vitest';
@@ -105,10 +105,10 @@ test('navigates between routes', async ({ page }) => {
 });
 ```
 
-## 5. Form analysis + targeted fill
+## 5. 表单分析 + 定向填充
 
-Adapted from `e2e/form-fill-e2e.test.ts`. Use `analyze()` to inspect, `fillFields()` to target a
-subset, then assert on semantic types.
+改编自 `e2e/form-fill-e2e.test.ts`。用 `analyze()` 检视，用 `fillFields()` 针对性地填一部分字段，
+再按语义类型断言。
 
 ```typescript
 import { expect } from 'vitest';
@@ -129,10 +129,10 @@ test('analyzes and selectively fills a form', async ({ page }) => {
 });
 ```
 
-## 6. Mock API at the transport level
+## 6. 传输层 Mock API
 
-Adapted from `e2e/mock-api-e2e.test.ts`. Verifies the `HttpOverrides` proxy itself by firing a
-request through the app's `HttpClient` via the test extension, then checking the recorded call.
+改编自 `e2e/mock-api-e2e.test.ts`。通过测试扩展用应用的 `HttpClient` 发出一次请求，再检查记录到的
+调用，从而验证 `HttpOverrides` 代理本身。
 
 ```typescript
 import { describe, expect } from 'vitest';
@@ -165,11 +165,10 @@ describe('Mock API E2E', () => {
 });
 ```
 
-## 7. Legacy / raw-driver (older bridge)
+## 7. 旧版 / 原始 driver（较老的 bridge）
 
-Adapted from `e2e/exio-app-e2e.test.ts`. Only for targets that can't yet upgrade the bridge. Note
-the `skipIf`, the WS conversion, raw `sendRequest` extensions, and environment-overridable
-coordinates.
+改编自 `e2e/exio-app-e2e.test.ts`。仅适用于暂时无法升级 bridge 的目标。注意其中的
+`skipIf`、WS URL 转换、原始的 `sendRequest` 扩展调用，以及可由环境变量覆盖的坐标。
 
 ```typescript
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -201,10 +200,10 @@ function toWsUrl(url: string): string {
 }
 ```
 
-> Migrate legacy scripts to the current bridge (`ext.fliwright.snap` / `ext.fliwright.action` /
-> `ext.fliwright.extractForm`) as soon as the app upgrades. See [driver-lifecycle.md](./driver-lifecycle.md).
+> 待应用升级后，请尽快把旧版脚本迁到当前 bridge（`ext.fliwright.snap` / `ext.fliwright.action` /
+> `ext.fliwright.extractForm`）。详见 [driver-lifecycle.md](./driver-lifecycle.md)。
 
-## How to run any of these
+## 如何运行上述任一脚本
 
 ```bash
 # Via the CLI (full report + screenshots + reproduce command)
@@ -215,4 +214,4 @@ fliwright run --test path/to/example.test.ts \
 FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/abc=/ws" pnpm vitest run path/to/example.test.ts
 ```
 
-See [getting-started.md](./getting-started.md) and [cli.md](./cli.md).
+详见 [getting-started.md](./getting-started.md) 与 [cli.md](./cli.md)。

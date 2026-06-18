@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 class MockRoute {
   final String id;
@@ -94,32 +93,11 @@ abstract class MockRuleStorage {
   Future<void> save(String json);
 }
 
-/// File-backed storage for Dart VM and desktop test environments.
-class FileMockRuleStorage implements MockRuleStorage {
-  final String filePath;
-
-  FileMockRuleStorage(this.filePath);
-
-  @override
-  Future<String?> load() async {
-    final file = File(filePath);
-    if (!await file.exists()) return null;
-    return file.readAsString();
-  }
-
-  @override
-  Future<void> save(String json) async {
-    final file = File(filePath);
-    final parent = file.parent;
-    if (!await parent.exists()) {
-      await parent.create(recursive: true);
-    }
-    await file.writeAsString(json);
-  }
-}
-
 /// In-process mock route table shared by VM Service extensions and interceptors.
 class MockRuleStore {
+  static int _nextDebugId = 1;
+
+  final int debugId = _nextDebugId++;
   final Map<String, MockRoute> _routes = {};
   final MockRuleStorage? _storage;
 
@@ -142,6 +120,11 @@ class MockRuleStore {
   }
 
   Future<bool> removeRoute({String? id, String? path, String? method}) async {
+    // Operate on the in-memory route table directly. The store is loaded once
+    // from storage at bridge init and persisted after every mutation, so the
+    // in-memory map is the source of truth — reloading here would resurrect
+    // routes that were just removed (the "no rule in VSCode but Flutter still
+    // mocks" bug).
     final before = _routes.length;
     if (id != null) {
       _routes.removeWhere((_, route) => route.id == id);
@@ -158,8 +141,8 @@ class MockRuleStore {
   }
 
   Future<int> clearRoutes() async {
+    // See removeRoute: mutate the authoritative in-memory map then persist.
     final count = _routes.length;
-    if (count == 0) return 0;
     _routes.clear();
     await _persist();
     return count;

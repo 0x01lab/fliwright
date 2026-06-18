@@ -1,9 +1,8 @@
-# API Quick Reference
+# API 速查
 
-One-page signature cheat sheet. For prose/examples follow the topic links. All signatures are
-copied from current source — code wins on disagreement.
+单页签名速查表。需要讲解/示例请参考各专题链接。所有签名均取自当前源码 —— 若有冲突，以源码为准。
 
-## `@fliwright/vitest` exports
+## `@fliwright/vitest` 导出
 
 ```typescript
 import { test, expect, createFliwrightTest, defineConfig,
@@ -16,9 +15,9 @@ import { test, expect, createFliwrightTest, defineConfig,
 //   FliwrightConfig { vmServiceUrl; timeout?: 5000; screenshot?: 'file'|'base64'|'off' }
 ```
 
-Env vars: `FLIWRIGHT_VM_URL`, `FLIWRIGHT_VM_SERVICE_URL`, `FLIWRIGHT_SCREENSHOT_MODE`,
-`FLIWRIGHT_FAILURE_TIMEOUT_MS`, `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`,
-`FLIWRIGHT_MOCK_CONTROLLER_URL`, `FLIWRIGHT_TRACE`, `FLIWRIGHT_TRACE_DIR`.
+环境变量：`FLIWRIGHT_VM_URL`、`FLIWRIGHT_VM_SERVICE_URL`、`FLIWRIGHT_SCREENSHOT_MODE`、
+`FLIWRIGHT_FAILURE_TIMEOUT_MS`、`FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`、
+`FLIWRIGHT_MOCK_CONTROLLER_URL`、`FLIWRIGHT_TRACE`、`FLIWRIGHT_TRACE_DIR`。
 
 ## `page` — `Page`
 
@@ -139,7 +138,7 @@ driver.mock.controllerUrl: string | null
 // MockRouteResponse { status, body, headers?, delay?, method? }
 ```
 
-## `driver` — `FliwrightDriver` (raw / advanced)
+## `driver` — `FliwrightDriver`（原始 / 高级用法）
 
 ```typescript
 new FliwrightDriver(options?: { plugins?: FliwrightPlugin[] })
@@ -168,22 +167,22 @@ fliwright record [--vm-url <url>] [--output <file>] [--lang ts|dart] [--name <n>
 fliwright mock:start [--host <h>] [--port <p>] [--mock-dir <d>]
 ```
 
-## Selector string formats
+## 选择器字符串格式
 
 `text=` · `textContains=` · `key=` · `type=`/`byType=` · `subtype=` · `tooltip=` · `semantics=`
-· `role=` · plain string (exact text) · `RegExp`.
+· `role=` · 纯字符串（精确匹配文案） · `RegExp`。
 
-## Bridge capabilities (required extensions)
+## Bridge 能力（所需扩展）
 
-| Feature | Extension |
+| 功能 | 扩展 |
 | --- | --- |
 | snapshot/findRef/snap/observe | `ext.fliwright.snap` |
-| all Locator actions, actionability | `ext.fliwright.action` |
+| 所有 Locator 动作、可操作性 | `ext.fliwright.action` |
 | resolve/count/isVisible | `ext.fliwright.resolve` |
 | formHelper/extractForm | `ext.fliwright.extractForm` |
 | screenshot | `ext.fliwright.screenshot` |
 | mocks | `ext.fliwright.mock.*` |
-| click/dragFrom (raw) | `ext.fliwright.click` / `ext.fliwright.dragFrom` |
-| navigation | `ext.fliwright.navigate` / `.currentRoute` / `.goBack` |
+| click/dragFrom（原始） | `ext.fliwright.click` / `ext.fliwright.dragFrom` |
+| 导航 | `ext.fliwright.navigate` / `.currentRoute` / `.goBack` |
 | settle | `ext.fliwright.settle` |
-| legacy flat snapshot | `ext.fliwright.snapshot` (older bridge) |
+| 旧版扁平快照 | `ext.fliwright.snapshot`（较旧的 bridge） |

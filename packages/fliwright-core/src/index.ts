@@ -1,6 +1,8 @@
 export type {
   ProviderInfo,
   WidgetInfo,
+  KeyedAncestor,
+  ResolvedSelector,
   WidgetSnapshot,
   AgentFindQuery,
   AgentSnapshotOptions,
@@ -59,6 +61,7 @@ export { FliwrightDriver } from './Driver.js';
 export type { DriverOptions } from './Driver.js';
 
 export { Page } from './Page.js';
+export type { NavigationWaitUntil, PageNavigationOptions, ResetToHomeOptions } from './Page.js';
 export { Locator } from './Locator.js';
 export { Selector } from './Selector.js';
 export { Assertion, AssertionError, createExpect } from './Assertion.js';
@@ -81,7 +84,9 @@ export { SemanticInferrer } from './SemanticInferrer.js';
 export { FakerGenerator } from './FakerGenerator.js';
 export { SkillRegistry } from './SkillRegistry.js';
 export { JsonRuleLoader } from './JsonRuleLoader.js';
-export { SelectorResolver, resolveSelector } from './SelectorResolver.js';
+export { SelectorResolver, buildBaseSelector } from './SelectorResolver.js';
+export { serializeSelectorQuery } from './SelectorSerializer.js';
+export { RecordedSelectorResolver } from './RecordedSelectorResolver.js';
 export {
   selectorQuerySchema,
   matchCriteriaSchema,
@@ -113,6 +118,7 @@ export type {
   AiInvocationContext,
   AiAdapter,
   AiRuntimeContext,
+  AiCallContext,
   AiRuntimeConfig,
   AiCliAdapterOptions,
   AiArtifactMeta,
@@ -134,3 +140,5 @@ export { AiRuntime } from './ai/AiRuntime.js';
 export { CliJsonAdapter } from './ai/adapters/CliJsonAdapter.js';
 export { ClaudeCliAdapter } from './ai/adapters/ClaudeCliAdapter.js';
 export { CodexCliAdapter } from './ai/adapters/CodexCliAdapter.js';
+export { resolveAiConfig } from './ai/config.js';
+export { ai, configureAi } from './ai/capability.js';

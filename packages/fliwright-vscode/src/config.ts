@@ -12,8 +12,6 @@ export function loadConfig(): ExtensionConfig {
     mockDir: config.get<string>('mockDir', '.fliwright/mocks'),
     mockIndex: config.get<string>('mockIndex', '.fliwright/mocks/mock-index.json'),
     autoStartMockController: config.get<boolean>('autoStartMockController', true),
-    autoApplyDefaultMocksOnConnect: config.get<boolean>('autoApplyDefaultMocksOnConnect', true),
-    restoreSelectedMocksOnConnect: config.get<boolean>('restoreSelectedMocksOnConnect', true),
     vmServiceUrl: config.get<string | null>('vmServiceUrl', null),
     autoDiscoverVmService: config.get<boolean>('autoDiscoverVmService', true),
     testGlob: config.get<string>('testGlob', 'tests/**/*.test.ts'),
@@ -26,6 +24,7 @@ export function loadConfig(): ExtensionConfig {
     formLocale: config.get<string>('formLocale', 'zh_CN'),
     formPreviewBeforeFill: config.get<boolean>('formPreviewBeforeFill', true),
     codeLensEnabled: config.get<boolean>('codeLensEnabled', true),
+    scriptGlob: config.get<string>('scriptGlob', '.fliwright/scripts/**/*.{js,mjs,cjs}'),
   };
 }
 

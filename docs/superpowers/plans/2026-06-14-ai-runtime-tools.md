@@ -31,7 +31,7 @@
 
 ## Implementation Notes
 
-- Follow repository bootstrap docs: read `memory/index.md`, `memory/repository-guidelines/index.md`, project structure, coding constraints, build/test commands, testing guidelines, feature documentation, and relevant `docs/features/` pages before editing.
+- Follow `AGENTS.md` (self-contained bootstrap) before editing; open on-demand `memory/` reference and the specific `docs/features/` pages only as the task requires.
 - Use `.js` extensions in relative TypeScript imports.
 - Do not call real Claude or Codex in default tests.
 - Do not add a runtime dependency for Zod in `@fliwright/core`; use the local minimal JSON Schema validator for the MVP.

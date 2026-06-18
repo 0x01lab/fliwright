@@ -130,4 +130,34 @@ describe('AiRuntime', () => {
 
     await expect(runtime.ask({ prompt: 'Hang' })).rejects.toBeInstanceOf(AiTimeoutError);
   });
+
+  it('visible uses per-call page override instead of constructor context', async () => {
+    const constructorPage = {
+      screenshot: () => { throw new Error('constructor page must not be used'); },
+      snapshot: () => { throw new Error('constructor page must not be used'); },
+    } as unknown as Page;
+    const callPage = pageStub();
+    const adapter = new MockAiAdapter(async (request) => {
+      expect(request.images?.[0]?.mimeType).toBe('image/png');
+      return { text: '{"pass":true,"reason":"ok"}', json: { pass: true, reason: 'ok' } };
+    });
+    const runtime = new AiRuntime({ adapter }, { page: constructorPage });
+
+    await expect(runtime.visible('looks good', {}, { page: callPage })).resolves.toBeUndefined();
+    expect((callPage.screenshot as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+  });
+
+  it('ask uses per-call testName and runId for the artifact directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fliwright-ai-callctx-'));
+    const runtime = new AiRuntime(
+      { artifactsDir: root, adapter: new MockAiAdapter([{ text: '{"ok":true}', json: { ok: true } }]) },
+      { runId: 'constructor-run', testName: 'constructor-test' },
+    );
+
+    const response = await runtime.ask({ prompt: 'hi', responseFormat: 'json' }, { runId: 'call-run', testName: 'call-test' });
+
+    expect(response.artifactsDir).toContain('call-run');
+    expect(response.artifactsDir).toContain('call-test');
+    expect(response.artifactsDir).not.toContain('constructor');
+  });
 });

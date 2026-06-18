@@ -1,29 +1,71 @@
 # Repository Agent Instructions
 
-Before working in this repository, read [memory/index.md](./memory/index.md).
+Fliwright is a TypeScript-scripted Flutter automation & E2E-testing platform: a
+Dart VM-Service bridge (`fliwright_bridge`) instrumented inside the app, a TS
+core (`@fliwright/core`) that drives it, and integrations for Vitest, an MCP
+server, a CLI, a VS Code extension, and a Riverpod state plugin. It is an
+**automation runtime**, not only a test framework — tests are scripts plus
+assertions; scripts can also drive the app to perform arbitrary tasks.
 
-This file is intentionally only a bootstrap declaration. The repository rules,
-coding constraints, commands, testing expectations, security notes, and feature
-documentation routes live under `memory/` and must be loaded progressively from
-that index. Do not duplicate that content here.
+This file is intentionally **self-contained**. The hard constraints below are all
+you need for typical work, so no other file must be read up front. Everything
+else is linked as **on-demand reference** — open it only when the task actually
+needs it, never as a routine. Keeping the loaded context small is an explicit
+goal; do not pre-read `docs/` or `memory/` "just in case".
 
-## Mandatory: read before generating code
+## Hard constraints (apply always)
 
-Before writing, modifying, or generating any code in this repository — including
-test code, generated snippets, and code produced via tooling or skills — you
-MUST first read the relevant `memory/` content:
+### Coding style
 
-1. Read [memory/index.md](./memory/index.md), then
-   [memory/repository-guidelines/index.md](./memory/repository-guidelines/index.md).
-2. Follow its **Task Routing** to open the smallest set of leaf documents that
-   apply to the task (project structure, coding constraints, build/test
-   commands, testing guidelines, security/configuration, and feature
-   documentation as relevant).
-3. Only after reading those documents, proceed to generate code that follows the
-   conventions, naming, module layout, and test expectations they define.
+**TypeScript** — ESM, strict mode, Node16 module resolution, ES2022 targets.
+Keep source in `src`, export public APIs from `src/index.ts`, and include `.js`
+extensions in relative imports. PascalCase for classes/types, camelCase for
+functions/variables, `*.test.ts` for Vitest tests.
 
-Do not generate code from prior assumptions. If a task touches MCP tools,
-selectors, protocol behavior, code generation, self-healing, form filling, or
-Riverpod support, also read the matching feature documentation under
-`docs/features/` (see [feature-documentation.md](./memory/repository-guidelines/feature-documentation.md))
-before changing behavior.
+**Dart** — standard `dart format` with two-space indentation. snake_case
+filenames, PascalCase classes, camelCase members.
+
+### Build & test commands
+
+- TS: `pnpm install` after dependency changes; `pnpm build`; `pnpm test`;
+  `pnpm lint` (runs `tsc --noEmit`); scope to one package with
+  `pnpm --filter @fliwright/core test`.
+- Dart: `melos bootstrap` to fetch dependencies; `melos run analyze`
+  (`dart analyze .`); `melos run test` (`dart test`).
+- E2E smoke tests require a running Flutter VM service:
+  `FLIWRIGHT_VM_SERVICE_URL=... pnpm --filter @fliwright/e2e-tests test:smoke`.
+
+### Testing
+
+Vitest is the TypeScript test framework. Place focused unit tests beside each
+package under `tests`, mirroring the source subject (e.g. `Locator.test.ts`,
+`runTest.test.ts`). **Add a regression test whenever you change selectors,
+protocol behavior, MCP tools, or code generation.** Dart bridge tests use
+`dart test`; Flutter demo tests live under `examples/riverpod_demo/test`.
+
+### Security & configuration
+
+Do not commit generated build output (`dist`), Flutter-generated files, local VM
+service URLs, or device-specific configuration. Keep test fixtures deterministic
+and never embed secrets in docs, examples, or generated tests.
+
+## On-demand reference (open only if the task needs it)
+
+- [Project structure](./memory/repository-guidelines/project-structure.md) —
+  where each TS/Dart package, its tests, examples, and docs live.
+- [Commit & PR guidelines](./memory/repository-guidelines/commit-and-pr-guidelines.md)
+  — Conventional Commit scopes and PR expectations (read when committing or
+  opening a PR).
+- [Feature documentation](./memory/repository-guidelines/feature-documentation.md)
+  — how `docs/features/` is organized and regenerated.
+
+## `docs/` is strictly on-demand
+
+`docs/features/` is the generated source of truth for implemented APIs. When you
+need the *current* API of the exact component you are changing, open **that
+specific per-class doc** (for example `docs/features/core/Selector.md`) — do
+**not** load `docs/features/index.md` as a routine; it is a ~23 KB lookup table,
+use it for lookup only. `docs/superpowers/` (plans and specs) is historical
+background — read a slice's design only when extending that slice. Regenerate
+`docs/features/` with the `/document-features` command after significant source
+changes.

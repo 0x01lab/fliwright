@@ -11,6 +11,22 @@ import type {
 import { Selector } from './Selector.js';
 import { FormHelper } from './FormHelper.js';
 
+export type NavigationWaitUntil = 'none' | 'settled';
+
+export interface PageNavigationOptions {
+  extra?: Record<string, unknown>;
+  waitUntil?: NavigationWaitUntil;
+  settleTimeout?: number;
+  stableFrames?: number;
+  waitFor?: SelectorInput;
+  waitForTimeout?: number;
+  throwOnSettleTimeout?: boolean;
+}
+
+export interface ResetToHomeOptions extends Omit<PageNavigationOptions, 'extra'> {
+  homeRoute?: string;
+}
+
 export class Page {
   constructor(private sendRequest: SendRequest) {}
 
@@ -172,12 +188,25 @@ export class Page {
     throw new Error(`Timeout waiting for new element matching selector: ${selectorObj.toString()}`);
   }
 
-  async settle(options?: { timeout?: number }): Promise<void> {
-    const result = (await this.sendRequest('ext.fliwright.settle', {
+  async settle(options?: { timeout?: number; stableFrames?: number; throwOnTimeout?: boolean }): Promise<void> {
+    const params: Record<string, unknown> = {
       timeout: (options?.timeout ?? 2000).toString(),
-    })) as { success?: boolean; error?: string };
+    };
+    if (options?.stableFrames != null) {
+      params.stableFrames = options.stableFrames.toString();
+    }
+
+    const result = (await this.sendRequest('ext.fliwright.settle', params)) as {
+      success?: boolean;
+      error?: string;
+      timedOut?: boolean;
+      settledAfterMs?: number;
+    };
     if (result.success === false || result.error) {
       throw new Error(`settle failed: ${result.error ?? 'timeout'}`);
+    }
+    if (options?.throwOnTimeout && result.timedOut) {
+      throw new Error(`settle timed out after ${result.settledAfterMs ?? options.timeout ?? 2000}ms`);
     }
   }
 
@@ -351,6 +380,44 @@ export class Page {
   }
 
   /**
+   * Navigate to a route and wait for the destination screen to become stable.
+   *
+   * Use `navigate()` when you need the raw route RPC; use `goto()` in tests
+   * before locating widgets on the next page.
+   */
+  async goto(path: string, options?: PageNavigationOptions): Promise<void> {
+    await this.navigate(path, { extra: options?.extra });
+    await this.waitForNavigationStable(options);
+  }
+
+  /**
+   * Reset the Flutter route stack to a path, then wait for the destination
+   * screen to settle. For GoRouter-style injected routers this uses `go(path)`;
+   * for Navigator fallback it uses `pushNamedAndRemoveUntil`.
+   */
+  async resetRouteStack(path: string, options?: PageNavigationOptions): Promise<void> {
+    const params: Record<string, unknown> = { path };
+    if (options?.extra) {
+      params.extra = JSON.stringify(options.extra);
+    }
+    const result = (await this.sendRequest('ext.fliwright.resetRouteStack', params)) as {
+      success: boolean;
+      error?: string;
+    };
+    if (!result.success) {
+      throw new Error(`Reset route stack to '${path}' failed: ${result.error ?? 'unknown error'}`);
+    }
+    await this.waitForNavigationStable(options);
+  }
+
+  /**
+   * Reset the route stack to the app home route (`/` by default).
+   */
+  async resetToHome(options?: ResetToHomeOptions): Promise<void> {
+    await this.resetRouteStack(options?.homeRoute ?? '/', options);
+  }
+
+  /**
    * Get the current route path.
    *
    * @returns The current route path string, or empty string if unknown.
@@ -372,6 +439,20 @@ export class Page {
     };
     if (!result.success) {
       throw new Error(`Go back failed: ${result.error ?? 'unknown error'}`);
+    }
+  }
+
+  private async waitForNavigationStable(options?: PageNavigationOptions | ResetToHomeOptions): Promise<void> {
+    const waitUntil = options?.waitUntil ?? 'settled';
+    if (options?.waitFor != null) {
+      await this.waitFor(options.waitFor, options.waitForTimeout ?? 5000);
+    }
+    if (waitUntil === 'settled') {
+      await this.settle({
+        timeout: options?.settleTimeout ?? 3000,
+        stableFrames: options?.stableFrames,
+        throwOnTimeout: options?.throwOnSettleTimeout ?? true,
+      });
     }
   }
 }

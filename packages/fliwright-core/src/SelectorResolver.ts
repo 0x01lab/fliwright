@@ -1,4 +1,4 @@
-import type { WidgetInfo } from './types.js';
+import type { SelectorQuery, WidgetInfo } from './types.js';
 
 const ROLE_MAP: Record<string, string> = {
   ElevatedButton: 'button',
@@ -21,28 +21,51 @@ const ROLE_MAP: Record<string, string> = {
   TabBar: 'tablist',
 };
 
-function escapeSelectorValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-}
-
-export function resolveSelector(widget: Partial<WidgetInfo>): string {
-  const text = widget.text?.trim();
-  if (text) return `{ text: '${escapeSelectorValue(text)}' }`;
-
-  const key = widget.key?.trim();
-  if (key) return `{ key: '${escapeSelectorValue(key)}' }`;
-
-  const type = widget.type?.trim();
-  if (!type) return "{ type: 'Widget' }";
-
-  const role = ROLE_MAP[type];
-  if (role) return `{ role: '${role}' }`;
-
-  return `{ type: '${escapeSelectorValue(type)}' }`;
-}
-
 export class SelectorResolver {
-  resolve(widget: Partial<WidgetInfo>): string {
-    return resolveSelector(widget);
+  resolve(widget: Partial<WidgetInfo>): SelectorQuery {
+    return buildBaseSelector(widget);
   }
+}
+
+function trimmed(value: string | undefined): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const v = value.trim();
+  return v.length > 0 ? v : undefined;
+}
+
+/**
+ * Build the most specific base SelectorQuery for a hit-tested widget.
+ * Priority: text → key → tooltip → semanticsLabel → role → name →
+ * semanticsHint → ancestorKey → type (→ generic Widget).
+ *
+ * Returns a structured SelectorQuery (not a string) so downstream steps can
+ * attach within / containing / position for disambiguation.
+ */
+export function buildBaseSelector(widget: Partial<WidgetInfo>): SelectorQuery {
+  const text = trimmed(widget.text);
+  if (text) return { match: { text } };
+
+  const key = trimmed(widget.key);
+  if (key) return { match: { key } };
+
+  const tooltip = trimmed(widget.tooltip);
+  if (tooltip) return { match: { tooltip } };
+
+  const semanticsLabel = trimmed(widget.semanticsLabel);
+  if (semanticsLabel) return { match: { semanticsLabel } };
+
+  const role = trimmed(widget.role) ?? ROLE_MAP[widget.type ?? ''];
+  if (role) return { match: { role } };
+
+  const name = trimmed(widget.name);
+  if (name) return { match: { name } };
+
+  const semanticsHint = trimmed(widget.semanticsHint);
+  if (semanticsHint) return { match: { semanticsHint } };
+
+  const ancestorKey = trimmed(widget.ancestorKey);
+  if (ancestorKey) return { match: { ancestorKey } };
+
+  const type = trimmed(widget.type);
+  return { match: { type: type ?? 'Widget' } };
 }

@@ -102,6 +102,13 @@ export interface AiRuntimeContext {
   cwd?: string;
 }
 
+export interface AiCallContext {
+  page?: Page;
+  driver?: FliwrightDriver;
+  testName?: string;
+  runId?: string;
+}
+
 export interface AiRuntimeConfig {
   provider?: AiProviderName;
   cache?: AiCacheMode;

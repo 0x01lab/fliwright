@@ -63,12 +63,12 @@ describe('handleGenerateTest', () => {
   it('generates a beforeEach home reset hook by default', () => {
     const result = handleGenerateTest({ source: "Text('test')" });
     expect(result.testCode).toContain("beforeEach(async ({ page }) => {");
-    expect(result.testCode).toContain("await page.navigate('/')");
+    expect(result.testCode).toContain("await page.resetToHome({ homeRoute: '/' })");
   });
 
   it('supports custom home route and disabling home reset', () => {
     const custom = handleGenerateTest({ source: "Text('test')", homeRoute: '/dashboard' });
-    expect(custom.testCode).toContain("await page.navigate('/dashboard')");
+    expect(custom.testCode).toContain("await page.resetToHome({ homeRoute: '/dashboard' })");
 
     const disabled = handleGenerateTest({ source: "Text('test')", resetToHomeBeforeEach: false });
     expect(disabled.testCode).toContain("import { test, expect } from '@fliwright/vitest'");

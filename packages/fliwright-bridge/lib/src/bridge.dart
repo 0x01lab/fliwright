@@ -6,6 +6,7 @@ import 'extension_registry.dart';
 import 'extensions/dio_mock_extension.dart';
 import 'extensions/form_extract.dart';
 import 'extensions/gesture.dart';
+import 'extensions/hive_mock_rule_storage.dart';
 import 'extensions/http_overrides.dart';
 import 'extensions/inspect.dart';
 import 'extensions/mock_rule_store.dart';
@@ -50,8 +51,9 @@ class FliwrightBridge {
   ///
   /// [router] is an optional router instance (e.g. `GoRouter`) that enables
   /// programmatic navigation via `ext.fliwright.navigate`. The bridge calls
-  /// `router.go(path)` via `dynamic` dispatch — no hard dependency on
-  /// go_router is required.
+  /// `router.push(path)` for normal navigation and `router.go(path)` for route
+  /// stack resets via `dynamic` dispatch — no hard dependency on go_router is
+  /// required.
   static Future<void> init({
     dynamic router,
     MockRuleStorage? mockStorage,
@@ -77,7 +79,9 @@ class FliwrightBridge {
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
 
-    final mockRuleStore = MockRuleStore(storage: mockStorage);
+    final mockRuleStore = MockRuleStore(
+      storage: await _resolveMockStorage(mockStorage),
+    );
     await mockRuleStore.loadFromStorage();
     MockServerExtension.register(_registry, store: mockRuleStore);
     await MockServerExtension.startServer();
@@ -124,7 +128,9 @@ class FliwrightBridge {
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
 
-    final mockRuleStore = MockRuleStore(storage: mockStorage);
+    final mockRuleStore = MockRuleStore(
+      storage: await _resolveMockStorage(mockStorage),
+    );
     await mockRuleStore.loadFromStorage();
     // Dio mock — no HttpServer, no HttpOverrides.
     DioMockExtension.register(_registry, store: mockRuleStore);
@@ -162,6 +168,21 @@ class FliwrightBridge {
       '[fliwright] Warning: FliwrightBridge was initialized outside debug mode. '
       'Guard setup with kDebugMode so release builds can tree-shake it.',
     );
+  }
+
+  static Future<MockRuleStorage?> _resolveMockStorage(
+    MockRuleStorage? storage,
+  ) async {
+    if (storage != null) return storage;
+    try {
+      return await HiveMockRuleStorage.open();
+    } catch (error) {
+      debugPrint(
+        '[fliwright] Mock rule persistence unavailable; '
+        'cached mock routes will not be restored: $error',
+      );
+      return null;
+    }
   }
 
   /// The Dart SDK version string reported by [Platform.version].

@@ -11,10 +11,6 @@ import { dirname } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import {
   AiRuntime,
-  ClaudeCliAdapter,
-  CliJsonAdapter,
-  CodexCliAdapter,
-  MockAiAdapter,
   AssertionError,
   Assertion,
   FailureCollector,
@@ -23,8 +19,9 @@ import {
   TraceStore,
   isActionMethod,
   createExpect,
+  resolveAiConfig,
 } from '@fliwright/core';
-import type { AiAdapter, AiCliAdapterOptions, AiRuntimeConfig, FailureContext, HealingReport, Locator, Page, VMServiceEvent, TraceMode } from '@fliwright/core';
+import type { AiRuntimeConfig, FailureContext, HealingReport, Locator, Page, VMServiceEvent, TraceMode } from '@fliwright/core';
 
 export interface FliwrightConfig {
   vmServiceUrl: string;
@@ -62,7 +59,7 @@ type FliwrightHookContext = {
 type FliwrightHook = (context: FliwrightHookContext, suite: unknown) => unknown | Promise<unknown>;
 
 export function createFliwrightTest(config: FliwrightConfig) {
-  const fliwrightTest = vitestTest.extend<{ page: Page; driver: FliwrightDriver; ai: AiRuntime }>({
+  const fliwrightTest = vitestTest.extend<{ page: Page; driver: FliwrightDriver; aiRuntime: AiRuntime }>({
     driver: async ({ task }, use) => {
       const driver = await getSharedDriver(config);
       const testName = getTestName(task);
@@ -129,10 +126,10 @@ export function createFliwrightTest(config: FliwrightConfig) {
       // Restore original sendRequest
       if (origSendRequest) (driver as any).sendRequest = origSendRequest;
     },
-    ai: async ({ task }, use) => {
+    aiRuntime: async ({ task }, use) => {
       const driver = await getSharedDriver(config);
       const testName = getTestName(task);
-      const runtime = createAiRuntime(config.ai, {
+      const runtime = new AiRuntime(resolveAiConfig(config.ai), {
         page: driver.page,
         driver,
         testName,
@@ -344,78 +341,6 @@ function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function createAiRuntime(config: AiRuntimeConfig | undefined, context: ConstructorParameters<typeof AiRuntime>[1]): AiRuntime {
-  const resolved = resolveAiConfig(config);
-  return new AiRuntime(resolved, context);
-}
-
-function resolveAiConfig(config: AiRuntimeConfig | undefined): AiRuntimeConfig {
-  const provider = config?.provider ?? parseAiProvider(process.env.FLIWRIGHT_AI_PROVIDER);
-  const adapter = isAiAdapter(config?.adapter) ? config?.adapter : createAiAdapter(config);
-  return {
-    provider,
-    timeoutMs: config?.timeoutMs ?? parsePositiveInt(process.env.FLIWRIGHT_AI_TIMEOUT_MS) ?? 60_000,
-    artifactsDir: config?.artifactsDir ?? process.env.FLIWRIGHT_AI_ARTIFACTS_DIR ?? '.fliwright/ai',
-    cache: config?.cache ?? parseAiCache(process.env.FLIWRIGHT_AI_CACHE),
-    maxConcurrency: config?.maxConcurrency ?? 1,
-    enabled: config?.enabled ?? parseAiEnabled(process.env.FLIWRIGHT_AI_ENABLED, provider),
-    defaultVisionContext: config?.defaultVisionContext,
-    adapter,
-  };
-}
-
-function createAiAdapter(config: AiRuntimeConfig | undefined): AiAdapter | undefined {
-  if (isAiCliAdapterOptions(config?.adapter)) return new CliJsonAdapter(config.adapter);
-  const provider = config?.provider ?? parseAiProvider(process.env.FLIWRIGHT_AI_PROVIDER);
-  if (provider === 'mock') return new MockAiAdapter();
-  if (provider === 'claude') {
-    return new ClaudeCliAdapter({
-      command: process.env.FLIWRIGHT_AI_COMMAND ?? 'claude',
-      args: parseAiArgs(process.env.FLIWRIGHT_AI_ARGS),
-    });
-  }
-  if (provider === 'codex') {
-    return new CodexCliAdapter({
-      command: process.env.FLIWRIGHT_AI_COMMAND ?? 'codex',
-      args: parseAiArgs(process.env.FLIWRIGHT_AI_ARGS) ?? ['exec', '--json'],
-    });
-  }
-  if (provider === 'custom-cli') {
-    const command = process.env.FLIWRIGHT_AI_COMMAND;
-    return command ? new CliJsonAdapter({ provider: 'custom-cli', command, args: parseAiArgs(process.env.FLIWRIGHT_AI_ARGS) }) : undefined;
-  }
-  return undefined;
-}
-
-function parseAiProvider(value: string | undefined): AiRuntimeConfig['provider'] {
-  if (value === 'mock' || value === 'claude' || value === 'codex' || value === 'custom-cli' || value === 'none') return value;
-  return 'none';
-}
-
-function parseAiCache(value: string | undefined): AiRuntimeConfig['cache'] {
-  if (value === 'read' || value === 'write' || value === 'read-write') return value;
-  return 'off';
-}
-
-function parseAiEnabled(value: string | undefined, provider: AiRuntimeConfig['provider']): boolean {
-  if (value === 'false') return false;
-  if (value === 'true') return true;
-  return provider !== 'none';
-}
-
-function parseAiArgs(value: string | undefined): string[] | undefined {
-  if (!value) return undefined;
-  return value.split(',').map(arg => arg.trim()).filter(Boolean);
-}
-
-function isAiAdapter(adapter: AiRuntimeConfig['adapter'] | undefined): adapter is AiAdapter {
-  return Boolean(adapter && 'invoke' in adapter);
-}
-
-function isAiCliAdapterOptions(adapter: AiRuntimeConfig['adapter'] | undefined): adapter is AiCliAdapterOptions {
-  return Boolean(adapter && 'command' in adapter);
 }
 
 function toWebSocketUrl(url: string): string {
