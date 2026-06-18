@@ -100,7 +100,7 @@ void main() {
       }
     });
 
-    test('clearRoutes clears persisted Hive routes from an empty memory store',
+    test('clearRoutes clears loaded routes and persists empty state to Hive',
         () async {
       final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
       final boxName =
@@ -118,8 +118,12 @@ void main() {
           body: {'cached': true},
         ));
 
-        final emptyMemoryStore = MockRuleStore(storage: storage);
-        final cleared = await emptyMemoryStore.clearRoutes();
+        // Load once (as bridge init does): the in-memory map is the
+        // authoritative mirror of Hive, mutated in place and persisted. The
+        // store no longer reloads from storage on each mutation.
+        final store = MockRuleStore(storage: storage);
+        await store.loadFromStorage();
+        final cleared = await store.clearRoutes();
 
         expect(cleared, 1);
         expect(storage.box.get(HiveMockRuleStorage.defaultRouteIndexKey), []);
@@ -136,7 +140,7 @@ void main() {
       }
     });
 
-    test('removeRoute removes persisted Hive route after rehydrating storage',
+    test('removeRoute mutates loaded routes and persists the change to Hive',
         () async {
       final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
       final boxName =
@@ -159,8 +163,11 @@ void main() {
           status: 200,
         ));
 
-        final emptyMemoryStore = MockRuleStore(storage: storage);
-        final removed = await emptyMemoryStore.removeRoute(
+        // Load once (as bridge init does) before mutating the authoritative
+        // in-memory map; the change is then persisted to Hive.
+        final store = MockRuleStore(storage: storage);
+        await store.loadFromStorage();
+        final removed = await store.removeRoute(
           path: '/api/remove',
           method: 'POST',
         );

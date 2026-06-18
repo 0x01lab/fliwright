@@ -494,14 +494,52 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.stopSandbox', async () => {
       await runCommand('Stop All Mock Routes', async () => {
-        const count = await sandboxService.clear(session.connectedDriver);
+        const driver = session.connectedDriver;
+        const count = await sandboxService.clear(driver);
         await setMockAutoDefaultsSuppressed(true);
         await clearSuppressedMockEndpoints();
         await mockSelectionStore.clear();
         mockTree.setAppliedRules([]);
-        output.appendLine(`Stopped all mock routes (${count} tracked route(s)).`);
+
+        // Hard-clear fallback: verify the Flutter store is actually empty —
+        // including the Dio interceptor's store (covers store-identity split) —
+        // retry once if not, and never report success silently. This is the
+        // user-facing guarantee that "Stop All" leaves nothing mocking even if
+        // auto-clear/reconcile has a hole.
+        const remainingRoutes = (state?: FlutterMockDebugState) =>
+          (state?.routes?.length ?? 0) + (state?.interceptorState?.routes?.length ?? 0);
+
+        let state = await readFlutterMockDebugState(driver);
+        if (remainingRoutes(state) > 0) {
+          output.appendLine(
+            `[MockStateSync] Flutter store still had ${remainingRoutes(state)} route(s) after clear; retrying clearFlutterRoutes().`,
+          );
+          try {
+            await driver.mock.clearFlutterRoutes();
+          } catch (error) {
+            output.appendLine(
+              `[MockStateSync] Retry clearFlutterRoutes() failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          state = await readFlutterMockDebugState(driver);
+        }
+        const remaining = remainingRoutes(state);
+        output.appendLine(
+          `[MockStateSync] stop-all result: tracked=${count} remaining=${remaining} `
+          + `storeId=#${state?.storeId ?? 'unknown'} sharedStore=${state?.interceptorState?.sharedStore === true}`,
+        );
         await appendMockControllerDebug('Flutter mock routes after clear:');
-        vscode.window.showInformationMessage('Stopped all mock routes.');
+        if (remaining > 0) {
+          output.appendLine(
+            `[MockStateSync] WARNING: Flutter 端仍有 ${remaining} 条路由未清除。${formatFlutterMockDebugState(state).join(' | ')}`,
+          );
+          vscode.window.showWarningMessage(
+            `Flutter 端仍有 ${remaining} 条 mock 路由未清除（store=#${state?.storeId ?? 'unknown'}）。请检查 Dio 拦截器与扩展是否共享同一 store。`,
+          );
+          return;
+        }
+        output.appendLine(`Stopped all mock routes (${count} tracked route(s)); Flutter store cleared.`);
+        vscode.window.showInformationMessage('已清空 Flutter 端全部 mock 配置（store routes=0）。');
       });
     }),
     vscode.commands.registerCommand('fliwright.analyzeForm', async (node?: FormRulesEntry) => {
@@ -1017,6 +1055,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logMockRouteSample('flutter.matched', sync.applied);
     logFlutterRouteSample('flutter.unmatched', sync.unmatched);
     logMockRouteSample('workspace.reconciled', sync.reconciled);
+
+    // Post-sync diagnostics: confirm the Flutter store reflects the desired
+    // state and surface store-identity split / ineffective-clear failures that
+    // would otherwise silently leave routes mocking.
+    const postState = await readFlutterMockDebugState(session.connectedDriver);
+    const postRoutes = (postState?.routes?.length ?? 0) + (postState?.interceptorState?.routes?.length ?? 0);
+    output.appendLine(
+      `[MockStateSync] post-sync store=#${postState?.storeId ?? 'unknown'} `
+      + `sharedStore=${postState?.interceptorState?.sharedStore === true} flutterRoutes=${postRoutes}`,
+    );
+    if (postState?.interceptorState && postState.interceptorState.sharedStore === false) {
+      output.appendLine(
+        '[MockStateSync] WARNING: Dio 拦截器与扩展未共享同一 store（sharedStore=false），'
+        + 'VSCode 的增删可能不影响实际匹配的路由表。',
+      );
+    }
+    if (postRoutes > 0 && sandboxService.getAppliedRules().length === 0) {
+      output.appendLine(
+        `[MockStateSync] WARNING: 期望 0 条路由但 Flutter 仍有 ${postRoutes} 条，`
+        + '可能存在 store 分裂或清理未生效；可用「Stop All Mock Routes」强制清空。',
+      );
+    }
 
     if (sync.applied.length > 0) {
       for (const applied of sync.applied) {
@@ -1576,12 +1636,25 @@ async function waitForFlutterMockExtension(
   driver: { sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> },
   reason: string,
 ): Promise<void> {
-  try {
-    await driver.sendRequest('ext.fliwright.mock.debugState', {});
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Flutter mock extension is not ready for mock sync (${reason}): ${message}`);
+  // The bridge re-registers the mock VM-service extensions asynchronously
+  // during (hot-)restart. A single probe races that re-registration and, on
+  // failure, aborts the whole reconcile — leaving Hive-resurrected routes
+  // active while VSCode shows no applied rules. Poll until the extension
+  // responds (or the deadline elapses) before proceeding.
+  const maxAttempts = 25; // ~5s at 200ms intervals
+  const intervalMs = 200;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await driver.sendRequest('ext.fliwright.mock.debugState', {});
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
   }
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Flutter mock extension is not ready for mock sync after ~5s (${reason}): ${message}`);
 }
 
 async function readFlutterMockDebugState(

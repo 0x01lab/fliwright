@@ -264,10 +264,16 @@ describe('SandboxService', () => {
 
     expect(removeFlutterRoute).toHaveBeenCalledWith('/v1/token', 'GET');
     expect(sync.pruned).toBe(1);
+    // Pruned routes must not appear in the returned applied set, otherwise the
+    // caller re-saves them to the selection store and resurrects them later.
+    expect(sync.applied).toEqual([]);
     expect(service.getAppliedRules()).toHaveLength(0);
   });
 
-  it('leaves foreign (non-VSCode) Flutter routes untouched during prune', async () => {
+  it('prunes foreign (non-VSCode) Flutter routes too when the desired state is empty', async () => {
+    // Desired-state driven prune: "no active rule in VSCode" must clear the
+    // Flutter store completely, including routes without a fliwright-vscode: id
+    // (legacy/script-added). This is the behavior the user opted into.
     const service = new SandboxService();
     const removeFlutterRoute = vi.fn().mockResolvedValue(undefined);
     const listFlutterRoutes = vi.fn().mockResolvedValue([
@@ -285,8 +291,9 @@ describe('SandboxService', () => {
       { restoreSelections: true, selectedEntries: [] },
     );
 
-    expect(removeFlutterRoute).not.toHaveBeenCalled();
-    expect(sync.pruned).toBe(0);
+    expect(removeFlutterRoute).toHaveBeenCalledWith('/v1/token', 'GET');
+    expect(sync.pruned).toBe(1);
+    expect(sync.applied).toEqual([]);
   });
 
   it('keeps VSCode-managed Flutter routes that match a restored selection', async () => {

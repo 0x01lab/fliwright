@@ -88,6 +88,11 @@ class DioMockExtension {
     registry.register('ext.fliwright.mock.getCalls', _getCalls);
     registry.register('ext.fliwright.mock.clearCalls', _clearCalls);
     registry.register('ext.fliwright.mock.debugState', _debugState);
+    // Guarantee the interceptor shares the canonical store regardless of the
+    // order the host app called setInterceptor/register in. Without this, the
+    // interceptor can keep matching against a stale store while VSCode mutates
+    // another — the "no rule in VSCode but Flutter still mocks" failure.
+    _syncInterceptorToStore();
   }
 
   // ---------------------------------------------------------------------------

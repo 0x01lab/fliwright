@@ -171,25 +171,40 @@ export class SandboxService {
       reconciled.push(applied);
     }
 
-    // Prune to desired state: remove VSCode-managed Flutter routes (id prefixed
-    // `fliwright-vscode:`) that are neither a restored selection nor a default
-    // target. Routes registered by tests/scripts (no prefix) are left untouched.
-    // Removal flows through to removeFlutterRoute -> Hive save(), so cold starts
-    // no longer resurrect pruned routes.
+    // Prune to desired state: remove every Flutter route whose endpoint is NOT
+    // in the desired active set. This is desired-state driven (not id-prefix
+    // driven), so when VSCode has no selected/default rules the Flutter store is
+    // fully cleared — including stale or non-prefixed routes — which is what
+    // makes "no active rule in VSCode" actually mean "nothing is mocked".
+    // Suppressed endpoints are not exempt: suppression only prevents re-applying
+    // a route, it must not spare a route from being cleared. Removal flows
+    // through removeFlutterRoute -> Hive save(), so cold starts no longer
+    // resurrect pruned routes.
     let pruned = 0;
+    const prunedKeys = new Set<string>();
     for (const route of sync.routes) {
       const parsed = parseRouteId(route.id);
-      if (!parsed) continue;
-      const key = appliedKey(parsed.method, parsed.endpoint);
+      const method = (parsed?.method ?? route.method)?.toUpperCase();
+      if (!method) continue;
+      const endpoint = parsed?.endpoint ?? route.path;
+      const key = appliedKey(method, endpoint);
       if (desiredActiveKeys.has(key)) continue;
-      if (suppressedKeys.has(key)) continue;
-      await driver.mock.removeFlutterRoute(route.path, parsed.method);
+      await driver.mock.removeFlutterRoute(route.path, method);
       this.applied.delete(key);
+      prunedKeys.add(key);
       pruned += 1;
     }
 
+    // Reflect prune in the returned applied set. sync.applied is a pre-prune
+    // snapshot; returning it verbatim would let callers re-save pruned routes
+    // into the selection store, which then resurrects them on the next reconnect.
+    const finalApplied = sync.applied.filter(
+      (rule) => !prunedKeys.has(appliedKey(rule.method, rule.endpoint)),
+    );
+
     return {
       ...sync,
+      applied: finalApplied,
       rebuilt,
       reconciled,
       skipped,

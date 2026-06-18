@@ -120,7 +120,11 @@ class MockRuleStore {
   }
 
   Future<bool> removeRoute({String? id, String? path, String? method}) async {
-    await loadFromStorage();
+    // Operate on the in-memory route table directly. The store is loaded once
+    // from storage at bridge init and persisted after every mutation, so the
+    // in-memory map is the source of truth — reloading here would resurrect
+    // routes that were just removed (the "no rule in VSCode but Flutter still
+    // mocks" bug).
     final before = _routes.length;
     if (id != null) {
       _routes.removeWhere((_, route) => route.id == id);
@@ -137,7 +141,7 @@ class MockRuleStore {
   }
 
   Future<int> clearRoutes() async {
-    await loadFromStorage();
+    // See removeRoute: mutate the authoritative in-memory map then persist.
     final count = _routes.length;
     _routes.clear();
     await _persist();
