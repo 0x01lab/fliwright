@@ -107,6 +107,22 @@ describe('Page', () => {
     });
   });
 
+  it('screenshot uses the unified fliwright viewport capture extension', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      success: true,
+      format: 'png',
+      screenshot: Buffer.from('png').toString('base64'),
+    });
+    const page = new Page(sendRequest);
+
+    const result = await page.screenshot({ pixelRatio: 2 });
+
+    expect(result.toString()).toBe('png');
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', {
+      pixelRatio: '2',
+    });
+  });
+
   it('query serializes normalized bridge queries', async () => {
     const sendRequest = vi.fn().mockResolvedValue({
       matches: [{ ref: 'e1', role: 'button', label: 'Next', enabled: true }],

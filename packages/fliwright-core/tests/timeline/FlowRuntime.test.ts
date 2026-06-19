@@ -78,4 +78,26 @@ describe('FlowRuntime', () => {
     expect(page.screenshot).toHaveBeenCalled();
     expect(page.snapshot).toHaveBeenCalled();
   });
+
+  it('keeps frame artifacts best-effort when screenshot capture fails', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'fliwright-flow-frame-'));
+    const page = {
+      screenshot: vi.fn().mockRejectedValue(new Error('screenshot failed')),
+      snapshot: vi.fn().mockResolvedValue({
+        snapshot: '- text "Register" [ref=e1]',
+        groupId: 'snap-1',
+        refs: [],
+        count: 1,
+      } satisfies AgentSnapshotResult),
+    } as unknown as Page;
+    const recorder = new TimelineRecorder({ runId: 'run-frame', testName: 'frame test' });
+    const store = new TimelineArtifactStore({ cwd, runId: 'run-frame' });
+    const flow = new FlowRuntime({ recorder, artifactStore: store, page });
+
+    const artifacts = await flow.frame('Register form filled', { screenshot: true, snapshot: true });
+
+    expect(artifacts.map((artifact) => artifact.kind)).toEqual(['snapshot']);
+    expect(page.screenshot).toHaveBeenCalled();
+    expect(page.snapshot).toHaveBeenCalled();
+  });
 });

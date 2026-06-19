@@ -32,4 +32,35 @@ void main() {
     expect(result['snap'], isA<Map>());
     expect(result['diagnostics'], isA<Map>());
   });
+
+  testWidgets(
+    'captureFrame captures screenshots without forcing a frame pump',
+    (tester) async {
+      final registry = ExtensionRegistry();
+      final calls = <Map<String, String>>[];
+      registry.register('ext.fliwright.context', (_) async => {});
+      registry.register('ext.fliwright.screenshot', (params) async {
+        calls.add(params);
+        return {
+          'success': true,
+          'format': 'png',
+          'screenshot': 'cG5n',
+          'width': 100,
+          'height': 200,
+        };
+      });
+      registry.register('ext.fliwright.snap', (_) async => {});
+      CaptureFrameExtension.register(registry);
+
+      final result = await registry.invoke('ext.fliwright.captureFrame', {
+        'screenshot': 'true',
+        'snapshot': 'false',
+        'diagnostics': 'false',
+      });
+
+      expect(result['success'], isTrue);
+      expect(result['screenshot'], isA<Map>());
+      expect(calls.single, {'pixelRatio': '1.0', 'waitForFrame': 'false'});
+    },
+  );
 }

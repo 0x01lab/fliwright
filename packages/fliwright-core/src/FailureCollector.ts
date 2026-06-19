@@ -20,9 +20,7 @@ export class FailureCollector {
   }
 
   private async _takeScreenshot(): Promise<Buffer | null> {
-    const fliwrightScreenshot = await this._requestScreenshot('ext.fliwright.screenshot');
-    if (fliwrightScreenshot) return fliwrightScreenshot;
-    return this._requestScreenshot('ext.flutter.driver.screenshot');
+    return this._requestScreenshot('ext.fliwright.screenshot');
   }
 
   private async _requestScreenshot(method: string): Promise<Buffer | null> {

@@ -278,7 +278,6 @@ export class RecorderController {
     await this.waitForStableFrame();
     const result = await this.sendRequest('ext.fliwright.screenshot', {
       pixelRatio: '1.0',
-      mode: 'auto',
       waitForFrame: 'false',
     }) as {
       success?: boolean;

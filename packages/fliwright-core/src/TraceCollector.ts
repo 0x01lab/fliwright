@@ -198,16 +198,6 @@ export class TraceCollector {
       }
     } catch { /* fall through */ }
 
-    // Fallback to flutter.driver.screenshot
-    try {
-      const result = await this.sendRequest('ext.flutter.driver.screenshot', {}) as {
-        screenshot?: string;
-      };
-      if (result?.screenshot) {
-        return Buffer.from(result.screenshot, 'base64');
-      }
-    } catch { /* fall through */ }
-
     return null;
   }
 

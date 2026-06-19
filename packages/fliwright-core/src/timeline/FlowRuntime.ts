@@ -119,17 +119,25 @@ export class FlowRuntime {
         }
         if (artifacts.length) return artifacts;
       } catch {
-        // Fall back to legacy calls below.
+        // Fall back to per-artifact calls below.
       }
     }
 
     if (options.screenshot && typeof (page as unknown as { screenshot?: () => Promise<Buffer> }).screenshot === 'function') {
-      const screenshot = await (page as unknown as { screenshot: () => Promise<Buffer> }).screenshot();
-      artifacts.push(await store.writeScreenshot(nodeId, screenshot));
+      try {
+        const screenshot = await (page as unknown as { screenshot: () => Promise<Buffer> }).screenshot();
+        artifacts.push(await store.writeScreenshot(nodeId, screenshot));
+      } catch {
+        // Screenshot capture is best-effort for frame artifacts.
+      }
     }
     if (options.snapshot && typeof page.snapshot === 'function') {
-      const snapshot = await page.snapshot();
-      artifacts.push(await store.writeSnapshot(nodeId, snapshot));
+      try {
+        const snapshot = await page.snapshot();
+        artifacts.push(await store.writeSnapshot(nodeId, snapshot));
+      } catch {
+        // Snapshot capture is best-effort for frame artifacts.
+      }
     }
     return artifacts;
   }

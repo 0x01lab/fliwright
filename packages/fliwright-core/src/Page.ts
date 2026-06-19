@@ -308,22 +308,16 @@ export class Page {
    * Take a screenshot of the current Flutter app screen.
    *
    * @param options.pixelRatio - Device pixel ratio for the screenshot (default: 1.0)
-   * @param options.mode - Capture strategy: 'auto' (default), 'boundary', or 'canvas'.
-   *   'auto' detects PlatformView and chooses the best path.
-   *   'boundary' forces RepaintBoundary.toImage().
-   *   'canvas' forces OffsetLayer painting (works around WebView debugNeedsPaint).
    * @param options.rect - Crop to a specific logical-pixel region.
    * @returns A Buffer containing the PNG image data
    */
   async screenshot(options?: {
     pixelRatio?: number;
-    mode?: 'auto' | 'boundary' | 'canvas';
     rect?: { x: number; y: number; width: number; height: number };
   }): Promise<Buffer> {
     const params: Record<string, unknown> = {
       pixelRatio: options?.pixelRatio?.toString() ?? '1.0',
     };
-    if (options?.mode) params.mode = options.mode;
     if (options?.rect) params.rect = JSON.stringify(options.rect);
 
     const result = (await this.sendRequest('ext.fliwright.screenshot', params)) as {

@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import * as fs from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import type { RunResult, ScriptFileEntry } from '../types.js';
@@ -22,7 +24,13 @@ export class ScriptRunner {
       env.FLIWRIGHT_VM_URL = params.vmServiceUrl;
     }
 
-    const execution = await runCommand('node', [relativeScript], params.workspaceRoot.fsPath, env, params.onOutput);
+    const command = await resolveScriptCommand(params.script.uri.fsPath, relativeScript, params.workspaceRoot.fsPath);
+    let execution: CommandResult;
+    try {
+      execution = await runCommand(command.command, command.args, params.workspaceRoot.fsPath, env, params.onOutput);
+    } finally {
+      await command.cleanup?.();
+    }
     const duration = Date.now() - startedAt;
     const passed = execution.exitCode === 0;
     const output = [execution.stdout, execution.stderr].filter(Boolean).join('\n').trim();
@@ -43,6 +51,65 @@ export class ScriptRunner {
       stderr: execution.stderr,
     };
   }
+}
+
+interface ScriptCommand {
+  command: string;
+  args: string[];
+  cleanup?: () => Promise<void>;
+}
+
+async function resolveScriptCommand(scriptPath: string, relativeScript: string, workspaceRoot: string): Promise<ScriptCommand> {
+  const source = await fs.readFile(scriptPath, 'utf8');
+  if (usesFliwrightVitest(source)) {
+    const config = await createVitestScriptConfig(relativeScript, workspaceRoot);
+    return {
+      command: 'pnpm',
+      args: [
+        'exec',
+        'vitest',
+        'run',
+        relativeScript,
+        '--config',
+        config.path,
+        '--pool',
+        'forks',
+        '--poolOptions.forks.singleFork',
+        '--no-fileParallelism',
+      ],
+      cleanup: config.cleanup,
+    };
+  }
+  return { command: 'node', args: [relativeScript] };
+}
+
+function usesFliwrightVitest(source: string): boolean {
+  return /from\s+['"]@fliwright\/vitest['"]/.test(source) ||
+    /import\s*\(\s*['"]@fliwright\/vitest['"]\s*\)/.test(source);
+}
+
+async function createVitestScriptConfig(relativeScript: string, workspaceRoot: string): Promise<{ path: string; cleanup: () => Promise<void> }> {
+  const dir = await fs.mkdtemp(path.join(tmpdir(), 'fliwright-vscode-script-'));
+  const configPath = path.join(dir, 'vitest.config.mjs');
+  const include = relativeScript.split(path.sep).join('/');
+  await fs.writeFile(configPath, [
+    'export default {',
+    `  root: ${JSON.stringify(workspaceRoot)},`,
+    '  test: {',
+    `    include: [${JSON.stringify(include)}],`,
+    "    environment: 'node',",
+    '    testTimeout: 60_000,',
+    '    hookTimeout: 30_000,',
+    '  },',
+    '};',
+    '',
+  ].join('\n'));
+  return {
+    path: configPath,
+    cleanup: async () => {
+      await fs.rm(dir, { recursive: true, force: true });
+    },
+  };
 }
 
 interface CommandResult {

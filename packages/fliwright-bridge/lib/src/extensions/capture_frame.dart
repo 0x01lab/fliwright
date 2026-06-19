@@ -22,6 +22,7 @@ class CaptureFrameExtension {
     if (includeScreenshot) {
       final screenshot = await _invokeOrEmpty('ext.fliwright.screenshot', {
         'pixelRatio': params['pixelRatio'] ?? '1.0',
+        'waitForFrame': 'false',
       });
       if (screenshot['success'] == true && screenshot['screenshot'] != null) {
         result['screenshot'] = {

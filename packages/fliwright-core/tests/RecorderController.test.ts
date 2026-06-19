@@ -318,7 +318,7 @@ describe('RecorderController', () => {
     await controller.stop();
 
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.settle', { timeout: '1200', stableFrames: '2' });
-    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', { pixelRatio: '1.0', mode: 'auto', waitForFrame: 'false' });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', { pixelRatio: '1.0', waitForFrame: 'false' });
     expect(controller.getFrames()).toEqual([
       expect.objectContaining({
         index: 0,
@@ -491,7 +491,7 @@ describe('RecorderController', () => {
     expect(maxActiveScreenshots).toBe(1);
     expect(sendRequest.mock.calls.filter(([method]) => method === 'ext.fliwright.screenshot')).toHaveLength(1);
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.settle', { timeout: '1200', stableFrames: '2' });
-    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', { pixelRatio: '1.0', mode: 'auto', waitForFrame: 'false' });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', { pixelRatio: '1.0', waitForFrame: 'false' });
   });
 
   it('synthesizes a visible frame for a standalone textInput with no preceding tap', async () => {

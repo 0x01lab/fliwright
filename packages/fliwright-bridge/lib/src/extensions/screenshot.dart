@@ -19,45 +19,21 @@ class ScreenshotExtension {
       return {'success': false, 'error': 'No widget tree available'};
     }
 
-    final renderObject = root.findRenderObject();
     final pixelRatio = double.tryParse(params['pixelRatio'] ?? '') ?? 1.0;
-    final mode = params['mode'] ?? 'auto'; // 'auto' | 'boundary' | 'canvas'
     final fullPage = (params['fullPage'] ?? 'false') == 'true';
-    final waitForFrame = (params['waitForFrame'] ?? 'true') != 'false';
-
-    final boundary = _findBestRepaintBoundary(renderObject);
-    if (boundary == null || !boundary.hasSize) {
-      return {'success': false, 'error': 'No repaint boundary available'};
-    }
+    final waitForFrame = params['waitForFrame'] == 'true';
 
     // Full-page screenshot: scroll through the content in segments.
     if (fullPage) {
-      return await _fullPageScreenshot(root, boundary, pixelRatio);
+      return await _fullPageScreenshot(root, pixelRatio);
     }
 
-    // Choose capture strategy based on mode.
-    Map<String, dynamic> result;
-    if (mode == 'canvas') {
-      if (waitForFrame) await _waitForFrame();
-      result = await _captureViaCanvas(boundary, pixelRatio);
-    } else if (mode == 'boundary') {
-      if (waitForFrame) await _waitForFrame();
-      result = await _captureBoundary(boundary, pixelRatio);
-    } else {
-      // 'auto': capture the whole Flutter view instead of the first repaint
-      // boundary in the widget tree. Some apps contain nested boundaries whose
-      // layer only covers part of the screen, producing clipped/black captures.
-      try {
-        if (waitForFrame) await _waitForFrame();
-        result = await _captureRenderView(pixelRatio);
-      } catch (_) {
-        try {
-          result = await _captureBoundary(boundary, pixelRatio);
-        } catch (_) {
-          result = await _captureViaCanvas(boundary, pixelRatio);
-        }
-      }
-    }
+    if (waitForFrame) await _waitForFrame();
+
+    // Viewport screenshots always capture the composited Flutter view. This
+    // avoids accidentally snapshotting a nested repaint boundary from an older
+    // route in the stack or a partial subtree.
+    var result = await _captureSafely(() => _captureRenderView(pixelRatio));
 
     // Optional rect crop.
     final rectJson = params['rect'];
@@ -81,119 +57,35 @@ class ScreenshotExtension {
       return {'success': false, 'error': 'No render view available'};
     }
 
-    final renderView = renderViews.first;
+    final renderView = renderViews.firstWhere(
+      (view) => view.size.width > 0 && view.size.height > 0,
+      orElse: () => renderViews.first,
+    );
     final layer = renderView.layer;
     final width = renderView.size.width;
     final height = renderView.size.height;
     final viewPixelRatio = renderView.configuration.devicePixelRatio;
-    final physicalWidth = (width * viewPixelRatio).ceil();
-    final physicalHeight = (height * viewPixelRatio).ceil();
-    final outputWidth = (width * pixelRatio).ceil();
-    final outputHeight = (height * pixelRatio).ceil();
     if (layer == null) {
       return {'success': false, 'error': 'Render view has no layer'};
+    }
+    if (layer is! OffsetLayer) {
+      return {
+        'success': false,
+        'error': 'Render view layer is not an OffsetLayer',
+      };
     }
     if (width <= 0 || height <= 0) {
       return {'success': false, 'error': 'Render view has zero size'};
     }
-
-    final scene = layer.buildScene(ui.SceneBuilder());
-    late final ui.Image physicalImage;
-    try {
-      physicalImage = await scene.toImage(physicalWidth, physicalHeight);
-    } finally {
-      scene.dispose();
-    }
-    final image = pixelRatio == viewPixelRatio
-        ? physicalImage
-        : await _resizeImage(physicalImage, outputWidth, outputHeight);
-    if (!identical(image, physicalImage)) {
-      physicalImage.dispose();
-    }
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    image.dispose();
-
-    if (byteData == null) {
-      return {'success': false, 'error': 'Failed to encode screenshot'};
+    if (viewPixelRatio <= 0) {
+      return {'success': false, 'error': 'Render view has invalid pixel ratio'};
     }
 
-    return {
-      'success': true,
-      'format': 'png',
-      'screenshot': base64Encode(byteData.buffer.asUint8List()),
-      'width': width,
-      'height': height,
-      'pixelRatio': pixelRatio,
-    };
-  }
-
-  static Future<ui.Image> _resizeImage(
-    ui.Image source,
-    int width,
-    int height,
-  ) async {
-    final recorder = ui.PictureRecorder();
-    final canvas = ui.Canvas(recorder);
-    final src = Rect.fromLTWH(
-      0,
-      0,
-      source.width.toDouble(),
-      source.height.toDouble(),
+    final bounds = renderView.paintBounds;
+    final image = await layer.toImage(
+      bounds,
+      pixelRatio: pixelRatio / viewPixelRatio,
     );
-    final dst = Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble());
-    canvas.drawImageRect(source, src, dst, ui.Paint());
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(width, height);
-    picture.dispose();
-    return image;
-  }
-
-  /// Direct capture via RepaintBoundary.toImage.
-  static Future<Map<String, dynamic>> _captureBoundary(
-    RenderRepaintBoundary boundary,
-    double pixelRatio,
-  ) async {
-    final image = await boundary.toImage(pixelRatio: pixelRatio);
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    image.dispose();
-
-    if (byteData == null) {
-      return {'success': false, 'error': 'Failed to encode screenshot'};
-    }
-
-    return {
-      'success': true,
-      'format': 'png',
-      'screenshot': base64Encode(byteData.buffer.asUint8List()),
-      'width': boundary.size.width,
-      'height': boundary.size.height,
-      'pixelRatio': pixelRatio,
-    };
-  }
-
-  /// Fallback: paint the render object into an offscreen [OffsetLayer]
-  /// and convert to PNG.  This avoids the `!debugNeedsPaint` assertion
-  /// because we never call `toImage()` on the live boundary.
-  static Future<Map<String, dynamic>> _captureViaCanvas(
-    RenderRepaintBoundary boundary,
-    double pixelRatio,
-  ) async {
-    final width = boundary.size.width;
-    final height = boundary.size.height;
-    if (width <= 0 || height <= 0) {
-      return {'success': false, 'error': 'Boundary has zero size'};
-    }
-
-    final bounds = Rect.fromLTWH(0, 0, width, height);
-
-    // Paint into a fresh OffsetLayer, then rasterise that layer to PNG.
-    // OffsetLayer.toImage() does NOT assert debugNeedsPaint.
-    final offsetLayer = OffsetLayer();
-    final paintContext = PaintingContext(offsetLayer, bounds);
-    boundary.paint(paintContext, Offset.zero);
-    paintContext.stopRecordingIfNeeded();
-
-    final image = await offsetLayer.toImage(bounds, pixelRatio: pixelRatio);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
 
@@ -218,12 +110,15 @@ class ScreenshotExtension {
   ///           totalHeight, segmentCount }` so the caller can stitch them.
   static Future<Map<String, dynamic>> _fullPageScreenshot(
     Element root,
-    RenderRepaintBoundary boundary,
     double pixelRatio,
   ) async {
     // Find a ScrollPosition in the widget tree to determine total extent.
     final scrollInfo = _findScrollExtent(root);
-    final viewportHeight = boundary.size.height;
+    final viewportSize = _currentViewportSize();
+    if (viewportSize == null) {
+      return {'success': false, 'error': 'No render view available'};
+    }
+    final viewportHeight = viewportSize.height;
     final totalHeight = scrollInfo.totalExtent > viewportHeight
         ? scrollInfo.totalExtent
         : viewportHeight;
@@ -239,10 +134,12 @@ class ScreenshotExtension {
         final offset = (i * viewportHeight).toDouble();
         // Use jumpTo via dynamic dispatch (ScrollController is common).
         try {
-          (scrollController as dynamic).jumpTo(offset.clamp(
-            0.0,
-            (scrollController as dynamic).position.maxScrollExtent as double,
-          ));
+          (scrollController as dynamic).jumpTo(
+            offset.clamp(
+              0.0,
+              (scrollController as dynamic).position.maxScrollExtent as double,
+            ),
+          );
         } catch (_) {
           // If jumpTo fails, try animateTo.
           try {
@@ -259,22 +156,9 @@ class ScreenshotExtension {
 
       await _waitForFrame();
 
-      // Capture current viewport.
-      try {
-        final result = await _captureBoundary(boundary, pixelRatio);
-        if (result['success'] == true && result['screenshot'] != null) {
-          segments.add(result['screenshot'] as String);
-        }
-      } catch (_) {
-        // Try canvas fallback for this segment.
-        try {
-          final result = await _captureViaCanvas(boundary, pixelRatio);
-          if (result['success'] == true && result['screenshot'] != null) {
-            segments.add(result['screenshot'] as String);
-          }
-        } catch (_) {
-          // Skip failed segment.
-        }
+      final result = await _captureSafely(() => _captureRenderView(pixelRatio));
+      if (result['success'] == true && result['screenshot'] != null) {
+        segments.add(result['screenshot'] as String);
       }
     }
 
@@ -289,12 +173,38 @@ class ScreenshotExtension {
       'success': true,
       'format': 'png',
       'segments': segments,
-      'segmentWidth': boundary.size.width,
+      'segmentWidth': viewportSize.width,
       'segmentHeight': viewportHeight,
       'totalHeight': totalHeight,
       'segmentCount': segments.length,
       'pixelRatio': pixelRatio,
     };
+  }
+
+  static Future<Map<String, dynamic>> _captureSafely(
+    Future<Map<String, dynamic>> Function() capture,
+  ) async {
+    try {
+      return await capture();
+    } catch (error) {
+      return {
+        'success': false,
+        'error': 'Render view screenshot failed: $error',
+      };
+    }
+  }
+
+  static Size? _currentViewportSize() {
+    final renderViews = RendererBinding.instance.renderViews;
+    if (renderViews.isEmpty) return null;
+    final renderView = renderViews.firstWhere(
+      (view) => view.size.width > 0 && view.size.height > 0,
+      orElse: () => renderViews.first,
+    );
+    if (renderView.size.width <= 0 || renderView.size.height <= 0) {
+      return null;
+    }
+    return renderView.size;
   }
 
   /// Result of searching the widget tree for scroll extent information.
@@ -339,28 +249,6 @@ class ScreenshotExtension {
     );
   }
 
-  /// Detects whether the render tree contains a PlatformView render object
-  /// (e.g. WebView, Maps).  When present, `toImage()` is likely to throw
-  /// `debugNeedsPaint`, so we proactively use the canvas capture path.
-  static bool _hasPlatformViewInTree(RenderObject? root) {
-    if (root == null) return false;
-    final typeName = root.runtimeType.toString();
-    if (typeName.contains('PlatformView')) return true;
-
-    var found = false;
-    void visitor(RenderObject child) {
-      if (found) return;
-      if (child.runtimeType.toString().contains('PlatformView')) {
-        found = true;
-        return;
-      }
-      child.visitChildren(visitor);
-    }
-
-    root.visitChildren(visitor);
-    return found;
-  }
-
   /// Crops a screenshot result to the specified logical-pixel rect.
   static Future<Map<String, dynamic>> _cropResult(
     Map<String, dynamic> result,
@@ -400,8 +288,9 @@ class ScreenshotExtension {
       );
       image.dispose();
 
-      final byteData =
-          await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await croppedImage.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       croppedImage.dispose();
 
       if (byteData == null) {
@@ -420,30 +309,6 @@ class ScreenshotExtension {
       // Crop failed — return original uncropped result.
       return result;
     }
-  }
-
-  static RenderRepaintBoundary? _findBestRepaintBoundary(RenderObject? root) {
-    if (root == null) return null;
-    RenderRepaintBoundary? best;
-    var bestArea = -1.0;
-
-    void visitor(RenderObject child) {
-      if (child is RenderRepaintBoundary && child.hasSize) {
-        final area = child.size.width * child.size.height;
-        if (area > bestArea) {
-          best = child;
-          bestArea = area;
-        }
-      }
-      child.visitChildren(visitor);
-    }
-
-    if (root is RenderRepaintBoundary && root.hasSize) {
-      best = root;
-      bestArea = root.size.width * root.size.height;
-    }
-    root.visitChildren(visitor);
-    return best;
   }
 
   /// Wait for Flutter to finish rendering the current frame.
