@@ -12,11 +12,12 @@ import { TestDiscoveryService } from './runner/TestDiscoveryService.js';
 import { VitestRunner } from './runner/VitestRunner.js';
 import { ScriptDiscoveryService } from './scripts/ScriptDiscoveryService.js';
 import { ScriptRunner } from './scripts/ScriptRunner.js';
+import { ScreenshotPreviewPanel, ScreenshotService } from './screenshot/ScreenshotService.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
 import { MockRuleSelectionStore } from './sandbox/MockRuleSelectionStore.js';
-import { formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js';
+import { clearFlutterMockRoutes, formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js';
 import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
@@ -63,6 +64,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const scriptDiscoveryService = new ScriptDiscoveryService();
   const runner = new VitestRunner();
   const scriptRunner = new ScriptRunner();
+  const screenshotService = new ScreenshotService();
+  const screenshotPreviewPanel = new ScreenshotPreviewPanel();
   const failureStore = new FailureContextStore();
   const recorderService = new RecorderService();
   const stateService = new StateInjectionService();
@@ -93,6 +96,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   void updateRecordingContext(recorderService.getSession());
 
   context.subscriptions.push(session);
+  context.subscriptions.push(screenshotPreviewPanel);
   context.subscriptions.push(statusBar);
   context.subscriptions.push(
     stateProviderDocuments,
@@ -380,6 +384,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         await vscode.window.showTextDocument(document);
       });
     }),
+    vscode.commands.registerCommand('fliwright.takeScreenshot', async () => {
+      await runCommand('Take App Screenshot', async () => {
+        const preview = await screenshotService.capture(session.connectedDriver);
+        screenshotPreviewPanel.show(preview);
+      });
+    }),
     vscode.commands.registerCommand('fliwright.createMockConfig', async () => {
       await runCommand('Create Mock Config', async () => {
         const root = requireWorkspaceRoot();
@@ -512,13 +522,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         let state = await readFlutterMockDebugState(driver);
         if (remainingRoutes(state) > 0) {
           output.appendLine(
-            `[MockStateSync] Flutter store still had ${remainingRoutes(state)} route(s) after clear; retrying clearFlutterRoutes().`,
+            `[MockStateSync] Flutter store still had ${remainingRoutes(state)} route(s) after clear; retrying clearRoutes().`,
           );
           try {
-            await driver.mock.clearFlutterRoutes();
+            await clearFlutterMockRoutes(driver);
           } catch (error) {
             output.appendLine(
-              `[MockStateSync] Retry clearFlutterRoutes() failed: ${error instanceof Error ? error.message : String(error)}`,
+              `[MockStateSync] Retry clearRoutes() failed: ${error instanceof Error ? error.message : String(error)}`,
             );
           }
           state = await readFlutterMockDebugState(driver);

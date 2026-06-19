@@ -1,37 +1,38 @@
 ---
 name: write-fliwright-tests
-description: Create, update, review, or debug Fliwright test scripts for Flutter apps. Use when Codex needs to write TypeScript `.test.ts` files with `@fliwright/vitest`, selectors, locators, gestures, assertions, form filling, HTTP mocks, Riverpod state setup, MCP-recorded code cleanup, or manual `FliwrightDriver` E2E scripts.
+description: Create, update, review, or debug Fliwright automation and E2E scripts for Flutter apps. Use when Codex needs to write TypeScript `.test.ts` or `.mjs` scripts with `@fliwright/vitest`, timeline-native `script`/`test` fixtures, `flow` steps, Playwright-style `expect(locator, title?)` assertions, `mock` request capture, `agent` AI calls, selectors, locators, gestures, form filling, HTTP mocks, Riverpod state setup, MCP-recorded code cleanup, generated timeline-aware code, or manual `FliwrightDriver` scripts.
 ---
 
 # 编写 Fliwright 测试（Write Fliwright Tests）
 
 ## 概述
 
-把 Fliwright 测试当作**确定性的 Flutter app 自动化**来写，而不是浏览器测试。普通测试文件优先用 `@fliwright/vitest` fixture，使用稳定的控件选择器，对可见的用户结果做断言，并显式写清楚对活动 VM 的依赖。
+把 Fliwright 测试当作**确定性的 Flutter app 自动化**来写，而不是浏览器测试。普通验证用 `@fliwright/vitest` 的 `test` fixture；一次性自动化、数据录入、录制脚本清理优先用新版 `script` fixture。新脚本默认使用 timeline-native `{ flow, mock, agent }` 和 Playwright-style `expect(locator, title?)`，让失败产出 `timeline.json`、截图/快照和 agent-visible failure。
 
 ## 工作流
 
-1. 判断测试形态：新建 `.test.ts`、修复既有脚本、转换录制产物、加 mock/状态准备，或诊断一个失败。
+1. 判断脚本形态：测试断言用 `test`，自动化任务用 `script`，旧桥接/插件实验才用裸 `FliwrightDriver`。
 2. 在真实探查前先检查桥接能力。优先选择暴露了当前桥接（`ext.fliwright.snap`、`ext.fliwright.action`、`ext.fliwright.extractForm`、截图与 mock 扩展）的 app。
-3. 优先 `import { test, expect } from '@fliwright/vitest'`，除非该文件需要显式的 driver 生命周期、自定义插件或底层设置。
-4. 针对你需要的主题读对应的参考文档。从 **[references/index.md](references/index.md)**（主题地图）开始，或直接去：[getting-started.md](references/getting-started.md), [test-harness.md](references/test-harness.md), [selectors.md](references/selectors.md), [actions.md](references/actions.md), [assertions.md](references/assertions.md), [navigation.md](references/navigation.md), [forms.md](references/forms.md), [ai.md](references/ai.md), [mocks.md](references/mocks.md), [state.md](references/state.md), [screenshots-snapshots.md](references/screenshots-snapshots.md), [driver-lifecycle.md](references/driver-lifecycle.md), [cli.md](references/cli.md), [mcp-workflow.md](references/mcp-workflow.md), [troubleshooting.md](references/troubleshooting.md), [examples.md](references/examples.md)，或一页式的 [api-quick-reference.md](references/api-quick-reference.md) 查精确签名。
+3. 新测试优先 `import { test, expect } from '@fliwright/vitest'` 并使用 `{ page, flow, mock, agent }`；新自动化脚本优先 `import { script, expect } from '@fliwright/vitest'` 并使用 `{ page, flow, mock, agent }`。
+4. 针对你需要的主题读对应的参考文档。从 **[references/index.md](references/index.md)**（主题地图）开始，或直接去：[timeline-native.md](references/timeline-native.md), [getting-started.md](references/getting-started.md), [test-harness.md](references/test-harness.md), [selectors.md](references/selectors.md), [actions.md](references/actions.md), [assertions.md](references/assertions.md), [navigation.md](references/navigation.md), [forms.md](references/forms.md), [ai.md](references/ai.md), [mocks.md](references/mocks.md), [state.md](references/state.md), [screenshots-snapshots.md](references/screenshots-snapshots.md), [driver-lifecycle.md](references/driver-lifecycle.md), [cli.md](references/cli.md), [mcp-workflow.md](references/mcp-workflow.md), [troubleshooting.md](references/troubleshooting.md), [examples.md](references/examples.md)，或一页式的 [api-quick-reference.md](references/api-quick-reference.md) 查精确签名。
 5. 写选择器前先看附近的测试和源码 UI。用 `rg` 搜控件文案、key、路由名、provider 名以及既有的 Fliwright 模式。
-6. 写最短的用户路径脚本：设置状态、执行动作、对可见结果断言。不要用 sleep；依靠 `waitFor()` 和 Fliwright 断言。
+6. 写最短的用户路径脚本：mock/状态准备放在 `mock.rules()` 或 `flow.step()`；每个用户动作放在 `flow.step()`；用 `expect(locator, title?).toBeVisible()` / `toHaveText()` 等记录 timeline assertion。不要用 sleep；依靠 `waitFor()`、`settle()` 和 Fliwright 断言。
 7. 尽可能用仓库的 TypeScript 检查来校验语法和导入。只有在能拿到 Flutter VM Service URL 且 app 稳定时才跑 Fliwright E2E 测试。
 
 ## 夹具选择（Harness Choice）
 
-- 标准脚本用 `@fliwright/vitest` 默认的 `test`。它读 `FLIWRIGHT_VM_URL`（兼容 `FLIWRIGHT_VM_SERVICE_URL`），创建共享 driver，提供 `{ page, driver }`，并接好失败上下文。
+- 标准 E2E 测试用 `@fliwright/vitest` 默认的 `test`。它读 `FLIWRIGHT_VM_URL`（兼容 `FLIWRIGHT_VM_SERVICE_URL`），创建共享 driver，提供 `{ page, driver, flow, mock, agent, aiRuntime, timeline }`，并写 `timeline.json`。
+- 一次性自动化、填表、注册账号、录制脚本重写用 `script`。它共享同一套 fixture，但 mode 是 `script`，不要求必须有 assertion。
 - 当脚本必须写死/变换 VM URL、调整超时或关掉截图时，用 `createFliwrightTest(defineConfig(...))`。
 - 只有在自定义插件、旧桥接兼容、或刻意做底层坐标/扩展测试时，才在 Vitest 的 `beforeAll/afterAll` 里用裸 `FliwrightDriver`。务必调用 `dispose()`。
-- 常规的 mock/状态操作用 `driver` fixture，别写裸生命周期代码：`test('...', async ({ page, driver }) => { await driver.mock.route(...); })`。
+- 常规 mock 操作用 `mock` fixture（timeline-aware），需要底层能力时才用 `driver.mock`。请求校验用 `mock.findCalls(...)` 或 `mock.getCalls(...)` 加 Vitest `expect`，不要引入第二套 locator assertion。
 - 用 MCP 工具（`fliwright_snap`、`fliwright_observe`、`fliwright_record`、`fliwright_generate_test`、`fliwright_run`、`fliwright_get_failure`）来发现或验证行为，然后提交一个正常的测试文件。
 
 ## AI 与状态能力（AI & State Capabilities）
 
 Fliwright 自带 AI 子系统和状态注入适配器。要**显式**使用——它们默认不开。完整细节见 [references/ai.md](references/ai.md) 和 [references/state.md](references/state.md)。
 
-- **AI runtime** —— fixture 还会产出 `aiRuntime`：`test('…', async ({ page, driver, aiRuntime }) => { … })`。用 `aiRuntime.generate()` 造结构化测试数据（带 `fallback`），用 `aiRuntime.visible()`/`inspect()` 做视觉断言，用 `aiRuntime.classify()` 按当前屏幕分支。fixture 之外的脚本，从 `@fliwright/core` import `{ ai, configureAi }`。通过 `createFliwrightTest({ ai: { provider } })` 或 `FLIWRIGHT_AI_PROVIDER`（`mock` | `claude` | `codex` | `custom-cli` | `none`）配置 provider。**默认关闭/mock——只有你显式配置才会真的调模型。**
+- **AI runtime** —— fixture 产出 `agent` 和 `aiRuntime`。新脚本优先用 `agent.generate()` / `agent.verify()` / `agent.inspect()`，因为它们会记录 `ai-call` timeline node；需要底层 AI API 时再用 `aiRuntime.generate()` / `visible()` / `inspect()` / `classify()`。通过 `createFliwrightTest({ ai: { provider } })` 或 `FLIWRIGHT_AI_PROVIDER`（`mock` | `claude` | `codex` | `custom-cli` | `none`）配置 provider。**默认关闭/mock——只有你显式配置才会真的调模型。**
 - **自愈选择器** —— 自动：经 `@fliwright/vitest` 的 `expect()` 做的断言，通过时会记录成功快照；非否定断言失败时会先尝试重新定位控件（4 维加权打分，置信度 ≥0.85）再抛错。通过 `driver.healing.getReports()` / `setEnabled(false)` 查看或关闭。`.not` 会关闭自愈。
 - **AI 辅助填表** —— `page.formHelper` 推断每个字段的语义类型并填入逼真假数据；在 `.fliwright/forms/*.json` 里写一条 `LLM_GENERATE` 规则可让特定字段去问模型。见 [forms.md](references/forms.md)。
 - **状态注入** —— `driver.state`（一个 Riverpod `StateAdapter`）暴露 `read` / `write` / `override` / `watch` / `listProviders`。用 `override()` 跳过登录或直接进入某个业务态，再对可见结果断言。需要 app 接入 `fliwright_bridge_riverpod` 扩展。
@@ -54,6 +55,8 @@ AI 编写建议：保持 CI 确定性（`provider: 'mock'` 或 `'none'`）；捕
 - 用 descendant/ancestor locator、`.and(...)`、`.nth(...)` 或路由/表单上下文来限定含义模糊的控件，别依赖“取第一个”的行为。
 - 替换字段值用 `fill()`，追加/键入行为用 `type()`。除非被测行为本身基于坐标，否则在 locator 上用 `click()`、`longPress()`、`drag()`、`pinch()`，而不是坐标。
 - 尽可能通过 UI 来断言状态：`await expect(page.getByText('Done')).toBeVisible()`、`toHaveText`、`toContainText`、`toBeEnabled` 或 `not`。
+- 新版测试只使用一套公开 locator 断言：`await expect(locator, 'Title').toBeVisible()`、`toHaveText()`、`toContainText()`、`toBeEnabled()`、`toBeDisabled()`。第二个参数或 options 里的 `title` 会写入 timeline metadata。
+- 在 `script` 模式中不要为了满足测试而硬塞 assertion；需要记录事实时用 `flow.frame()` 或 `agent.verify()`，需要可失败的 UI 校验时才用 `expect(locator, title?).to*`。
 - 不要加固定 sleep。用 `await page.waitFor(selector, timeout)` 或断言超时。
 - E2E 专用脚本把 VM Service URL 的要求写在注释或文档里，但别把本机 URL 写进提交的测试。
 

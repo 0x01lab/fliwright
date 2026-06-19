@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "runId": "2026-06-19T09-08-39-writes-timeline.json-after-each-run",
+  "testName": "writes timeline.json after each run",
+  "mode": "test",
+  "status": "passed",
+  "startedAt": "2026-06-19T09:08:39.924Z",
+  "endedAt": "2026-06-19T09:08:39.924Z",
+  "nodes": [
+    {
+      "id": "step-1",
+      "kind": "step",
+      "title": "A passing step",
+      "status": "passed",
+      "startedAt": "2026-06-19T09:08:39.924Z",
+      "endedAt": "2026-06-19T09:08:39.924Z"
+    }
+  ]
+}

@@ -41,6 +41,7 @@ describe('VS Code manifest', () => {
       'fliwright.unwatchStateProvider',
       'fliwright.copyStateProviderValue',
       'fliwright.openRiverpodSetupHelp',
+      'fliwright.takeScreenshot',
     ]) {
       expect(commands.has(command), command).toBe(true);
     }
@@ -77,5 +78,13 @@ describe('VS Code manifest', () => {
     expect(commands.get('fliwright.insertRecordedTest')).toMatchObject({
       enablement: 'fliwright.recording.hasPreview',
     });
+  });
+
+  it('shows the screenshot command in the Devices title actions', () => {
+    const devicesTitleActions = manifest.contributes.menus['view/title']
+      .filter((entry: { when?: string }) => entry.when === 'view == fliwright.devices')
+      .map((entry: { command: string }) => entry.command);
+
+    expect(devicesTitleActions).toContain('fliwright.takeScreenshot');
   });
 });

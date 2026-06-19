@@ -1,7 +1,12 @@
 import type { Locator } from './Locator.js';
-import type { WidgetInfo, WidgetSnapshot } from './types.js';
+import type { Page } from './Page.js';
+import type { WidgetSnapshot } from './types.js';
 import type { FailureCollector } from './FailureCollector.js';
 import type { SelfHealingEngine } from './SelfHealingEngine.js';
+import { FliwrightAgentError } from './agent/FliwrightAgentError.js';
+import type { TimelineArtifactStore } from './timeline/TimelineArtifactStore.js';
+import type { TimelineRecorder } from './timeline/TimelineRecorder.js';
+import type { AgentVisibleFailure, TimelineArtifactRef } from './timeline/types.js';
 
 const DEFAULT_TIMEOUT = 5000;
 const DEFAULT_INTERVAL = 100;
@@ -25,6 +30,20 @@ export class AssertionError extends Error {
   }
 }
 
+export interface AssertionOptions {
+  timeout?: number;
+  title?: string;
+  includeScreenshot?: boolean;
+  includeSnapshot?: boolean;
+}
+
+export interface AssertionTimelineOptions {
+  title?: string;
+  recorder?: TimelineRecorder;
+  artifactStore?: TimelineArtifactStore;
+  page?: Page;
+}
+
 /**
  * Playwright-style auto-wait polling assertion wrapper for a Locator.
  */
@@ -35,6 +54,7 @@ export class Assertion {
   private readonly healingEngine: SelfHealingEngine | null;
   private readonly testName: string | null;
   private readonly sendRequest: ((method: string, params?: Record<string, unknown>) => Promise<unknown>) | null;
+  private readonly timeline: AssertionTimelineOptions | null;
 
   constructor(
     locator: Locator,
@@ -43,6 +63,7 @@ export class Assertion {
     healingEngine?: SelfHealingEngine,
     testName?: string,
     sendRequest?: (method: string, params?: Record<string, unknown>) => Promise<unknown>,
+    timeline?: AssertionTimelineOptions,
   ) {
     this.locator = locator;
     this.negated = negated;
@@ -50,6 +71,7 @@ export class Assertion {
     this.healingEngine = healingEngine ?? null;
     this.testName = testName ?? null;
     this.sendRequest = sendRequest ?? null;
+    this.timeline = timeline ?? null;
   }
 
   /** Negates the next assertion. */
@@ -61,6 +83,7 @@ export class Assertion {
       this.healingEngine ?? undefined,
       this.testName ?? undefined,
       this.sendRequest ?? undefined,
+      this.timeline ?? undefined,
     );
   }
 
@@ -84,8 +107,16 @@ export class Assertion {
 
       if (result.healed && result.report) {
         const { Locator } = await import('./Locator.js');
-        const newLocator = new Locator(result.report.suggestedSelector, this.sendRequest!);
-        const healedAssertion = new Assertion(newLocator, false, this.failureCollector ?? undefined);
+        const newLocator = new Locator(result.report.suggestedSelector, this.sendRequest!, this.timeline ?? undefined);
+        const healedAssertion = new Assertion(
+          newLocator,
+          false,
+          this.failureCollector ?? undefined,
+          this.healingEngine ?? undefined,
+          this.testName ?? undefined,
+          this.sendRequest ?? undefined,
+          this.timeline ?? undefined,
+        );
         await healedAssertion.toBeVisible(options);
         return true;
       }
@@ -124,7 +155,13 @@ export class Assertion {
   }
 
   /** Asserts that the element is visible. */
-  async toBeVisible(options?: { timeout?: number }): Promise<void> {
+  async toBeVisible(options?: AssertionOptions): Promise<void> {
+    return this.runWithTimeline('toBeVisible', this.negated ? 'not visible' : 'visible', options, async () => {
+      await this.checkVisible(options);
+    });
+  }
+
+  private async checkVisible(options?: AssertionOptions): Promise<void> {
     const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
     const selector = this.locator.selectorString;
 
@@ -154,13 +191,18 @@ export class Assertion {
   }
 
   /** Asserts that the element has the exact text. */
-  async toHaveText(text: string, options?: { timeout?: number }): Promise<void> {
+  async toHaveText(text: string, options?: AssertionOptions): Promise<void> {
+    return this.runWithTimeline('toHaveText', this.negated ? `not "${text}"` : `"${text}"`, options, async () => {
+      await this.checkText(text, options);
+    });
+  }
+
+  private async checkText(text: string, options?: AssertionOptions): Promise<void> {
     const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
     const selector = this.locator.selectorString;
 
     const getText = async (): Promise<string | undefined> => {
-      const widgets = await (this.locator as any)._resolve() as WidgetInfo[];
-      return widgets[0]?.text;
+      return (await this.locator.resolve())?.text;
     };
 
     const passed = await pollUntil(
@@ -183,13 +225,18 @@ export class Assertion {
   }
 
   /** Asserts that the element contains the given text substring. */
-  async toContainText(text: string, options?: { timeout?: number }): Promise<void> {
+  async toContainText(text: string, options?: AssertionOptions): Promise<void> {
+    return this.runWithTimeline('toContainText', this.negated ? `not containing "${text}"` : `containing "${text}"`, options, async () => {
+      await this.checkContainsText(text, options);
+    });
+  }
+
+  private async checkContainsText(text: string, options?: AssertionOptions): Promise<void> {
     const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
     const selector = this.locator.selectorString;
 
     const getText = async (): Promise<string | undefined> => {
-      const widgets = await (this.locator as any)._resolve() as WidgetInfo[];
-      return widgets[0]?.text;
+      return (await this.locator.resolve())?.text;
     };
 
     const passed = await pollUntil(
@@ -212,13 +259,19 @@ export class Assertion {
   }
 
   /** Asserts that the element is enabled. */
-  async toBeEnabled(options?: { timeout?: number }): Promise<void> {
+  async toBeEnabled(options?: AssertionOptions): Promise<void> {
+    return this.runWithTimeline('toBeEnabled', this.negated ? 'disabled' : 'enabled', options, async () => {
+      await this.checkEnabled(options);
+    });
+  }
+
+  private async checkEnabled(options?: AssertionOptions): Promise<void> {
     const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
     const selector = this.locator.selectorString;
 
     const getEnabled = async (): Promise<boolean> => {
-      const widgets = await (this.locator as any)._resolve() as WidgetInfo[];
-      return (widgets[0]?.properties?.enabled ?? true) as boolean;
+      const widget = await this.locator.resolve();
+      return (widget?.properties?.enabled ?? true) as boolean;
     };
 
     const passed = await pollUntil(
@@ -241,24 +294,136 @@ export class Assertion {
   }
 
   /** Asserts that the element is disabled. */
-  async toBeDisabled(options?: { timeout?: number }): Promise<void> {
-    const negatedAssertion = new Assertion(
-      this.locator,
-      !this.negated,
-      this.failureCollector ?? undefined,
-      this.healingEngine ?? undefined,
-      this.testName ?? undefined,
-      this.sendRequest ?? undefined,
-    );
-    await negatedAssertion.toBeEnabled(options);
+  async toBeDisabled(options?: AssertionOptions): Promise<void> {
+    return this.runWithTimeline('toBeDisabled', this.negated ? 'enabled' : 'disabled', options, async () => {
+      const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
+      const selector = this.locator.selectorString;
+
+      const getEnabled = async (): Promise<boolean> => {
+        const widget = await this.locator.resolve();
+        return (widget?.properties?.enabled ?? true) as boolean;
+      };
+
+      const passed = await pollUntil(
+        () => getEnabled(),
+        (enabled) => {
+          const match = !enabled;
+          return this.negated ? !match : match;
+        },
+        timeout,
+      );
+
+      if (!passed) {
+        const actual = await getEnabled();
+        if (this.negated) {
+          throw new AssertionError('toBeDisabled', 'enabled', `enabled=${actual}`, selector);
+        } else {
+          throw new AssertionError('toBeDisabled', 'disabled', `enabled=${actual}`, selector);
+        }
+      }
+    });
+  }
+
+  private async runWithTimeline(
+    matcher: string,
+    expected: unknown,
+    options: AssertionOptions | undefined,
+    body: () => Promise<void>,
+  ): Promise<void> {
+    const recorder = this.timeline?.recorder;
+    if (!recorder) {
+      await body();
+      return;
+    }
+
+    const title = options?.title ?? this.timeline?.title ?? `${matcher} ${this.locator.selectorString}`;
+    const metadata = {
+      matcher,
+      target: this.locator.selectorString,
+      expected,
+      ...(this.negated ? { negated: true } : {}),
+    };
+    const node = recorder.startNode('assertion', title, { metadata });
+    try {
+      await body();
+      recorder.passNode(node.id);
+    } catch (error) {
+      const artifacts = await this.captureFailureArtifacts(node.id, options);
+      if (artifacts.length) recorder.addArtifacts(node.id, artifacts);
+      const failure = createAssertionFailure(error, title, node.id, metadata, artifacts);
+      recorder.failNode(node.id, failure, { ...metadata, actual: assertionActual(error) });
+      throw new FliwrightAgentError(failure, { cause: error });
+    }
+  }
+
+  private async captureFailureArtifacts(nodeId: string, options?: AssertionOptions): Promise<TimelineArtifactRef[]> {
+    const page = this.timeline?.page;
+    const store = this.timeline?.artifactStore;
+    if (!page || !store) return [];
+    const artifacts: TimelineArtifactRef[] = [];
+    try {
+      if (options?.includeScreenshot !== false && typeof page.screenshot === 'function') {
+        artifacts.push(await store.writeScreenshot(nodeId, await page.screenshot()));
+      }
+    } catch {
+      // Best effort only.
+    }
+    try {
+      if (options?.includeSnapshot !== false && typeof page.snapshot === 'function') {
+        artifacts.push(await store.writeSnapshot(nodeId, await page.snapshot()));
+      }
+    } catch {
+      // Best effort only.
+    }
+    return artifacts;
   }
 }
 
 /**
  * Creates an Assertion for the given Locator (Playwright-style `expect`).
  */
-export function createExpect(locator: Locator, failureCollector?: FailureCollector): Assertion {
-  return new Assertion(locator, false, failureCollector);
+export function createExpect(
+  locator: Locator,
+  failureCollector?: FailureCollector,
+  timeline?: AssertionTimelineOptions,
+): Assertion {
+  return new Assertion(locator, false, failureCollector, undefined, undefined, undefined, timeline);
+}
+
+function createAssertionFailure(
+  error: unknown,
+  title: string,
+  timelineNodeId: string,
+  metadata: Record<string, unknown>,
+  artifacts: TimelineArtifactRef[],
+): AgentVisibleFailure {
+  const message = error instanceof Error ? error.message : String(error);
+  const screenshot = artifacts.find((artifact) => artifact.kind === 'screenshot');
+  const snapshot = artifacts.find((artifact) => artifact.kind === 'snapshot');
+  return {
+    code: 'assertion_failed',
+    title,
+    message,
+    timelineNodeId,
+    appState: {
+      ...(screenshot ? { screenshotPath: screenshot.path } : {}),
+      ...(snapshot ? { snapshotPath: snapshot.path } : {}),
+    },
+    actionContext: {
+      action: String(metadata.matcher),
+      target: typeof metadata.target === 'string' ? metadata.target : undefined,
+    },
+    recoveryHints: [
+      { kind: 'observe', description: 'Inspect the current screen and semantic snapshot around the failed assertion.' },
+      { kind: 'retry', description: 'Retry after the UI has settled if the expected state is asynchronous.' },
+      { kind: 'manual', description: 'Check whether the assertion target or expected value still matches the app behavior.' },
+    ],
+  };
+}
+
+function assertionActual(error: unknown): unknown {
+  if (error instanceof AssertionError) return error.actual;
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**

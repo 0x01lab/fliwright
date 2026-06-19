@@ -3,7 +3,7 @@ import { loadConfig } from '../config.js';
 import { formatPretty, formatJson, formatJunit, type CliFailureEntry, type CliRunResult } from '../reporter.js';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
@@ -62,6 +62,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
     failureContextPath: join(outputDir, 'failures.json'),
     timeout,
     screenshot,
+    runId,
   });
   const withArtifacts = await attachArtifacts(vitestResult, {
     cwd,
@@ -88,6 +89,7 @@ interface RunVitestOptions {
   failureContextPath: string;
   timeout: number;
   screenshot: 'file' | 'base64' | 'off';
+  runId?: string;
 }
 
 export async function runVitest(options: RunVitestOptions): Promise<CliRunResult> {
@@ -106,6 +108,7 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
       FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: options.failureContextPath,
       FLIWRIGHT_SCREENSHOT_MODE: options.screenshot,
       FLIWRIGHT_FAILURE_TIMEOUT_MS: String(options.timeout),
+      ...(options.runId ? { FLIWRIGHT_RUN_ID: options.runId } : {}),
     },
     options.cwd,
   );
@@ -213,6 +216,7 @@ async function attachArtifacts(
   await mkdir(options.outputDir, { recursive: true });
   const screenshots: string[] = [];
   const failures = await persistScreenshots(result.failures ?? [], options.outputDir, options.screenshot, screenshots);
+  const timelines = await readTimelineSummaries(options.outputDir);
   const report: CliRunResult = {
     ...result,
     ...(failures.length > 0 ? { failures } : {}),
@@ -221,12 +225,71 @@ async function attachArtifacts(
       outputDir: options.outputDir,
       reportPath: options.reportPath,
       screenshots,
+      timelines: timelines.map((timeline) => timeline.path),
     },
+    ...(timelines.length ? { timelines, agentVisibleFailures: timelines.flatMap((timeline) => (
+      timeline.firstFailure ? [timeline.firstFailure] : []
+    )) } : {}),
     reproduceCommand: buildReproduceCommand(options.testPattern, options.testName),
   };
   await mkdir(dirname(options.reportPath), { recursive: true });
   await writeFile(options.reportPath, JSON.stringify(report, null, 2), 'utf8');
   return report;
+}
+
+async function readTimelineSummaries(outputDir: string): Promise<NonNullable<CliRunResult['timelines']>> {
+  const entries = await findTimelineFiles(outputDir);
+  const summaries: NonNullable<CliRunResult['timelines']> = [];
+  for (const path of entries) {
+    try {
+      const data = JSON.parse(await readFile(path, 'utf8')) as {
+        mode?: 'script' | 'test';
+        nodes?: Array<{
+          kind?: string;
+          status?: string;
+          artifacts?: Array<{ kind?: string }>;
+        }>;
+        agentVisibleFailures?: Array<{ code: string; title: string; message: string; timelineNodeId?: string }>;
+      };
+      const nodes = data.nodes ?? [];
+      summaries.push({
+        path,
+        mode: data.mode,
+        pages: nodes.filter((node) => node.kind === 'page').length,
+        stepsPassed: nodes.filter((node) => node.kind === 'step' && node.status === 'passed').length,
+        stepsFailed: nodes.filter((node) => node.kind === 'step' && node.status === 'failed').length,
+        screenshots: nodes.reduce((count, node) => count + (node.artifacts?.filter((artifact) => artifact.kind === 'screenshot').length ?? 0), 0),
+        firstFailure: data.agentVisibleFailures?.[0],
+      });
+    } catch {
+      // Ignore malformed sidecar timelines.
+    }
+  }
+  return summaries;
+}
+
+async function findTimelineFiles(outputDir: string): Promise<string[]> {
+  const found: string[] = [];
+  try {
+    const entries = await readdir(outputDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const path = join(outputDir, entry.name);
+      if (entry.isDirectory()) {
+        const candidate = join(path, 'timeline.json');
+        try {
+          await readFile(candidate, 'utf8');
+          found.push(candidate);
+        } catch {
+          found.push(...await findTimelineFiles(path));
+        }
+      } else if (entry.isFile() && entry.name === 'timeline.json') {
+        found.push(path);
+      }
+    }
+  } catch {
+    return [];
+  }
+  return found;
 }
 
 async function persistScreenshots(

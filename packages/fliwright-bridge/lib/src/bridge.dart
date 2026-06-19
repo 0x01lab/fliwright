@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'extension_registry.dart';
+import 'extensions/capture_frame.dart';
+import 'extensions/context.dart';
 import 'extensions/dio_mock_extension.dart';
 import 'extensions/form_extract.dart';
 import 'extensions/gesture.dart';
@@ -11,6 +13,7 @@ import 'extensions/http_overrides.dart';
 import 'extensions/inspect.dart';
 import 'extensions/mock_rule_store.dart';
 import 'extensions/mock_server.dart';
+import 'extensions/query.dart';
 import 'extensions/recording.dart';
 import 'extensions/riverpod.dart';
 import 'extensions/router_navigate.dart';
@@ -73,6 +76,9 @@ class FliwrightBridge {
     SnapshotExtension.register(_registry);
     ScreenshotExtension.register(_registry);
     SnapExtension.register(_registry);
+    ContextExtension.register(_registry);
+    CaptureFrameExtension.register(_registry);
+    QueryExtension.register(_registry);
     RecordingExtension.register(_registry);
     FormExtractExtension.register(_registry);
 
@@ -122,6 +128,9 @@ class FliwrightBridge {
     SnapshotExtension.register(_registry);
     ScreenshotExtension.register(_registry);
     SnapExtension.register(_registry);
+    ContextExtension.register(_registry);
+    CaptureFrameExtension.register(_registry);
+    QueryExtension.register(_registry);
     RecordingExtension.register(_registry);
     FormExtractExtension.register(_registry);
 
@@ -157,6 +166,13 @@ class FliwrightBridge {
           'screenshotWaitForFrame': true,
           'rootRenderViewScreenshot': true,
           'recordingScreenshotSampler': true,
+          'timelineContext': true,
+          'captureFrame': true,
+          'query': true,
+          'assertionDiagnostics': true,
+          'normalizedActionErrors': true,
+          'normalizedMockCalls': true,
+          'normalizedProviderState': true,
         },
       };
     });

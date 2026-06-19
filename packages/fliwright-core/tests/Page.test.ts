@@ -78,6 +78,52 @@ describe('Page', () => {
     expect(result.refs[0].ref).toBe('e1');
   });
 
+  it('context calls the timeline context extension', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      route: { location: '/register' },
+      focused: { ref: 'e1', role: 'textbox', label: 'Email' },
+    });
+    const page = new Page(sendRequest);
+
+    const context = await page.context();
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.context', {});
+    expect(context.route?.location).toBe('/register');
+  });
+
+  it('captureFrame forwards capture options', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      frameId: 'frame-1',
+      capturedAt: '2026-06-18T00:00:00.000Z',
+    });
+    const page = new Page(sendRequest);
+
+    await page.captureFrame({ screenshot: true, snapshot: false, diagnostics: true });
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.captureFrame', {
+      screenshot: 'true',
+      snapshot: 'false',
+      diagnostics: 'true',
+    });
+  });
+
+  it('query serializes normalized bridge queries', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      matches: [{ ref: 'e1', role: 'button', label: 'Next', enabled: true }],
+      count: 1,
+    });
+    const page = new Page(sendRequest);
+
+    const result = await page.query({ text: 'Next', role: 'button' }, { visible: 'hitTestable', limit: 1 });
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.query', {
+      query: JSON.stringify({ text: 'Next', role: 'button' }),
+      visible: 'hitTestable',
+      limit: '1',
+    });
+    expect(result.count).toBe(1);
+  });
+
   it('dismissModal sends a page-level action', async () => {
     const sendRequest = vi.fn().mockResolvedValue({ success: true });
     const page = new Page(sendRequest);

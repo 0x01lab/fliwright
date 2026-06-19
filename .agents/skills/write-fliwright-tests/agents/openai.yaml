@@ -1,4 +1,4 @@
 interface:
   display_name: "Write Fliwright Tests"
-  short_description: "Create robust Fliwright test scripts"
-  default_prompt: "Use $write-fliwright-tests to create a Fliwright test for a Flutter login flow."
+  short_description: "Write timeline-aware Fliwright scripts"
+  default_prompt: "Use $write-fliwright-tests to create a timeline-aware Fliwright script for a Flutter login flow."

@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Assertion, AssertionError, createExpect } from '../src/Assertion.js';
+import { FliwrightAgentError } from '../src/agent/FliwrightAgentError.js';
 import { SelfHealingEngine } from '../src/SelfHealingEngine.js';
 import { SnapshotStore } from '../src/SnapshotStore.js';
 import { MultiDimensionalHealingStrategy } from '../src/strategies/MultiDimensionalHealingStrategy.js';
+import { TimelineRecorder } from '../src/timeline/TimelineRecorder.js';
 import type { Locator } from '../src/Locator.js';
 import type { WidgetInfo, WidgetSnapshot } from '../src/types.js';
 import * as fs from 'node:fs';
@@ -28,12 +30,13 @@ function createMockLocator(
     text: text ?? testWidget.text,
     properties: { enabled: enabled ?? true },
   };
-  // If not visible, return empty widgets array (simulates _resolve behavior)
+  // If not visible, resolve no widget.
   const widgets = visible ? [widget] : [];
 
   return {
     isVisible: vi.fn().mockResolvedValue(visible),
     selectorString: 'text=Test',
+    resolve: vi.fn().mockResolvedValue(widgets[0]),
     _resolve: vi.fn().mockResolvedValue(widgets),
   } as unknown as Locator;
 }
@@ -56,6 +59,45 @@ describe('createExpect', () => {
     const locator = createMockLocator(true);
     const assertion = createExpect(locator);
     expect(assertion).toBeInstanceOf(Assertion);
+  });
+});
+
+describe('timeline-aware expect', () => {
+  it('records passing locator assertions as timeline assertion nodes', async () => {
+    const recorder = new TimelineRecorder({ runId: 'run-1', testName: 'timeline expect' });
+    const locator = createMockLocator(true);
+
+    await createExpect(locator, undefined, {
+      title: 'Submit button is visible',
+      recorder,
+    }).toBeVisible();
+
+    expect(recorder.toJSON().nodes).toContainEqual(expect.objectContaining({
+      kind: 'assertion',
+      title: 'Submit button is visible',
+      status: 'passed',
+      metadata: expect.objectContaining({
+        matcher: 'toBeVisible',
+        target: 'text=Test',
+      }),
+    }));
+  });
+
+  it('wraps failed timeline locator assertions in FliwrightAgentError', async () => {
+    const recorder = new TimelineRecorder({ runId: 'run-1', testName: 'timeline expect failure' });
+    const locator = createMockLocator(false);
+
+    await expect(createExpect(locator, undefined, {
+      title: 'Missing button is visible',
+      recorder,
+    }).toBeVisible({ timeout: 100 })).rejects.toBeInstanceOf(FliwrightAgentError);
+
+    expect(recorder.toJSON().nodes[0]).toMatchObject({
+      kind: 'assertion',
+      title: 'Missing button is visible',
+      status: 'failed',
+      error: { code: 'assertion_failed' },
+    });
   });
 });
 
@@ -314,12 +356,12 @@ describe('polling behavior', () => {
     let callCount = 0;
 
     // Simulate text changing after first poll
-    (locator._resolve as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+    (locator.resolve as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       callCount++;
       if (callCount < 3) {
-        return [{ ...testWidget, text: 'Loading...' }];
+        return { ...testWidget, text: 'Loading...' };
       }
-      return [{ ...testWidget, text: 'Done' }];
+      return { ...testWidget, text: 'Done' };
     });
 
     await createExpect(locator).toHaveText('Done', { timeout: 200 });

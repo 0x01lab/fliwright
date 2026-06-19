@@ -16,7 +16,7 @@ import 'mock_rule_store.dart';
 /// forwarded to the real server. Set to `false` to reject unmatched requests.
 class FliwrightDioMockInterceptor extends Interceptor {
   FliwrightDioMockInterceptor({MockRuleStore? ruleStore})
-      : ruleStore = ruleStore ?? MockRuleStore();
+    : ruleStore = ruleStore ?? MockRuleStore();
 
   MockRuleStore ruleStore;
   final List<MockCallRecord> callLog = [];
@@ -36,8 +36,9 @@ class FliwrightDioMockInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    final requestPath =
-        options.uri.path.isEmpty ? options.path : options.uri.path;
+    final requestPath = options.uri.path.isEmpty
+        ? options.path
+        : options.uri.path;
     _log(
       'Incoming Dio ${options.method} $requestPath url=${options.uri} '
       'store=#${ruleStore.debugId} routes=${routes.length}',
@@ -70,22 +71,27 @@ class FliwrightDioMockInterceptor extends Interceptor {
       return;
     }
 
-    callLog.add(MockCallRecord(
-      method: options.method,
-      path: requestPath,
-      headers: _extractHeaders(options.headers),
-      body: _extractBody(options.data),
-      timestamp: DateTime.now(),
-    ));
+    callLog.add(
+      MockCallRecord(
+        method: options.method,
+        path: requestPath,
+        url: options.uri.toString(),
+        headers: _extractHeaders(options.headers),
+        query: _extractQuery(options.uri),
+        body: _extractBody(options.data),
+        status: route.status,
+        response: route.body,
+        timestamp: DateTime.now(),
+        backend: 'dio',
+      ),
+    );
 
     final response = Response<dynamic>(
       requestOptions: options,
       statusCode: route.status,
-      headers: Headers.fromMap(
-        {
-          for (final entry in route.headers.entries) entry.key: [entry.value]
-        },
-      ),
+      headers: Headers.fromMap({
+        for (final entry in route.headers.entries) entry.key: [entry.value],
+      }),
       data: route.body,
     );
 
@@ -121,4 +127,9 @@ class FliwrightDioMockInterceptor extends Interceptor {
     if (data is String) return data;
     return data.toString();
   }
+
+  Map<String, dynamic> _extractQuery(Uri uri) => {
+    for (final entry in uri.queryParametersAll.entries)
+      entry.key: entry.value.length == 1 ? entry.value.first : entry.value,
+  };
 }

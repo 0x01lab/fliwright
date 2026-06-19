@@ -3,7 +3,73 @@
 可直接复制、带注释的完整测试脚本。每个都改编自 `e2e/` 或
 `.agents/skills/write-fliwright-tests/examples/` 下的真实文件。套用时请去掉解释性注释。
 
-## 1. 最小计数器（默认 fixture）
+## 1. Timeline-native 注册流程（新版推荐）
+
+新测试默认用 `{ flow, mock, agent }` 和 `expect(locator, title?)`。每个关键动作和 locator 断言都会进入 `timeline.json`。
+
+```typescript
+import { test, expect } from '@fliwright/vitest';
+import { expect as viExpect } from 'vitest';
+
+test('register flow succeeds', async ({ page, flow, mock }) => {
+  await mock.rules('Use successful registration API', async () => {
+    await mock.clearRoutes();
+    await mock.clearCalls();
+    await mock.route('/api/register', {
+      method: 'POST',
+      status: 200,
+      body: { success: true, message: '注册成功' },
+    });
+  });
+
+  await flow.page('Open register page', { route: '/register' }, async () => {
+    await page.navigate('/register');
+    await expect(page.getByText('请输入手机号'), 'Phone field is visible').toBeVisible();
+  });
+
+  await flow.step('Fill registration form', async () => {
+    await page.formHelper.fill({ skipObscureFields: false });
+  });
+
+  await flow.step('Submit registration form', async () => {
+    await page.getByText('提交').click();
+  });
+
+  await expect(page.getByText('注册成功'), 'Registration succeeded').toBeVisible();
+  const calls = await mock.findCalls({ method: 'POST', path: '/api/register' });
+  viExpect(calls.length).toBeGreaterThanOrEqual(1);
+});
+```
+
+## 2. 自动化脚本（`script`）
+
+适合一次性数据录入、账号注册、录制产物清理。`script` 会写 timeline，但不强制要求断言。
+
+```typescript
+import { script } from '@fliwright/vitest';
+
+script('fill registration form', async ({ page, flow, agent }) => {
+  await flow.page('Open register page', { route: '/register' }, async () => {
+    await page.navigate('/register');
+  });
+
+  const user = await agent.generate<{ phone: string; password: string }>('Generate registration data', {
+    fallback: { phone: '13800138000', password: 'Passw0rd!' },
+  });
+
+  await flow.step('Fill phone', async () => {
+    await page.getByText('请输入手机号').fill(user.phone);
+  });
+
+  await flow.step('Fill password', async () => {
+    await page.getByKey('passwordField').fill(user.password);
+  });
+
+  await flow.frame('Registration form filled', { screenshot: true, snapshot: true });
+});
+```
+
+## 3. 最小计数器（默认 fixture）
 
 标准的 `@fliwright/vitest` fixture —— 共享 driver、自带自动等待断言。改编自
 `examples/basic-counter.test.ts`。
@@ -18,7 +84,7 @@ test('counter increments when the increment button is tapped', async ({ page }) 
 });
 ```
 
-## 2. 自定义配置登录（显式超时 + 截图模式）
+## 4. 自定义配置登录（显式超时 + 截图模式）
 
 改编自 `examples/custom-config-login.test.ts`。当某个文件需要显式处理 VM URL 时使用。
 
@@ -39,48 +105,55 @@ test('user can sign in', async ({ page }) => {
 });
 ```
 
-## 3. Mock + 表单 + 提交 + 断言请求（fixture `driver`）
+## 5. Mock + 表单 + 提交 + 断言请求（timeline `mock`）
 
 改编自 `e2e/form-mock-e2e.test.ts`。这是典型的“完整 E2E”形态：mock 一个 API，通过 UI 填表单，
 提交，再断言**可见结果**和**被拦截到的请求**。
 
 ```typescript
-import { expect } from 'vitest';
-import { test } from '@fliwright/vitest';
+import { test, expect } from '@fliwright/vitest';
+import { expect as viExpect } from 'vitest';
 
 const hasVmUrl = Boolean(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL);
 const liveTest = test.skipIf(!hasVmUrl);   // skip cleanly in CI without a VM
 
-liveTest('register flow: mock → fill → submit → verify request', async ({ page, driver }) => {
+liveTest('register flow: mock → fill → submit → verify request', async ({ page, flow, mock }) => {
   // 1. Mock the API before interacting
-  await driver.mock.clear();
-  await driver.mock.clearCalls();
-  await driver.mock.route('/api/register', {
-    method: 'POST',
-    status: 200,
-    body: { success: true, message: '注册成功', userId: 42 },
+  await mock.rules('Use register success API', async () => {
+    await mock.clearRoutes();
+    await mock.clearCalls();
+    await mock.route('/api/register', {
+      method: 'POST',
+      status: 200,
+      body: { success: true, message: '注册成功', userId: 42 },
+    });
   });
 
   // 2. Fill the form via the UI
-  await page.formHelper.fill({ skipObscureFields: false });
+  await flow.step('Fill form', async () => {
+    await page.formHelper.fill({ skipObscureFields: false });
+  });
 
   // 3. Submit
-  await page.locator({ text: '提交' }).click();
+  await flow.step('Submit', async () => {
+    await page.locator({ text: '提交' }).click();
+  });
 
   // 4. Assert the visible outcome (response came from our mock)
-  await expect(page.waitFor('text=注册成功', 5000)).toBeVisible();
+  const success = await page.waitFor('text=注册成功', 5000);
+  await expect(success, 'Registration success is visible').toBeVisible();
 
   // 5. Assert the app actually sent the request, with the right body
-  const calls = await driver.mock.getCalls('/api/register');
-  expect(calls.length).toBeGreaterThanOrEqual(1);
+  const calls = await mock.findCalls({ method: 'POST', path: '/api/register' });
+  viExpect(calls.length).toBeGreaterThanOrEqual(1);
   const body = typeof calls.at(-1)!.body === 'string'
     ? JSON.parse(calls.at(-1)!.body as string)
     : calls.at(-1)!.body;
-  expect(body.phone).toMatch(/^1[3-9]\d{9}$/);
+  viExpect(body.phone).toMatch(/^1[3-9]\d{9}$/);
 });
 ```
 
-## 4. 跨路由导航（go_router）
+## 6. 跨路由导航（go_router）
 
 改编自 `e2e/go-router-navigation-e2e.test.ts`。要求应用把它的 router 传给
 `FliwrightBridge.init(router: …)`。
@@ -105,7 +178,7 @@ test('navigates between routes', async ({ page }) => {
 });
 ```
 
-## 5. 表单分析 + 定向填充
+## 7. 表单分析 + 定向填充
 
 改编自 `e2e/form-fill-e2e.test.ts`。用 `analyze()` 检视，用 `fillFields()` 针对性地填一部分字段，
 再按语义类型断言。
@@ -129,7 +202,7 @@ test('analyzes and selectively fills a form', async ({ page }) => {
 });
 ```
 
-## 6. 传输层 Mock API
+## 8. 传输层 Mock API
 
 改编自 `e2e/mock-api-e2e.test.ts`。通过测试扩展用应用的 `HttpClient` 发出一次请求，再检查记录到的
 调用，从而验证 `HttpOverrides` 代理本身。
@@ -165,7 +238,7 @@ describe('Mock API E2E', () => {
 });
 ```
 
-## 7. 旧版 / 原始 driver（较老的 bridge）
+## 9. 旧版 / 原始 driver（较老的 bridge）
 
 改编自 `e2e/exio-app-e2e.test.ts`。仅适用于暂时无法升级 bridge 的目标。注意其中的
 `skipIf`、WS URL 转换、原始的 `sendRequest` 扩展调用，以及可由环境变量覆盖的坐标。

@@ -91,6 +91,55 @@ describe('runCommand', () => {
 
     await rm(tmpDir, { recursive: true, force: true });
   });
+
+  it('attaches timeline summaries and agent-visible failures to the report', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'fliwright-cli-timeline-'));
+    await writeFile(join(tmpDir, 'timeline.test.ts'), [
+      "import { mkdirSync, writeFileSync } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "import { describe, expect, it } from 'vitest';",
+      "describe('timeline fixture', () => {",
+      "  it('writes timeline sidecar', () => {",
+      "    const dir = join(process.cwd(), '.fliwright', 'runs', process.env.FLIWRIGHT_RUN_ID!, 'timeline-fixture');",
+      "    mkdirSync(dir, { recursive: true });",
+      "    writeFileSync(join(dir, 'timeline.json'), JSON.stringify({",
+      "      version: 1, runId: process.env.FLIWRIGHT_RUN_ID, testName: 'timeline fixture', mode: 'test', status: 'failed', startedAt: '2026-06-18T00:00:00.000Z',",
+      "      nodes: [",
+      "        { id: 'page-1', kind: 'page', title: 'Register', status: 'passed', startedAt: 'x', endedAt: 'x' },",
+      "        { id: 'step-2', kind: 'step', title: 'Fill', status: 'passed', startedAt: 'x', endedAt: 'x', artifacts: [{ kind: 'screenshot', path: 'artifacts/screenshots/step-2.png' }] },",
+      "        { id: 'step-3', kind: 'step', title: 'Submit', status: 'failed', startedAt: 'x', endedAt: 'x' }",
+      "      ],",
+      "      agentVisibleFailures: [{ code: 'assertion_failed', title: 'Submit', message: 'button disabled', timelineNodeId: 'step-3' }]",
+      "    }));",
+      "    expect(true).toBe(true);",
+      "  });",
+      "});",
+    ].join('\n'));
+
+    const result = await runCommand({
+      testPattern: 'timeline.test.ts',
+      reporter: 'ai-json',
+      cwd: tmpDir,
+      print: false,
+    }, {
+      resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
+    });
+
+    expect(result.timelines).toHaveLength(1);
+    expect(result.timelines![0]).toMatchObject({
+      pages: 1,
+      stepsPassed: 1,
+      stepsFailed: 1,
+      screenshots: 1,
+      firstFailure: { code: 'assertion_failed', message: 'button disabled' },
+    });
+    expect(result.agentVisibleFailures).toEqual([
+      { code: 'assertion_failed', title: 'Submit', message: 'button disabled', timelineNodeId: 'step-3' },
+    ]);
+    expect(result.artifacts?.timelines?.[0]).toContain('timeline.json');
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
 });
 
 describe('parseVitestOutput', () => {

@@ -11,14 +11,15 @@
 | 文档 | 覆盖内容 | 何时读… |
 | --- | --- | --- |
 | [getting-started.md](./getting-started.md) | 桥接设置、第一个测试、环境变量、运行测试 | 你在写第一个 Fliwright 测试 |
-| [test-harness.md](./test-harness.md) | `@fliwright/vitest` fixture：`test`、`expect`、`createFliwrightTest`、hooks、环境变量、失败上下文 | 你在决定如何接入 driver 生命周期 |
+| [timeline-native.md](./timeline-native.md) | 新版 `script`/`test`、`flow`、timeline-aware `mock`、`agent`、`expect(locator, title?)`、timeline/MCP inspection | 你在写新版自动化脚本、清理录制产物、或需要 AI/agent 可读失败 |
+| [test-harness.md](./test-harness.md) | `@fliwright/vitest` fixture：`test`、`script`、`flow`/`mock`/`agent` fixture、`expect`、`createFliwrightTest`、hooks、环境变量、失败上下文 | 你在决定如何接入 driver 生命周期 |
 | [selectors.md](./selectors.md) | 选择器格式、`getByX`、作用域（`descendant`/`ancestor`/`and`/`or`/`nth`/`first`/`last`/`filter`/`containing`）、`subtype`/`tooltip`/`state` | 你需要稳定地定位某个控件 |
 | [actions.md](./actions.md) | `click`/`longPress`/`drag`/`dragTo`/`slideTo`/`pinch`/`type`/`fill`/`clear`/`pressKey`/`setCheckbox`/`selectOption`/`scrollIntoView` + 底层 `clickAt`/`dragFrom` | 你要做手势 / 输入 |
-| [assertions.md](./assertions.md) | `expect()` 匹配器、自动等待、`.not`、自愈 | 你在对可见结果做断言 |
+| [assertions.md](./assertions.md) | `expect(locator, title?)` 匹配器、timeline assertion、自动等待、`.not`、自愈、失败上下文、请求检查写法 | 你在对可见结果或请求做断言 |
 | [navigation.md](./navigation.md) | `navigate` / `currentRoute` / `goBack` / `waitFor` / `waitForNew` / `settle`、go_router 设置 | 你的测试跨越多个路由 / page |
 | [forms.md](./forms.md) | `page.formHelper.analyze()` / `fill()` / `fillFields()`、语义类型、作用域、表单规则 JSON | 你在填表单或冒烟测表单 |
 | [ai.md](./ai.md) | AI runtime（`aiRuntime` fixture / `ai` 命名空间：`ask`/`generate`/`classify`/`visible`/`inspect`）、自愈 self-healing、provider 配置、`FakerGenerator`/`SemanticInferrer`/`AssertionSuggester` | 你要用 AI 造数/视觉断言，或想知道选择器自愈怎么工作 |
-| [mocks.md](./mocks.md) | `driver.mock.*`（route / getCalls / loadRules / switchRule / …）、JSON mock 文件、`fliwright mock:start` | 你要 stub HTTP / 对请求做断言 |
+| [mocks.md](./mocks.md) | timeline-aware `mock.*`、`driver.mock.*`（route / getCalls / loadRules / switchRule / …）、JSON mock 文件、`fliwright mock:start` | 你要 stub HTTP / 对请求做断言 |
 | [screenshots-snapshots.md](./screenshots-snapshots.md) | `screenshot` / `screenshotFullPage` / `snapshot` / `findRef` / `ref`、桥接能力表 | 你在探查控件树、抓图、或处理 refs |
 | [driver-lifecycle.md](./driver-lifecycle.md) | 手动 `FliwrightDriver`、`connect`/`dispose`、`sendRequest`、诊断信息、原始扩展 | 你需要自定义插件、原始扩展、或旧桥接兼容 |
 | [state.md](./state.md) | `driver.state`（StateAdapter / Riverpod）：`read` / `write` / `override` / `watch` / `listProviders`，跳过 UI 直接进入业务态 | 你要跳过登录、覆盖 provider、或断言 UI 没展示的状态 |

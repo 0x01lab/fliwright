@@ -21,14 +21,17 @@ class MockRoute {
 
   factory MockRoute.fromJson(Map<String, dynamic> json) {
     return MockRoute(
-      id: json['id'] as String? ??
+      id:
+          json['id'] as String? ??
           DateTime.now().microsecondsSinceEpoch.toString(),
       method: json['method'] as String?,
       pathPattern:
           json['pathPattern'] as String? ?? json['path'] as String? ?? '/',
       status: json['status'] as int? ?? 200,
-      headers: (json['headers'] as Map<String, dynamic>?)
-              ?.map((key, dynamic value) => MapEntry(key, value.toString())) ??
+      headers:
+          (json['headers'] as Map<String, dynamic>?)?.map(
+            (key, dynamic value) => MapEntry(key, value.toString()),
+          ) ??
           const {},
       body: json['body'],
       delayMs: json['delayMs'] as int? ?? json['delay'] as int? ?? 0,
@@ -36,14 +39,14 @@ class MockRoute {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        if (method != null) 'method': method,
-        'pathPattern': pathPattern,
-        'status': status,
-        'headers': headers,
-        'body': body,
-        'delayMs': delayMs,
-      };
+    'id': id,
+    if (method != null) 'method': method,
+    'pathPattern': pathPattern,
+    'status': status,
+    'headers': headers,
+    'body': body,
+    'delayMs': delayMs,
+  };
 
   bool matches(String method, String path) {
     if (this.method != null &&
@@ -66,25 +69,51 @@ class MockRoute {
 class MockCallRecord {
   final String method;
   final String path;
+  final String? url;
   final Map<String, String> headers;
+  final Map<String, dynamic> query;
   final String? body;
+  final int? status;
+  final Object? response;
   final DateTime timestamp;
+  final String? backend;
 
   MockCallRecord({
     required this.method,
     required this.path,
+    this.url,
     required this.headers,
+    Map<String, dynamic>? query,
     this.body,
+    this.status,
+    this.response,
     required this.timestamp,
-  });
+    this.backend,
+  }) : query = query ?? const {};
 
   Map<String, dynamic> toJson() => {
-        'method': method,
-        'path': path,
-        'headers': headers,
-        'body': body,
-        'timestamp': timestamp.toIso8601String(),
-      };
+    'method': method,
+    'path': path,
+    if (url != null) 'url': url,
+    'headers': headers,
+    'query': query,
+    'body': body,
+    if (status != null) 'status': status,
+    if (response != null) 'response': _mockJsonSafe(response),
+    'timestamp': timestamp.toIso8601String(),
+    if (backend != null) 'backend': backend,
+  };
+}
+
+Object? _mockJsonSafe(Object? value) {
+  if (value is Map) {
+    return {
+      for (final entry in value.entries)
+        if (entry.key != null) entry.key.toString(): _mockJsonSafe(entry.value),
+    };
+  }
+  if (value is List) return value.map(_mockJsonSafe).toList();
+  return value;
 }
 
 /// Pluggable persistence backend for mock route rules.
@@ -172,10 +201,12 @@ class MockRuleStore {
   Future<void> _persist() async {
     final storage = _storage;
     if (storage == null) return;
-    await storage.save(encodeStoragePayload({
-      'version': 1,
-      'rules': _routes.values.map((route) => route.toJson()).toList(),
-    }));
+    await storage.save(
+      encodeStoragePayload({
+        'version': 1,
+        'rules': _routes.values.map((route) => route.toJson()).toList(),
+      }),
+    );
   }
 
   static Map<String, dynamic> decodeStoragePayload(Object value) {

@@ -126,6 +126,18 @@ let configValue: Record<string, unknown> = {};
 let showInputBoxResult: string | undefined = undefined;
 let showQuickPickResultProvider: ((items: unknown[], options?: { canPickMany?: boolean }) => unknown) | undefined;
 let showSaveDialogResult: Uri | undefined = undefined;
+export const __webviewPanels: Array<{
+  webview: {
+    cspSource: string;
+    html: string;
+    postedMessages: unknown[];
+    asWebviewUri(uri: Uri): Uri;
+    postMessage(message: unknown): Promise<boolean>;
+    onDidReceiveMessage(): Disposable;
+  };
+  reveal(): void;
+  dispose(): void;
+}> = [];
 
 export const workspace = {
   get workspaceFolders() {
@@ -186,14 +198,18 @@ export const window = {
     return { text: '', command: undefined as string | undefined, show() {}, dispose() {} };
   },
   createWebviewPanel() {
-    return {
+    const panel = {
       webview: {
         cspSource: 'vscode-resource:',
         html: '',
+        postedMessages: [] as unknown[],
         asWebviewUri(uri: Uri) {
           return uri;
         },
-        postMessage: async () => true,
+        postMessage(message: unknown) {
+          this.postedMessages.push(message);
+          return Promise.resolve(true);
+        },
         onDidReceiveMessage() {
           return { dispose() {} };
         },
@@ -204,6 +220,8 @@ export const window = {
       reveal() {},
       dispose() {},
     };
+    __webviewPanels.push(panel);
+    return panel;
   },
   registerTreeDataProvider() {
     return { dispose() {} };

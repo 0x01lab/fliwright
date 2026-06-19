@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "runId": "2026-06-19T09-05-28-provides-an-aiRuntime-fixture-to-generated-tests",
+  "testName": "provides an aiRuntime fixture to generated tests",
+  "mode": "test",
+  "status": "passed",
+  "startedAt": "2026-06-19T09:05:28.389Z",
+  "endedAt": "2026-06-19T09:05:28.389Z",
+  "nodes": []
+}

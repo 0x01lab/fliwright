@@ -20,6 +20,8 @@ import { registerDragTool } from './tools/drag.js';
 import { registerWaitTool } from './tools/wait.js';
 import { registerActionTool } from './tools/action.js';
 import { registerDiagnosticsTool } from './tools/diagnostics.js';
+import { registerTimelineTool } from './tools/timeline.js';
+import { registerAgentDiagnoseTool } from './tools/agentDiagnose.js';
 
 export function createFliwrightServer() {
   const server = new McpServer({
@@ -52,6 +54,8 @@ export function createFliwrightServer() {
   registerWaitTool(server, state);
   registerActionTool(server, state);
   registerDiagnosticsTool(server, state);
+  registerTimelineTool(server, state);
+  registerAgentDiagnoseTool(server, state);
 
   return { server, state };
 }

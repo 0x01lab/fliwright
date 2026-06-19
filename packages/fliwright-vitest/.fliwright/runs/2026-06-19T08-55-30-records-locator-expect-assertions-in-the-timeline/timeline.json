@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "runId": "2026-06-19T08-55-30-records-locator-expect-assertions-in-the-timeline",
+  "testName": "records locator expect assertions in the timeline",
+  "mode": "test",
+  "status": "passed",
+  "startedAt": "2026-06-19T08:55:30.473Z",
+  "endedAt": "2026-06-19T08:55:30.473Z",
+  "nodes": [
+    {
+      "id": "assertion-1",
+      "kind": "assertion",
+      "title": "Next is visible",
+      "status": "passed",
+      "startedAt": "2026-06-19T08:55:30.473Z",
+      "metadata": {
+        "matcher": "toBeVisible",
+        "target": "text=Next",
+        "expected": "visible"
+      },
+      "endedAt": "2026-06-19T08:55:30.473Z"
+    }
+  ]
+}

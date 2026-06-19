@@ -147,6 +147,39 @@ describe('CodeGenerator', () => {
     expect(code).toContain("page.locator({ text: 'Field' }).type('ok')");
     expect(code.match(/Open/g)).toHaveLength(1);
   });
+
+  it('generates timeline-aware test code when requested', () => {
+    const gen = new CodeGenerator();
+    const ops: RecordedOperation[] = [
+      tap(100, 200, 1000),
+      typeOp(100, 300, 'ada@example.com', 2000),
+    ];
+    const selectors = sel({
+      0: { match: { text: 'Register' } },
+      1: { match: { key: 'emailField' } },
+    });
+
+    const code = gen.generate(ops, selectors, { timeline: true, mode: 'test', testName: 'register flow' });
+
+    expect(code).toContain("import { test } from '@fliwright/vitest'");
+    expect(code).toContain("test('register flow', async ({ page, flow, mock, agent }) => {");
+    expect(code).toContain("await flow.step('Tap target', async () => {");
+    expect(code).toContain("await page.locator({ text: 'Register' }).click();");
+    expect(code).toContain("await flow.step('Type text', async () => {");
+    expect(code).toContain("await page.locator({ key: 'emailField' }).type('ada@example.com');");
+  });
+
+  it('generates timeline-aware script code when requested', () => {
+    const gen = new CodeGenerator();
+    const ops: RecordedOperation[] = [tap(100, 200, 1000)];
+    const selectors = sel({ 0: { match: { text: 'Start' } } });
+
+    const code = gen.generate(ops, selectors, { timeline: true, mode: 'script', testName: 'open app' });
+
+    expect(code).toContain("import { script } from '@fliwright/vitest'");
+    expect(code).toContain("script('open app', async ({ page, flow, mock, agent }) => {");
+    expect(code).toContain("await flow.step('Tap target', async () => {");
+  });
 });
 
 const op = (over: Partial<RecordedOperation> = {}): RecordedOperation =>

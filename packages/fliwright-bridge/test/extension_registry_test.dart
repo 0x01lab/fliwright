@@ -45,32 +45,41 @@ void main() {
         return {'echo': params['message'] ?? 'none'};
       });
       expect(registry.isRegistered('ext.test.ping'), isTrue);
-      final result =
-          await registry.invoke('ext.test.ping', {'message': 'hello'});
+      final result = await registry.invoke('ext.test.ping', {
+        'message': 'hello',
+      });
       expect(result, equals({'echo': 'hello'}));
     });
 
     test('throws when registering non-ext method', () {
-      expect(() => registry.register('bad.method', (_) async => {}),
-          throwsA(isA<ArgumentError>()));
+      expect(
+        () => registry.register('bad.method', (_) async => {}),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('throws when registering duplicate method', () {
       registry.register('ext.test.dup', (_) async => {});
-      expect(() => registry.register('ext.test.dup', (_) async => {}),
-          throwsA(isA<StateError>()));
+      expect(
+        () => registry.register('ext.test.dup', (_) async => {}),
+        throwsA(isA<StateError>()),
+      );
     });
 
     test('throws when invoking unregistered method', () {
-      expect(() => registry.invoke('ext.test.missing', {}),
-          throwsA(isA<StateError>()));
+      expect(
+        () => registry.invoke('ext.test.missing', {}),
+        throwsA(isA<StateError>()),
+      );
     });
 
     test('lists registered methods', () {
       registry.register('ext.test.a', (_) async => {});
       registry.register('ext.test.b', (_) async => {});
-      expect(registry.registeredMethods,
-          containsAll(['ext.test.a', 'ext.test.b']));
+      expect(
+        registry.registeredMethods,
+        containsAll(['ext.test.a', 'ext.test.b']),
+      );
     });
   });
 
@@ -86,36 +95,39 @@ void main() {
       expect(methods, contains('ext.fliwright.handshake'));
     });
 
-    test('init is safe to call repeatedly and reports handshake status',
-        () async {
-      await FliwrightBridge.init();
-      final firstMethods = FliwrightBridge.registry.registeredMethods.toSet();
+    test(
+      'init is safe to call repeatedly and reports handshake status',
+      () async {
+        await FliwrightBridge.init();
+        final firstMethods = FliwrightBridge.registry.registeredMethods.toSet();
 
-      await FliwrightBridge.init();
-      final secondMethods = FliwrightBridge.registry.registeredMethods.toSet();
+        await FliwrightBridge.init();
+        final secondMethods = FliwrightBridge.registry.registeredMethods
+            .toSet();
 
-      expect(secondMethods, firstMethods);
-      final handshake = await FliwrightBridge.registry.invoke(
-        'ext.fliwright.handshake',
-        {'protocolVersion': '1'},
-      );
-      expect(handshake['status'], 'ok');
-      expect(handshake['compatible'], isTrue);
-      expect(handshake['initialized'], isTrue);
-      expect(handshake['debugMode'], isTrue);
-      expect(
-        handshake['bridgeCapabilities'],
-        containsPair('screenshotWaitForFrame', true),
-      );
-      expect(
-        handshake['bridgeCapabilities'],
-        containsPair('rootRenderViewScreenshot', true),
-      );
-      expect(
-        handshake['bridgeCapabilities'],
-        containsPair('recordingScreenshotSampler', true),
-      );
-    });
+        expect(secondMethods, firstMethods);
+        final handshake = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.handshake',
+          {'protocolVersion': '1'},
+        );
+        expect(handshake['status'], 'ok');
+        expect(handshake['compatible'], isTrue);
+        expect(handshake['initialized'], isTrue);
+        expect(handshake['debugMode'], isTrue);
+        expect(
+          handshake['bridgeCapabilities'],
+          containsPair('screenshotWaitForFrame', true),
+        );
+        expect(
+          handshake['bridgeCapabilities'],
+          containsPair('rootRenderViewScreenshot', true),
+        );
+        expect(
+          handshake['bridgeCapabilities'],
+          containsPair('recordingScreenshotSampler', true),
+        );
+      },
+    );
   });
 
   group('RiverpodExtension', () {
@@ -136,25 +148,33 @@ void main() {
 
     test('read returns error when provider name is missing', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry
-          .invoke('ext.fliwright.riverpod.read', {});
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.riverpod.read',
+        {},
+      );
       expect(result, contains('error'));
     });
 
-    test('status reports observer readiness before provider observation',
-        () async {
-      await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry
-          .invoke('ext.fliwright.riverpod.status', {});
-      expect(result['observerInstalled'], isFalse);
-      expect(result['providerCount'], 0);
-      expect(result['watching'], isEmpty);
-    });
+    test(
+      'status reports observer readiness before provider observation',
+      () async {
+        await FliwrightBridge.init();
+        final result = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.riverpod.status',
+          {},
+        );
+        expect(result['observerInstalled'], isFalse);
+        expect(result['providerCount'], 0);
+        expect(result['watching'], isEmpty);
+      },
+    );
 
     test('watch returns error when provider name is missing', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry
-          .invoke('ext.fliwright.riverpod.watch', {});
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.riverpod.watch',
+        {},
+      );
       expect(result, contains('error'));
     });
   });
@@ -172,9 +192,14 @@ void main() {
 
     test('click returns error when x or y is missing', () async {
       await FliwrightBridge.init();
-      final result =
-          await FliwrightBridge.registry.invoke('ext.fliwright.click', {});
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.click',
+        {},
+      );
       expect(result, contains('error'));
+      expect(result['success'], isFalse);
+      expect(result['code'], 'target_not_found');
+      expect(result['recoveryHints'], isA<List<dynamic>>());
     });
 
     test('registers gesture extension', () async {
@@ -185,12 +210,14 @@ void main() {
 
     test('gesture returns error when gesture type is missing', () async {
       await FliwrightBridge.init();
-      final result =
-          await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
-        'selector': 'text=Hello',
-      });
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.gesture',
+        {'selector': 'text=Hello'},
+      );
       expect(result, contains('error'));
       expect(result['error'], contains('gesture'));
+      expect(result['success'], isFalse);
+      expect(result['code'], 'target_not_found');
     });
 
     test('gesture returns error for unknown gesture type', () async {
@@ -198,8 +225,9 @@ void main() {
       await FliwrightBridge.init();
       // Override inspect to return a widget so the gesture type check is reached
       FliwrightBridge.registry.reset();
-      FliwrightBridge.registry.register('ext.fliwright.inspect',
-          (params) async {
+      FliwrightBridge.registry.register('ext.fliwright.inspect', (
+        params,
+      ) async {
         return {
           'widgets': [
             {
@@ -213,23 +241,26 @@ void main() {
       });
       GestureExtension.register(FliwrightBridge.registry);
 
-      final result =
-          await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
-        'gesture': 'swipe',
-        'selector': 'text=Hello',
-      });
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.gesture',
+        {'gesture': 'swipe', 'selector': 'text=Hello'},
+      );
       expect(result, contains('error'));
       expect(result['error'], contains('Unknown gesture type'));
+      expect(result['success'], isFalse);
+      expect(result['code'], 'target_not_found');
     });
 
     test('gesture returns error when selector is missing', () async {
       await FliwrightBridge.init();
-      final result =
-          await FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
-        'gesture': 'longPress',
-      });
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.gesture',
+        {'gesture': 'longPress'},
+      );
       expect(result, contains('error'));
       expect(result['error'], contains('selector'));
+      expect(result['success'], isFalse);
+      expect(result['code'], 'target_not_found');
     });
   });
 
@@ -284,8 +315,9 @@ void main() {
       expect(idWidgets.first['text'], 'Login');
     });
 
-    testWidgets('resolve semanticIdentifier matches declaring Semantics only',
-        (tester) async {
+    testWidgets('resolve semanticIdentifier matches declaring Semantics only', (
+      tester,
+    ) async {
       InspectExtension.register(FliwrightBridge.registry);
       await tester.pumpWidget(
         MaterialApp(
@@ -301,14 +333,12 @@ void main() {
         ),
       );
 
-      final result = await FliwrightBridge.registry.invoke(
-        'ext.fliwright.resolve',
-        {
-          'selector': '{"match":{"semanticIdentifier":"login.username"}}',
-          'strict': 'true',
-          'visible': 'any',
-        },
-      );
+      final result = await FliwrightBridge.registry
+          .invoke('ext.fliwright.resolve', {
+            'selector': '{"match":{"semanticIdentifier":"login.username"}}',
+            'strict': 'true',
+            'visible': 'any',
+          });
 
       expect(result['success'], isTrue);
       expect(result['count'], 1);
@@ -364,8 +394,10 @@ void main() {
 
     test('type returns error when selector is missing', () async {
       await FliwrightBridge.init();
-      final result =
-          await FliwrightBridge.registry.invoke('ext.fliwright.type', {});
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.type',
+        {},
+      );
       expect(result, contains('error'));
       expect(result['error'], contains('selector'));
     });
@@ -391,8 +423,9 @@ void main() {
       expect(result['success'], isFalse);
     });
 
-    testWidgets('type fills a TextField when selector matches label text',
-        (tester) async {
+    testWidgets('type fills a TextField when selector matches label text', (
+      tester,
+    ) async {
       final controller = TextEditingController();
       addTearDown(controller.dispose);
 
@@ -421,14 +454,11 @@ void main() {
       );
 
       final result = await tester.runAsync(() {
-        return FliwrightBridge.registry.invoke(
-          'ext.fliwright.type',
-          {
-            'selector': 'text=Username / Email',
-            'text': 'user@example.com',
-            'replaceAll': 'true',
-          },
-        );
+        return FliwrightBridge.registry.invoke('ext.fliwright.type', {
+          'selector': 'text=Username / Email',
+          'text': 'user@example.com',
+          'replaceAll': 'true',
+        });
       });
 
       expect(result, isNotNull);
@@ -437,8 +467,9 @@ void main() {
       expect(controller.text, 'user@example.com');
     });
 
-    testWidgets('type fills custom editable text by ancestor name',
-        (tester) async {
+    testWidgets('type fills custom editable text by ancestor name', (
+      tester,
+    ) async {
       final controller = TextEditingController();
       final focusNode = FocusNode(debugLabel: 'jobPosition');
       addTearDown(controller.dispose);
@@ -476,23 +507,17 @@ void main() {
       );
 
       final result = await tester.runAsync(() {
-        return FliwrightBridge.registry.invoke(
-          'ext.fliwright.type',
-          {
-            'selector': 'name=jobPosition',
-            'text': 'Delectatio carpo vivo benevolentia solus.',
-            'replaceAll': 'true',
-          },
-        );
+        return FliwrightBridge.registry.invoke('ext.fliwright.type', {
+          'selector': 'name=jobPosition',
+          'text': 'Delectatio carpo vivo benevolentia solus.',
+          'replaceAll': 'true',
+        });
       });
 
       expect(result, isNotNull);
       final typeResult = result!;
       expect(typeResult['success'], isTrue);
-      expect(
-        controller.text,
-        'Delectatio carpo vivo benevolentia solus.',
-      );
+      expect(controller.text, 'Delectatio carpo vivo benevolentia solus.');
       expect(typeResult['debug']['targetType'], 'EditableText');
     });
   });
@@ -510,10 +535,10 @@ class _JsonModel {
   final _PlainModel child;
 
   Map<String, Object?> toJson() => {
-        'label': label,
-        'token': token,
-        'child': child,
-      };
+    'label': label,
+    'token': token,
+    'child': child,
+  };
 }
 
 class _PlainModel {
@@ -523,10 +548,7 @@ class _PlainModel {
 }
 
 class _NamedField<T> extends StatefulWidget {
-  const _NamedField({
-    required this.name,
-    required this.child,
-  });
+  const _NamedField({required this.name, required this.child});
 
   final String name;
   final Widget child;

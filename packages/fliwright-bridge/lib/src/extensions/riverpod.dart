@@ -21,8 +21,8 @@ class ObservedRiverpodProvider {
     this.disposed = false,
     this.error,
     this.overridable = false,
-  })  : addedAt = addedAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : addedAt = addedAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   final String key;
   String displayName;
@@ -38,21 +38,24 @@ class ObservedRiverpodProvider {
   bool overridable;
 
   Map<String, dynamic> toJson({bool watching = false}) => {
-        'key': key,
-        'name': displayName,
-        'type': providerType,
-        'value': _jsonSafe(currentValue),
-        'previousValue': _jsonSafe(previousValue),
-        'valueType': valueType,
-        'readable': !disposed,
-        'overridable': overridable,
-        'watching': watching,
-        'disposed': disposed,
-        'addedAt': addedAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
-        if (disposedAt != null) 'disposedAt': disposedAt!.toIso8601String(),
-        if (error != null) 'error': error.toString(),
-      };
+    'key': key,
+    'name': displayName,
+    'type': providerType,
+    'value': _jsonSafe(currentValue),
+    'debugValue': _debugValue(currentValue),
+    'previousValue': _jsonSafe(previousValue),
+    'previousDebugValue': _debugValue(previousValue),
+    'valueType': valueType,
+    'readable': !disposed,
+    'overridable': overridable,
+    'watching': watching,
+    'disposed': disposed,
+    'addedAt': addedAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    if (disposedAt != null) 'disposedAt': disposedAt!.toIso8601String(),
+    if (error != null) 'error': error.toString(),
+    if (error != null) 'debugError': _debugError(error),
+  };
 }
 
 class RiverpodExtension {
@@ -90,7 +93,8 @@ class RiverpodExtension {
     markObserverInstalled();
     final now = DateTime.now();
     final serializedValue = _serializeValue(key, value);
-    final provider = _providers[key] ??
+    final provider =
+        _providers[key] ??
         ObservedRiverpodProvider(
           key: key,
           displayName: displayName ?? key,
@@ -123,7 +127,8 @@ class RiverpodExtension {
     final now = DateTime.now();
     final serializedPreviousValue = _serializeValue(key, previousValue);
     final serializedValue = _serializeValue(key, value);
-    final provider = _providers[key] ??
+    final provider =
+        _providers[key] ??
         ObservedRiverpodProvider(
           key: key,
           displayName: displayName ?? key,
@@ -161,13 +166,11 @@ class RiverpodExtension {
       ..updatedAt = DateTime.now();
   }
 
-  static void recordProviderError({
-    required String key,
-    Object? error,
-  }) {
+  static void recordProviderError({required String key, Object? error}) {
     markObserverInstalled();
     final now = DateTime.now();
-    final provider = _providers[key] ??
+    final provider =
+        _providers[key] ??
         ObservedRiverpodProvider(
           key: key,
           displayName: key,
@@ -188,7 +191,8 @@ class RiverpodExtension {
     String? providerType,
   }) {
     _writeHandlers[key] = write;
-    final provider = _providers[key] ??
+    final provider =
+        _providers[key] ??
         ObservedRiverpodProvider(
           key: key,
           displayName: displayName ?? key,
@@ -235,7 +239,8 @@ class RiverpodExtension {
   }
 
   static Future<Map<String, dynamic>> _status(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     return {
       'observerInstalled': _observerInstalled,
       'containerReady': _getContainer() != null,
@@ -245,7 +250,8 @@ class RiverpodExtension {
   }
 
   static Future<Map<String, dynamic>> _listProviders(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final container = _getContainer();
     if (container == null && !_observerInstalled) {
       return {
@@ -256,9 +262,11 @@ class RiverpodExtension {
     }
     return {
       'providers': _providers.values
-          .map((provider) => provider.toJson(
-                watching: _activeSubscriptions.contains(provider.key),
-              ))
+          .map(
+            (provider) => provider.toJson(
+              watching: _activeSubscriptions.contains(provider.key),
+            ),
+          )
           .toList(),
       'containerReady': container != null,
       'observerInstalled': _observerInstalled,
@@ -266,7 +274,8 @@ class RiverpodExtension {
   }
 
   static Future<Map<String, dynamic>> _readProvider(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final providerName = params['provider'];
     if (providerName == null) return {'error': 'Missing parameter: provider'};
     final provider = _providers[providerName];
@@ -277,14 +286,17 @@ class RiverpodExtension {
       return {
         'provider': providerName,
         'value': _jsonSafe(provider.currentValue),
+        'debugValue': _debugValue(provider.currentValue),
         'found': true,
         'readable': !provider.disposed,
         'error': provider.error.toString(),
+        'debugError': _debugError(provider.error),
       };
     }
     return {
       'provider': providerName,
       'value': _jsonSafe(provider.currentValue),
+      'debugValue': _debugValue(provider.currentValue),
       'found': true,
       'readable': !provider.disposed,
       'overridable': provider.overridable,
@@ -292,7 +304,8 @@ class RiverpodExtension {
   }
 
   static Future<Map<String, dynamic>> _overrideProvider(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final providerName = params['provider'];
     final valueJson = params['value'];
     if (providerName == null || valueJson == null)
@@ -316,11 +329,13 @@ class RiverpodExtension {
       'provider': providerName,
       'overridden': true,
       'value': _jsonSafe(_providers[providerName]?.currentValue),
+      'debugValue': _debugValue(_providers[providerName]?.currentValue),
     };
   }
 
   static Future<Map<String, dynamic>> _watchProvider(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final providerName = params['provider'];
     if (providerName == null) return {'error': 'Missing parameter: provider'};
     if (!_observerInstalled && _getContainer() == null) {
@@ -331,7 +346,8 @@ class RiverpodExtension {
   }
 
   static Future<Map<String, dynamic>> _unwatchProvider(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final providerName = params['provider'];
     if (providerName == null) return {'error': 'Missing parameter: provider'};
     _activeSubscriptions.remove(providerName);
@@ -345,16 +361,26 @@ Object? _jsonSafe(Object? value) {
   return const DebugValueEncoder().encode(value);
 }
 
+Map<String, dynamic> _debugValue(Object? value) => {
+  'kind': value == null ? 'null' : 'value',
+  'type': _valueType(value),
+  'value': _jsonSafe(value),
+  'stringValue': value?.toString(),
+};
+
+Map<String, dynamic> _debugError(Object? error) => {
+  'kind': 'error',
+  'type': _valueType(error),
+  'message': error?.toString(),
+};
+
 Object? _serializeValue(String key, Object? value) {
   final serializer = RiverpodExtension._serializers[key];
   if (serializer == null) return value;
   try {
     return serializer(value);
   } catch (error) {
-    return {
-      'serializerError': error.toString(),
-      'rawValue': value.toString(),
-    };
+    return {'serializerError': error.toString(), 'rawValue': value.toString()};
   }
 }
 

@@ -1,9 +1,9 @@
-import 'dart:convert';
 import 'dart:developer' as developer;
 
-import 'dio_mock_interceptor.dart';
-import 'mock_rule_store.dart';
 import '../bridge.dart';
+import 'dio_mock_interceptor.dart';
+import 'mock_extension_helpers.dart';
+import 'mock_rule_store.dart';
 
 /// VM Service extension that exposes [FliwrightDioMockInterceptor] operations.
 ///
@@ -102,28 +102,11 @@ class DioMockExtension {
   static Future<Map<String, dynamic>> _addRoute(
     Map<String, String> params,
   ) async {
-    final routeJson = params['route'];
-    if (routeJson == null || routeJson.isEmpty) {
-      return {'error': 'Missing parameter: route'};
-    }
+    final missingRoute = missingRouteParamResponse(params);
+    if (missingRoute != null) return missingRoute;
 
     try {
-      final decoded = jsonDecode(routeJson) as Map<String, dynamic>;
-      final response = decoded['response'] as Map<String, dynamic>? ?? {};
-      final route = MockRoute(
-        id: decoded['id'] as String? ??
-            DateTime.now().millisecondsSinceEpoch.toString(),
-        method: decoded['method'] as String?,
-        pathPattern: decoded['path'] as String? ??
-            decoded['pathPattern'] as String? ??
-            '/',
-        status: response['status'] as int? ?? 200,
-        headers: (response['headers'] as Map<String, dynamic>?)
-                ?.map((k, v) => MapEntry(k, v.toString())) ??
-            {'Content-Type': 'application/json'},
-        body: response['body'],
-        delayMs: response['delay'] as int? ?? 0,
-      );
+      final route = parseRouteParam(params);
       _syncInterceptorToStore();
       final beforeReplace = _store.getAllRoutes().length;
       await _store.addRoute(route);
@@ -187,15 +170,7 @@ class DioMockExtension {
     Map<String, String> params,
   ) async {
     _syncInterceptorToStore();
-    final routes = _store
-        .getAllRoutes()
-        .map((r) => {
-              'id': r.id,
-              'method': r.method,
-              'path': r.pathPattern,
-            })
-        .toList();
-    return {'routes': routes};
+    return {'routes': routeSummaries(_store)};
   }
 
   static Future<Map<String, dynamic>> _setPassthrough(
@@ -212,11 +187,7 @@ class DioMockExtension {
   static Future<Map<String, dynamic>> _getCalls(
     Map<String, String> params,
   ) async {
-    var calls = _allCalls();
-    final pathFilter = params['path'];
-    if (pathFilter != null) {
-      calls = calls.where((c) => c.path == pathFilter).toList();
-    }
+    final calls = filterCallsByPath(_allCalls(), params['path']);
     return {'calls': calls.map((c) => c.toJson()).toList()};
   }
 
@@ -241,28 +212,13 @@ class DioMockExtension {
       'interceptors': interceptor == null ? 0 : 1,
       'passthrough': _passthrough,
       'storeId': _store.debugId,
-      'routes': _store
-          .getAllRoutes()
-          .map((route) => {
-                'id': route.id,
-                'method': route.method,
-                'path': route.pathPattern,
-                'status': route.status,
-              })
-          .toList(),
+      'routes': _store.getAllRoutes().map(routeSummary).toList(),
       if (interceptor != null)
         'interceptorState': {
           'storeId': interceptor.ruleStoreDebugId,
           'sharedStore': identical(interceptor.ruleStore, _store),
           'passthrough': interceptor.passthrough,
-          'routes': interceptor.routes
-              .map((route) => {
-                    'id': route.id,
-                    'method': route.method,
-                    'path': route.pathPattern,
-                    'status': route.status,
-                  })
-              .toList(),
+          'routes': interceptor.routes.map(routeSummary).toList(),
           'calls': interceptor.callLog.length,
         },
       'calls': calls.length,
@@ -288,9 +244,6 @@ class DioMockExtension {
       return _callLog.toList();
     }
 
-    return [
-      ..._callLog,
-      ...interceptor.callLog,
-    ];
+    return [..._callLog, ...interceptor.callLog];
   }
 }

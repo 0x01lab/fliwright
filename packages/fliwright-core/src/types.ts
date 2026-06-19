@@ -260,9 +260,81 @@ export interface MockRouteConfig {
 export interface MockCall {
   method: string;
   path: string;
+  url?: string;
   headers: Record<string, string>;
-  body: string;
+  query?: Record<string, string | string[]>;
+  body?: string;
+  status?: number;
+  response?: unknown;
   timestamp: string;
+  backend?: 'flutter' | 'dio' | 'tool-server' | string;
+}
+
+export interface BridgeContext {
+  route?: {
+    location?: string;
+    name?: string;
+  };
+  focused?: {
+    ref?: string;
+    role?: string;
+    label?: string;
+    type?: string;
+    key?: string;
+  };
+  diagnostics?: Record<string, unknown>;
+  capabilities?: Record<string, boolean>;
+}
+
+export interface FrameCaptureResult {
+  success?: boolean;
+  frameId: string;
+  capturedAt: string;
+  route?: {
+    location?: string;
+    name?: string;
+  };
+  screenshot?: {
+    format: 'png' | string;
+    base64: string;
+  };
+  snap?: AgentSnapshotResult;
+  snapshot?: unknown;
+  diagnostics?: Record<string, unknown>;
+}
+
+export interface BridgeQuery {
+  key?: string;
+  text?: string;
+  containsText?: string;
+  type?: string;
+  semanticsLabel?: string;
+  semanticsIdentifier?: string;
+  role?: string;
+  ref?: string;
+}
+
+export interface BridgeQueryMatch {
+  ref?: string;
+  role?: string;
+  label?: string;
+  text?: string;
+  value?: unknown;
+  type?: string;
+  key?: string;
+  rect?: { x: number; y: number; width: number; height: number };
+  enabled?: boolean;
+  visible?: boolean;
+  hitTestable?: boolean;
+  actionable?: boolean;
+  checked?: boolean;
+  selected?: boolean;
+  properties?: Record<string, unknown>;
+}
+
+export interface BridgeQueryResult {
+  matches: BridgeQueryMatch[];
+  count: number;
 }
 
 export interface WidgetMatch {
@@ -370,6 +442,8 @@ export interface CodegenOptions {
   lang?: 'ts' | 'dart';
   resetToHomeBeforeEach?: boolean;
   homeRoute?: string;
+  timeline?: boolean;
+  mode?: 'script' | 'test';
 }
 
 export interface FormFieldMeta {

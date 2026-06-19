@@ -734,6 +734,30 @@ describe('SandboxService', () => {
     expect(clearFlutterRoutes).toHaveBeenCalledOnce();
     expect(service.getAppliedRules()).toHaveLength(0);
   });
+
+  it('falls back to the VM service clearRoutes extension when the core mock helper is unavailable', async () => {
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.inspect') {
+        return {
+          httpReadiness: {
+            registered: true,
+            active: true,
+            routes: [{ method: 'GET', path: '/v1/token' }],
+          },
+        };
+      }
+      return {};
+    });
+    const service = new SandboxService();
+    await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, mockRule('success'));
+
+    const count = await service.clear({ mock: {}, sendRequest } as any);
+
+    expect(count).toBe(1);
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.clearRoutes');
+    expect(service.getAppliedRules()).toHaveLength(0);
+  });
 });
 
 function mockRule(ruleName: string): MockRuleEntry {

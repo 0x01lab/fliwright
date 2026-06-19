@@ -1,21 +1,22 @@
 # 测试框架：`@fliwright/vitest`
 
-如何把 driver 接到你的测试里。**普通脚本优先用默认 fixture**；只有在需要自定义配置时才用
+如何把 driver 接到你的测试里。**普通测试优先用默认 `test` fixture，自动化脚本优先用 `script` fixture**；只有在需要自定义配置时才用
 `createFliwrightTest`，只有在自定义插件 / 原始扩展 / 旧桥接兼容时才用裸 `FliwrightDriver`。
 
 ## 导入
 
 ```typescript
-import { test, expect } from '@fliwright/vitest';
+import { test, script, expect } from '@fliwright/vitest';
 ```
 
-包里还重新导出了：`createFliwrightTest`、`defineConfig`、`beforeEach`、
+包里还重新导出了：`expect`、`createFliwrightTest`、`createFliwrightScript`、`defineConfig`、`beforeEach`、
 `afterEach`、`beforeAll`、`afterAll`、`describe`。
 
 ## 默认的 `test` fixture
 
 ```typescript
-test('name', async ({ page, driver, aiRuntime }) => { /* … */ });
+test('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline }) => { /* … */ });
+script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline }) => { /* … */ });
 ```
 
 它替你做的事：
@@ -24,21 +25,54 @@ test('name', async ({ page, driver, aiRuntime }) => { /* … */ });
 | --- | --- |
 | VM URL | 读 `process.env.FLIWRIGHT_VM_URL`，兜底 `FLIWRIGHT_VM_SERVICE_URL`；HTTP→WS 转换自动完成 |
 | Driver | 每进程一个**共享** `FliwrightDriver`，懒创建并连接 |
-| Fixtures | 提供 `{ page, driver, aiRuntime }`。`aiRuntime` 是一个已绑定到当前 `page`/`driver`/`testName` 的 `AiRuntime`——用它来做 `generate`/`classify`/`visible`/`inspect`（见 [ai.md](./ai.md)）。用不到 AI 时省略它。 |
+| Fixtures | 提供 `{ page, driver, flow, mock, agent, aiRuntime, timeline }`。`flow`、`mock`、`agent` 和 locator `expect` 都会写入 timeline。`script` 与 `test` 类似，但 mode 是 `script` 且不要求 assertion。 |
 | 诊断信息 | 启动 `driver.listenToDiagnostics()`，把日志/stderr 收集进失败报告 |
 | 失败上下文 | 当 `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH` 被设置时，写入断言详情 + 控件树 + 截图 + 诊断信息 + 源码 + 自愈建议 |
 | Trace | 当 `FLIWRIGHT_TRACE_DIR` + `FLIWRIGHT_TRACE` 被设置时，按动作记录 trace（见 [driver-lifecycle.md](./driver-lifecycle.md)） |
 | 截图模式 | 由 `FLIWRIGHT_SCREENSHOT_MODE` 控制 |
+| Timeline | 每次运行写 `.fliwright/runs/<runId>/timeline.json`；失败节点会带 agent-visible failure 和 artifact refs |
 
-`driver` fixture 就是你做 mock 和状态操作时用的——优先用它，别写裸生命周期代码：
+`mock` fixture 是 timeline-aware 的 mock facade；需要底层能力时再退回 `driver.mock`：
 
 ```typescript
-test('submits through mocked API', async ({ page, driver }) => {
-  await driver.mock.clear();
-  await driver.mock.route('/api/login', { method: 'POST', status: 200, body: { token: 't' } });
-  await page.getByKey('loginButton').click();
+import { expect as viExpect } from 'vitest';
+
+test('submits through mocked API', async ({ page, flow, mock }) => {
+  await mock.rules('Mock login API', async () => {
+    await mock.clearRoutes();
+    await mock.clearCalls();
+    await mock.route('/api/login', { method: 'POST', status: 200, body: { token: 't' } });
+  });
+  await flow.step('Submit login', async () => {
+    await page.getByKey('loginButton').click();
+  });
+  const calls = await mock.findCalls({ method: 'POST', path: '/api/login' });
+  viExpect(calls.length).toBeGreaterThanOrEqual(1);
 });
 ```
+
+## `script` fixture
+
+Use `script` for automation that drives an app but is not primarily a CI assertion suite: account registration, data seeding, cleanup, or MCP-recorded script cleanup.
+
+```typescript
+import { script } from '@fliwright/vitest';
+
+script('fill registration form', async ({ page, flow, agent }) => {
+  await flow.page('Open registration', { route: '/register' }, async () => {
+    await page.navigate('/register');
+  });
+  const user = await agent.generate('Generate registration data', {
+    fallback: { phone: '13800138000', password: 'Passw0rd!' },
+  });
+  await flow.step('Fill phone', async () => {
+    await page.getByText('请输入手机号').fill((user as { phone: string }).phone);
+  });
+  await flow.frame('Filled form', { screenshot: true, snapshot: true });
+});
+```
+
+See [timeline-native.md](./timeline-native.md) for all `flow`/`mock`/`agent` APIs and timeline-aware `expect`.
 
 ## 自定义配置：`createFliwrightTest` + `defineConfig`
 
@@ -62,6 +96,10 @@ const test = createFliwrightTest(defineConfig({
 | `timeout` | `number` | `5000` | 默认断言 / 失败超时，单位 ms |
 | `screenshot` | `'file' \| 'base64' \| 'off'` | `'file'` | 失败截图如何序列化 |
 | `ai` | `AiRuntimeConfig` | *(未设)* | AI runtime 配置（`provider`、`cache`、`timeoutMs`、`artifactsDir`、…）。支撑 `aiRuntime` fixture 和自愈。见 [ai.md](./ai.md)。 |
+| `mode` | `'test' \| 'script'` | `'test'` | 写入 timeline 的运行模式 |
+| `requireAssertions` | `boolean` | `false` | 为 `true` 时，测试结束前必须至少有一个 locator `expect(...).to*` timeline assertion node |
+| `agentPolicy` | `AgentPolicy` | *(未设)* | 主动/被动 agent 策略 |
+| `timelineDir` | `string` | `process.cwd()` | `.fliwright/runs/<runId>` 的根目录 |
 
 ```typescript
 export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUrl: string }): FliwrightConfig
@@ -89,14 +127,13 @@ afterEach(async ({ page }) => {
 
 ## `expect`（Fliwright 断言）
 
-`expect(locator)` 返回一个 `Assertion`（Playwright 风格的自动等待）。它从测试上下文里取出活动的 driver，
-所以自愈和失败捕获自动挂上：
+`expect(locator, title?)` 返回一个 `Assertion`（Playwright 风格的自动等待）。它从测试上下文里取出活动的 driver，所以自愈、timeline assertion 和失败捕获自动挂上：
 
 ```typescript
-await expect(page.getByText('Welcome')).toBeVisible();
-await expect(page.getByKey('submit')).toBeEnabled({ timeout: 10_000 });
-await expect(page.getByText('Saved')).toContainText('Saved');
-await expect(page.getByKey('passwordError')).not.toBeVisible();
+await expect(page.getByText('Welcome'), 'Welcome is shown').toBeVisible();
+await expect(page.getByKey('submit'), 'Submit is enabled').toBeEnabled({ timeout: 10_000 });
+await expect(page.getByText('Saved'), 'Saved text is rendered').toContainText('Saved');
+await expect(page.getByKey('passwordError'), 'Password error is hidden').not.toBeVisible();
 ```
 
 如果想在 Fliwright 封装之外做原始布尔判断，导入 Vitest 的 `expect`：
@@ -107,6 +144,8 @@ viExpect(await page.getByText('Ready').count()).toBe(1);
 ```
 
 完整匹配器列表和行为 → [assertions.md](./assertions.md)。
+
+请求、route、provider 等非 locator 检查使用对应 fixture 读取数据后交给 Vitest `expect`。不要为 locator 检查引入第二套断言语法。
 
 ## 环境变量参考
 

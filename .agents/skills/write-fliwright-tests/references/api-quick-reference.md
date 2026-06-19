@@ -6,18 +6,56 @@
 
 ```typescript
 import { test, expect, createFliwrightTest, defineConfig,
+         createFliwrightScript, script,
          beforeEach, afterEach, beforeAll, afterAll, describe } from '@fliwright/vitest';
 
-// fixture: test('name', async ({ page, driver }) => {})
-// expect(locator): Assertion            // auto-wait + healing
+// fixture: test('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline }) => {})
+// fixture: script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline }) => {})
+// expect(locator, title?): Assertion    // auto-wait + healing + timeline assertion
 // createFliwrightTest(config): test     // custom config
+// createFliwrightScript(config): script // mode='script', requireAssertions=false
 // defineConfig(overrides & { vmServiceUrl }): FliwrightConfig   // fills defaults
-//   FliwrightConfig { vmServiceUrl; timeout?: 5000; screenshot?: 'file'|'base64'|'off' }
+//   FliwrightConfig { vmServiceUrl; timeout?: 5000; screenshot?: 'file'|'base64'|'off';
+//                     ai?; mode?: 'test'|'script'; requireAssertions?; agentPolicy?; timelineDir? }
 ```
 
 环境变量：`FLIWRIGHT_VM_URL`、`FLIWRIGHT_VM_SERVICE_URL`、`FLIWRIGHT_SCREENSHOT_MODE`、
 `FLIWRIGHT_FAILURE_TIMEOUT_MS`、`FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`、
 `FLIWRIGHT_MOCK_CONTROLLER_URL`、`FLIWRIGHT_TRACE`、`FLIWRIGHT_TRACE_DIR`。
+
+## Timeline Fixtures
+
+```typescript
+// flow — Timeline node grouping and artifacts
+flow.step(title, body, metadata?)
+flow.page(title, { route?, metadata? }, body)
+flow.page(title, body)
+flow.branch(title, metadata, body)
+flow.optional(title, { when? }, body)
+flow.frame(title, { screenshot?, snapshot?, diagnostics?, metadata? })
+flow.assertion(title, body, metadata?)
+
+// mock — timeline-aware facade over driver.mock
+mock.rules(title, body)
+mock.loadRules(mockDir?)
+mock.switchRule(endpoint, ruleName, method?)
+mock.route(path, response & { method?, id? })
+mock.routeFlutter(path, response & { method?, id? })
+mock.removeRoute(path, method?)
+mock.clearRoutes()
+mock.clearCalls()
+mock.setPassthrough(enabled)
+mock.getCalls(path?)
+mock.listRoutes()
+mock.listRules()
+mock.findCalls({ method?, path?, url?, headers?, body? })
+
+// agent — explicit AI calls recorded as ai-call timeline nodes
+agent.ask(titleOrPrompt, request?)
+agent.generate<T>(titleOrPrompt, { schema?, fallback?, prompt? })
+agent.verify(prompt, { includeScreenshot?, includeSnapshot?, timeoutMs? })
+agent.inspect<T>(titleOrPrompt, { schema?, prompt?, includeScreenshot?, includeSnapshot? })
+```
 
 ## `page` — `Page`
 
@@ -109,10 +147,13 @@ loc.clickResolved(resolved): Promise<void>
 ## `expect` — `Assertion`
 
 ```typescript
-expect(locator): Assertion
-// matchers (options?: { timeout?=5000 })
-.toBeVisible() | .toHaveText(text) | .toContainText(text)
-.toBeEnabled() | .toBeDisabled()
+expect(locator, title?): Assertion
+// matchers (options?: { timeout?=5000, title?, includeScreenshot?, includeSnapshot? })
+.toBeVisible(options?)
+.toHaveText(text, options?)
+.toContainText(text, options?)
+.toBeEnabled(options?)
+.toBeDisabled(options?)
 .not          // negation (disables healing)
 // raw Vitest for non-locator checks:
 import { expect as viExpect } from 'vitest'

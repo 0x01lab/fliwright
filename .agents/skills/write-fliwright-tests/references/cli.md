@@ -29,8 +29,8 @@ fliwright run \
 1. 通过 jiti 加载 `fliwright.config.ts` 取默认值——`testDir`、`vmServiceUrl`、`timeout`、`reporter`。
 2. 解析 VM URL：优先级 `--vm-url` ▸ `config.vmServiceUrl` ▸ 自动发现（`vm-discovery.ts` 会扫描正在运行的 Flutter VM Service）。
 3. 用 `--reporter=json` 启动 Vitest，注入 `FLIWRIGHT_VM_URL`、`FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`、`FLIWRIGHT_SCREENSHOT_MODE`、`FLIWRIGHT_FAILURE_TIMEOUT_MS`。
-4. 读取失败上下文 JSON，把截图持久化到 `.fliwright/runs/<runId>/screenshots/`。
-5. 把完整报告写到 `.fliwright/runs/<runId>/report.json`（或 `--output` 指定的路径）。
+4. 读取失败上下文 JSON 和测试产出的 timeline，把截图/快照持久化到 `.fliwright/runs/<runId>/`。
+5. 把完整报告写到 `.fliwright/runs/<runId>/report.json`（或 `--output` 指定的路径），并在 artifacts 中列出 timeline path。
 6. 每次运行都打印 `reproduceCommand`（`fliwright run --test … --test-name …`）。
 
 ### 报告器
@@ -49,7 +49,9 @@ fliwright run \
   totalTests, passedTests, failedTests, duration: number;
   results: Array<{ name: string; passed: boolean; duration: number; error?: string }>;
   failures?: CliFailureEntry[];   // assertion + widgetTree + diagnostics + source + screenshot + healingSuggestion
-  artifacts?: { runId, outputDir, reportPath, screenshots: string[] };
+  agentVisibleFailures?: AgentVisibleFailure[];
+  timelines?: Array<{ path: string; runId?: string; status?: string }>;
+  artifacts?: { runId, outputDir, reportPath, screenshots: string[], timelines?: string[] };
   reproduceCommand: string;
 }
 ```
@@ -110,6 +112,8 @@ fliwright record --vm-url "ws://127.0.0.1:54321/abc=/ws" \
 ```
 
 录制器会通过 `EventAggregator` 把原始的指针/文本事件聚合成语义操作，再由 `CodeGenerator`（TS）或 `DartCodeGenerator`（Dart integration_test）渲染成文件。**产出一定要再清理一遍**：精简选择器、把临时引用换成查询 locator、补上断言。`fliwright_record` 的等价流程见 [mcp-workflow.md](./mcp-workflow.md)。
+
+当生成器启用 `timeline: true` 时，TS 输出会使用 `{ flow, mock, agent }` 或 `script` fixture，并把每个录制动作包进 `flow.step(...)`。清理这类产物时优先保留 step 边界、替换稳定 selector，再补 `expect(locator, title?).to*`。
 
 ## `fliwright mock:start`
 

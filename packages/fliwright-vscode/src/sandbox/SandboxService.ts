@@ -272,7 +272,7 @@ export class SandboxService {
 
   async clear(driver: FliwrightDriver): Promise<number> {
     const count = this.applied.size;
-    await driver.mock.clearFlutterRoutes();
+    await clearFlutterMockRoutes(driver);
     this.applied.clear();
     return count;
   }
@@ -280,6 +280,30 @@ export class SandboxService {
   resetController(): void {
     this.applied.clear();
   }
+}
+
+export async function clearFlutterMockRoutes(driver: FliwrightDriver): Promise<void> {
+  const mock = driver.mock as {
+    clearFlutterRoutes?: () => Promise<void>;
+    clear?: () => Promise<void>;
+  };
+
+  if (typeof mock.clearFlutterRoutes === 'function') {
+    await mock.clearFlutterRoutes();
+    return;
+  }
+
+  if (typeof driver.sendRequest === 'function') {
+    await driver.sendRequest('ext.fliwright.mock.clearRoutes');
+    return;
+  }
+
+  if (typeof mock.clear === 'function') {
+    await mock.clear();
+    return;
+  }
+
+  throw new Error('Connected Fliwright driver does not support clearing Flutter mock routes. Update @fliwright/core.');
 }
 
 export function formatMockRuleDebug(entry: MockRuleEntry): string {

@@ -58,4 +58,23 @@ describe('formatPretty', () => {
     expect(output).toContain('2 passed');
     expect(output).toContain('1 failed');
   });
+
+  it('includes timeline summary when present', () => {
+    const output = formatPretty({
+      ...sampleResult,
+      timelines: [{
+        path: '/tmp/timeline.json',
+        mode: 'test',
+        pages: 1,
+        stepsPassed: 2,
+        stepsFailed: 1,
+        screenshots: 3,
+        firstFailure: { code: 'assertion_failed', title: 'Submit', message: 'button disabled' },
+      }],
+    });
+
+    expect(output).toContain('Timelines: 1');
+    expect(output).toContain('1 page(s), 2 passed step(s), 1 failed step(s), 3 screenshot(s)');
+    expect(output).toContain('assertion_failed - button disabled');
+  });
 });

@@ -10,24 +10,35 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { dirname } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import {
+  AgentRuntime,
   AiRuntime,
   AssertionError,
   Assertion,
   FailureCollector,
   FliwrightDriver,
+  FlowRuntime,
+  FliwrightAgentError,
+  MockRuntime,
+  Page as FliwrightPage,
   TraceCollector,
   TraceStore,
+  TimelineArtifactStore,
+  TimelineRecorder,
   isActionMethod,
   createExpect,
   resolveAiConfig,
 } from '@fliwright/core';
-import type { AiRuntimeConfig, FailureContext, HealingReport, Locator, Page, VMServiceEvent, TraceMode } from '@fliwright/core';
+import type { AiRuntimeConfig, AgentPolicy, FailureContext, HealingReport, Locator, Page, TimelineRunMode, VMServiceEvent, TraceMode } from '@fliwright/core';
 
 export interface FliwrightConfig {
   vmServiceUrl: string;
   timeout?: number;
   screenshot?: 'file' | 'base64' | 'off';
   ai?: AiRuntimeConfig;
+  mode?: TimelineRunMode;
+  requireAssertions?: boolean;
+  agentPolicy?: AgentPolicy;
+  timelineDir?: string;
 }
 
 export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUrl: string }): FliwrightConfig {
@@ -46,11 +57,13 @@ const runId = TraceStore.generateRunId();
 interface FliwrightTestContext {
   driver: FliwrightDriver;
   testName: string;
+  timeline?: FliwrightTimelineContext;
   traceCollector?: TraceCollector;
   originalSendRequest?: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 }
 
 const testContext = new AsyncLocalStorage<FliwrightTestContext>();
+let currentTestContext: FliwrightTestContext | null = null;
 
 type FliwrightHookContext = {
   page: Page;
@@ -58,16 +71,78 @@ type FliwrightHookContext = {
 
 type FliwrightHook = (context: FliwrightHookContext, suite: unknown) => unknown | Promise<unknown>;
 
+interface FliwrightTimelineContext {
+  recorder: TimelineRecorder;
+  artifactStore: TimelineArtifactStore;
+  runId: string;
+  timelinePath?: string;
+}
+
+interface FliwrightFixtures {
+  driver: FliwrightDriver;
+  page: Page;
+  aiRuntime: AiRuntime;
+  flow: FlowRuntime;
+  mock: MockRuntime;
+  agent: AgentRuntime;
+  timeline: FliwrightTimelineContext;
+}
+
 export function createFliwrightTest(config: FliwrightConfig) {
-  const fliwrightTest = vitestTest.extend<{ page: Page; driver: FliwrightDriver; aiRuntime: AiRuntime }>({
-    driver: async ({ task }, use) => {
+  const fliwrightTest = vitestTest.extend<FliwrightFixtures>({
+    timeline: async ({ task }, use) => {
+      const testName = getTestName(task);
+      const testRunId = `${process.env.FLIWRIGHT_RUN_ID ?? runId}-${safeName(testName)}`;
+      const artifactStore = new TimelineArtifactStore({
+        cwd: config.timelineDir ?? process.cwd(),
+        runId: testRunId,
+      });
+      const recorder = new TimelineRecorder({
+        runId: testRunId,
+        testName,
+        mode: config.mode ?? 'test',
+      });
+      const timeline: FliwrightTimelineContext = { recorder, artifactStore, runId: testRunId };
+      const ctx = testContext.getStore();
+      if (ctx) ctx.timeline = timeline;
+
+      let failed = false;
+      try {
+        await use(timeline);
+        if (config.requireAssertions && !timeline.recorder.toJSON().nodes.some((node) => node.kind === 'assertion')) {
+          throw new FliwrightAgentError({
+            code: 'assertion_failed',
+            title: testName,
+            message: 'Test mode requires at least one timeline assertion, but none were recorded.',
+            recoveryHints: [
+              { kind: 'manual', description: 'Add at least one expect(...).to* assertion or disable requireAssertions.' },
+            ],
+          });
+        }
+      } catch (error) {
+        failed = true;
+        captureTimelineFailure(timeline, error, testName);
+        throw error;
+      } finally {
+        const data = timeline.recorder.complete(failed ? 'failed' : 'passed');
+        timeline.timelinePath = await timeline.artifactStore.writeTimeline(data);
+      }
+    },
+    driver: async ({ task, timeline }, use) => {
       const driver = await getSharedDriver(config);
       const testName = getTestName(task);
-      await testContext.run({ driver, testName }, async () => {
-        await use(driver);
-      });
+      const previous = currentTestContext;
+      const ctx: FliwrightTestContext = { driver, testName, timeline };
+      currentTestContext = ctx;
+      try {
+        await testContext.run(ctx, async () => {
+          await use(driver);
+        });
+      } finally {
+        currentTestContext = previous;
+      }
     },
-    page: async ({ task }, use) => {
+    page: async ({ task, timeline }, use) => {
       const driver = await getSharedDriver(config);
       const testName = getTestName(task);
 
@@ -108,42 +183,69 @@ export function createFliwrightTest(config: FliwrightConfig) {
       // Reset lazy Page so it picks up the shadowed sendRequest
       (driver as any)._page = null;
 
-      const ctx: FliwrightTestContext = { driver, testName, traceCollector: collector, originalSendRequest: origSendRequest };
+      const ctx: FliwrightTestContext = { driver, testName, timeline, traceCollector: collector, originalSendRequest: origSendRequest };
+      const previous = currentTestContext;
+      currentTestContext = ctx;
 
       try {
         await testContext.run(ctx, async () => {
-          await use(driver.page);
+          const page = new FliwrightPage(
+            (method, params) => driver.sendRequest(method, params),
+            {
+              recorder: timeline.recorder,
+              artifactStore: timeline.artifactStore,
+            },
+          );
+          await use(page);
         });
+        await collector?.complete('passed');
       } catch (error) {
         await collector?.complete('failed');
         await writeMcpFailureContext(error, driver, testName, config.timeout ?? 5000, config.screenshot ?? 'file');
-        // Restore original sendRequest before re-throwing
-        if (origSendRequest) (driver as any).sendRequest = origSendRequest;
         throw error;
+      } finally {
+        // Restore original sendRequest
+        if (origSendRequest) (driver as any).sendRequest = origSendRequest;
+        currentTestContext = previous;
       }
-
-      await collector?.complete('passed');
-      // Restore original sendRequest
-      if (origSendRequest) (driver as any).sendRequest = origSendRequest;
     },
-    aiRuntime: async ({ task }, use) => {
+    aiRuntime: async ({ task, timeline }, use) => {
       const driver = await getSharedDriver(config);
       const testName = getTestName(task);
       const runtime = new AiRuntime(resolveAiConfig(config.ai), {
         page: driver.page,
         driver,
         testName,
-        runId,
+        runId: timeline.runId,
         cwd: process.cwd(),
       });
       await use(runtime);
+    },
+    flow: async ({ page, timeline }, use) => {
+      await use(new FlowRuntime({ recorder: timeline.recorder, artifactStore: timeline.artifactStore, page }));
+    },
+    mock: async ({ driver, timeline }, use) => {
+      await use(new MockRuntime(driver.mock, timeline.recorder));
+    },
+    agent: async ({ aiRuntime, timeline }, use) => {
+      await use(new AgentRuntime({ aiRuntime, recorder: timeline.recorder }));
     },
   });
 
   return fliwrightTest;
 }
 
+export function createFliwrightScript(config: FliwrightConfig) {
+  return createFliwrightTest({ ...config, mode: 'script', requireAssertions: false });
+}
+
 export const test = createFliwrightTest({
+  vmServiceUrl: toWebSocketUrl(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL ?? ''),
+  timeout: parsePositiveInt(process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS) ?? 5000,
+  screenshot: parseScreenshotMode(process.env.FLIWRIGHT_SCREENSHOT_MODE),
+});
+
+export const script = createFliwrightScript({
   vmServiceUrl: toWebSocketUrl(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL ?? ''),
   timeout: parsePositiveInt(process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS) ?? 5000,
   screenshot: parseScreenshotMode(process.env.FLIWRIGHT_SCREENSHOT_MODE),
@@ -159,9 +261,10 @@ export function afterEach(hook: FliwrightHook, timeout?: number): void {
 
 export { afterAll, beforeAll, describe };
 
-export function expect(locator: Locator): Assertion {
-  const context = testContext.getStore();
-  if (!context) return createExpect(locator);
+export function expect(locator: Locator, title?: string): Assertion {
+  const context = testContext.getStore() ?? currentTestContext;
+  const locatorTimeline = locator.assertionTimeline;
+  if (!context) return createExpect(locator, undefined, { ...locatorTimeline, title: title ?? locatorTimeline?.title });
   return new Assertion(
     locator,
     false,
@@ -169,6 +272,16 @@ export function expect(locator: Locator): Assertion {
     context.driver.healing,
     context.testName,
     (method, params) => context.driver.sendRequest(method, params),
+    locatorTimeline?.recorder
+      ? { ...locatorTimeline, title: title ?? locatorTimeline.title }
+      : context.timeline
+      ? {
+        title,
+        recorder: context.timeline.recorder,
+        artifactStore: context.timeline.artifactStore,
+        page: context.driver.page,
+      }
+      : { title },
   );
 }
 
@@ -382,4 +495,23 @@ function getTestName(task: unknown): string {
   const candidate = task as { name?: unknown };
   if (typeof candidate.name === 'string') return candidate.name;
   return '<unknown>';
+}
+
+function captureTimelineFailure(timeline: FliwrightTimelineContext, error: unknown, testName: string): void {
+  if (error instanceof FliwrightAgentError) return;
+  const node = timeline.recorder.startNode('failure', testName);
+  timeline.recorder.failNode(node.id, {
+    code: 'unknown',
+    title: testName,
+    message: error instanceof Error ? error.message : String(error),
+    timelineNodeId: node.id,
+    recoveryHints: [
+      { kind: 'observe', description: 'Inspect timeline artifacts and failure context for this run.' },
+      { kind: 'manual', description: 'Review the thrown error and app state at failure time.' },
+    ],
+  });
+}
+
+function safeName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'test';
 }

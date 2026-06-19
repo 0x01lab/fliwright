@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart';
 
 import '../bridge.dart';
+import 'diagnostics.dart';
 
 /// VM Service extension for programmatic route navigation.
 ///
@@ -27,8 +28,14 @@ class RouterNavigateExtension {
   ) async {
     final path = params['path'];
     if (path == null || path.isEmpty) {
-      return {'success': false, 'error': 'path is required'};
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'path is required',
+        action: 'navigate',
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
+    final routeBefore = await _currentRoute(const {});
 
     // 1. Try injected router (e.g. GoRouter). Normal navigation should keep a
     // route below the destination so app back buttons can pop safely.
@@ -41,11 +48,14 @@ class RouterNavigateExtension {
         } else {
           (router as dynamic).push(path);
         }
-        return {
-          'success': true,
-          'method': 'injected_router_push',
-          'path': path,
-        };
+        final routeAfter = await _currentRoute(const {});
+        return normalizedSuccess(
+          action: 'navigate',
+          target: {'path': path},
+          routeBefore: routeBefore,
+          routeAfter: routeAfter,
+          extra: {'method': 'injected_router_push', 'path': path},
+        );
       } on NoSuchMethodError {
         try {
           final extraRaw = params['extra'];
@@ -54,55 +64,79 @@ class RouterNavigateExtension {
           } else {
             (router as dynamic).go(path);
           }
-          return {
-            'success': true,
-            'method': 'injected_router_go',
-            'path': path,
-          };
+          final routeAfter = await _currentRoute(const {});
+          return normalizedSuccess(
+            action: 'navigate',
+            target: {'path': path},
+            routeBefore: routeBefore,
+            routeAfter: routeAfter,
+            extra: {'method': 'injected_router_go', 'path': path},
+          );
         } catch (e) {
-          return {
-            'success': false,
-            'error': 'injected router fallback failed: $e',
-            'path': path,
-          };
+          return normalizedFailure(
+            code: 'navigation_failed',
+            message: 'injected router fallback failed: $e',
+            action: 'navigate',
+            target: {'path': path},
+            details: {'routeBefore': routeBefore},
+            recoveryHints: _navigationRecoveryHints(),
+          );
         }
       } catch (e) {
-        return {
-          'success': false,
-          'error': 'injected router failed: $e',
-          'path': path,
-        };
+        return normalizedFailure(
+          code: 'navigation_failed',
+          message: 'injected router failed: $e',
+          action: 'navigate',
+          target: {'path': path},
+          details: {'routeBefore': routeBefore},
+          recoveryHints: _navigationRecoveryHints(),
+        );
       }
     }
 
     // 2. Fallback: find NavigatorState in the widget tree
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
-      return {'success': false, 'error': 'no root element', 'path': path};
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'no root element',
+        action: 'navigate',
+        target: {'path': path},
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
 
     final navigator = _findNavigatorState(root);
     if (navigator == null) {
-      return {
-        'success': false,
-        'error': 'no navigator found',
-        'path': path,
-      };
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'no navigator found',
+        action: 'navigate',
+        target: {'path': path},
+        details: {'routeBefore': routeBefore},
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
 
     try {
       navigator.pushNamed(path);
-      return {
-        'success': true,
-        'method': 'navigator_pushNamed',
-        'path': path,
-      };
+      final routeAfter = await _currentRoute(const {});
+      return normalizedSuccess(
+        action: 'navigate',
+        target: {'path': path},
+        routeBefore: routeBefore,
+        routeAfter: routeAfter,
+        extra: {'method': 'navigator_pushNamed', 'path': path},
+      );
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'navigator pushNamed failed: $e',
-        'path': path,
-      };
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'navigator pushNamed failed: $e',
+        action: 'navigate',
+        target: {'path': path},
+        details: {'routeBefore': routeBefore},
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
   }
 
@@ -116,8 +150,14 @@ class RouterNavigateExtension {
   ) async {
     final path = params['path'];
     if (path == null || path.isEmpty) {
-      return {'success': false, 'error': 'path is required'};
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'path is required',
+        action: 'resetRouteStack',
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
+    final routeBefore = await _currentRoute(const {});
 
     final router = FliwrightBridge.router;
     if (router != null) {
@@ -128,47 +168,68 @@ class RouterNavigateExtension {
         } else {
           (router as dynamic).go(path);
         }
-        return {
-          'success': true,
-          'method': 'injected_router_go',
-          'path': path,
-        };
+        final routeAfter = await _currentRoute(const {});
+        return normalizedSuccess(
+          action: 'resetRouteStack',
+          target: {'path': path},
+          routeBefore: routeBefore,
+          routeAfter: routeAfter,
+          extra: {'method': 'injected_router_go', 'path': path},
+        );
       } catch (e) {
-        return {
-          'success': false,
-          'error': 'injected router reset failed: $e',
-          'path': path,
-        };
+        return normalizedFailure(
+          code: 'navigation_failed',
+          message: 'injected router reset failed: $e',
+          action: 'resetRouteStack',
+          target: {'path': path},
+          details: {'routeBefore': routeBefore},
+          recoveryHints: _navigationRecoveryHints(),
+        );
       }
     }
 
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
-      return {'success': false, 'error': 'no root element', 'path': path};
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'no root element',
+        action: 'resetRouteStack',
+        target: {'path': path},
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
 
     final navigator = _findNavigatorState(root);
     if (navigator == null) {
-      return {
-        'success': false,
-        'error': 'no navigator found',
-        'path': path,
-      };
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'no navigator found',
+        action: 'resetRouteStack',
+        target: {'path': path},
+        details: {'routeBefore': routeBefore},
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
 
     try {
       navigator.pushNamedAndRemoveUntil(path, (route) => false);
-      return {
-        'success': true,
-        'method': 'navigator_pushNamedAndRemoveUntil',
-        'path': path,
-      };
+      final routeAfter = await _currentRoute(const {});
+      return normalizedSuccess(
+        action: 'resetRouteStack',
+        target: {'path': path},
+        routeBefore: routeBefore,
+        routeAfter: routeAfter,
+        extra: {'method': 'navigator_pushNamedAndRemoveUntil', 'path': path},
+      );
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'navigator reset failed: $e',
-        'path': path,
-      };
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'navigator reset failed: $e',
+        action: 'resetRouteStack',
+        target: {'path': path},
+        details: {'routeBefore': routeBefore},
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
   }
 
@@ -205,10 +266,7 @@ class RouterNavigateExtension {
       final modalRoute = ModalRoute.of(root);
       if (modalRoute != null) {
         final settings = modalRoute.settings;
-        return {
-          'path': settings.name,
-          'name': settings.name,
-        };
+        return {'path': settings.name, 'name': settings.name};
       }
     } catch (_) {
       // ModalRoute.of may throw if called outside of a route
@@ -221,12 +279,19 @@ class RouterNavigateExtension {
   static Future<Map<String, dynamic>> _goBack(
     Map<String, String> params,
   ) async {
+    final routeBefore = await _currentRoute(const {});
     // 1. Try injected router
     final router = FliwrightBridge.router;
     if (router != null) {
       try {
         (router as dynamic).pop();
-        return {'success': true, 'method': 'injected_router'};
+        final routeAfter = await _currentRoute(const {});
+        return normalizedSuccess(
+          action: 'goBack',
+          routeBefore: routeBefore,
+          routeAfter: routeAfter,
+          extra: {'method': 'injected_router'},
+        );
       } catch (e) {
         // Fall through to Navigator.pop
       }
@@ -235,19 +300,43 @@ class RouterNavigateExtension {
     // 2. Fallback: Navigator.pop via root context
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
-      return {'success': false, 'error': 'no root element'};
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'no root element',
+        action: 'goBack',
+        details: {'routeBefore': routeBefore},
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
 
     final navigator = _findNavigatorState(root);
     if (navigator == null) {
-      return {'success': false, 'error': 'no navigator found'};
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'no navigator found',
+        action: 'goBack',
+        details: {'routeBefore': routeBefore},
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
 
     try {
       navigator.pop();
-      return {'success': true, 'method': 'navigator_pop'};
+      final routeAfter = await _currentRoute(const {});
+      return normalizedSuccess(
+        action: 'goBack',
+        routeBefore: routeBefore,
+        routeAfter: routeAfter,
+        extra: {'method': 'navigator_pop'},
+      );
     } catch (e) {
-      return {'success': false, 'error': 'navigator pop failed: $e'};
+      return normalizedFailure(
+        code: 'navigation_failed',
+        message: 'navigator pop failed: $e',
+        action: 'goBack',
+        details: {'routeBefore': routeBefore},
+        recoveryHints: _navigationRecoveryHints(),
+      );
     }
   }
 
@@ -276,3 +365,14 @@ class RouterNavigateExtension {
     return lastFound;
   }
 }
+
+List<Map<String, String>> _navigationRecoveryHints() => const [
+  {
+    'kind': 'observe',
+    'description': 'Inspect the current route and visible navigation controls.',
+  },
+  {
+    'kind': 'manual',
+    'description': 'Verify the app router supports the requested route.',
+  },
+];

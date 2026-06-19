@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 
 import '../bridge.dart';
+import 'mock_extension_helpers.dart';
 import 'mock_rule_store.dart';
 
 class MockServerExtension {
@@ -66,29 +67,13 @@ class MockServerExtension {
   }
 
   static Future<Map<String, dynamic>> _addRoute(
-      Map<String, String> params) async {
-    final routeJson = params['route'];
-    if (routeJson == null || routeJson.isEmpty) {
-      return {'error': 'Missing parameter: route'};
-    }
+    Map<String, String> params,
+  ) async {
+    final missingRoute = missingRouteParamResponse(params);
+    if (missingRoute != null) return missingRoute;
+
     try {
-      final decoded = jsonDecode(routeJson) as Map<String, dynamic>;
-      final response = decoded['response'] as Map<String, dynamic>? ?? {};
-      final route = MockRoute(
-        id: decoded['id'] as String? ??
-            DateTime.now().millisecondsSinceEpoch.toString(),
-        method: decoded['method'] as String?,
-        pathPattern: decoded['path'] as String? ??
-            decoded['pathPattern'] as String? ??
-            '/',
-        status: response['status'] as int? ?? 200,
-        headers: (response['headers'] as Map<String, dynamic>?)?.map(
-              (k, v) => MapEntry(k, v.toString()),
-            ) ??
-            {'Content-Type': 'application/json'},
-        body: response['body'],
-        delayMs: response['delay'] as int? ?? 0,
-      );
+      final route = parseRouteParam(params);
       final beforeReplace = _store.getAllRoutes().length;
       await _store.addRoute(route);
       final replaced = beforeReplace - _store.getAllRoutes().length + 1;
@@ -104,64 +89,60 @@ class MockServerExtension {
   }
 
   static Future<Map<String, dynamic>> _removeRoute(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final id = params['id'];
     final path = params['path'];
     if (id != null) {
       final removed = await _store.removeRoute(id: id);
       _log(
-          'Removed route id=$id removed=$removed routes=${_store.getAllRoutes().length}');
+        'Removed route id=$id removed=$removed routes=${_store.getAllRoutes().length}',
+      );
       return {'removed': removed};
     }
     if (path != null) {
       final method = params['method'];
       final removed = await _store.removeRoute(path: path, method: method);
       _log(
-          'Removed route path=$path method=${method ?? '*'} removed=$removed routes=${_store.getAllRoutes().length}');
+        'Removed route path=$path method=${method ?? '*'} removed=$removed routes=${_store.getAllRoutes().length}',
+      );
       return {'removed': removed};
     }
     return {'error': 'Missing parameter: id or path'};
   }
 
   static Future<Map<String, dynamic>> _clearRoutes(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final count = await _store.clearRoutes();
     _log('Cleared $count route(s)');
     return {'cleared': count};
   }
 
   static Future<Map<String, dynamic>> _listRoutes(
-      Map<String, String> params) async {
-    final routes = _store
-        .getAllRoutes()
-        .map((r) => {
-              'id': r.id,
-              'method': r.method,
-              'path': r.pathPattern,
-            })
-        .toList();
-    return {'routes': routes};
+    Map<String, String> params,
+  ) async {
+    return {'routes': routeSummaries(_store)};
   }
 
   static Future<Map<String, dynamic>> _setPassthrough(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     _passthrough = params['enabled'] == 'true';
     _log('Passthrough set to $_passthrough');
     return {'passthrough': _passthrough};
   }
 
   static Future<Map<String, dynamic>> _getCalls(
-      Map<String, String> params) async {
-    final pathFilter = params['path'];
-    var calls = _callLog.toList();
-    if (pathFilter != null) {
-      calls = calls.where((c) => c.path == pathFilter).toList();
-    }
+    Map<String, String> params,
+  ) async {
+    final calls = filterCallsByPath(_callLog, params['path']);
     return {'calls': calls.map((c) => c.toJson()).toList()};
   }
 
   static Future<Map<String, dynamic>> _clearCalls(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final count = _callLog.length;
     _callLog.clear();
     _log('Cleared $count recorded call(s)');
@@ -169,20 +150,13 @@ class MockServerExtension {
   }
 
   static Future<Map<String, dynamic>> _debugState(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     return {
       'mode': 'http',
       'serverPort': _server?.port,
       'passthrough': _passthrough,
-      'routes': _store
-          .getAllRoutes()
-          .map((route) => {
-                'id': route.id,
-                'method': route.method,
-                'path': route.pathPattern,
-                'status': route.status,
-              })
-          .toList(),
+      'routes': _store.getAllRoutes().map(routeSummary).toList(),
       'calls': _callLog.length,
     };
   }
@@ -205,21 +179,30 @@ class MockServerExtension {
         callHeaders[name] = values.join(', ');
       });
 
-      _callLog.add(MockCallRecord(
-        method: request.method,
-        path: uri.path,
-        headers: callHeaders,
-        body: requestBody,
-        timestamp: DateTime.now(),
-      ));
+      _callLog.add(
+        MockCallRecord(
+          method: request.method,
+          path: uri.path,
+          url: uri.toString(),
+          headers: callHeaders,
+          query: _queryParametersAll(uri),
+          body: requestBody,
+          status: route.status,
+          response: route.body,
+          timestamp: DateTime.now(),
+          backend: 'tool-server',
+        ),
+      );
 
       _log(
-          'Matched route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status}');
+        'Matched route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status}',
+      );
       await _respondWithRoute(request, route);
     } else if (_passthrough) {
       final requestBody = await _readRequestBody(request);
       _log(
-          'No route matched ${request.method} ${uri.path}; passthrough enabled');
+        'No route matched ${request.method} ${uri.path}; passthrough enabled',
+      );
       await _passthroughRequest(request, uri, requestBody);
     } else {
       _log(
@@ -234,6 +217,11 @@ class MockServerExtension {
     }
   }
 
+  static Map<String, dynamic> _queryParametersAll(Uri uri) => {
+    for (final entry in uri.queryParametersAll.entries)
+      entry.key: entry.value.length == 1 ? entry.value.first : entry.value,
+  };
+
   static Future<String?> _readRequestBody(HttpRequest request) async {
     // Read body once — HttpRequest is a single-subscription stream.
     // contentLength is -1 when chunked transfer encoding is used (e.g. via
@@ -244,7 +232,9 @@ class MockServerExtension {
   }
 
   static Future<void> _respondWithRoute(
-      HttpRequest request, MockRoute route) async {
+    HttpRequest request,
+    MockRoute route,
+  ) async {
     if (route.delayMs > 0) {
       await Future.delayed(Duration(milliseconds: route.delayMs));
     }
@@ -316,7 +306,8 @@ class MockServerExtension {
   /// This lets E2E tests verify that the mock proxy is intercepting traffic
   /// without depending on the UI layer or third-party HTTP clients like Dio.
   static Future<Map<String, dynamic>> _testRequest(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final url = params['url'] ?? 'http://test.local/ping';
     final method = (params['method'] ?? 'GET').toUpperCase();
     try {
@@ -337,10 +328,7 @@ class MockServerExtension {
         }
         final response = await request.close();
         final body = await utf8.decoder.bind(response).join();
-        return {
-          'status': response.statusCode,
-          'body': body,
-        };
+        return {'status': response.statusCode, 'body': body};
       } finally {
         client.close();
       }

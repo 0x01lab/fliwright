@@ -8,6 +8,7 @@ import type {
   WidgetInfo,
 } from './types.js';
 import { Selector } from './Selector.js';
+import type { AssertionTimelineOptions } from './Assertion.js';
 
 type ActionResponse = {
   success?: boolean;
@@ -35,6 +36,7 @@ export class Locator {
   constructor(
     input: SelectorInput | SelectorAst | Selector | RefTarget,
     private sendRequest: SendRequest,
+    readonly assertionTimeline?: AssertionTimelineOptions,
   ) {
     if (isRefTarget(input)) {
       this.target = { kind: 'ref', ref: normalizeRef(input.ref) };
@@ -56,7 +58,7 @@ export class Locator {
   }
 
   locator(selector: SelectorInput): Locator {
-    return new Locator(this.requireSelector('locator').descendant(selector), this.sendRequest);
+    return new Locator(this.requireSelector('locator').descendant(selector), this.sendRequest, this.assertionTimeline);
   }
 
   getByText(
@@ -90,23 +92,23 @@ export class Locator {
   }
 
   ancestor(selector: SelectorInput): Locator {
-    return new Locator(this.requireSelector('ancestor').ancestor(selector), this.sendRequest);
+    return new Locator(this.requireSelector('ancestor').ancestor(selector), this.sendRequest, this.assertionTimeline);
   }
 
   and(...selectors: SelectorInput[]): Locator {
-    return new Locator(this.requireSelector('and').and(...selectors), this.sendRequest);
+    return new Locator(this.requireSelector('and').and(...selectors), this.sendRequest, this.assertionTimeline);
   }
 
   or(...selectors: SelectorInput[]): Locator {
-    return new Locator(this.requireSelector('or').or(...selectors), this.sendRequest);
+    return new Locator(this.requireSelector('or').or(...selectors), this.sendRequest, this.assertionTimeline);
   }
 
   nth(index: number, options?: { visible?: boolean }): Locator {
     const base = this.requireSelector('nth').nth(index);
     if (options?.visible) {
-      return new Locator(base.filter({ visible: true }), this.sendRequest);
+      return new Locator(base.filter({ visible: true }), this.sendRequest, this.assertionTimeline);
     }
-    return new Locator(base, this.sendRequest);
+    return new Locator(base, this.sendRequest, this.assertionTimeline);
   }
 
   first(options?: { visible?: boolean }): Locator {
@@ -116,17 +118,17 @@ export class Locator {
   last(options?: { visible?: boolean }): Locator {
     const base = this.requireSelector('last').last();
     if (options?.visible) {
-      return new Locator(base.filter({ visible: true }), this.sendRequest);
+      return new Locator(base.filter({ visible: true }), this.sendRequest, this.assertionTimeline);
     }
-    return new Locator(base, this.sendRequest);
+    return new Locator(base, this.sendRequest, this.assertionTimeline);
   }
 
   filter(criteria: FilterCriteria): Locator {
-    return new Locator(this.requireSelector('filter').filter(criteria), this.sendRequest);
+    return new Locator(this.requireSelector('filter').filter(criteria), this.sendRequest, this.assertionTimeline);
   }
 
   containing(descendant: SelectorInput): Locator {
-    return new Locator(this.requireSelector('containing').containing(descendant), this.sendRequest);
+    return new Locator(this.requireSelector('containing').containing(descendant), this.sendRequest, this.assertionTimeline);
   }
 
   getByTooltip(tooltip: string): Locator {

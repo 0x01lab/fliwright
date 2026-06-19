@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../bridge.dart';
+import 'diagnostics.dart';
 
 class GestureExtension {
   static int _nextPointer = 10000;
@@ -22,7 +23,12 @@ class GestureExtension {
     final x = double.tryParse(params['x'] ?? '');
     final y = double.tryParse(params['y'] ?? '');
     if (x == null || y == null) {
-      return {'error': 'Missing or invalid x, y coordinates'};
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'Missing or invalid x, y coordinates',
+        action: 'click',
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
 
     final pointer = _nextPointer++;
@@ -31,8 +37,9 @@ class GestureExtension {
     final position = Offset(x, y);
     final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
     final isRightClick = params['button'] == 'right';
-    final kind =
-        isRightClick ? PointerDeviceKind.mouse : PointerDeviceKind.touch;
+    final kind = isRightClick
+        ? PointerDeviceKind.mouse
+        : PointerDeviceKind.touch;
     final buttons = isRightClick ? kSecondaryMouseButton : kPrimaryButton;
 
     GestureBinding.instance.handlePointerEvent(
@@ -57,14 +64,23 @@ class GestureExtension {
       ),
     );
 
-    return {'success': true, if (isRightClick) 'button': 'right'};
+    return normalizedSuccess(
+      action: 'click',
+      target: coordinateTarget(x, y),
+      extra: {if (isRightClick) 'button': 'right'},
+    );
   }
 
   static Future<Map<String, dynamic>> _hover(Map<String, String> params) async {
     final x = double.tryParse(params['x'] ?? '');
     final y = double.tryParse(params['y'] ?? '');
     if (x == null || y == null) {
-      return {'error': 'Missing or invalid x, y coordinates'};
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'Missing or invalid x, y coordinates',
+        action: 'hover',
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
 
     final pointer = _nextPointer++;
@@ -76,24 +92,40 @@ class GestureExtension {
         position: Offset(x, y),
         kind: PointerDeviceKind.mouse,
         viewId: view,
-        timeStamp:
-            Duration(milliseconds: DateTime.now().millisecondsSinceEpoch),
+        timeStamp: Duration(
+          milliseconds: DateTime.now().millisecondsSinceEpoch,
+        ),
       ),
     );
 
-    return {'success': true, 'gesture': 'hover'};
+    return normalizedSuccess(
+      action: 'hover',
+      target: coordinateTarget(x, y),
+      extra: {'gesture': 'hover'},
+    );
   }
 
   static Future<Map<String, dynamic>> _gesture(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final gesture = params['gesture'];
     final selector = params['selector'];
 
     if (gesture == null || gesture.isEmpty) {
-      return {'error': 'Missing required parameter: gesture'};
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'Missing required parameter: gesture',
+        action: 'gesture',
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
     if (selector == null || selector.isEmpty) {
-      return {'error': 'Missing required parameter: selector'};
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'Missing required parameter: selector',
+        action: gesture,
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
 
     Map<String, dynamic>? rect;
@@ -107,18 +139,33 @@ class GestureExtension {
         inspectParams['ancestorSelector'] = params['ancestorSelector']!;
       }
 
-      final inspectResult =
-          await _registry!.invoke('ext.fliwright.inspect', inspectParams);
+      final inspectResult = await _registry!.invoke(
+        'ext.fliwright.inspect',
+        inspectParams,
+      );
       final widgets = inspectResult['widgets'] as List<dynamic>?;
       if (widgets == null || widgets.isEmpty) {
-        return {'error': 'No widget found matching selector: $selector'};
+        return normalizedFailure(
+          code: 'target_not_found',
+          message: 'No widget found matching selector: $selector',
+          action: gesture,
+          target: selectorTarget(selector),
+          details: {'inspectResult': inspectResult},
+          recoveryHints: selectorRecoveryHints(),
+        );
       }
 
       final widget = widgets[0] as Map<String, dynamic>;
       rect = widget['rect'] as Map<String, dynamic>?;
     }
     if (rect == null) {
-      return {'error': 'Widget matching $selector has no render bounds'};
+      return normalizedFailure(
+        code: 'actionability_zero_rect',
+        message: 'Widget matching $selector has no render bounds',
+        action: gesture,
+        target: selectorTarget(selector),
+        recoveryHints: actionabilityRecoveryHints(),
+      );
     }
 
     final cx =
@@ -138,12 +185,21 @@ class GestureExtension {
       case 'pinch':
         return _pinch(cx, cy, rect, params);
       default:
-        return {'error': 'Unknown gesture type: $gesture'};
+        return normalizedFailure(
+          code: 'target_not_found',
+          message: 'Unknown gesture type: $gesture',
+          action: gesture,
+          target: selectorTarget(selector, rect: rect),
+          recoveryHints: selectorRecoveryHints(),
+        );
     }
   }
 
   static Future<Map<String, dynamic>> _longPress(
-      double x, double y, Map<String, String> params) async {
+    double x,
+    double y,
+    Map<String, String> params,
+  ) async {
     final duration = int.tryParse(params['duration'] ?? '') ?? 500;
 
     final pointer = _nextPointer++;
@@ -172,15 +228,28 @@ class GestureExtension {
       ),
     );
 
-    return {'success': true, 'gesture': 'longPress'};
+    return normalizedSuccess(
+      action: 'longPress',
+      target: coordinateTarget(x, y),
+      extra: {'gesture': 'longPress'},
+    );
   }
 
   static Future<Map<String, dynamic>> _drag(
-      double x, double y, Map<String, String> params) async {
+    double x,
+    double y,
+    Map<String, String> params,
+  ) async {
     final deltaX = double.tryParse(params['deltaX'] ?? '');
     final deltaY = double.tryParse(params['deltaY'] ?? '');
     if (deltaX == null || deltaY == null) {
-      return {'error': 'Missing required parameters: deltaX, deltaY'};
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'Missing required parameters: deltaX, deltaY',
+        action: 'drag',
+        target: coordinateTarget(x, y),
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
 
     final steps = int.tryParse(params['steps'] ?? '') ?? 10;
@@ -223,7 +292,12 @@ class GestureExtension {
       ),
     );
 
-    return {'success': true, 'gesture': 'drag'};
+    return normalizedSuccess(
+      action: 'drag',
+      target: coordinateTarget(x, y),
+      details: {'deltaX': deltaX, 'deltaY': deltaY, 'steps': steps},
+      extra: {'gesture': 'drag'},
+    );
   }
 
   /// Drag from the widget center in a semantic direction by a given distance.
@@ -242,8 +316,7 @@ class GestureExtension {
     final defaultDist = direction == 'left' || direction == 'right'
         ? (rect['width'] as num).toDouble() * 0.5
         : (rect['height'] as num).toDouble() * 0.5;
-    final distance =
-        double.tryParse(params['distance'] ?? '') ?? defaultDist;
+    final distance = double.tryParse(params['distance'] ?? '') ?? defaultDist;
     final steps = int.tryParse(params['steps'] ?? '') ?? 20;
 
     double deltaX = 0, deltaY = 0;
@@ -296,12 +369,16 @@ class GestureExtension {
       ),
     );
 
-    return {
-      'success': true,
-      'gesture': 'semanticDrag',
-      'direction': direction,
-      'distance': distance,
-    };
+    return normalizedSuccess(
+      action: 'semanticDrag',
+      target: coordinateTarget(cx, cy),
+      details: {'direction': direction, 'distance': distance, 'steps': steps},
+      extra: {
+        'gesture': 'semanticDrag',
+        'direction': direction,
+        'distance': distance,
+      },
+    );
   }
 
   /// Slide a widget (e.g. slider knob) to a target X position.
@@ -317,7 +394,13 @@ class GestureExtension {
   ) async {
     final targetX = double.tryParse(params['targetX'] ?? '');
     if (targetX == null) {
-      return {'error': 'Missing required parameter: targetX'};
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'Missing required parameter: targetX',
+        action: 'slideTo',
+        target: coordinateTarget(cx, cy),
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
     final deltaX = targetX - cx;
     final steps = int.tryParse(params['steps'] ?? '') ?? 25;
@@ -360,16 +443,20 @@ class GestureExtension {
       ),
     );
 
-    return {
-      'success': true,
-      'gesture': 'slideTo',
-      'fromX': cx,
-      'toX': targetX,
-    };
+    return normalizedSuccess(
+      action: 'slideTo',
+      target: coordinateTarget(cx, cy),
+      details: {'fromX': cx, 'toX': targetX, 'steps': steps},
+      extra: {'gesture': 'slideTo', 'fromX': cx, 'toX': targetX},
+    );
   }
 
-  static Future<Map<String, dynamic>> _pinch(double cx, double cy,
-      Map<String, dynamic> rect, Map<String, String> params) async {
+  static Future<Map<String, dynamic>> _pinch(
+    double cx,
+    double cy,
+    Map<String, dynamic> rect,
+    Map<String, String> params,
+  ) async {
     final scale = double.tryParse(params['scale'] ?? '') ?? 0.5;
     final steps = int.tryParse(params['steps'] ?? '') ?? 10;
 
@@ -416,14 +503,8 @@ class GestureExtension {
     // Interpolated moves
     for (var i = 1; i <= steps; i++) {
       final t = i / steps;
-      final p1Pos = Offset(
-        p1Start.dx + (p1End.dx - p1Start.dx) * t,
-        cy,
-      );
-      final p2Pos = Offset(
-        p2Start.dx + (p2End.dx - p2Start.dx) * t,
-        cy,
-      );
+      final p1Pos = Offset(p1Start.dx + (p1End.dx - p1Start.dx) * t, cy);
+      final p2Pos = Offset(p2Start.dx + (p2End.dx - p2Start.dx) * t, cy);
       GestureBinding.instance.handlePointerEvent(
         PointerMoveEvent(
           pointer: pointer1,
@@ -464,21 +545,32 @@ class GestureExtension {
       ),
     );
 
-    return {'success': true, 'gesture': 'pinch'};
+    return normalizedSuccess(
+      action: 'pinch',
+      target: coordinateTarget(cx, cy),
+      details: {'scale': scale, 'steps': steps},
+      extra: {'gesture': 'pinch'},
+    );
   }
 
   /// Drag from an arbitrary (x, y) coordinate without needing a Flutter widget.
   /// Used for WebView overlays (e.g. captcha sliders) that are not in the
   /// Flutter widget tree.
   static Future<Map<String, dynamic>> _dragFrom(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final x = double.tryParse(params['x'] ?? '');
     final y = double.tryParse(params['y'] ?? '');
     final deltaX = double.tryParse(params['deltaX'] ?? '');
     final deltaY = double.tryParse(params['deltaY'] ?? '');
 
     if (x == null || y == null || deltaX == null || deltaY == null) {
-      return {'error': 'Missing required parameters: x, y, deltaX, deltaY'};
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'Missing required parameters: x, y, deltaX, deltaY',
+        action: 'dragFrom',
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
 
     final steps = int.tryParse(params['steps'] ?? '') ?? 20;
@@ -524,6 +616,11 @@ class GestureExtension {
       ),
     );
 
-    return {'success': true, 'gesture': 'dragFrom'};
+    return normalizedSuccess(
+      action: 'dragFrom',
+      target: coordinateTarget(x, y),
+      details: {'deltaX': deltaX, 'deltaY': deltaY, 'steps': steps},
+      extra: {'gesture': 'dragFrom'},
+    );
   }
 }

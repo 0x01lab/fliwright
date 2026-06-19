@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "runId": "2026-06-19T08-50-44-provides-timeline-native-fixtures",
+  "testName": "provides timeline-native fixtures",
+  "mode": "test",
+  "status": "passed",
+  "startedAt": "2026-06-19T08:50:44.827Z",
+  "endedAt": "2026-06-19T08:50:44.836Z",
+  "nodes": [
+    {
+      "id": "step-1",
+      "kind": "step",
+      "title": "Generate data",
+      "status": "passed",
+      "startedAt": "2026-06-19T08:50:44.827Z",
+      "endedAt": "2026-06-19T08:50:44.830Z"
+    },
+    {
+      "id": "ai-call-2",
+      "parentId": "step-1",
+      "kind": "ai-call",
+      "title": "Generate payload",
+      "status": "passed",
+      "startedAt": "2026-06-19T08:50:44.827Z",
+      "metadata": {
+        "mode": "active",
+        "prompt": "Generate payload",
+        "responseFormat": "json",
+        "hasSchema": true,
+        "hasFallback": true
+      },
+      "endedAt": "2026-06-19T08:50:44.830Z"
+    },
+    {
+      "id": "mock-3",
+      "kind": "mock",
+      "title": "Mock route: /api/register",
+      "status": "passed",
+      "startedAt": "2026-06-19T08:50:44.831Z",
+      "metadata": {
+        "operation": "route",
+        "endpoint": "/api/register",
+        "method": "POST",
+        "backend": "tool-server"
+      },
+      "endedAt": "2026-06-19T08:50:44.831Z"
+    }
+  ]
+}

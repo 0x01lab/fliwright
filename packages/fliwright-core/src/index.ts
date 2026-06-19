@@ -46,6 +46,11 @@ export type {
   MockEndpointConfig,
   MockIndex,
   MockRuleEntry,
+  BridgeContext,
+  BridgeQuery,
+  BridgeQueryMatch,
+  BridgeQueryResult,
+  FrameCaptureResult,
 } from './types.js';
 
 export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';
@@ -65,6 +70,7 @@ export type { NavigationWaitUntil, PageNavigationOptions, ResetToHomeOptions } f
 export { Locator } from './Locator.js';
 export { Selector } from './Selector.js';
 export { Assertion, AssertionError, createExpect } from './Assertion.js';
+export type { AssertionOptions, AssertionTimelineOptions } from './Assertion.js';
 export { FailureCollector } from './FailureCollector.js';
 export { TraceCollector, isActionMethod, TraceStore } from './TraceCollector.js';
 export type { TraceStep, TraceMeta, TraceData, TraceMode } from './TraceCollector.js';
@@ -142,3 +148,38 @@ export { ClaudeCliAdapter } from './ai/adapters/ClaudeCliAdapter.js';
 export { CodexCliAdapter } from './ai/adapters/CodexCliAdapter.js';
 export { resolveAiConfig } from './ai/config.js';
 export { ai, configureAi } from './ai/capability.js';
+
+export type {
+  AgentPolicy,
+  AgentVisibleFailure,
+  CodeRef,
+  TimelineArtifactRef,
+  TimelineData,
+  TimelineNode,
+  TimelineNodeKind,
+  TimelineNodeStartOptions,
+  TimelineNodeStatus,
+  TimelineRecorderOptions,
+  TimelineRunMode,
+  TimelineRunStatus,
+} from './timeline/types.js';
+export { TimelineRecorder } from './timeline/TimelineRecorder.js';
+export { TimelineArtifactStore } from './timeline/TimelineArtifactStore.js';
+export type { TimelineArtifactStoreOptions } from './timeline/TimelineArtifactStore.js';
+export { FlowRuntime, createAgentFailure, wrapAgentError } from './timeline/FlowRuntime.js';
+export type { FlowFrameOptions, FlowRuntimeOptions } from './timeline/FlowRuntime.js';
+export { FliwrightAgentError } from './agent/FliwrightAgentError.js';
+export { AgentRuntime } from './agent/AgentRuntime.js';
+export type { AgentRuntimeOptions } from './agent/AgentRuntime.js';
+export { PassiveAgent } from './agent/PassiveAgent.js';
+export type { AgentDiagnosis, PassiveAgentContext, PassiveAgentOptions } from './agent/PassiveAgent.js';
+export { AgentRepair } from './agent/AgentRepair.js';
+export type { AgentRepairOptions, RepairProposal, RepairResult, SafeRepairAction } from './agent/AgentRepair.js';
+export { MockRuntime, matchesCall } from './mocks/MockRuntime.js';
+export type {
+  MockBackend,
+  MockTimelineMetadata,
+  NormalizedMockCall,
+  NormalizedRequestMatcher,
+  TimelineMockResponse,
+} from './mocks/types.js';

@@ -4,12 +4,17 @@ import type {
   AgentSnapshotRef,
   AgentSnapshotOptions,
   AgentSnapshotResult,
+  BridgeContext,
+  BridgeQuery,
+  BridgeQueryResult,
+  FrameCaptureResult,
   SelectorInput,
   SelectorQuery,
   SendRequest,
 } from './types.js';
 import { Selector } from './Selector.js';
 import { FormHelper } from './FormHelper.js';
+import type { AssertionTimelineOptions } from './Assertion.js';
 
 export type NavigationWaitUntil = 'none' | 'settled';
 
@@ -28,14 +33,17 @@ export interface ResetToHomeOptions extends Omit<PageNavigationOptions, 'extra'>
 }
 
 export class Page {
-  constructor(private sendRequest: SendRequest) {}
+  constructor(
+    private sendRequest: SendRequest,
+    private readonly assertionTimeline?: AssertionTimelineOptions,
+  ) {}
 
   locator(selector: SelectorInput): Locator {
-    return new Locator(selector, this.sendRequest);
+    return new Locator(selector, this.sendRequest, this.assertionTimeline);
   }
 
   find(query: SelectorQuery): Locator {
-    return new Locator(query, this.sendRequest);
+    return new Locator(query, this.sendRequest, this.assertionTimeline);
   }
 
   getByText(
@@ -73,7 +81,7 @@ export class Page {
   }
 
   ref(ref: string): Locator {
-    return new Locator({ ref }, this.sendRequest);
+    return new Locator({ ref }, this.sendRequest, this.assertionTimeline);
   }
 
   async findRef(query: AgentFindQuery): Promise<Locator> {
@@ -95,6 +103,30 @@ export class Page {
       params.includeProperties = options.includeProperties.toString();
     }
     return (await this.sendRequest('ext.fliwright.snap', params)) as AgentSnapshotResult;
+  }
+
+  async context(): Promise<BridgeContext> {
+    return (await this.sendRequest('ext.fliwright.context', {})) as BridgeContext;
+  }
+
+  async captureFrame(options?: { screenshot?: boolean; snapshot?: boolean; diagnostics?: boolean }): Promise<FrameCaptureResult> {
+    const params: Record<string, unknown> = {};
+    if (options?.screenshot != null) params.screenshot = String(options.screenshot);
+    if (options?.snapshot != null) params.snapshot = String(options.snapshot);
+    if (options?.diagnostics != null) params.diagnostics = String(options.diagnostics);
+    return (await this.sendRequest('ext.fliwright.captureFrame', params)) as FrameCaptureResult;
+  }
+
+  async query(query: BridgeQuery, options?: { visible?: 'any' | 'hitTestable'; limit?: number }): Promise<BridgeQueryResult> {
+    const result = await this.sendRequest('ext.fliwright.query', {
+      query: JSON.stringify(query),
+      ...(options?.visible ? { visible: options.visible } : {}),
+      ...(options?.limit != null ? { limit: String(options.limit) } : {}),
+    }) as Partial<BridgeQueryResult>;
+    return {
+      matches: result.matches ?? [],
+      count: result.count ?? result.matches?.length ?? 0,
+    };
   }
 
   async dismissModal(): Promise<void> {

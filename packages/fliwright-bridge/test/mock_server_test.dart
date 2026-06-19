@@ -10,26 +10,32 @@ void main() {
   group('MockRuleStore', () {
     test('adds, finds, replaces, removes, and clears routes', () async {
       final store = MockRuleStore();
-      await store.addRoute(MockRoute(
-        id: 'get-users-1',
-        method: 'GET',
-        pathPattern: '/api/users',
-        status: 200,
-        body: {'version': 1},
-      ));
-      await store.addRoute(MockRoute(
-        id: 'get-users-2',
-        method: 'GET',
-        pathPattern: '/api/users',
-        status: 201,
-        body: {'version': 2},
-      ));
-      await store.addRoute(MockRoute(
-        id: 'post-users',
-        method: 'POST',
-        pathPattern: '/api/users',
-        status: 202,
-      ));
+      await store.addRoute(
+        MockRoute(
+          id: 'get-users-1',
+          method: 'GET',
+          pathPattern: '/api/users',
+          status: 200,
+          body: {'version': 1},
+        ),
+      );
+      await store.addRoute(
+        MockRoute(
+          id: 'get-users-2',
+          method: 'GET',
+          pathPattern: '/api/users',
+          status: 201,
+          body: {'version': 2},
+        ),
+      );
+      await store.addRoute(
+        MockRoute(
+          id: 'post-users',
+          method: 'POST',
+          pathPattern: '/api/users',
+          status: 202,
+        ),
+      );
 
       expect(store.getAllRoutes(), hasLength(2));
       expect(store.findRoute('GET', '/api/users')?.id, 'get-users-2');
@@ -37,7 +43,9 @@ void main() {
       expect(store.findRoute('DELETE', '/api/users'), isNull);
 
       expect(
-          await store.removeRoute(path: '/api/users', method: 'GET'), isTrue);
+        await store.removeRoute(path: '/api/users', method: 'GET'),
+        isTrue,
+      );
       expect(store.findRoute('GET', '/api/users'), isNull);
       expect(store.findRoute('POST', '/api/users')?.id, 'post-users');
 
@@ -54,18 +62,20 @@ void main() {
         final box = await Hive.openBox<dynamic>(boxName);
         final storage = HiveMockRuleStorage.fromBox(box);
         final store = MockRuleStore(storage: storage);
-        await store.addRoute(MockRoute(
-          id: 'hive-route',
-          method: 'POST',
-          pathPattern: '/api/hive',
-          status: 202,
-          headers: {'Content-Type': 'application/json'},
-          body: {
-            'ok': true,
-            'items': [1, 2, 3],
-          },
-          delayMs: 7,
-        ));
+        await store.addRoute(
+          MockRoute(
+            id: 'hive-route',
+            method: 'POST',
+            pathPattern: '/api/hive',
+            status: 202,
+            headers: {'Content-Type': 'application/json'},
+            body: {
+              'ok': true,
+              'items': [1, 2, 3],
+            },
+            delayMs: 7,
+          ),
+        );
 
         expect(storage.box.get(HiveMockRuleStorage.defaultVersionKey), 1);
         expect(storage.box.get(HiveMockRuleStorage.defaultRouteIndexKey), [
@@ -73,8 +83,9 @@ void main() {
         ]);
         final rawRoute = storage.box.get('route:POST /api/hive');
         expect(rawRoute, isA<Map>());
-        final rawRouteMap =
-            Map<dynamic, dynamic>.from(rawRoute as Map<dynamic, dynamic>);
+        final rawRouteMap = Map<dynamic, dynamic>.from(
+          rawRoute as Map<dynamic, dynamic>,
+        );
         expect(rawRouteMap['id'], 'hive-route');
         expect(rawRouteMap['method'], 'POST');
         expect(rawRouteMap['pathPattern'], '/api/hive');
@@ -100,97 +111,108 @@ void main() {
       }
     });
 
-    test('clearRoutes clears loaded routes and persists empty state to Hive',
-        () async {
-      final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
-      final boxName =
-          'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
-      try {
-        Hive.init(temp.path);
-        final box = await Hive.openBox<dynamic>(boxName);
-        final storage = HiveMockRuleStorage.fromBox(box);
-        final writer = MockRuleStore(storage: storage);
-        await writer.addRoute(MockRoute(
-          id: 'cached-route',
-          method: 'POST',
-          pathPattern: '/api/cached',
-          status: 202,
-          body: {'cached': true},
-        ));
+    test(
+      'clearRoutes clears loaded routes and persists empty state to Hive',
+      () async {
+        final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
+        final boxName =
+            'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
+        try {
+          Hive.init(temp.path);
+          final box = await Hive.openBox<dynamic>(boxName);
+          final storage = HiveMockRuleStorage.fromBox(box);
+          final writer = MockRuleStore(storage: storage);
+          await writer.addRoute(
+            MockRoute(
+              id: 'cached-route',
+              method: 'POST',
+              pathPattern: '/api/cached',
+              status: 202,
+              body: {'cached': true},
+            ),
+          );
 
-        // Load once (as bridge init does): the in-memory map is the
-        // authoritative mirror of Hive, mutated in place and persisted. The
-        // store no longer reloads from storage on each mutation.
-        final store = MockRuleStore(storage: storage);
-        await store.loadFromStorage();
-        final cleared = await store.clearRoutes();
+          // Load once (as bridge init does): the in-memory map is the
+          // authoritative mirror of Hive, mutated in place and persisted. The
+          // store no longer reloads from storage on each mutation.
+          final store = MockRuleStore(storage: storage);
+          await store.loadFromStorage();
+          final cleared = await store.clearRoutes();
 
-        expect(cleared, 1);
-        expect(storage.box.get(HiveMockRuleStorage.defaultRouteIndexKey), []);
-        expect(storage.box.get('route:POST /api/cached'), isNull);
+          expect(cleared, 1);
+          expect(storage.box.get(HiveMockRuleStorage.defaultRouteIndexKey), []);
+          expect(storage.box.get('route:POST /api/cached'), isNull);
 
-        final loaded = MockRuleStore(storage: storage);
-        await loaded.loadFromStorage();
-        expect(loaded.getAllRoutes(), isEmpty);
-      } finally {
-        if (Hive.isBoxOpen(boxName)) {
-          await Hive.box<dynamic>(boxName).close();
+          final loaded = MockRuleStore(storage: storage);
+          await loaded.loadFromStorage();
+          expect(loaded.getAllRoutes(), isEmpty);
+        } finally {
+          if (Hive.isBoxOpen(boxName)) {
+            await Hive.box<dynamic>(boxName).close();
+          }
+          await temp.delete(recursive: true);
         }
-        await temp.delete(recursive: true);
-      }
-    });
+      },
+    );
 
-    test('removeRoute mutates loaded routes and persists the change to Hive',
-        () async {
-      final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
-      final boxName =
-          'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
-      try {
-        Hive.init(temp.path);
-        final box = await Hive.openBox<dynamic>(boxName);
-        final storage = HiveMockRuleStorage.fromBox(box);
-        final writer = MockRuleStore(storage: storage);
-        await writer.addRoute(MockRoute(
-          id: 'cached-remove',
-          method: 'POST',
-          pathPattern: '/api/remove',
-          status: 202,
-        ));
-        await writer.addRoute(MockRoute(
-          id: 'cached-keep',
-          method: 'GET',
-          pathPattern: '/api/keep',
-          status: 200,
-        ));
+    test(
+      'removeRoute mutates loaded routes and persists the change to Hive',
+      () async {
+        final temp = await Directory.systemTemp.createTemp('fliwright_hive_');
+        final boxName =
+            'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
+        try {
+          Hive.init(temp.path);
+          final box = await Hive.openBox<dynamic>(boxName);
+          final storage = HiveMockRuleStorage.fromBox(box);
+          final writer = MockRuleStore(storage: storage);
+          await writer.addRoute(
+            MockRoute(
+              id: 'cached-remove',
+              method: 'POST',
+              pathPattern: '/api/remove',
+              status: 202,
+            ),
+          );
+          await writer.addRoute(
+            MockRoute(
+              id: 'cached-keep',
+              method: 'GET',
+              pathPattern: '/api/keep',
+              status: 200,
+            ),
+          );
 
-        // Load once (as bridge init does) before mutating the authoritative
-        // in-memory map; the change is then persisted to Hive.
-        final store = MockRuleStore(storage: storage);
-        await store.loadFromStorage();
-        final removed = await store.removeRoute(
-          path: '/api/remove',
-          method: 'POST',
-        );
+          // Load once (as bridge init does) before mutating the authoritative
+          // in-memory map; the change is then persisted to Hive.
+          final store = MockRuleStore(storage: storage);
+          await store.loadFromStorage();
+          final removed = await store.removeRoute(
+            path: '/api/remove',
+            method: 'POST',
+          );
 
-        expect(removed, isTrue);
-        expect(storage.box.get('route:POST /api/remove'), isNull);
-        expect(storage.box.get('route:GET /api/keep'), isNotNull);
+          expect(removed, isTrue);
+          expect(storage.box.get('route:POST /api/remove'), isNull);
+          expect(storage.box.get('route:GET /api/keep'), isNotNull);
 
-        final loaded = MockRuleStore(storage: storage);
-        await loaded.loadFromStorage();
-        expect(loaded.findRoute('POST', '/api/remove'), isNull);
-        expect(loaded.findRoute('GET', '/api/keep')?.id, 'cached-keep');
-      } finally {
-        if (Hive.isBoxOpen(boxName)) {
-          await Hive.box<dynamic>(boxName).close();
+          final loaded = MockRuleStore(storage: storage);
+          await loaded.loadFromStorage();
+          expect(loaded.findRoute('POST', '/api/remove'), isNull);
+          expect(loaded.findRoute('GET', '/api/keep')?.id, 'cached-keep');
+        } finally {
+          if (Hive.isBoxOpen(boxName)) {
+            await Hive.box<dynamic>(boxName).close();
+          }
+          await temp.delete(recursive: true);
         }
-        await temp.delete(recursive: true);
-      }
-    });
+      },
+    );
 
     test('loads legacy Hive activeRules payload', () async {
-      final temp =
-          await Directory.systemTemp.createTemp('fliwright_hive_legacy_');
+      final temp = await Directory.systemTemp.createTemp(
+        'fliwright_hive_legacy_',
+      );
       final boxName =
           'fliwright_mock_rules_${DateTime.now().microsecondsSinceEpoch}';
       try {
@@ -255,7 +277,7 @@ void main() {
             'path': '/api/users',
             'response': {
               'status': 200,
-              'body': {'users': []}
+              'body': {'users': []},
             },
           }),
         },
@@ -275,28 +297,22 @@ void main() {
 
     test('listRoutes returns registered routes', () async {
       await FliwrightBridge.init();
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'r1',
-            'method': 'GET',
-            'path': '/api/users',
-            'response': {},
-          }),
-        },
-      );
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'r2',
-            'method': 'POST',
-            'path': '/api/items',
-            'response': {},
-          }),
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'r1',
+          'method': 'GET',
+          'path': '/api/users',
+          'response': {},
+        }),
+      });
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'r2',
+          'method': 'POST',
+          'path': '/api/items',
+          'response': {},
+        }),
+      });
       final result = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.listRoutes',
         {},
@@ -309,18 +325,12 @@ void main() {
 
     test('clearRoutes removes all routes', () async {
       await FliwrightBridge.init();
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({'id': 'r1', 'path': '/a', 'response': {}})
-        },
-      );
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({'id': 'r2', 'path': '/b', 'response': {}})
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({'id': 'r1', 'path': '/a', 'response': {}}),
+      });
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({'id': 'r2', 'path': '/b', 'response': {}}),
+      });
       final result = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.clearRoutes',
         {},
@@ -335,18 +345,12 @@ void main() {
 
     test('removeRoute removes by id', () async {
       await FliwrightBridge.init();
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({'id': 'r1', 'path': '/a', 'response': {}})
-        },
-      );
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({'id': 'r2', 'path': '/b', 'response': {}})
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({'id': 'r1', 'path': '/a', 'response': {}}),
+      });
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({'id': 'r2', 'path': '/b', 'response': {}}),
+      });
       final result = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.removeRoute',
         {'id': 'r1'},
@@ -363,28 +367,22 @@ void main() {
 
     test('removeRoute can remove only one method for a path', () async {
       await FliwrightBridge.init();
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'get-user',
-            'method': 'GET',
-            'path': '/api/user',
-            'response': {}
-          })
-        },
-      );
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'post-user',
-            'method': 'POST',
-            'path': '/api/user',
-            'response': {}
-          })
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'get-user',
+          'method': 'GET',
+          'path': '/api/user',
+          'response': {},
+        }),
+      });
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'post-user',
+          'method': 'POST',
+          'path': '/api/user',
+          'response': {},
+        }),
+      });
 
       final result = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.removeRoute',
@@ -426,20 +424,17 @@ void main() {
       final port = MockServerExtension.serverPort;
       expect(port, isNotNull);
 
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'hello-route',
-            'method': 'GET',
-            'path': '/api/hello',
-            'response': {
-              'status': 200,
-              'body': {'message': 'mocked'},
-            },
-          }),
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'hello-route',
+          'method': 'GET',
+          'path': '/api/hello',
+          'response': {
+            'status': 200,
+            'body': {'message': 'mocked'},
+          },
+        }),
+      });
 
       final client = HttpClient();
       try {
@@ -461,8 +456,11 @@ void main() {
 
       final client = HttpClient();
       try {
-        final request =
-            await client.get('127.0.0.1', port!, '/api/nonexistent');
+        final request = await client.get(
+          '127.0.0.1',
+          port!,
+          '/api/nonexistent',
+        );
         final response = await request.close();
         expect(response.statusCode, 404);
         final body = await utf8.decoder.bind(response).join();
@@ -478,20 +476,17 @@ void main() {
       final port = MockServerExtension.serverPort;
       expect(port, isNotNull);
 
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'ping-route',
-            'method': 'GET',
-            'path': '/api/ping',
-            'response': {
-              'status': 200,
-              'body': {'pong': true},
-            },
-          }),
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'ping-route',
+          'method': 'GET',
+          'path': '/api/ping',
+          'response': {
+            'status': 200,
+            'body': {'pong': true},
+          },
+        }),
+      });
 
       final client = HttpClient();
       try {
@@ -510,16 +505,19 @@ void main() {
       final lastCall = calls.last as Map<String, dynamic>;
       expect(lastCall['path'], '/api/ping');
       expect(lastCall['method'], 'GET');
+      expect(lastCall['status'], 200);
+      expect(lastCall['response'], {'pong': true});
+      expect(lastCall['backend'], 'tool-server');
+      expect(lastCall['query'], isA<Map<String, dynamic>>());
     });
 
-    test('mock server records POST body (including chunked via proxy)',
-        () async {
-      final port = MockServerExtension.serverPort;
-      expect(port, isNotNull);
+    test(
+      'mock server records POST body (including chunked via proxy)',
+      () async {
+        final port = MockServerExtension.serverPort;
+        expect(port, isNotNull);
 
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
+        await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
           'route': jsonEncode({
             'id': 'post-route',
             'method': 'POST',
@@ -529,41 +527,40 @@ void main() {
               'body': {'ok': true},
             },
           }),
-        },
-      );
+        });
 
-      // Send directly to mock server (explicit Content-Length).
-      final client = HttpClient();
-      try {
-        final request = await client.post('127.0.0.1', port!, '/api/data');
-        request.headers.contentType = ContentType.json;
-        request.write(jsonEncode({'key': 'value'}));
-        final response = await request.close();
-        expect(response.statusCode, 201);
-      } finally {
-        client.close();
-      }
+        // Send directly to mock server (explicit Content-Length).
+        final client = HttpClient();
+        try {
+          final request = await client.post('127.0.0.1', port!, '/api/data');
+          request.headers.contentType = ContentType.json;
+          request.write(jsonEncode({'key': 'value'}));
+          final response = await request.close();
+          expect(response.statusCode, 201);
+        } finally {
+          client.close();
+        }
 
-      final result = await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.getCalls',
-        {'path': '/api/data'},
-      );
-      final calls = result['calls'] as List<dynamic>;
-      expect(calls, hasLength(1));
-      final call = calls.first as Map<String, dynamic>;
-      expect(call['method'], 'POST');
-      expect(call['path'], '/api/data');
-      // Body must be captured (was null before the contentLength fix).
-      expect(call['body'], isNotNull);
-      final body = jsonDecode(call['body'] as String) as Map<String, dynamic>;
-      expect(body['key'], 'value');
-    });
+        final result = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.getCalls',
+          {'path': '/api/data'},
+        );
+        final calls = result['calls'] as List<dynamic>;
+        expect(calls, hasLength(1));
+        final call = calls.first as Map<String, dynamic>;
+        expect(call['method'], 'POST');
+        expect(call['path'], '/api/data');
+        // Body must be captured (was null before the contentLength fix).
+        expect(call['body'], isNotNull);
+        final body = jsonDecode(call['body'] as String) as Map<String, dynamic>;
+        expect(body['key'], 'value');
+      },
+    );
 
-    test('HttpOverrides redirects app HttpClient requests to mock server',
-        () async {
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
+    test(
+      'HttpOverrides redirects app HttpClient requests to mock server',
+      () async {
+        await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
           'route': jsonEncode({
             'id': 'override-route',
             'method': 'GET',
@@ -573,82 +570,83 @@ void main() {
               'body': {'source': 'override'},
             },
           }),
-        },
-      );
+        });
 
-      final client = HttpClient();
-      try {
-        final request = await client.getUrl(
-          Uri.parse('http://example.test/api/override?x=1'),
+        final client = HttpClient();
+        try {
+          final request = await client.getUrl(
+            Uri.parse('http://example.test/api/override?x=1'),
+          );
+          final response = await request.close();
+          expect(response.statusCode, 200);
+          final body = await utf8.decoder.bind(response).join();
+          final decoded = jsonDecode(body) as Map<String, dynamic>;
+          expect(decoded['source'], 'override');
+        } finally {
+          client.close();
+        }
+
+        final result = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.getCalls',
+          {'path': '/api/override'},
         );
-        final response = await request.close();
-        expect(response.statusCode, 200);
-        final body = await utf8.decoder.bind(response).join();
-        final decoded = jsonDecode(body) as Map<String, dynamic>;
-        expect(decoded['source'], 'override');
-      } finally {
-        client.close();
-      }
+        final calls = result['calls'] as List<dynamic>;
+        expect(calls, isNotEmpty);
+        expect(calls.last['path'], '/api/override');
+        expect(calls.last['url'], contains('/api/override?x=1'));
+        expect(calls.last['query'], {'x': '1'});
+        expect(calls.last['backend'], 'tool-server');
+      },
+    );
 
-      final result = await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.getCalls',
-        {'path': '/api/override'},
-      );
-      final calls = result['calls'] as List<dynamic>;
-      expect(calls, isNotEmpty);
-      expect(calls.last['path'], '/api/override');
-    });
-
-    test('HttpOverrides leaves unmocked app HttpClient requests direct',
-        () async {
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
+    test(
+      'HttpOverrides leaves unmocked app HttpClient requests direct',
+      () async {
+        await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
           'route': jsonEncode({
             'id': 'enabled-route',
             'method': 'GET',
             'path': '/api/enabled',
             'response': {},
           }),
-        },
-      );
+        });
 
-      final target = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      target.listen((request) async {
-        request.response
-          ..statusCode = 204
-          ..headers.contentType = ContentType.json;
-        await request.response.close();
-      });
+        final target = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        target.listen((request) async {
+          request.response
+            ..statusCode = 204
+            ..headers.contentType = ContentType.json;
+          await request.response.close();
+        });
 
-      final client = HttpClient();
-      try {
-        final request = await client.getUrl(
-          Uri.parse('http://127.0.0.1:${target.port}/api/live'),
+        final client = HttpClient();
+        try {
+          final request = await client.getUrl(
+            Uri.parse('http://127.0.0.1:${target.port}/api/live'),
+          );
+          final response = await request.close();
+          expect(response.statusCode, 204);
+        } finally {
+          client.close();
+          await target.close(force: true);
+        }
+
+        final result = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.getCalls',
+          {},
         );
-        final response = await request.close();
-        expect(response.statusCode, 204);
-      } finally {
-        client.close();
-        await target.close(force: true);
-      }
+        final calls = result['calls'] as List<dynamic>;
+        expect(calls, isEmpty);
+      },
+    );
 
-      final result = await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.getCalls',
-        {},
-      );
-      final calls = result['calls'] as List<dynamic>;
-      expect(calls, isEmpty);
-    });
+    test(
+      're-registering the same method and path replaces previous route',
+      () async {
+        final port = MockServerExtension.serverPort;
+        expect(port, isNotNull);
 
-    test('re-registering the same method and path replaces previous route',
-        () async {
-      final port = MockServerExtension.serverPort;
-      expect(port, isNotNull);
-
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
+        await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
           'route': jsonEncode({
             'id': 'replace-route-1',
             'method': 'GET',
@@ -658,11 +656,8 @@ void main() {
               'body': {'version': 1},
             },
           }),
-        },
-      );
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
+        });
+        await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
           'route': jsonEncode({
             'id': 'replace-route-2',
             'method': 'GET',
@@ -672,29 +667,29 @@ void main() {
               'body': {'version': 2},
             },
           }),
-        },
-      );
+        });
 
-      final routesResult = await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.listRoutes',
-        {},
-      );
-      final routes = routesResult['routes'] as List<dynamic>;
-      expect(routes, hasLength(1));
-      expect(routes.first['id'], 'replace-route-2');
+        final routesResult = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.listRoutes',
+          {},
+        );
+        final routes = routesResult['routes'] as List<dynamic>;
+        expect(routes, hasLength(1));
+        expect(routes.first['id'], 'replace-route-2');
 
-      final client = HttpClient();
-      try {
-        final request = await client.get('127.0.0.1', port!, '/api/replace');
-        final response = await request.close();
-        expect(response.statusCode, 201);
-        final body = await utf8.decoder.bind(response).join();
-        final decoded = jsonDecode(body) as Map<String, dynamic>;
-        expect(decoded['version'], 2);
-      } finally {
-        client.close();
-      }
-    });
+        final client = HttpClient();
+        try {
+          final request = await client.get('127.0.0.1', port!, '/api/replace');
+          final response = await request.close();
+          expect(response.statusCode, 201);
+          final body = await utf8.decoder.bind(response).join();
+          final decoded = jsonDecode(body) as Map<String, dynamic>;
+          expect(decoded['version'], 2);
+        } finally {
+          client.close();
+        }
+      },
+    );
   });
 
   group('DioMockExtension', () {
@@ -708,20 +703,17 @@ void main() {
     });
 
     test('matches full Dio URL requests by URI path', () async {
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'dio-route',
-            'method': 'POST',
-            'path': '/api/register',
-            'response': {
-              'status': 200,
-              'body': {'ok': true},
-            },
-          }),
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'dio-route',
+          'method': 'POST',
+          'path': '/api/register',
+          'response': {
+            'status': 200,
+            'body': {'ok': true},
+          },
+        }),
+      });
 
       final dio = Dio()..interceptors.add(interceptor);
       final response = await dio.post<Map<String, dynamic>>(
@@ -736,34 +728,28 @@ void main() {
     });
 
     test('re-registering a Dio route replaces the previous response', () async {
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'dio-replace-1',
-            'method': 'GET',
-            'path': '/api/replace',
-            'response': {
-              'status': 200,
-              'body': {'version': 1},
-            },
-          }),
-        },
-      );
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'dio-replace-2',
-            'method': 'GET',
-            'path': '/api/replace',
-            'response': {
-              'status': 202,
-              'body': {'version': 2},
-            },
-          }),
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'dio-replace-1',
+          'method': 'GET',
+          'path': '/api/replace',
+          'response': {
+            'status': 200,
+            'body': {'version': 1},
+          },
+        }),
+      });
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'dio-replace-2',
+          'method': 'GET',
+          'path': '/api/replace',
+          'response': {
+            'status': 202,
+            'body': {'version': 2},
+          },
+        }),
+      });
 
       expect(interceptor.routes, hasLength(1));
       expect(interceptor.routes.single.id, 'dio-replace-2');
@@ -778,28 +764,22 @@ void main() {
     });
 
     test('removeRoute can remove only one Dio method for a path', () async {
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'dio-get-user',
-            'method': 'GET',
-            'path': '/api/user',
-            'response': {}
-          }),
-        },
-      );
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'dio-post-user',
-            'method': 'POST',
-            'path': '/api/user',
-            'response': {}
-          }),
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'dio-get-user',
+          'method': 'GET',
+          'path': '/api/user',
+          'response': {},
+        }),
+      });
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'dio-post-user',
+          'method': 'POST',
+          'path': '/api/user',
+          'response': {},
+        }),
+      });
 
       final result = await FliwrightBridge.registry.invoke(
         'ext.fliwright.mock.removeRoute',
@@ -811,20 +791,17 @@ void main() {
     });
 
     test('newly injected Dio interceptor inherits registered routes', () async {
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
-          'route': jsonEncode({
-            'id': 'preserved-route',
-            'method': 'GET',
-            'path': '/api/preserved',
-            'response': {
-              'status': 200,
-              'body': {'preserved': true},
-            },
-          }),
-        },
-      );
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'id': 'preserved-route',
+          'method': 'GET',
+          'path': '/api/preserved',
+          'response': {
+            'status': 200,
+            'body': {'preserved': true},
+          },
+        }),
+      });
 
       final replacement = FliwrightDioMockInterceptor();
       DioMockExtension.setInterceptor(replacement);
@@ -841,15 +818,14 @@ void main() {
       expect(response.data?['preserved'], isTrue);
     });
 
-    test('newly injected Dio interceptor replaces and neutralizes old entry',
-        () async {
-      final olderInterceptor = interceptor;
-      final newerInterceptor = FliwrightDioMockInterceptor();
-      DioMockExtension.setInterceptor(newerInterceptor);
+    test(
+      'newly injected Dio interceptor replaces and neutralizes old entry',
+      () async {
+        final olderInterceptor = interceptor;
+        final newerInterceptor = FliwrightDioMockInterceptor();
+        DioMockExtension.setInterceptor(newerInterceptor);
 
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
+        await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
           'route': jsonEncode({
             'id': 'shared-route',
             'method': 'GET',
@@ -859,32 +835,31 @@ void main() {
               'body': {'shared': true},
             },
           }),
-        },
-      );
+        });
 
-      final newerDio = Dio()..interceptors.add(newerInterceptor);
-      final newerResponse = await newerDio.get<Map<String, dynamic>>(
-        'https://dev.ex.io/api/shared',
-      );
+        final newerDio = Dio()..interceptors.add(newerInterceptor);
+        final newerResponse = await newerDio.get<Map<String, dynamic>>(
+          'https://dev.ex.io/api/shared',
+        );
 
-      expect(olderInterceptor.routes, isEmpty);
-      expect(olderInterceptor.passthrough, isTrue);
-      expect(newerResponse.statusCode, 200);
-      expect(newerResponse.data?['shared'], isTrue);
-    });
+        expect(olderInterceptor.routes, isEmpty);
+        expect(olderInterceptor.passthrough, isTrue);
+        expect(newerResponse.statusCode, 200);
+        expect(newerResponse.data?['shared'], isTrue);
+      },
+    );
 
-    test('only the latest injected Dio interceptor receives routes after init',
-        () async {
-      await FliwrightBridge.reset();
-      final firstInterceptor = FliwrightDioMockInterceptor();
-      final secondInterceptor = FliwrightDioMockInterceptor();
-      DioMockExtension.setInterceptor(firstInterceptor);
-      DioMockExtension.setInterceptor(secondInterceptor);
-      await FliwrightBridge.initForDioMock();
+    test(
+      'only the latest injected Dio interceptor receives routes after init',
+      () async {
+        await FliwrightBridge.reset();
+        final firstInterceptor = FliwrightDioMockInterceptor();
+        final secondInterceptor = FliwrightDioMockInterceptor();
+        DioMockExtension.setInterceptor(firstInterceptor);
+        DioMockExtension.setInterceptor(secondInterceptor);
+        await FliwrightBridge.initForDioMock();
 
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
+        await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
           'route': jsonEncode({
             'id': 'post-init-route',
             'method': 'GET',
@@ -894,27 +869,26 @@ void main() {
               'body': {'postInit': true},
             },
           }),
-        },
-      );
+        });
 
-      final secondDio = Dio()..interceptors.add(secondInterceptor);
-      final secondResponse = await secondDio.get<Map<String, dynamic>>(
-        'https://dev.ex.io/api/post-init',
-      );
+        final secondDio = Dio()..interceptors.add(secondInterceptor);
+        final secondResponse = await secondDio.get<Map<String, dynamic>>(
+          'https://dev.ex.io/api/post-init',
+        );
 
-      expect(firstInterceptor.routes, isEmpty);
-      expect(secondResponse.statusCode, 200);
-      expect(secondResponse.data?['postInit'], isTrue);
-    });
+        expect(firstInterceptor.routes, isEmpty);
+        expect(secondResponse.statusCode, 200);
+        expect(secondResponse.data?['postInit'], isTrue);
+      },
+    );
 
-    test('getCalls and clearCalls use only the active Dio interceptor',
-        () async {
-      final secondInterceptor = FliwrightDioMockInterceptor();
-      DioMockExtension.setInterceptor(secondInterceptor);
+    test(
+      'getCalls and clearCalls use only the active Dio interceptor',
+      () async {
+        final secondInterceptor = FliwrightDioMockInterceptor();
+        DioMockExtension.setInterceptor(secondInterceptor);
 
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
+        await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
           'route': jsonEncode({
             'id': 'aggregate-route',
             'method': 'GET',
@@ -924,28 +898,33 @@ void main() {
               'body': {'ok': true},
             },
           }),
-        },
-      );
+        });
 
-      await (Dio()..interceptors.add(secondInterceptor)).get<void>(
-        'https://dev.ex.io/api/aggregate',
-      );
+        await (Dio()..interceptors.add(secondInterceptor)).get<void>(
+          'https://dev.ex.io/api/aggregate',
+        );
 
-      final result = await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.getCalls',
-        {'path': '/api/aggregate'},
-      );
-      final calls = result['calls'] as List<dynamic>;
-      expect(calls, hasLength(1));
+        final result = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.getCalls',
+          {'path': '/api/aggregate'},
+        );
+        final calls = result['calls'] as List<dynamic>;
+        expect(calls, hasLength(1));
+        final call = calls.single as Map<String, dynamic>;
+        expect(call['url'], 'https://dev.ex.io/api/aggregate');
+        expect(call['status'], 200);
+        expect(call['response'], {'ok': true});
+        expect(call['backend'], 'dio');
 
-      final clearResult = await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.clearCalls',
-        {},
-      );
-      expect(clearResult['cleared'], 1);
-      expect(interceptor.callLog, isEmpty);
-      expect(secondInterceptor.callLog, isEmpty);
-    });
+        final clearResult = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.mock.clearCalls',
+          {},
+        );
+        expect(clearResult['cleared'], 1);
+        expect(interceptor.callLog, isEmpty);
+        expect(secondInterceptor.callLog, isEmpty);
+      },
+    );
 
     test('setPassthrough applies only to the active Dio interceptor', () async {
       final secondInterceptor = FliwrightDioMockInterceptor();
@@ -976,13 +955,15 @@ void main() {
 
     test('listRoutes resyncs a stale Dio interceptor store', () async {
       final staleStore = MockRuleStore();
-      await staleStore.addRoute(MockRoute(
-        id: 'stale-route',
-        method: 'POST',
-        pathPattern: '/api/v1/user/onboard/knowledge-test',
-        status: 200,
-        body: {'stale': true},
-      ));
+      await staleStore.addRoute(
+        MockRoute(
+          id: 'stale-route',
+          method: 'POST',
+          pathPattern: '/api/v1/user/onboard/knowledge-test',
+          status: 200,
+          body: {'stale': true},
+        ),
+      );
       interceptor.ruleStore = staleStore;
 
       final list = await FliwrightBridge.registry.invoke(
@@ -999,28 +980,31 @@ void main() {
       );
       final dio = Dio()..interceptors.add(interceptor);
       await expectLater(
-        dio.post<void>(
-          'https://dev.ex.io/api/v1/user/onboard/knowledge-test',
+        dio.post<void>('https://dev.ex.io/api/v1/user/onboard/knowledge-test'),
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.response?.statusCode,
+            'statusCode',
+            404,
+          ),
         ),
-        throwsA(isA<DioException>().having(
-          (error) => error.response?.statusCode,
-          'statusCode',
-          404,
-        )),
       );
     });
 
     test('unsetInterceptor neutralizes stale Dio interceptor routes', () async {
       final staleStore = MockRuleStore();
-      await staleStore.addRoute(MockRoute(
-        id: 'unset-stale-route',
-        method: 'GET',
-        pathPattern: '/api/unset-stale',
-        status: 209,
-        body: {'stale': true},
-      ));
-      final staleInterceptor =
-          FliwrightDioMockInterceptor(ruleStore: staleStore);
+      await staleStore.addRoute(
+        MockRoute(
+          id: 'unset-stale-route',
+          method: 'GET',
+          pathPattern: '/api/unset-stale',
+          status: 209,
+          body: {'stale': true},
+        ),
+      );
+      final staleInterceptor = FliwrightDioMockInterceptor(
+        ruleStore: staleStore,
+      );
       DioMockExtension.setInterceptor(staleInterceptor);
       staleInterceptor.ruleStore = staleStore;
 
@@ -1030,11 +1014,10 @@ void main() {
       expect(staleInterceptor.passthrough, isTrue);
     });
 
-    test('Dio requests resolve directly from the in-process rule store',
-        () async {
-      await FliwrightBridge.registry.invoke(
-        'ext.fliwright.mock.addRoute',
-        {
+    test(
+      'Dio requests resolve directly from the in-process rule store',
+      () async {
+        await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
           'route': jsonEncode({
             'id': 'tool-route',
             'method': 'GET',
@@ -1044,52 +1027,51 @@ void main() {
               'body': {'fromStore': true},
             },
           }),
-        },
-      );
+        });
 
-      final dio = Dio()..interceptors.add(interceptor);
-      final response = await dio.get<Map<String, dynamic>>(
-        'https://dev.ex.io/api/tool',
-      );
+        final dio = Dio()..interceptors.add(interceptor);
+        final response = await dio.get<Map<String, dynamic>>(
+          'https://dev.ex.io/api/tool',
+        );
 
-      expect(response.statusCode, 200);
-      expect(response.data?['fromStore'], isTrue);
-    });
+        expect(response.statusCode, 200);
+        expect(response.data?['fromStore'], isTrue);
+      },
+    );
 
-    test('unmocked Dio requests passthrough without controller forwarding',
-        () async {
-      final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      upstream.listen((request) async {
-        request.response
-          ..statusCode = 204
-          ..headers.contentType = ContentType.json;
-        await request.response.close();
-      });
+    test(
+      'unmocked Dio requests passthrough without controller forwarding',
+      () async {
+        final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        upstream.listen((request) async {
+          request.response
+            ..statusCode = 204
+            ..headers.contentType = ContentType.json;
+          await request.response.close();
+        });
 
-      try {
-        await FliwrightBridge.registry.invoke(
-          'ext.fliwright.mock.addRoute',
-          {
+        try {
+          await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
             'route': jsonEncode({
               'id': 'only-enabled-route',
               'method': 'GET',
               'path': '/api/enabled',
               'response': {},
             }),
-          },
-        );
+          });
 
-        final dio = Dio()..interceptors.add(interceptor);
-        final response = await dio.get<void>(
-          'http://127.0.0.1:${upstream.port}/api/live',
-        );
+          final dio = Dio()..interceptors.add(interceptor);
+          final response = await dio.get<void>(
+            'http://127.0.0.1:${upstream.port}/api/live',
+          );
 
-        expect(response.statusCode, 204);
-        expect(interceptor.callLog, isEmpty);
-      } finally {
-        await upstream.close(force: true);
-      }
-    });
+          expect(response.statusCode, 204);
+          expect(interceptor.callLog, isEmpty);
+        } finally {
+          await upstream.close(force: true);
+        }
+      },
+    );
 
     test('loads persisted Dio routes during initForDioMock', () async {
       await FliwrightBridge.reset();
@@ -1101,15 +1083,17 @@ void main() {
       final storage = HiveMockRuleStorage.fromBox(box);
       // Pre-populate the Hive box in its normalized shape by writing through a store.
       final writer = MockRuleStore(storage: storage);
-      await writer.addRoute(MockRoute(
-        id: 'persisted-route',
-        method: 'GET',
-        pathPattern: '/api/persisted',
-        status: 200,
-        headers: {'Content-Type': 'application/json'},
-        body: {'persisted': true},
-        delayMs: 0,
-      ));
+      await writer.addRoute(
+        MockRoute(
+          id: 'persisted-route',
+          method: 'GET',
+          pathPattern: '/api/persisted',
+          status: 200,
+          headers: {'Content-Type': 'application/json'},
+          body: {'persisted': true},
+          delayMs: 0,
+        ),
+      );
 
       final persistedInterceptor = FliwrightDioMockInterceptor();
       DioMockExtension.setInterceptor(persistedInterceptor);

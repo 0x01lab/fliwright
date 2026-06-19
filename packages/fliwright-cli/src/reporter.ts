@@ -52,6 +52,21 @@ export interface CliRunArtifacts {
   outputDir: string;
   reportPath?: string;
   screenshots: string[];
+  timelines?: string[];
+}
+
+export interface TimelineSummary {
+  path: string;
+  mode?: 'script' | 'test';
+  pages: number;
+  stepsPassed: number;
+  stepsFailed: number;
+  screenshots: number;
+  firstFailure?: {
+    code: string;
+    title: string;
+    message: string;
+  };
 }
 
 export interface CliRunResult {
@@ -63,6 +78,13 @@ export interface CliRunResult {
   results: CliTestResult[];
   failures?: CliFailureEntry[];
   artifacts?: CliRunArtifacts;
+  timelines?: TimelineSummary[];
+  agentVisibleFailures?: Array<{
+    code: string;
+    title: string;
+    message: string;
+    timelineNodeId?: string;
+  }>;
   reproduceCommand?: string;
 }
 
@@ -90,6 +112,14 @@ export function formatPretty(result: CliRunResult): string {
   }
   if (result.artifacts?.screenshots.length) {
     lines.push(chalk.gray(`Screenshots: ${result.artifacts.screenshots.length}`));
+  }
+  if (result.timelines?.length) {
+    const first = result.timelines[0];
+    lines.push(chalk.gray(`Timelines: ${result.timelines.length}`));
+    lines.push(chalk.gray(`Timeline summary: ${first.pages} page(s), ${first.stepsPassed} passed step(s), ${first.stepsFailed} failed step(s), ${first.screenshots} screenshot(s)`));
+    if (first.firstFailure) {
+      lines.push(chalk.gray(`First agent-visible failure: ${first.firstFailure.code} - ${first.firstFailure.message}`));
+    }
   }
 
   return lines.join('\n');

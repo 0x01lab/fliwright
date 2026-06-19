@@ -43,6 +43,7 @@
     "onCommand:fliwright.disconnect",
     "onCommand:fliwright.discoverVmService",
     "onCommand:fliwright.configureMcp",
+    "onCommand:fliwright.takeScreenshot",
     "onCommand:fliwright.createMockConfig",
     "onCommand:fliwright.openMockConfig",
     "onCommand:fliwright.copyMockEndpoint",
@@ -150,6 +151,11 @@
         "command": "fliwright.configureMcp",
         "title": "Fliwright: Configure MCP",
         "icon": "$(server-environment)"
+      },
+      {
+        "command": "fliwright.takeScreenshot",
+        "title": "Fliwright: Take App Screenshot",
+        "icon": "$(device-camera)"
       },
       {
         "command": "fliwright.reloadMocks",
@@ -350,6 +356,11 @@
           "command": "fliwright.configureMcp",
           "when": "view == fliwright.devices",
           "group": "navigation@4"
+        },
+        {
+          "command": "fliwright.takeScreenshot",
+          "when": "view == fliwright.devices",
+          "group": "navigation@5"
         },
         {
           "command": "fliwright.reloadMocks",

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 
 import '../bridge.dart';
+import 'diagnostics.dart';
 
 class TypeExtension {
   static void register(ExtensionRegistry registry) {
@@ -15,14 +16,25 @@ class TypeExtension {
     final precomputedRectJson = params['targetRect'];
     if (selector.isEmpty &&
         (precomputedId == null || precomputedRectJson == null)) {
-      return {'error': 'Missing parameter: selector', 'success': false};
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'Missing parameter: selector',
+        action: 'type',
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
 
     final replaceAll = (params['replaceAll'] ?? 'false') == 'true';
     final text = params['text'] ?? '';
     final key = params['key'];
     if (text.isEmpty && key == null && !replaceAll) {
-      return {'error': 'Missing parameter: text', 'success': false};
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'Missing parameter: text',
+        action: 'type',
+        target: selectorTarget(selector),
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
     final charDelayMs = int.tryParse(params['charDelay'] ?? '0') ?? 0;
 
@@ -46,22 +58,26 @@ class TypeExtension {
       );
 
       if (inspectResult.containsKey('error')) {
-        return {
-          'error': 'Inspect failed: ${inspectResult['error']}',
-          'success': false,
-        };
+        return normalizedFailure(
+          code: 'target_not_found',
+          message: 'Inspect failed: ${inspectResult['error']}',
+          action: 'type',
+          target: selectorTarget(selector),
+          details: {'inspectResult': inspectResult},
+          recoveryHints: selectorRecoveryHints(),
+        );
       }
 
       final widgets = inspectResult['widgets'];
       if (widgets is! List || widgets.isEmpty) {
-        return {
-          'error': 'No widget found for selector: $selector',
-          'success': false,
-          'debug': {
-            'selector': selector,
-            'inspectResult': inspectResult,
-          },
-        };
+        return normalizedFailure(
+          code: 'target_not_found',
+          message: 'No widget found for selector: $selector',
+          action: 'type',
+          target: selectorTarget(selector),
+          details: {'selector': selector, 'inspectResult': inspectResult},
+          recoveryHints: selectorRecoveryHints(),
+        );
       }
 
       final target = _bestTypeTarget(widgets);
@@ -72,15 +88,19 @@ class TypeExtension {
     }
 
     if (rect == null) {
-      return {
-        'error':
+      return normalizedFailure(
+        code: 'actionability_zero_rect',
+        message:
             'Widget has no render geometry (no rect): selector=$selector targetType=$targetType targetId=$targetId',
-        'success': false,
-        'debug': {
-          'selector': selector,
-          'matchedCount': matchedCount,
-        },
-      };
+        action: 'type',
+        target: selectorTarget(
+          selector,
+          targetId: targetId,
+          targetType: targetType,
+        ),
+        details: {'selector': selector, 'matchedCount': matchedCount},
+        recoveryHints: actionabilityRecoveryHints(),
+      );
     }
 
     // Step 2: Click to focus the widget.
@@ -90,15 +110,20 @@ class TypeExtension {
     final height = rect['height'];
 
     if (x == null || y == null || width == null || height == null) {
-      return {
-        'error':
+      return normalizedFailure(
+        code: 'actionability_zero_rect',
+        message:
             'Widget rect is incomplete: selector=$selector targetType=$targetType targetId=$targetId',
-        'success': false,
-        'debug': {
-          'selector': selector,
-          'matchedCount': matchedCount,
-        },
-      };
+        action: 'type',
+        target: selectorTarget(
+          selector,
+          targetId: targetId,
+          targetType: targetType,
+          rect: rect,
+        ),
+        details: {'selector': selector, 'matchedCount': matchedCount},
+        recoveryHints: actionabilityRecoveryHints(),
+      );
     }
 
     // Click the center of the widget.
@@ -107,17 +132,23 @@ class TypeExtension {
 
     final clickResult = await FliwrightBridge.registry.invoke(
       'ext.fliwright.click',
-      {
-        'x': centerX.toString(),
-        'y': centerY.toString(),
-      },
+      {'x': centerX.toString(), 'y': centerY.toString()},
     );
 
     if (clickResult.containsKey('error')) {
-      return {
-        'error': 'Click failed: ${clickResult['error']}',
-        'success': false,
-      };
+      return normalizedFailure(
+        code: clickResult['code']?.toString() ?? 'actionability_failed',
+        message: 'Click failed: ${clickResult['error']}',
+        action: 'type',
+        target: selectorTarget(
+          selector,
+          targetId: targetId,
+          targetType: targetType,
+          rect: rect,
+        ),
+        details: {'click': clickResult},
+        recoveryHints: actionabilityRecoveryHints(),
+      );
     }
 
     // Step 3: Find the target EditableText.
@@ -131,10 +162,18 @@ class TypeExtension {
 
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
-      return {
-        'error': 'No widget tree available',
-        'success': false,
-      };
+      return normalizedFailure(
+        code: 'target_not_found',
+        message: 'No widget tree available',
+        action: 'type',
+        target: selectorTarget(
+          selector,
+          targetId: targetId,
+          targetType: targetType,
+          rect: rect,
+        ),
+        recoveryHints: selectorRecoveryHints(),
+      );
     }
 
     EditableText? focusedEditable;
@@ -256,11 +295,18 @@ class TypeExtension {
     }
 
     if (focusedEditable == null) {
-      return {
-        'error':
+      return normalizedFailure(
+        code: 'actionability_failed',
+        message:
             'No EditableText found after click: selector=$selector targetType=$targetType targetId=$targetId matchedCount=$matchedCount',
-        'success': false,
-        'debug': {
+        action: 'type',
+        target: selectorTarget(
+          selector,
+          targetId: targetId,
+          targetType: targetType,
+          rect: rect,
+        ),
+        details: {
           'selector': selector,
           'matchedCount': matchedCount,
           'targetId': targetId,
@@ -268,7 +314,8 @@ class TypeExtension {
           'targetRect': rect,
           'click': {'x': centerX, 'y': centerY},
         },
-      };
+        recoveryHints: actionabilityRecoveryHints(),
+      );
     }
 
     final controller = focusedEditable!.controller;
@@ -279,7 +326,18 @@ class TypeExtension {
       try {
         newText = _applyKey(controller, key);
       } catch (error) {
-        return {'error': error.toString(), 'success': false};
+        return normalizedFailure(
+          code: 'actionability_failed',
+          message: error.toString(),
+          action: 'type',
+          target: selectorTarget(
+            selector,
+            targetId: targetId,
+            targetType: targetType,
+            rect: rect,
+          ),
+          recoveryHints: actionabilityRecoveryHints(),
+        );
       }
     } else if (replaceAll) {
       newText = text;
@@ -321,10 +379,15 @@ class TypeExtension {
       _notifyFormField(editableElement!, newText);
     }
 
-    return {
-      'success': true,
-      'currentText': newText,
-      'debug': {
+    return normalizedSuccess(
+      action: replaceAll ? 'fill' : 'type',
+      target: selectorTarget(
+        selector,
+        targetId: targetId,
+        targetType: targetType,
+        rect: rect,
+      ),
+      details: {
         'selector': selector,
         'matchedCount': matchedCount,
         'targetId': targetId,
@@ -333,7 +396,8 @@ class TypeExtension {
         'replaceAll': replaceAll,
         if (key != null) 'key': key,
       },
-    };
+      extra: {'currentText': newText},
+    );
   }
 
   /// Walk up from [editableElement] to find a [FormField] ancestor
@@ -401,16 +465,19 @@ class TypeExtension {
     final selection = value.selection.isValid
         ? value.selection
         : TextSelection.collapsed(offset: text.length);
-    final start =
-        selection.start < selection.end ? selection.start : selection.end;
-    final end =
-        selection.start < selection.end ? selection.end : selection.start;
+    final start = selection.start < selection.end
+        ? selection.start
+        : selection.end;
+    final end = selection.start < selection.end
+        ? selection.end
+        : selection.start;
 
     TextEditingValue nextValue(String nextText, int offset) {
       return TextEditingValue(
         text: nextText,
-        selection:
-            TextSelection.collapsed(offset: offset.clamp(0, nextText.length)),
+        selection: TextSelection.collapsed(
+          offset: offset.clamp(0, nextText.length),
+        ),
         composing: TextRange.empty,
       );
     }
@@ -446,8 +513,10 @@ class TypeExtension {
         controller.value = nextValue(text, start <= 0 ? 0 : start - 1);
         return text;
       case 'ArrowRight':
-        controller.value =
-            nextValue(text, end >= text.length ? text.length : end + 1);
+        controller.value = nextValue(
+          text,
+          end >= text.length ? text.length : end + 1,
+        );
         return text;
       default:
         if (key.length == 1) return _insertText(controller, key);
@@ -456,16 +525,20 @@ class TypeExtension {
   }
 
   static String _insertText(
-      TextEditingController controller, String insertion) {
+    TextEditingController controller,
+    String insertion,
+  ) {
     final value = controller.value;
     final text = value.text;
     final selection = value.selection.isValid
         ? value.selection
         : TextSelection.collapsed(offset: text.length);
-    final start =
-        selection.start < selection.end ? selection.start : selection.end;
-    final end =
-        selection.start < selection.end ? selection.end : selection.start;
+    final start = selection.start < selection.end
+        ? selection.start
+        : selection.end;
+    final end = selection.start < selection.end
+        ? selection.end
+        : selection.start;
     final next = text.replaceRange(start, end, insertion);
     controller.value = TextEditingValue(
       text: next,

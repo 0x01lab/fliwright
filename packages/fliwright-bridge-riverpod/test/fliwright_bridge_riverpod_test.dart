@@ -4,10 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-final counterProvider = StateProvider<int>(
-  (ref) => 0,
-  name: 'counterProvider',
-);
+final counterProvider = StateProvider<int>((ref) => 0, name: 'counterProvider');
 
 final failingProvider = Provider<int>(
   (ref) => throw StateError('provider failed during initialization'),
@@ -25,9 +22,8 @@ final asyncObjectProvider = Provider<AsyncValue<_JsonConfig>>(
 );
 
 final asyncBaseObjectProvider = Provider<AsyncValue<_BaseConfig>>(
-  (ref) => const AsyncData<_BaseConfig>(
-    _JsonConfig('https://base.example.test'),
-  ),
+  (ref) =>
+      const AsyncData<_BaseConfig>(_JsonConfig('https://base.example.test')),
   name: 'asyncBaseObjectProvider',
 );
 
@@ -70,6 +66,12 @@ void main() {
     expect(providers, isNotEmpty);
     expect(providers.first['key'], 'counterProvider');
     expect(providers.first['value'], 0);
+    expect(providers.first['debugValue'], {
+      'kind': 'value',
+      'type': 'int',
+      'value': 0,
+      'stringValue': '0',
+    });
 
     final read = await FliwrightBridge.registry.invoke(
       'ext.fliwright.riverpod.read',
@@ -77,6 +79,12 @@ void main() {
     );
     expect(read['found'], isTrue);
     expect(read['value'], 0);
+    expect(read['debugValue'], {
+      'kind': 'value',
+      'type': 'int',
+      'value': 0,
+      'stringValue': '0',
+    });
   });
 
   test('observer updates cached value after provider changes', () async {
@@ -95,76 +103,82 @@ void main() {
     expect(read['value'], 2);
   });
 
-  test('registered writable providers can be overridden through the bridge',
-      () async {
-    final container = ProviderContainer(
-      observers: const [FliwrightRiverpodObserver()],
-    );
-    addTearDown(container.dispose);
-    container.read(counterProvider);
+  test(
+    'registered writable providers can be overridden through the bridge',
+    () async {
+      final container = ProviderContainer(
+        observers: const [FliwrightRiverpodObserver()],
+      );
+      addTearDown(container.dispose);
+      container.read(counterProvider);
 
-    registerFliwrightWritableProvider(
-      'counterProvider',
-      (value) {
-        final next = value as int;
-        container.read(counterProvider.notifier).state = next;
-        return next;
-      },
-      displayName: 'counterProvider',
-      providerType: 'StateProvider<int>',
-    );
+      registerFliwrightWritableProvider(
+        'counterProvider',
+        (value) {
+          final next = value as int;
+          container.read(counterProvider.notifier).state = next;
+          return next;
+        },
+        displayName: 'counterProvider',
+        providerType: 'StateProvider<int>',
+      );
 
-    final result = await FliwrightBridge.registry.invoke(
-      'ext.fliwright.riverpod.override',
-      {'provider': 'counterProvider', 'value': '3'},
-    );
-    expect(result['overridden'], isTrue);
-    expect(container.read(counterProvider), 3);
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.riverpod.override',
+        {'provider': 'counterProvider', 'value': '3'},
+      );
+      expect(result['overridden'], isTrue);
+      expect(container.read(counterProvider), 3);
 
-    final read = await FliwrightBridge.registry.invoke(
-      'ext.fliwright.riverpod.read',
-      {'provider': 'counterProvider'},
-    );
-    expect(read['value'], 3);
-  });
+      final read = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.riverpod.read',
+        {'provider': 'counterProvider'},
+      );
+      expect(read['value'], 3);
+    },
+  );
 
-  test('failed providers preserve read errors instead of returning null',
-      () async {
-    final container = ProviderContainer(
-      observers: const [FliwrightRiverpodObserver()],
-    );
-    addTearDown(container.dispose);
+  test(
+    'failed providers preserve read errors instead of returning null',
+    () async {
+      final container = ProviderContainer(
+        observers: const [FliwrightRiverpodObserver()],
+      );
+      addTearDown(container.dispose);
 
-    expect(() => container.read(failingProvider), throwsA(anything));
+      expect(() => container.read(failingProvider), throwsA(anything));
 
-    final read = await FliwrightBridge.registry.invoke(
-      'ext.fliwright.riverpod.read',
-      {'provider': 'failingProvider'},
-    );
-    expect(read['found'], isTrue);
-    expect(read['value'], isNull);
-    expect(read['error'], contains('provider failed during initialization'));
-  });
+      final read = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.riverpod.read',
+        {'provider': 'failingProvider'},
+      );
+      expect(read['found'], isTrue);
+      expect(read['value'], isNull);
+      expect(read['error'], contains('provider failed during initialization'));
+    },
+  );
 
-  test('registered serializers expose object provider values as JSON-safe maps',
-      () async {
-    final container = ProviderContainer(
-      observers: const [FliwrightRiverpodObserver()],
-    );
-    addTearDown(container.dispose);
-    registerFliwrightProviderSerializer('objectProvider', (value) {
-      final object = value as _InspectableObject;
-      return {'label': object.label};
-    });
+  test(
+    'registered serializers expose object provider values as JSON-safe maps',
+    () async {
+      final container = ProviderContainer(
+        observers: const [FliwrightRiverpodObserver()],
+      );
+      addTearDown(container.dispose);
+      registerFliwrightProviderSerializer('objectProvider', (value) {
+        final object = value as _InspectableObject;
+        return {'label': object.label};
+      });
 
-    expect(container.read(objectProvider).label, 'alpha');
+      expect(container.read(objectProvider).label, 'alpha');
 
-    final read = await FliwrightBridge.registry.invoke(
-      'ext.fliwright.riverpod.read',
-      {'provider': 'objectProvider'},
-    );
-    expect(read['value'], {'label': 'alpha'});
-  });
+      final read = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.riverpod.read',
+        {'provider': 'objectProvider'},
+      );
+      expect(read['value'], {'label': 'alpha'});
+    },
+  );
 
   test('async values expose nested toJson model fields', () async {
     final container = ProviderContainer(
@@ -192,102 +206,104 @@ void main() {
       'value': {
         r'$type': '_JsonConfig',
         r'$encodedBy': 'toJson',
-        'value': {
-          'baseUrl': 'https://api.example.test',
-        },
+        'value': {'baseUrl': 'https://api.example.test'},
       },
     });
   });
 
-  test('async values preserve runtime model data when declared as base type',
-      () async {
-    final container = ProviderContainer(
-      observers: const [FliwrightRiverpodObserver()],
-    );
-    addTearDown(container.dispose);
+  test(
+    'async values preserve runtime model data when declared as base type',
+    () async {
+      final container = ProviderContainer(
+        observers: const [FliwrightRiverpodObserver()],
+      );
+      addTearDown(container.dispose);
 
-    expect(container.read(asyncBaseObjectProvider).hasValue, isTrue);
+      expect(container.read(asyncBaseObjectProvider).hasValue, isTrue);
 
-    final read = await FliwrightBridge.registry.invoke(
-      'ext.fliwright.riverpod.read',
-      {'provider': 'asyncBaseObjectProvider'},
-    );
-    expect(read['found'], isTrue);
-    expect(read['value'], {
-      r'$kind': 'AsyncData<_BaseConfig>',
-      r'$type': 'AsyncData<_BaseConfig>',
-      r'$encodedBy': 'riverpod.AsyncValue',
-      'isLoading': false,
-      'isRefreshing': false,
-      'isReloading': false,
-      'hasValue': true,
-      'hasError': false,
-      'retrying': false,
-      'value': {
-        r'$type': '_JsonConfig',
-        r'$encodedBy': 'toJson',
+      final read = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.riverpod.read',
+        {'provider': 'asyncBaseObjectProvider'},
+      );
+      expect(read['found'], isTrue);
+      expect(read['value'], {
+        r'$kind': 'AsyncData<_BaseConfig>',
+        r'$type': 'AsyncData<_BaseConfig>',
+        r'$encodedBy': 'riverpod.AsyncValue',
+        'isLoading': false,
+        'isRefreshing': false,
+        'isReloading': false,
+        'hasValue': true,
+        'hasError': false,
+        'retrying': false,
         'value': {
-          'baseUrl': 'https://base.example.test',
+          r'$type': '_JsonConfig',
+          r'$encodedBy': 'toJson',
+          'value': {'baseUrl': 'https://base.example.test'},
         },
-      },
-    });
-  });
+      });
+    },
+  );
 
-  test('async loading providers expose loading state instead of null',
-      () async {
-    final container = ProviderContainer(
-      observers: const [FliwrightRiverpodObserver()],
-    );
-    addTearDown(container.dispose);
+  test(
+    'async loading providers expose loading state instead of null',
+    () async {
+      final container = ProviderContainer(
+        observers: const [FliwrightRiverpodObserver()],
+      );
+      addTearDown(container.dispose);
 
-    expect(container.read(loadingConfigProvider).isLoading, isTrue);
+      expect(container.read(loadingConfigProvider).isLoading, isTrue);
 
-    final read = await FliwrightBridge.registry.invoke(
-      'ext.fliwright.riverpod.read',
-      {'provider': 'loadingConfigProvider'},
-    );
-    expect(read['found'], isTrue);
-    expect(read['readable'], isTrue);
-    expect(read['value'], {
-      r'$kind': 'AsyncLoading<_JsonConfig>',
-      r'$type': 'AsyncLoading<_JsonConfig>',
-      r'$encodedBy': 'riverpod.AsyncValue',
-      'isLoading': true,
-      'isRefreshing': false,
-      'isReloading': false,
-      'hasValue': false,
-      'hasError': false,
-      'retrying': false,
-    });
-  });
+      final read = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.riverpod.read',
+        {'provider': 'loadingConfigProvider'},
+      );
+      expect(read['found'], isTrue);
+      expect(read['readable'], isTrue);
+      expect(read['value'], {
+        r'$kind': 'AsyncLoading<_JsonConfig>',
+        r'$type': 'AsyncLoading<_JsonConfig>',
+        r'$encodedBy': 'riverpod.AsyncValue',
+        'isLoading': true,
+        'isRefreshing': false,
+        'isReloading': false,
+        'hasValue': false,
+        'hasError': false,
+        'retrying': false,
+      });
+    },
+  );
 
-  test('disposed providers keep their last encoded value for inspection',
-      () async {
-    final container = ProviderContainer(
-      observers: const [FliwrightRiverpodObserver()],
-    );
+  test(
+    'disposed providers keep their last encoded value for inspection',
+    () async {
+      final container = ProviderContainer(
+        observers: const [FliwrightRiverpodObserver()],
+      );
 
-    expect(container.read(loadingConfigProvider).isLoading, isTrue);
-    container.dispose();
+      expect(container.read(loadingConfigProvider).isLoading, isTrue);
+      container.dispose();
 
-    final read = await FliwrightBridge.registry.invoke(
-      'ext.fliwright.riverpod.read',
-      {'provider': 'loadingConfigProvider'},
-    );
-    expect(read['found'], isTrue);
-    expect(read['readable'], isFalse);
-    expect(read['value'], {
-      r'$kind': 'AsyncLoading<_JsonConfig>',
-      r'$type': 'AsyncLoading<_JsonConfig>',
-      r'$encodedBy': 'riverpod.AsyncValue',
-      'isLoading': true,
-      'isRefreshing': false,
-      'isReloading': false,
-      'hasValue': false,
-      'hasError': false,
-      'retrying': false,
-    });
-  });
+      final read = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.riverpod.read',
+        {'provider': 'loadingConfigProvider'},
+      );
+      expect(read['found'], isTrue);
+      expect(read['readable'], isFalse);
+      expect(read['value'], {
+        r'$kind': 'AsyncLoading<_JsonConfig>',
+        r'$type': 'AsyncLoading<_JsonConfig>',
+        r'$encodedBy': 'riverpod.AsyncValue',
+        'isLoading': true,
+        'isRefreshing': false,
+        'isReloading': false,
+        'hasValue': false,
+        'hasError': false,
+        'retrying': false,
+      });
+    },
+  );
 
   test('future providers expose completed async model values', () async {
     final container = ProviderContainer(
@@ -296,8 +312,10 @@ void main() {
     addTearDown(container.dispose);
 
     expect(container.read(futureBaseObjectProvider).isLoading, isTrue);
-    expect(await container.read(futureBaseObjectProvider.future),
-        isA<_JsonConfig>());
+    expect(
+      await container.read(futureBaseObjectProvider.future),
+      isA<_JsonConfig>(),
+    );
 
     final read = await FliwrightBridge.registry.invoke(
       'ext.fliwright.riverpod.read',
@@ -317,9 +335,7 @@ void main() {
       'value': {
         r'$type': '_JsonConfig',
         r'$encodedBy': 'toJson',
-        'value': {
-          'baseUrl': 'https://future.example.test',
-        },
+        'value': {'baseUrl': 'https://future.example.test'},
       },
     });
   });
@@ -343,7 +359,5 @@ class _JsonConfig extends _BaseConfig {
   @override
   final String baseUrl;
 
-  Map<String, Object?> toJson() => {
-        'baseUrl': baseUrl,
-      };
+  Map<String, Object?> toJson() => {'baseUrl': baseUrl};
 }

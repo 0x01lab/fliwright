@@ -1,6 +1,7 @@
 # HTTP Mock
 
-`driver.mock`（一个 `MockManager`）通过运行中 app 内的 Dart `HttpOverrides` 拦截 app 的
+新版脚本优先使用 `mock` fixture（timeline-aware `MockRuntime`）；底层能力或旧文件再用
+`driver.mock`（`MockManager`）。二者都通过运行中 app 内的 Dart `HttpOverrides` 拦截 app 的
 HTTP 流量，因此 **Dio/HttpClient 的真实请求会被你的 mock 规则捕获并应答**。你既能在
 UI 上断言，也能对 app 实际发出的请求做断言。
 
@@ -15,6 +16,51 @@ App code  ──►  HttpClient  ──►  HttpOverrides proxy  ──►  Mock
                    ▲                                          │
                    └────────────  mocked response ◄──────────┘
  getCalls('/api/x')  ──►  records every intercepted request (method, path, body, …)
+```
+
+## Timeline-aware `mock` fixture
+
+```typescript
+import { test, expect } from '@fliwright/vitest';
+import { expect as viExpect } from 'vitest';
+
+test('register flow', async ({ page, flow, mock }) => {
+  await mock.rules('Use successful registration API', async () => {
+    await mock.clearRoutes();
+    await mock.clearCalls();
+    await mock.route('/api/register', {
+      method: 'POST',
+      status: 200,
+      body: { success: true, message: '注册成功' },
+    });
+  });
+
+  await flow.step('Submit form', async () => {
+    await page.getByText('提交').click();
+  });
+
+  await expect(page.getByText('注册成功'), 'Registration succeeded').toBeVisible();
+  const calls = await mock.findCalls({ method: 'POST', path: '/api/register' });
+  viExpect(calls.length).toBeGreaterThanOrEqual(1);
+});
+```
+
+`mock` methods mirror `driver.mock` but create timeline nodes:
+
+```typescript
+mock.rules(title, body)
+mock.loadRules(mockDir?)
+mock.switchRule(endpoint, ruleName, method?)
+mock.route(path, response & { method?, id? })
+mock.routeFlutter(path, response & { method?, id? })
+mock.removeRoute(path, method?)
+mock.clearRoutes()
+mock.clearCalls()
+mock.setPassthrough(enabled)
+mock.getCalls(path?)
+mock.listRoutes()
+mock.listRules()
+mock.findCalls({ method?, path?, url?, headers?, body? })
 ```
 
 ## 注册路由：`route()`
@@ -157,10 +203,10 @@ await driver.mock.switchRule('/v1/public/token', 'server-error');
 项目里的 mock 文件，而不必在代码里重复响应体：
 
 ```typescript
-await driver.mock.clearFlutterRoutes();
-await driver.mock.clearCalls();
-await driver.mock.loadRules('.fliwright/mocks');
-await driver.mock.switchRule('/api/register', 'success', 'POST');
+await mock.clearRoutes();
+await mock.clearCalls();
+await mock.loadRules('.fliwright/mocks');
+await mock.switchRule('/api/register', 'success', 'POST');
 ```
 
 VS Code 扩展会扫描 `.fliwright/mocks/api/*.json`，让你选一条规则，然后通过
@@ -182,20 +228,26 @@ URL 传给 `driver.mock.configureFlutterController(url)`。见 [cli.md](./cli.md
 ## 完整 mock + 表单 + UI 模式
 
 ```typescript
-test('register flow: mock API → fill form → submit → assert request', async ({ page, driver }) => {
-  await driver.mock.clearFlutterRoutes();
-  await driver.mock.clearCalls();
-  await driver.mock.loadRules('.fliwright/mocks');
-  await driver.mock.switchRule('/api/register', 'success', 'POST');
+import { test, expect } from '@fliwright/vitest';
+import { expect as viExpect } from 'vitest';
+
+test('register flow: mock API → fill form → submit → verify request', async ({ page, mock }) => {
+  await mock.rules('Use registration mock rules', async () => {
+    await mock.clearRoutes();
+    await mock.clearCalls();
+    await mock.loadRules('.fliwright/mocks');
+    await mock.switchRule('/api/register', 'success', 'POST');
+  });
 
   await page.formHelper.fill({ skipObscureFields: false });   // fill all fields
   await page.locator({ text: '提交' }).click();
 
   // UI shows success from the mocked response
-  await expect(page.waitFor('text=注册成功', 5000)).toBeVisible();
+  const success = await page.waitFor('text=注册成功', 5000);
+  await expect(success, 'Registration success is visible').toBeVisible();
 
   // Mock server captured the real submission
-  const calls = await driver.mock.getCalls('/api/register');
+  const calls = await mock.findCalls({ method: 'POST', path: '/api/register' });
   viExpect(calls.length).toBeGreaterThanOrEqual(1);
 });
 ```
@@ -203,7 +255,7 @@ test('register flow: mock API → fill form → submit → assert request', asyn
 ## 常见坑（Gotchas）
 
 - **先清后设。** 上一个用例残留的路由会顺着共享 driver 串到当前用例。
-  开始 app 可见的 mock 测试时，先 `await driver.mock.clearFlutterRoutes(); await driver.mock.clearCalls();`。
+  开始 app 可见的 mock 测试时，先 `await mock.clearRoutes(); await mock.clearCalls();`。
 - **body 可能是字符串。** Dio 会把请求体 JSON 编码；断言字段前先 `JSON.parse`。
 - **`route()` 是尽力而为；`routeFlutter()` 是严格语义。** 当某个 UI 动作
   必须观察到该规则时用 `routeFlutter()`，否则用例可能只对镜像通过、而 app 什么也看不到。
