@@ -28,18 +28,15 @@ void main() {
     SnapExtension.register(registry);
     await tester.pumpWidget(_snapFixture());
 
-    final result = await registry.invoke(
-      'ext.fliwright.snap',
-      {},
-    );
+    final result = await registry.invoke('ext.fliwright.snap', {});
 
     expect(result['groupId'], isA<String>());
     expect(result['snapshot'], contains('[ref=e'));
 
     final refs = result['refs'] as List<dynamic>;
     final submit = refs.cast<Map<String, dynamic>>().firstWhere(
-          (entry) => entry['label'] == 'Submit' && entry['role'] == 'button',
-        );
+      (entry) => entry['label'] == 'Submit' && entry['role'] == 'button',
+    );
 
     expect(submit['ref'], startsWith('e'));
     expect(submit['rect'], isA<Map>());
@@ -56,10 +53,9 @@ void main() {
     SnapExtension.register(registry);
     await tester.pumpWidget(_snapFixture());
 
-    final result = await registry.invoke(
-      'ext.fliwright.snap',
-      {'includeRects': 'false'},
-    );
+    final result = await registry.invoke('ext.fliwright.snap', {
+      'includeRects': 'false',
+    });
 
     final refs = (result['refs'] as List<dynamic>).cast<Map<String, dynamic>>();
     expect(refs, isNotEmpty);
@@ -103,6 +99,7 @@ void main() {
     final clicks = <Map<String, String>>[];
     final hovers = <Map<String, String>>[];
     final types = <Map<String, String>>[];
+    final gestures = <Map<String, String>>[];
     FliwrightBridge.registry.reset();
     SnapExtension.register(FliwrightBridge.registry);
     InspectExtension.register(FliwrightBridge.registry);
@@ -118,31 +115,46 @@ void main() {
       types.add(params);
       return {'success': true};
     });
+    FliwrightBridge.registry.register('ext.fliwright.gesture', (params) async {
+      gestures.add(params);
+      return {'success': true};
+    });
     await tester.pumpWidget(_snapFixture());
 
     final snap = await FliwrightBridge.registry.invoke(
       'ext.fliwright.snap',
       {},
     );
-    final ref = ((snap['refs'] as List<dynamic>).first
-        as Map<String, dynamic>)['ref'] as String;
+    final ref =
+        ((snap['refs'] as List<dynamic>).first as Map<String, dynamic>)['ref']
+            as String;
 
-    await FliwrightBridge.registry.invoke(
-      'ext.fliwright.action',
-      {'action': 'doubleClick', 'ref': ref},
-    );
-    await FliwrightBridge.registry.invoke(
-      'ext.fliwright.action',
-      {'action': 'rightClick', 'ref': ref},
-    );
-    await FliwrightBridge.registry.invoke(
-      'ext.fliwright.action',
-      {'action': 'hover', 'ref': ref},
-    );
-    await FliwrightBridge.registry.invoke(
-      'ext.fliwright.action',
-      {'action': 'clear', 'ref': ref},
-    );
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'doubleClick',
+      'ref': ref,
+    });
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'rightClick',
+      'ref': ref,
+    });
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'hover',
+      'ref': ref,
+    });
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'clear',
+      'ref': ref,
+    });
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'semanticDrag',
+      'ref': ref,
+      'direction': 'down',
+    });
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'slideTo',
+      'ref': ref,
+      'targetX': '240',
+    });
 
     expect(clicks, hasLength(3));
     expect(clicks.last['button'], 'right');
@@ -150,10 +162,15 @@ void main() {
     expect(types, hasLength(1));
     expect(types.single['text'], '');
     expect(types.single['replaceAll'], 'true');
+    expect(gestures.map((entry) => entry['gesture']), [
+      'semanticDrag',
+      'slideTo',
+    ]);
   });
 
-  testWidgets('q refs resolve against the live widget tree for actions',
-      (tester) async {
+  testWidgets('q refs resolve against the live widget tree for actions', (
+    tester,
+  ) async {
     final clicks = <Map<String, String>>[];
     FliwrightBridge.registry.reset();
     InspectExtension.register(FliwrightBridge.registry);
@@ -189,9 +206,7 @@ void main() {
         home: Semantics(
           textField: true,
           label: 'Email',
-          child: Material(
-            child: TextField(controller: controller),
-          ),
+          child: Material(child: TextField(controller: controller)),
         ),
       ),
     );
@@ -200,9 +215,13 @@ void main() {
       'ext.fliwright.snap',
       {},
     );
-    final ref = ((snap['refs'] as List<dynamic>).firstWhere(
-      (entry) => (entry as Map<String, dynamic>)['role'] == 'textbox',
-    ) as Map<String, dynamic>)['ref'] as String;
+    final ref =
+        ((snap['refs'] as List<dynamic>).firstWhere(
+                  (entry) =>
+                      (entry as Map<String, dynamic>)['role'] == 'textbox',
+                )
+                as Map<String, dynamic>)['ref']
+            as String;
 
     final result = await FliwrightBridge.registry.invoke(
       'ext.fliwright.action',
@@ -218,8 +237,9 @@ void main() {
     expect(controller.text, 'alic');
   });
 
-  testWidgets('setCheckbox only taps when the requested state differs',
-      (tester) async {
+  testWidgets('setCheckbox only taps when the requested state differs', (
+    tester,
+  ) async {
     final clicks = <Map<String, String>>[];
     FliwrightBridge.registry.reset();
     SnapExtension.register(FliwrightBridge.registry);
@@ -233,10 +253,7 @@ void main() {
         home: Material(
           child: Semantics(
             label: 'Accept',
-            child: Checkbox(
-              value: false,
-              onChanged: (_) {},
-            ),
+            child: Checkbox(value: false, onChanged: (_) {}),
           ),
         ),
       ),
@@ -246,33 +263,29 @@ void main() {
       'ext.fliwright.snap',
       {},
     );
-    final ref = ((snap['refs'] as List<dynamic>).first
-        as Map<String, dynamic>)['ref'] as String;
+    final ref =
+        ((snap['refs'] as List<dynamic>).first as Map<String, dynamic>)['ref']
+            as String;
 
-    await FliwrightBridge.registry.invoke(
-      'ext.fliwright.action',
-      {
-        'action': 'setCheckbox',
-        'ref': ref,
-        'checked': 'false',
-        'checkStable': 'false',
-      },
-    );
-    await FliwrightBridge.registry.invoke(
-      'ext.fliwright.action',
-      {
-        'action': 'setCheckbox',
-        'ref': ref,
-        'checked': 'true',
-        'checkStable': 'false',
-      },
-    );
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'setCheckbox',
+      'ref': ref,
+      'checked': 'false',
+      'checkStable': 'false',
+    });
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'setCheckbox',
+      'ref': ref,
+      'checked': 'true',
+      'checkStable': 'false',
+    });
 
     expect(clicks, hasLength(1));
   });
 
-  testWidgets('selectOption invokes a ref-backed dropdown callback',
-      (tester) async {
+  testWidgets('selectOption invokes a ref-backed dropdown callback', (
+    tester,
+  ) async {
     String? selected;
     FliwrightBridge.registry.reset();
     InspectExtension.register(FliwrightBridge.registry);

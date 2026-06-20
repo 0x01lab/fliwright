@@ -1,0 +1,1 @@
+{"summary":"missing button","rootCause":"wrong page","suggestedActions":["navigate"],"confidence":0.9}

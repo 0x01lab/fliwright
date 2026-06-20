@@ -17,7 +17,8 @@ class InspectExtension {
   }
 
   static Future<Map<String, dynamic>> _resolve(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
       return {'error': 'No widget tree available', 'matches': <dynamic>[]};
@@ -79,7 +80,8 @@ class InspectExtension {
   }
 
   static Future<Map<String, dynamic>> _action(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final action = params['action'] ?? '';
     if (action.isEmpty) {
       return {'error': 'Missing required parameter: action', 'success': false};
@@ -122,10 +124,7 @@ class InspectExtension {
         action: action,
         rect: rect,
         targetId: '${entry.element.hashCode}',
-        params: {
-          ...params,
-          'selector': params['selector'] ?? 'ref=$ref',
-        },
+        params: {...params, 'selector': params['selector'] ?? 'ref=$ref'},
       );
     }
 
@@ -145,14 +144,14 @@ class InspectExtension {
     final target = targetId == null
         ? matches.first as Map<String, dynamic>
         : matches.cast<Map<String, dynamic>>().firstWhere(
-              (candidate) => candidate['id'].toString() == targetId,
-              orElse: () => matches.first as Map<String, dynamic>,
-            );
+            (candidate) => candidate['id'].toString() == targetId,
+            orElse: () => matches.first as Map<String, dynamic>,
+          );
     final rect = target['rect'];
     if (rect is! Map<String, dynamic>) {
       return {
         'error': 'Widget matching selector has no render bounds',
-        'success': false
+        'success': false,
       };
     }
 
@@ -174,10 +173,9 @@ class InspectExtension {
       case 'tap':
         final tapResult = await _tap(rect, params);
         if (params['waitForAnimations'] == 'true') {
-          await FliwrightBridge.registry.invoke(
-            'ext.fliwright.settle',
-            {'timeout': params['settleTimeout'] ?? '2000'},
-          );
+          await FliwrightBridge.registry.invoke('ext.fliwright.settle', {
+            'timeout': params['settleTimeout'] ?? '2000',
+          });
         }
         return tapResult;
       case 'doubleClick':
@@ -194,56 +192,47 @@ class InspectExtension {
         FocusManager.instance.primaryFocus?.unfocus();
         return {'success': true, 'action': 'blur'};
       case 'pressKey':
-        return FliwrightBridge.registry.invoke(
-          'ext.fliwright.type',
-          {
-            ...params,
-            'selector': params['selector'] ?? '',
-            'targetId': targetId,
-            'targetRect': jsonEncode(rect),
-            'key': params['key'] ?? params['value'] ?? '',
-          },
-        );
+        return FliwrightBridge.registry.invoke('ext.fliwright.type', {
+          ...params,
+          'selector': params['selector'] ?? '',
+          'targetId': targetId,
+          'targetRect': jsonEncode(rect),
+          'key': params['key'] ?? params['value'] ?? '',
+        });
       case 'setCheckbox':
         return _setCheckbox(rect, targetId, params);
       case 'selectOption':
         return _selectOption(targetId, params);
       case 'longPress':
       case 'drag':
+      case 'semanticDrag':
+      case 'slideTo':
       case 'pinch':
-        return FliwrightBridge.registry.invoke(
-          'ext.fliwright.gesture',
-          {
-            ...params,
-            'selector': params['selector'] ?? '',
-            'resolvedRect': jsonEncode(rect),
-            'gesture': action,
-          },
-        );
+        return FliwrightBridge.registry.invoke('ext.fliwright.gesture', {
+          ...params,
+          'selector': params['selector'] ?? '',
+          'resolvedRect': jsonEncode(rect),
+          'gesture': action,
+        });
       case 'type':
       case 'fill':
       case 'clear':
-        return FliwrightBridge.registry.invoke(
-          'ext.fliwright.type',
-          {
-            ...params,
-            'selector': params['selector'] ?? '',
-            'targetId': targetId,
-            'targetRect': jsonEncode(rect),
-            'replaceAll': params['replaceAll'] ??
-                (action == 'fill' || action == 'clear' ? 'true' : 'false'),
-            if (action == 'clear') 'text': '',
-          },
-        );
+        return FliwrightBridge.registry.invoke('ext.fliwright.type', {
+          ...params,
+          'selector': params['selector'] ?? '',
+          'targetId': targetId,
+          'targetRect': jsonEncode(rect),
+          'replaceAll':
+              params['replaceAll'] ??
+              (action == 'fill' || action == 'clear' ? 'true' : 'false'),
+          if (action == 'clear') 'text': '',
+        });
       case 'scrollIntoView':
-        return FliwrightBridge.registry.invoke(
-          'ext.fliwright.scrollIntoView',
-          {
-            ...params,
-            'selector': params['selector'] ?? '',
-            'targetId': targetId,
-          },
-        );
+        return FliwrightBridge.registry.invoke('ext.fliwright.scrollIntoView', {
+          ...params,
+          'selector': params['selector'] ?? '',
+          'targetId': targetId,
+        });
       default:
         return {'error': 'Unknown action: $action', 'success': false};
     }
@@ -320,14 +309,12 @@ class InspectExtension {
   }
 
   static Future<Map<String, dynamic>> _inspect(
-      Map<String, String> params) async {
+    Map<String, String> params,
+  ) async {
     final selector = params['selector'] ?? '';
     if (_looksLikeJsonSelector(selector)) {
       final result = await _resolve(params);
-      return {
-        ...result,
-        'widgets': result['matches'] ?? <dynamic>[],
-      };
+      return {...result, 'widgets': result['matches'] ?? <dynamic>[]};
     }
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
@@ -373,14 +360,11 @@ class InspectExtension {
   ) {
     final alignment = _alignmentFromString(params['alignment'] ?? 'center');
     final point = _pointInRect(rect, alignment);
-    return FliwrightBridge.registry.invoke(
-      'ext.fliwright.click',
-      {
-        'x': point.dx.toString(),
-        'y': point.dy.toString(),
-        if (params['button'] != null) 'button': params['button']!,
-      },
-    );
+    return FliwrightBridge.registry.invoke('ext.fliwright.click', {
+      'x': point.dx.toString(),
+      'y': point.dy.toString(),
+      if (params['button'] != null) 'button': params['button']!,
+    });
   }
 
   static Future<Map<String, dynamic>> _tapMultiple(
@@ -402,10 +386,10 @@ class InspectExtension {
   ) {
     final alignment = _alignmentFromString(params['alignment'] ?? 'center');
     final point = _pointInRect(rect, alignment);
-    return FliwrightBridge.registry.invoke(
-      'ext.fliwright.hover',
-      {'x': point.dx.toString(), 'y': point.dy.toString()},
-    );
+    return FliwrightBridge.registry.invoke('ext.fliwright.hover', {
+      'x': point.dx.toString(),
+      'y': point.dy.toString(),
+    });
   }
 
   static Future<Map<String, dynamic>> _setCheckbox(
@@ -483,7 +467,7 @@ class InspectExtension {
       }
       return {
         'error': 'No dropdown option matched: $desired',
-        'success': false
+        'success': false,
       };
     } catch (error) {
       return {'error': 'selectOption failed: $error', 'success': false};
@@ -628,9 +612,7 @@ class InspectExtension {
     final fallbackAst = fallback is Map<String, dynamic>
         ? _fallbackCriteriaToAst(fallback)
         : null;
-    var ast = _matchCriteriaToAst(
-      match is Map<String, dynamic> ? match : null,
-    );
+    var ast = _matchCriteriaToAst(match is Map<String, dynamic> ? match : null);
     if (ast != null && fallbackAst != null) {
       ast = {'kind': 'fallback', 'primary': ast, 'fallback': fallbackAst};
     } else if (ast == null) {
@@ -639,11 +621,7 @@ class InspectExtension {
     ast ??= {'kind': 'type', 'value': 'Widget'};
 
     if (within is Map<String, dynamic>) {
-      ast = {
-        'kind': 'descendant',
-        'of': _queryToAst(within),
-        'matching': ast,
-      };
+      ast = {'kind': 'descendant', 'of': _queryToAst(within), 'matching': ast};
     }
 
     if (containing is Map<String, dynamic>) {
@@ -699,8 +677,11 @@ class InspectExtension {
     }
     final textContains = match['textContains'];
     if (textContains is String && textContains.isNotEmpty) {
-      selectors
-          .add({'kind': 'text', 'value': textContains, 'match': 'contains'});
+      selectors.add({
+        'kind': 'text',
+        'value': textContains,
+        'match': 'contains',
+      });
     }
     final textRegex = match['textRegex'];
     if (textRegex is String && textRegex.isNotEmpty) {
@@ -753,11 +734,7 @@ class InspectExtension {
     }
     final semanticsHint = fallback['semanticsHint'];
     if (semanticsHint is String && semanticsHint.isNotEmpty) {
-      return {
-        'kind': 'semantics',
-        'hint': semanticsHint,
-        'match': 'contains',
-      };
+      return {'kind': 'semantics', 'hint': semanticsHint, 'match': 'contains'};
     }
     final hintText = fallback['hintText'] ?? fallback['textContains'];
     if (hintText is String && hintText.isNotEmpty) {
@@ -774,36 +751,48 @@ class InspectExtension {
   static ParsedSelectorAst _legacyParsedToAst(ParsedSelector selector) {
     switch (selector.field) {
       case 'text':
-        return ParsedSelectorAst(
-            {'kind': 'text', 'value': selector.value, 'match': 'exact'});
+        return ParsedSelectorAst({
+          'kind': 'text',
+          'value': selector.value,
+          'match': 'exact',
+        });
       case 'key':
       case 'type':
       case 'id':
       case 'name':
       case 'ancestorKey':
-        return ParsedSelectorAst(
-            {'kind': selector.field, 'value': selector.value});
+        return ParsedSelectorAst({
+          'kind': selector.field,
+          'value': selector.value,
+        });
       case 'semanticsId':
-        return ParsedSelectorAst(
-            {'kind': 'semantics', 'identifier': selector.value});
+        return ParsedSelectorAst({
+          'kind': 'semantics',
+          'identifier': selector.value,
+        });
       case 'semanticsLabel':
         return ParsedSelectorAst({
           'kind': 'semantics',
           'label': selector.value,
-          'match': 'contains'
+          'match': 'contains',
         });
       case 'role':
         return ParsedSelectorAst({'kind': 'semantics', 'role': selector.value});
       case 'tooltip':
         return ParsedSelectorAst({'kind': 'tooltip', 'value': selector.value});
       default:
-        return ParsedSelectorAst(
-            {'kind': 'text', 'value': selector.value, 'match': 'exact'});
+        return ParsedSelectorAst({
+          'kind': 'text',
+          'value': selector.value,
+          'match': 'exact',
+        });
     }
   }
 
   static List<Element> _evaluateSelector(
-      Element root, ParsedSelectorAst selector) {
+    Element root,
+    ParsedSelectorAst selector,
+  ) {
     final kind = selector.kind;
     switch (kind) {
       case 'descendant':
@@ -832,15 +821,19 @@ class InspectExtension {
         return _dedupeElements(result);
       case 'and':
         return _allElements(root)
-            .where((element) => selector
-                .children('selectors')
-                .every((child) => _matchesAst(element, child)))
+            .where(
+              (element) => selector
+                  .children('selectors')
+                  .every((child) => _matchesAst(element, child)),
+            )
             .toList();
       case 'or':
-        return _dedupeElements(selector
-            .children('selectors')
-            .expand((child) => _evaluateSelector(root, child))
-            .toList());
+        return _dedupeElements(
+          selector
+              .children('selectors')
+              .expand((child) => _evaluateSelector(root, child))
+              .toList(),
+        );
       case 'nth':
         final candidates = _evaluateSelector(root, selector.child('selector'));
         final index = selector.intValue('index') ?? -1;
@@ -881,7 +874,10 @@ class InspectExtension {
       default:
         final result = <Element>[];
         _walkTreeCollect(
-            root, (element) => _matchesAst(element, selector), result);
+          root,
+          (element) => _matchesAst(element, selector),
+          result,
+        );
         return result;
     }
   }
@@ -1047,8 +1043,9 @@ class InspectExtension {
 
     // Expensive fields: only compute when requested.
     final ancestorKey = includeAncestorKey ? findAncestorKey(element) : null;
-    final name =
-        includeName ? (extractName(widget) ?? findAncestorName(element)) : null;
+    final name = includeName
+        ? (extractName(widget) ?? findAncestorName(element))
+        : null;
     final semantics = includeSemantics
         ? extractSemantics(element)
         : const ExtractedSemantics();
@@ -1065,10 +1062,12 @@ class InspectExtension {
       };
     }
 
-    final descendantText =
-        includeDescendantText ? findDescendantText(element) : null;
-    final descendantIcon =
-        includeDescendantIcon ? findDescendantIcon(element) : null;
+    final descendantText = includeDescendantText
+        ? findDescendantText(element)
+        : null;
+    final descendantIcon = includeDescendantIcon
+        ? findDescendantIcon(element)
+        : null;
     final tooltip = includeTooltip ? extractTooltip(element) : null;
     final keyedAncestors = includeKeyedAncestors
         ? findKeyedAncestors(element)
@@ -1179,6 +1178,7 @@ class InspectExtension {
       }
       e.visitChildren(search);
     }
+
     element.visitChildren(search);
     return found;
   }
@@ -1200,6 +1200,7 @@ class InspectExtension {
       }
       e.visitChildren(search);
     }
+
     element.visitChildren(search);
     return found;
   }
@@ -1236,8 +1237,10 @@ class InspectExtension {
   /// at the Scaffold/App boundary, so a Scaffold-supplied key is exposed to
   /// the recorder. Framework plumbing keys (e.g. `_ScaffoldSlot.body`) are
   /// skipped because they are not useful selector anchors.
-  static List<Map<String, dynamic>> findKeyedAncestors(Element element,
-      {int maxDepth = 3}) {
+  static List<Map<String, dynamic>> findKeyedAncestors(
+    Element element, {
+    int maxDepth = 3,
+  }) {
     final result = <Map<String, dynamic>>[];
     element.visitAncestorElements((ancestor) {
       if (result.length >= maxDepth) return false;
@@ -1245,7 +1248,10 @@ class InspectExtension {
           ancestor.widget is Scaffold || ancestor.widget is WidgetsApp;
       final key = extractKeyValue(ancestor.widget.key);
       if (key != null && !key.startsWith('_')) {
-        result.add({'key': key, 'type': ancestor.widget.runtimeType.toString()});
+        result.add({
+          'key': key,
+          'type': ancestor.widget.runtimeType.toString(),
+        });
       }
       if (isBoundary) return false;
       return true;
@@ -1448,10 +1454,7 @@ class InspectExtension {
     return value;
   }
 
-  static bool _matches(
-    Map<String, dynamic> info,
-    ParsedSelector selector,
-  ) {
+  static bool _matches(Map<String, dynamic> info, ParsedSelector selector) {
     final value = info[selector.field];
     if (value == null) return false;
     if (_requiresExactMatch(selector.field)) {
@@ -1494,7 +1497,8 @@ class InspectExtension {
           element,
           includeAncestorKey: selector.field == 'ancestorKey',
           includeName: selector.field == 'name',
-          includeSemantics: selector.field == 'semanticsId' ||
+          includeSemantics:
+              selector.field == 'semanticsId' ||
               selector.field == 'semanticsLabel' ||
               selector.field == 'role',
         );
@@ -1622,13 +1626,13 @@ class InspectExtension {
         'Flex',
         'MultiChildRenderObjectWidget',
         'RenderObjectWidget',
-        'Widget'
+        'Widget',
       },
       'Row': {
         'Flex',
         'MultiChildRenderObjectWidget',
         'RenderObjectWidget',
-        'Widget'
+        'Widget',
       },
       'Container': {'StatelessWidget', 'Widget'},
       'Scaffold': {'StatefulWidget', 'Widget'},
@@ -1644,23 +1648,23 @@ class InspectExtension {
       'Padding': {
         'SingleChildRenderObjectWidget',
         'RenderObjectWidget',
-        'Widget'
+        'Widget',
       },
       'Align': {
         'SingleChildRenderObjectWidget',
         'RenderObjectWidget',
-        'Widget'
+        'Widget',
       },
       'Center': {
         'Align',
         'SingleChildRenderObjectWidget',
         'RenderObjectWidget',
-        'Widget'
+        'Widget',
       },
       'SizedBox': {
         'SingleChildRenderObjectWidget',
         'RenderObjectWidget',
-        'Widget'
+        'Widget',
       },
       'Expanded': {'Flexible', 'ParentDataWidget', 'ProxyWidget', 'Widget'},
       'Flexible': {'ParentDataWidget', 'ProxyWidget', 'Widget'},
@@ -1671,12 +1675,12 @@ class InspectExtension {
       'CircularProgressIndicator': {
         'ProgressIndicator',
         'StatefulWidget',
-        'Widget'
+        'Widget',
       },
       'LinearProgressIndicator': {
         'ProgressIndicator',
         'StatefulWidget',
-        'Widget'
+        'Widget',
       },
       'BottomNavigationBar': {'StatefulWidget', 'Widget'},
       'TabBar': {'StatefulWidget', 'Widget'},
@@ -1806,8 +1810,9 @@ class InspectExtension {
   }
 
   static bool _isRenderDescendant(RenderObject child, RenderObject ancestor) {
-    RenderObject? current =
-        child.parent is RenderObject ? child.parent as RenderObject : null;
+    RenderObject? current = child.parent is RenderObject
+        ? child.parent as RenderObject
+        : null;
     while (current != null) {
       if (current == ancestor) return true;
       current = current.parent is RenderObject
@@ -1957,12 +1962,7 @@ class ExtractedSemantics {
   final String? hint;
   final String? role;
 
-  const ExtractedSemantics({
-    this.identifier,
-    this.label,
-    this.hint,
-    this.role,
-  });
+  const ExtractedSemantics({this.identifier, this.label, this.hint, this.role});
 
   bool get hasAnyValue =>
       identifier != null || label != null || hint != null || role != null;

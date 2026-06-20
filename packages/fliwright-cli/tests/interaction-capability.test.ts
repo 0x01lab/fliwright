@@ -4,6 +4,7 @@ import {
   diagnosticsInteraction,
   findInteraction,
   hotReloadAndSnapInteraction,
+  dragInteraction,
   navigateInteraction,
   observeInteraction,
   snapInteraction,
@@ -42,6 +43,8 @@ function createDriver(): {
   pageSnapshot: ReturnType<typeof vi.fn>;
   click: ReturnType<typeof vi.fn>;
   fill: ReturnType<typeof vi.fn>;
+  drag: ReturnType<typeof vi.fn>;
+  dragFrom: ReturnType<typeof vi.fn>;
   dismissModal: ReturnType<typeof vi.fn>;
   waitForNetworkIdle: ReturnType<typeof vi.fn>;
   resetRouteStack: ReturnType<typeof vi.fn>;
@@ -50,6 +53,8 @@ function createDriver(): {
   const pageSnapshot = vi.fn().mockResolvedValue(snapshot);
   const click = vi.fn().mockResolvedValue(undefined);
   const fill = vi.fn().mockResolvedValue(undefined);
+  const drag = vi.fn().mockResolvedValue(undefined);
+  const dragFrom = vi.fn().mockResolvedValue(undefined);
   const dismissModal = vi.fn().mockResolvedValue(undefined);
   const waitForNetworkIdle = vi.fn().mockResolvedValue(undefined);
   const resetRouteStack = vi.fn().mockResolvedValue(undefined);
@@ -59,6 +64,8 @@ function createDriver(): {
     pageSnapshot,
     click,
     fill,
+    drag,
+    dragFrom,
     dismissModal,
     waitForNetworkIdle,
     resetRouteStack,
@@ -79,12 +86,13 @@ function createDriver(): {
         snapshot: pageSnapshot,
         screenshot: vi.fn().mockResolvedValue(Buffer.from('png')),
         waitFor: vi.fn().mockResolvedValue(undefined),
+        dragFrom,
         dismissModal,
         waitForNetworkIdle,
         resetRouteStack,
-        getByKey: vi.fn(() => ({ click, fill })),
-        getByText: vi.fn(() => ({ click, fill })),
-        getByType: vi.fn(() => ({ click, fill })),
+        getByKey: vi.fn(() => ({ click, fill, drag })),
+        getByText: vi.fn(() => ({ click, fill, drag })),
+        getByType: vi.fn(() => ({ click, fill, drag })),
       },
     },
   };
@@ -125,6 +133,7 @@ describe('CLI interaction capabilities', () => {
 
     await tapInteraction(driver, { ref: 'e1' });
     await typeInteraction(driver, { ref: 'e2', value: 'alice', replace: true });
+    await dragInteraction(driver, { ref: 'e1', deltaX: 0, deltaY: 120, steps: 24 });
     await actionInteraction(driver, {
       action: 'pressKey',
       ref: 'e2',
@@ -142,6 +151,13 @@ describe('CLI interaction capabilities', () => {
       replaceAll: 'true',
     });
     expect(sendRequest).toHaveBeenNthCalledWith(3, 'ext.fliwright.action', {
+      action: 'drag',
+      ref: 'e1',
+      deltaX: '0',
+      deltaY: '120',
+      steps: '24',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(4, 'ext.fliwright.action', {
       action: 'pressKey',
       ref: 'e2',
       key: 'Backspace',
@@ -149,13 +165,29 @@ describe('CLI interaction capabilities', () => {
   });
 
   it('routes selector interactions through locators', async () => {
-    const { driver, click, fill } = createDriver();
+    const { driver, click, fill, drag } = createDriver();
 
     await tapInteraction(driver, { text: 'Submit' });
     await typeInteraction(driver, { key: 'email', value: 'alice' });
+    await dragInteraction(driver, { type: 'ListView', deltaX: 0, deltaY: 160, steps: 20 });
 
     expect(click).toHaveBeenCalled();
     expect(fill).toHaveBeenCalledWith('alice');
+    expect(drag).toHaveBeenCalledWith(0, 160, { steps: 20 });
+  });
+
+  it('routes coordinate drags through the page raw coordinate API', async () => {
+    const { driver, dragFrom } = createDriver();
+
+    await expect(dragInteraction(driver, {
+      x: 180,
+      y: 120,
+      deltaX: 0,
+      deltaY: 260,
+      steps: 25,
+    })).resolves.toEqual({ success: true, action: 'drag' });
+
+    expect(dragFrom).toHaveBeenCalledWith(180, 120, 0, 260, { steps: 25 });
   });
 
   it('routes page-level actions through page APIs', async () => {

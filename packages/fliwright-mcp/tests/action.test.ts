@@ -18,6 +18,10 @@ describe('handleAction', () => {
     await expect(
       handleAction({ action: 'setCheckbox', ref: 'e1' }, createServerState()),
     ).rejects.toThrow('setCheckbox requires checked');
+
+    await expect(
+      handleAction({ action: 'drag', ref: 'e1', deltaY: 100 }, createServerState()),
+    ).rejects.toThrow('drag requires deltaX');
   });
 
   it('can target a snapshot ref', async () => {
@@ -83,6 +87,53 @@ describe('handleAction', () => {
       ref: 'e4',
       value: 'US',
     });
+  });
+
+  it('routes drag action through the shared drag interaction', async () => {
+    const state = createServerState();
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    state.setDriver({
+      sendRequest,
+      page: {},
+    } as unknown as FliwrightDriver);
+
+    await expect(
+      handleAction({
+        action: 'drag',
+        ref: 'e5',
+        deltaX: 0,
+        deltaY: 180,
+        steps: 22,
+      }, state),
+    ).resolves.toEqual({ success: true, action: 'drag' });
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.action', {
+      action: 'drag',
+      ref: 'e5',
+      deltaX: '0',
+      deltaY: '180',
+      steps: '22',
+    });
+  });
+
+  it('routes raw coordinate drag action through page dragFrom', async () => {
+    const state = createServerState();
+    const dragFrom = vi.fn().mockResolvedValue(undefined);
+    state.setDriver({
+      page: { dragFrom, snapshot: vi.fn() },
+    } as unknown as FliwrightDriver);
+
+    await expect(
+      handleAction({
+        action: 'drag',
+        x: 200,
+        y: 100,
+        deltaX: 0,
+        deltaY: 240,
+      }, state),
+    ).resolves.toEqual({ success: true, action: 'drag' });
+
+    expect(dragFrom).toHaveBeenCalledWith(200, 100, 0, 240, { steps: undefined });
   });
 
   it('supports page-level actions', async () => {

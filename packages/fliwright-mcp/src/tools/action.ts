@@ -15,6 +15,7 @@ const ActionNameSchema = z.enum([
   'pressKey',
   'setCheckbox',
   'selectOption',
+  'drag',
   'dismissModal',
   'waitForNetworkIdle',
 ]);
@@ -28,6 +29,11 @@ export const ActionParamsSchema = z.object({
   keyboardKey: z.string().optional().describe('Keyboard key for pressKey, e.g. "Backspace"'),
   checked: z.boolean().optional().describe('Expected state for setCheckbox'),
   value: z.union([z.string(), z.number()]).optional().describe('Value/label for selectOption'),
+  deltaX: z.number().optional().describe('Horizontal drag distance for drag (positive = right)'),
+  deltaY: z.number().optional().describe('Vertical drag distance for drag (positive = down)'),
+  steps: z.number().optional().describe('Number of interpolation steps for drag'),
+  x: z.number().optional().describe('Start X coordinate for raw coordinate drag'),
+  y: z.number().optional().describe('Start Y coordinate for raw coordinate drag'),
   quietMs: z.number().optional().describe('Quiet period for waitForNetworkIdle'),
   timeout: z.number().optional().describe('Timeout in milliseconds'),
   includeSnapshot: z.boolean().optional().describe('Return a post-action snapshot'),
@@ -35,6 +41,7 @@ export const ActionParamsSchema = z.object({
   (data) => (
     data.action === 'dismissModal' ||
     data.action === 'waitForNetworkIdle' ||
+    (data.action === 'drag' && data.x != null && data.y != null) ||
     data.ref ||
     data.key ||
     data.text ||
@@ -50,6 +57,15 @@ export const ActionParamsSchema = z.object({
 ).refine(
   (data) => data.action !== 'selectOption' || data.value != null,
   { message: 'selectOption requires value' },
+).refine(
+  (data) => data.action !== 'drag' || data.deltaX != null,
+  { message: 'drag requires deltaX' },
+).refine(
+  (data) => data.action !== 'drag' || data.deltaY != null,
+  { message: 'drag requires deltaY' },
+).refine(
+  (data) => data.action !== 'drag' || (data.x == null && data.y == null) || (data.x != null && data.y != null),
+  { message: 'Raw coordinate drags require both x and y' },
 );
 
 const ActionInputSchema = z.object({
@@ -61,6 +77,11 @@ const ActionInputSchema = z.object({
   keyboardKey: z.string().optional().describe('Keyboard key for pressKey, e.g. "Backspace"'),
   checked: z.boolean().optional().describe('Expected state for setCheckbox'),
   value: z.union([z.string(), z.number()]).optional().describe('Value/label for selectOption'),
+  deltaX: z.number().optional().describe('Horizontal drag distance for drag (positive = right)'),
+  deltaY: z.number().optional().describe('Vertical drag distance for drag (positive = down)'),
+  steps: z.number().optional().describe('Number of interpolation steps for drag'),
+  x: z.number().optional().describe('Start X coordinate for raw coordinate drag'),
+  y: z.number().optional().describe('Start Y coordinate for raw coordinate drag'),
   quietMs: z.number().optional().describe('Quiet period for waitForNetworkIdle'),
   timeout: z.number().optional().describe('Timeout in milliseconds'),
   includeSnapshot: z.boolean().optional().describe('Return a post-action snapshot'),

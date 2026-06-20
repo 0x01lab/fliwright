@@ -1,0 +1,30 @@
+{
+  "prompt": "Diagnose this Fliwright timeline failure. Return JSON only.\n\nFailure code: assertion_failed\nTitle: Next enabled\nMessage: enabled=false\nTimeline node id: unknown\n\nCurrent node: null\nRecent nodes: []\nArtifacts: []\nScreenshot path: none\nSnapshot path: none\nDiagnostics path: none\nAllowed tools: fliwright_timeline_get, fliwright_snap, fliwright_observe",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "summary": {
+        "type": "string"
+      },
+      "rootCause": {
+        "type": "string"
+      },
+      "suggestedActions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "confidence": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "summary",
+      "rootCause",
+      "suggestedActions",
+      "confidence"
+    ]
+  },
+  "responseFormat": "json"
+}

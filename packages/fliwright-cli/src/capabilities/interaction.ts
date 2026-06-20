@@ -17,6 +17,7 @@ export interface InteractionPage {
   waitFor?(selector: Record<string, unknown>, timeout?: number): Promise<unknown>;
   dismissModal?(): Promise<void>;
   waitForNetworkIdle?(options?: { quietMs?: number; timeout?: number }): Promise<void>;
+  dragFrom?(x: number, y: number, deltaX: number, deltaY: number, options?: { steps?: number }): Promise<void>;
   getByKey?(key: string): InteractionLocator;
   getByText?(text: string): InteractionLocator;
   getByType?(type: string): InteractionLocator;
@@ -36,6 +37,7 @@ export interface InteractionLocator {
   pressKey?(key: string): Promise<void>;
   setCheckbox?(checked: boolean): Promise<void>;
   selectOption?(value: string | number): Promise<void>;
+  drag?(deltaX: number, deltaY: number, options?: { steps?: number }): Promise<void>;
 }
 
 export interface SnapshotOptions {
@@ -115,6 +117,11 @@ export interface ActionOptions {
   keyboardKey?: string;
   checked?: boolean;
   value?: string | number;
+  deltaX?: number;
+  deltaY?: number;
+  steps?: number;
+  x?: number;
+  y?: number;
   quietMs?: number;
   timeout?: number;
   includeSnapshot?: boolean;
@@ -156,6 +163,7 @@ export type ActionName =
   | 'pressKey'
   | 'setCheckbox'
   | 'selectOption'
+  | 'drag'
   | 'dismissModal'
   | 'waitForNetworkIdle';
 
@@ -300,6 +308,30 @@ export async function typeInteraction(
   return { ...result, filled: target.value };
 }
 
+export async function dragInteraction(
+  driver: InteractionDriver,
+  target: TargetOptions & { deltaX: number; deltaY: number; steps?: number; x?: number; y?: number },
+): Promise<{ success: boolean; action: 'drag'; snapshot?: SnapshotResult }> {
+  const payload = stringifyDefined({
+    action: 'drag',
+    ref: target.ref,
+    deltaX: target.deltaX,
+    deltaY: target.deltaY,
+    steps: target.steps,
+  });
+
+  if (target.ref) {
+    assertActionSuccess(await driver.sendRequest('ext.fliwright.action', payload), 'drag');
+  } else if (target.x != null || target.y != null) {
+    await dragFromCoordinates(driver, target.x, target.y, target.deltaX, target.deltaY, target.steps);
+  } else {
+    const locator = resolveLocator(driver.page, target);
+    await requireMethod(locator, 'drag')(target.deltaX, target.deltaY, { steps: target.steps });
+  }
+
+  return { ...(await withOptionalSnapshot(driver.page, target.includeSnapshot)), action: 'drag' };
+}
+
 export async function actionInteraction(
   driver: InteractionDriver,
   options: ActionOptions,
@@ -327,6 +359,21 @@ export async function actionInteraction(
       })), options.action);
     }
     return { ...(await withOptionalSnapshot(driver.page, options.includeSnapshot)), action: options.action };
+  }
+
+  if (options.action === 'drag') {
+    return dragInteraction(driver, {
+      ref: options.ref,
+      key: options.key,
+      text: options.text,
+      type: options.type,
+      includeSnapshot: options.includeSnapshot,
+      deltaX: required(options.deltaX, 'deltaX'),
+      deltaY: required(options.deltaY, 'deltaY'),
+      steps: options.steps,
+      x: options.x,
+      y: options.y,
+    });
   }
 
   if (options.ref) {
@@ -514,6 +561,29 @@ async function waitForRef(page: InteractionPage, ref: string, timeoutMs = 5000):
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`Timeout waiting for ref: ${ref}`);
+}
+
+async function dragFromCoordinates(
+  driver: InteractionDriver,
+  x: number | undefined,
+  y: number | undefined,
+  deltaX: number,
+  deltaY: number,
+  steps?: number,
+): Promise<void> {
+  const startX = required(x, 'x');
+  const startY = required(y, 'y');
+  if (driver.page.dragFrom) {
+    await driver.page.dragFrom(startX, startY, deltaX, deltaY, { steps });
+    return;
+  }
+  assertActionSuccess(await driver.sendRequest('ext.fliwright.dragFrom', stringifyDefined({
+    x: startX,
+    y: startY,
+    deltaX,
+    deltaY,
+    steps,
+  })), 'drag');
 }
 
 async function withOptionalSnapshot(

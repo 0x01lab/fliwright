@@ -188,12 +188,16 @@ describe('Locator', () => {
 
     await locator.longPress({ duration: 1000 });
     await locator.drag(100, -50, { steps: 20 });
+    await locator.dragTo('down', 120, { steps: 24 });
+    await locator.slideTo(240, { steps: 18 });
     await locator.pinch(0.5, { steps: 15 });
     await locator.scrollIntoView({ alignment: 0, duration: 500 });
 
     expect(sendRequest.mock.calls.map((call) => [call[0], (call[1] as any).action])).toEqual([
       ['ext.fliwright.action', 'longPress'],
       ['ext.fliwright.action', 'drag'],
+      ['ext.fliwright.action', 'semanticDrag'],
+      ['ext.fliwright.action', 'slideTo'],
       ['ext.fliwright.action', 'pinch'],
       ['ext.fliwright.action', 'scrollIntoView'],
     ]);

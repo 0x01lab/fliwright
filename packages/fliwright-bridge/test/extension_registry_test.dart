@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
+import 'package:fliwright_bridge/src/click_indicator.dart';
+import 'package:fliwright_bridge/src/extensions/gesture.dart';
 import 'package:fliwright_bridge/src/extensions/inspect.dart';
 import 'package:fliwright_bridge/src/extensions/type_extension.dart';
 
@@ -200,6 +202,85 @@ void main() {
       expect(result['success'], isFalse);
       expect(result['code'], 'target_not_found');
       expect(result['recoveryHints'], isA<List<dynamic>>());
+    });
+
+    testWidgets('click shows a non-interactive ripple indicator', (
+      tester,
+    ) async {
+      var taps = 0;
+      FliwrightBridge.registry.reset();
+      GestureExtension.register(FliwrightBridge.registry);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: GestureDetector(
+                onTap: () => taps++,
+                child: const SizedBox(
+                  width: 120,
+                  height: 48,
+                  child: ColoredBox(color: Colors.green),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final center = tester.getCenter(find.byType(ColoredBox));
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.click',
+        {'x': '${center.dx}', 'y': '${center.dy}'},
+      );
+      await tester.pump();
+
+      expect(result['success'], isTrue);
+      expect(taps, 1);
+
+      final indicator = find.byKey(ClickIndicator.indicatorKey);
+      expect(indicator, findsOneWidget);
+      expect(tester.getSize(indicator), const Size(28, 28));
+      expect(tester.getCenter(indicator), center);
+      expect(tester.widget<IgnorePointer>(indicator).ignoring, isTrue);
+
+      await tester.pump(ClickIndicator.duration);
+      expect(indicator, findsNothing);
+    });
+
+    testWidgets('dragFrom moves a scrollable widget', (tester) async {
+      FliwrightBridge.registry.reset();
+      GestureExtension.register(FliwrightBridge.registry);
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListView.builder(
+              controller: controller,
+              itemCount: 40,
+              itemBuilder: (context, index) =>
+                  SizedBox(height: 64, child: Text('Row $index')),
+            ),
+          ),
+        ),
+      );
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.dragFrom',
+        {
+          'x': '200',
+          'y': '500',
+          'deltaX': '0',
+          'deltaY': '-260',
+          'steps': '18',
+        },
+      );
+      await tester.pumpAndSettle();
+
+      expect(result['success'], isTrue);
+      expect(controller.offset, greaterThan(0));
     });
 
     test('registers gesture extension', () async {

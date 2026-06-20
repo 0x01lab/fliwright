@@ -3,6 +3,7 @@ import type { FliwrightDriver } from '@fliwright/core';
 import { createServerState } from '../src/state.js';
 import { handleTap } from '../src/tools/tap.js';
 import { handleType } from '../src/tools/type.js';
+import { handleDrag } from '../src/tools/drag.js';
 import { handleWait } from '../src/tools/wait.js';
 
 describe('ref interaction tools', () => {
@@ -13,6 +14,9 @@ describe('ref interaction tools', () => {
     await expect(
       handleType({ value: 'alice' }, createServerState()),
     ).rejects.toThrow('At least one of ref, key, text, or type must be provided');
+    await expect(
+      handleDrag({ deltaX: 0, deltaY: 120 }, createServerState()),
+    ).rejects.toThrow('Provide ref, key, text, type, or both x and y');
     await expect(handleWait({}, createServerState())).rejects.toThrow(
       'At least one of ref, key, text, or type must be provided',
     );
@@ -89,6 +93,39 @@ describe('ref interaction tools', () => {
       filled: 'alice',
       snapshot: { refs: [{ ref: 'e2' }] },
     });
+  });
+
+  it('drag can target a snapshot ref through the shared action path', async () => {
+    const state = createServerState();
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    state.setDriver({
+      sendRequest,
+      page: {},
+    } as unknown as FliwrightDriver);
+
+    await expect(
+      handleDrag({ ref: 'e4', deltaX: 0, deltaY: 160, steps: 20 }, state),
+    ).resolves.toEqual({ success: true, action: 'drag' });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.action', {
+      action: 'drag',
+      ref: 'e4',
+      deltaX: '0',
+      deltaY: '160',
+      steps: '20',
+    });
+  });
+
+  it('drag can use raw coordinates through the shared interaction path', async () => {
+    const state = createServerState();
+    const dragFrom = vi.fn().mockResolvedValue(undefined);
+    state.setDriver({
+      page: { dragFrom, snapshot: vi.fn() },
+    } as unknown as FliwrightDriver);
+
+    await expect(
+      handleDrag({ x: 180, y: 120, deltaX: 0, deltaY: 260, steps: 25 }, state),
+    ).resolves.toEqual({ success: true, action: 'drag' });
+    expect(dragFrom).toHaveBeenCalledWith(180, 120, 0, 260, { steps: 25 });
   });
 
   it('wait can target a snapshot ref', async () => {

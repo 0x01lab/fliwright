@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../bridge.dart';
+import '../click_indicator.dart';
 import 'diagnostics.dart';
 
 class GestureExtension {
@@ -41,6 +42,8 @@ class GestureExtension {
         ? PointerDeviceKind.mouse
         : PointerDeviceKind.touch;
     final buttons = isRightClick ? kSecondaryMouseButton : kPrimaryButton;
+
+    ClickIndicator.show(position);
 
     GestureBinding.instance.handlePointerEvent(
       PointerDownEvent(
@@ -253,43 +256,10 @@ class GestureExtension {
     }
 
     final steps = int.tryParse(params['steps'] ?? '') ?? 10;
-
-    final pointer = _nextPointer++;
-    final view =
-        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
-    final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
-
-    GestureBinding.instance.handlePointerEvent(
-      PointerDownEvent(
-        pointer: pointer,
-        position: Offset(x, y),
-        kind: PointerDeviceKind.touch,
-        viewId: view,
-        timeStamp: now,
-      ),
-    );
-
-    for (var i = 1; i <= steps; i++) {
-      final t = i / steps;
-      GestureBinding.instance.handlePointerEvent(
-        PointerMoveEvent(
-          pointer: pointer,
-          position: Offset(x + deltaX * t, y + deltaY * t),
-          kind: PointerDeviceKind.touch,
-          viewId: view,
-          timeStamp: now + Duration(milliseconds: (i * 16)),
-        ),
-      );
-    }
-
-    GestureBinding.instance.handlePointerEvent(
-      PointerUpEvent(
-        pointer: pointer,
-        position: Offset(x + deltaX, y + deltaY),
-        kind: PointerDeviceKind.touch,
-        viewId: view,
-        timeStamp: now + Duration(milliseconds: (steps * 16) + 16),
-      ),
+    await _performDrag(
+      start: Offset(x, y),
+      delta: Offset(deltaX, deltaY),
+      steps: steps,
     );
 
     return normalizedSuccess(
@@ -331,42 +301,10 @@ class GestureExtension {
         deltaY = distance;
     }
 
-    final pointer = _nextPointer++;
-    final view =
-        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
-    final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
-
-    GestureBinding.instance.handlePointerEvent(
-      PointerDownEvent(
-        pointer: pointer,
-        position: Offset(cx, cy),
-        kind: PointerDeviceKind.touch,
-        viewId: view,
-        timeStamp: now,
-      ),
-    );
-
-    for (var i = 1; i <= steps; i++) {
-      final t = i / steps;
-      GestureBinding.instance.handlePointerEvent(
-        PointerMoveEvent(
-          pointer: pointer,
-          position: Offset(cx + deltaX * t, cy + deltaY * t),
-          kind: PointerDeviceKind.touch,
-          viewId: view,
-          timeStamp: now + Duration(milliseconds: (i * 16)),
-        ),
-      );
-    }
-
-    GestureBinding.instance.handlePointerEvent(
-      PointerUpEvent(
-        pointer: pointer,
-        position: Offset(cx + deltaX, cy + deltaY),
-        kind: PointerDeviceKind.touch,
-        viewId: view,
-        timeStamp: now + Duration(milliseconds: (steps * 16) + 16),
-      ),
+    await _performDrag(
+      start: Offset(cx, cy),
+      delta: Offset(deltaX, deltaY),
+      steps: steps,
     );
 
     return normalizedSuccess(
@@ -404,43 +342,10 @@ class GestureExtension {
     }
     final deltaX = targetX - cx;
     final steps = int.tryParse(params['steps'] ?? '') ?? 25;
-
-    final pointer = _nextPointer++;
-    final view =
-        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
-    final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
-
-    GestureBinding.instance.handlePointerEvent(
-      PointerDownEvent(
-        pointer: pointer,
-        position: Offset(cx, cy),
-        kind: PointerDeviceKind.touch,
-        viewId: view,
-        timeStamp: now,
-      ),
-    );
-
-    for (var i = 1; i <= steps; i++) {
-      final t = i / steps;
-      GestureBinding.instance.handlePointerEvent(
-        PointerMoveEvent(
-          pointer: pointer,
-          position: Offset(cx + deltaX * t, cy),
-          kind: PointerDeviceKind.touch,
-          viewId: view,
-          timeStamp: now + Duration(milliseconds: (i * 16)),
-        ),
-      );
-    }
-
-    GestureBinding.instance.handlePointerEvent(
-      PointerUpEvent(
-        pointer: pointer,
-        position: Offset(targetX, cy),
-        kind: PointerDeviceKind.touch,
-        viewId: view,
-        timeStamp: now + Duration(milliseconds: (steps * 16) + 16),
-      ),
+    await _performDrag(
+      start: Offset(cx, cy),
+      delta: Offset(deltaX, 0),
+      steps: steps,
     );
 
     return normalizedSuccess(
@@ -574,46 +479,10 @@ class GestureExtension {
     }
 
     final steps = int.tryParse(params['steps'] ?? '') ?? 20;
-
-    final pointer = _nextPointer++;
-    final view =
-        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
-    final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
-
-    // Pointer down at start position
-    GestureBinding.instance.handlePointerEvent(
-      PointerDownEvent(
-        pointer: pointer,
-        position: Offset(x, y),
-        kind: PointerDeviceKind.touch,
-        viewId: view,
-        timeStamp: now,
-      ),
-    );
-
-    // Interpolated move events
-    for (var i = 1; i <= steps; i++) {
-      final t = i / steps;
-      GestureBinding.instance.handlePointerEvent(
-        PointerMoveEvent(
-          pointer: pointer,
-          position: Offset(x + deltaX * t, y + deltaY * t),
-          kind: PointerDeviceKind.touch,
-          viewId: view,
-          timeStamp: now + Duration(milliseconds: (i * 16)),
-        ),
-      );
-    }
-
-    // Pointer up at end position
-    GestureBinding.instance.handlePointerEvent(
-      PointerUpEvent(
-        pointer: pointer,
-        position: Offset(x + deltaX, y + deltaY),
-        kind: PointerDeviceKind.touch,
-        viewId: view,
-        timeStamp: now + Duration(milliseconds: (steps * 16) + 16),
-      ),
+    await _performDrag(
+      start: Offset(x, y),
+      delta: Offset(deltaX, deltaY),
+      steps: steps,
     );
 
     return normalizedSuccess(
@@ -621,6 +490,57 @@ class GestureExtension {
       target: coordinateTarget(x, y),
       details: {'deltaX': deltaX, 'deltaY': deltaY, 'steps': steps},
       extra: {'gesture': 'dragFrom'},
+    );
+  }
+
+  static Future<void> _performDrag({
+    required Offset start,
+    required Offset delta,
+    required int steps,
+  }) async {
+    final safeSteps = max(1, steps);
+    final pointer = _nextPointer++;
+    final view =
+        WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
+    final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
+
+    GestureBinding.instance.handlePointerEvent(
+      PointerDownEvent(
+        pointer: pointer,
+        position: start,
+        kind: PointerDeviceKind.touch,
+        buttons: kPrimaryButton,
+        viewId: view,
+        timeStamp: now,
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+
+    for (var i = 1; i <= safeSteps; i++) {
+      final t = i / safeSteps;
+      GestureBinding.instance.handlePointerEvent(
+        PointerMoveEvent(
+          pointer: pointer,
+          position: start + delta * t,
+          delta: delta / safeSteps.toDouble(),
+          kind: PointerDeviceKind.touch,
+          buttons: kPrimaryButton,
+          viewId: view,
+          timeStamp: now + Duration(milliseconds: i * 16),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+
+    GestureBinding.instance.handlePointerEvent(
+      PointerUpEvent(
+        pointer: pointer,
+        position: start + delta,
+        kind: PointerDeviceKind.touch,
+        buttons: kPrimaryButton,
+        viewId: view,
+        timeStamp: now + Duration(milliseconds: (safeSteps + 1) * 16),
+      ),
     );
   }
 }

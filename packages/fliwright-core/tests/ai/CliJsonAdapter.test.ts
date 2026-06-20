@@ -68,6 +68,26 @@ describe('CliJsonAdapter', () => {
     )).resolves.toMatchObject({ json: { ok: true } });
   });
 
+  it('parses JSONL assistant events from CLI streaming output', async () => {
+    const command = await fakeCli(`
+      process.stdin.resume();
+      process.stdin.on('end', () => {
+        process.stdout.write(JSON.stringify({ type: 'session.created', id: 's1' }) + '\\n');
+        process.stdout.write(JSON.stringify({
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: '{"ok":true}' }]
+        }) + '\\n');
+      });
+    `);
+    const adapter = new CliJsonAdapter({ command: process.execPath, args: [command], inputMode: 'stdin-json' });
+
+    await expect(adapter.invoke(
+      { prompt: 'ok', responseFormat: 'json' },
+      { callId: 'call-1', timeoutMs: 1000, signal: new AbortController().signal, runtime: {} },
+    )).resolves.toMatchObject({ json: { ok: true } });
+  });
+
   it('throws AiParseError for non-json output when json is required', async () => {
     const command = await fakeCli(`process.stdout.write('not json');`);
     const adapter = new CliJsonAdapter({ command: process.execPath, args: [command], inputMode: 'stdin-json' });
