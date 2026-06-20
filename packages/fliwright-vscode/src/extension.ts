@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { FormAnalyzeResult, FormFillResult } from '@fliwright/core';
 import { setConnectorDebugLog } from '@fliwright/core';
@@ -11,7 +12,6 @@ import { FliwrightCodeLensProvider } from './runner/FliwrightCodeLensProvider.js
 import { TestDiscoveryService } from './runner/TestDiscoveryService.js';
 import { VitestRunner } from './runner/VitestRunner.js';
 import { ScriptDiscoveryService } from './scripts/ScriptDiscoveryService.js';
-import { ScriptRunner } from './scripts/ScriptRunner.js';
 import { ScreenshotPreviewPanel, ScreenshotService } from './screenshot/ScreenshotService.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
@@ -63,7 +63,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const testDiscoveryService = new TestDiscoveryService();
   const scriptDiscoveryService = new ScriptDiscoveryService();
   const runner = new VitestRunner();
-  const scriptRunner = new ScriptRunner();
   const screenshotService = new ScreenshotService();
   const screenshotPreviewPanel = new ScreenshotPreviewPanel();
   const failureStore = new FailureContextStore();
@@ -571,6 +570,50 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Insert Form Field Selector', async () => {
         if (!node || node.kind !== 'formAnalyzeField') throw new Error('Select a form field from Last Analyze.');
         await insertFormFieldRuleAtCursor(node);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.addAnalyzedFieldToFormRules', async (node?: FormAnalyzeFieldEntry) => {
+      await runCommand('Add Analyzed Field to Form Rules', async () => {
+        if (!node || node.kind !== 'formAnalyzeField') throw new Error('Select a form field from Last Analyze.');
+        const uri = await pickOrCreateFormRulesFile(formService, [node.field]);
+        if (!uri) return;
+        const added = await formService.appendAnalyzeFields(uri, [node.field]);
+        await formTree.refresh();
+        await vscode.window.showTextDocument(uri, { preview: false });
+        vscode.window.showInformationMessage(added > 0 ? `Added 1 form rule to ${path.basename(uri.fsPath)}.` : 'That field already has a matching rule.');
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.createFormRulesFromLastAnalyze', async () => {
+      await runCommand('Create Form Rules From Last Analyze', async () => {
+        const root = requireWorkspaceRoot();
+        const result = formHelperService.getLastAnalyze();
+        if (!result || result.fields.length === 0) throw new Error('Run Analyze Current Form before creating rules.');
+        const picked = await pickAnalyzeFields(formHelperService, result, 'Create Form Rules From Last Analyze');
+        if (!picked) return;
+        const input = await vscode.window.showInputBox({
+          title: 'Create Form Rules From Last Analyze',
+          prompt: 'File name under .fliwright/forms',
+          value: 'form-analyzed-rules.json',
+        });
+        if (input === undefined) return;
+        const uri = await formService.createFromAnalyzeFields(root, input, picked);
+        await formTree.refresh();
+        await vscode.window.showTextDocument(uri, { preview: false });
+        vscode.window.showInformationMessage(`Created ${path.basename(uri.fsPath)} with ${picked.length} form rule(s).`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.appendLastAnalyzeToFormRules', async (node?: FormRulesEntry) => {
+      await runCommand('Append Last Analyze to Form Rules', async () => {
+        const result = formHelperService.getLastAnalyze();
+        if (!result || result.fields.length === 0) throw new Error('Run Analyze Current Form before appending rules.');
+        const picked = await pickAnalyzeFields(formHelperService, result, 'Append Last Analyze to Form Rules');
+        if (!picked) return;
+        const uri = formRulesNode(node)?.uri ?? await pickFormRulesFileUri(formService);
+        if (!uri) return;
+        const added = await formService.appendAnalyzeFields(uri, picked);
+        await formTree.refresh();
+        await vscode.window.showTextDocument(uri, { preview: false });
+        vscode.window.showInformationMessage(`Added ${added} form rule(s) to ${path.basename(uri.fsPath)}.`);
       });
     }),
     vscode.commands.registerCommand('fliwright.fillForm', async () => {
@@ -1226,43 +1269,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
       }
 
-      output.show(true);
-      output.appendLine(`Running script: ${script.uri.fsPath}`);
+      const command = await terminalScriptCommand(root, script);
+      const terminal = vscode.window.createTerminal({
+        name: `Fliwright: ${script.label}`,
+        cwd: root.fsPath,
+        env: {
+          ...(session.currentUrl ? {
+            FLIWRIGHT_VM_SERVICE_URL: session.currentUrl,
+            FLIWRIGHT_VM_URL: session.currentUrl,
+          } : {}),
+        },
+      });
+      context.subscriptions.push(terminal);
+      terminal.show(true);
+      terminal.sendText(command, true);
+
+      output.appendLine(`Started script in terminal: ${script.uri.fsPath}`);
       output.appendLine(`VM Service: ${session.currentUrl ?? '(none)'}`);
-
-      session.setRunning(`script ${script.label}`);
-      let result: RunResult;
-      try {
-        result = await scriptRunner.run({
-          workspaceRoot: root,
-          script,
-          vmServiceUrl: session.currentUrl,
-          onOutput: appendScriptOutput,
-        });
-      } finally {
-        session.setConnectedIdle();
-      }
-
-      const run: RunEntry = {
-        kind: 'run',
-        id: `${Date.now()}`,
-        label: `Script: ${script.label}`,
-        filePath: script.uri.fsPath,
-        result,
-        ranAt: Date.now(),
-      };
-      runsTree.prependRun(run);
-      statusBar.setRunResult(result);
       scriptsTree.refresh();
-
-      output.appendLine(`Script complete: ${result.passed ? 'passed' : 'failed'} (${result.duration}ms).`);
-      if (result.passed) {
-        vscode.window.showInformationMessage(`Fliwright script passed: ${script.label}`);
-      } else {
-        vscode.window.showErrorMessage(`Fliwright script failed: ${script.label}`, 'Open Output').then((selection) => {
-          if (selection === 'Open Output') output.show();
-        });
-      }
+      vscode.window.showInformationMessage(`Fliwright script started in terminal: ${script.label}`);
     });
   }
 
@@ -1498,6 +1523,89 @@ async function openUriFromNode(node?: { uri?: vscode.Uri }): Promise<void> {
 
 function formRulesNode(node?: FormRulesEntry): FormRulesEntry | undefined {
   return node?.kind === 'formRulesFile' ? node : undefined;
+}
+
+async function pickOrCreateFormRulesFile(
+  service: FormRuleService,
+  fields: FormAnalyzeResult['fields'],
+): Promise<vscode.Uri | undefined> {
+  const root = requireWorkspaceRoot();
+  const discovery = await service.discover(root);
+  const createItem = {
+    label: 'Create new rules file',
+    description: '.fliwright/forms/*.json',
+    action: 'create' as const,
+  };
+  const picked = await vscode.window.showQuickPick([
+    ...discovery.files.map((entry) => ({
+      label: path.basename(entry.uri.fsPath),
+      description: `${entry.rulesFile.rules.length} rules`,
+      action: 'append' as const,
+      uri: entry.uri,
+    })),
+    createItem,
+  ], {
+    title: 'Add Analyzed Field to Form Rules',
+    placeHolder: 'Choose a rules file or create a new one',
+  });
+  if (!picked) return undefined;
+  if (picked.action === 'append') return picked.uri;
+
+  const input = await vscode.window.showInputBox({
+    title: 'Create Form Rules',
+    prompt: 'File name under .fliwright/forms',
+    value: fields.length === 1 ? `${safeFormRuleFileName(fields[0])}.json` : 'form-analyzed-rules.json',
+  });
+  if (input === undefined) return undefined;
+  return service.createFromAnalyzeFields(root, input, []);
+}
+
+async function pickFormRulesFileUri(service: FormRuleService): Promise<vscode.Uri | undefined> {
+  const root = requireWorkspaceRoot();
+  const discovery = await service.discover(root);
+  if (discovery.files.length === 0) return undefined;
+  if (discovery.files.length === 1) return discovery.files[0]!.uri;
+
+  const picked = await vscode.window.showQuickPick(
+    discovery.files.map((entry) => ({
+      label: path.basename(entry.uri.fsPath),
+      description: `${entry.rulesFile.rules.length} rules`,
+      uri: entry.uri,
+    })),
+    {
+      title: 'Select Form Rules File',
+      placeHolder: 'Choose a .fliwright/forms/*.json file to append rules',
+    },
+  );
+  return picked?.uri;
+}
+
+async function pickAnalyzeFields(
+  service: FormHelperService,
+  result: FormAnalyzeResult,
+  title: string,
+): Promise<FormAnalyzeResult['fields'] | undefined> {
+  const preview = service.previewFields(result);
+  const items = preview.map((field, index) => ({
+    label: field.label,
+    description: field.semanticType,
+    detail: field.generatedValue,
+    index,
+    picked: true,
+  }));
+  const picked = await vscode.window.showQuickPick(items, {
+    title,
+    placeHolder: 'Select analyzed fields to write as rules',
+    canPickMany: true,
+  });
+  if (!picked) return undefined;
+  if (picked.length === 0) return undefined;
+  return picked.map((item) => result.fields[item.index]!).filter(Boolean);
+}
+
+function safeFormRuleFileName(field: FormAnalyzeResult['fields'][number]): string {
+  const label = field.name ?? field.semanticsId ?? field.key ?? field.label ?? field.hintText ?? 'form-field';
+  return `form-${label.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'field'}-rules`;
 }
 
 async function insertFormFieldRuleAtCursor(node: FormAnalyzeFieldEntry): Promise<void> {
@@ -1771,4 +1879,33 @@ async function withWindowProgress<T>(title: string, task: () => Promise<T>): Pro
     },
     task,
   );
+}
+
+async function terminalScriptCommand(root: vscode.Uri, script: ScriptFileEntry): Promise<string> {
+  const relativeScript = path.relative(root.fsPath, script.uri.fsPath);
+  const source = await fs.promises.readFile(script.uri.fsPath, 'utf8');
+  if (usesFliwrightVitest(source)) {
+    return [
+      'pnpm',
+      'exec',
+      'vitest',
+      'run',
+      shellQuote(relativeScript),
+      '--pool',
+      'forks',
+      '--poolOptions.forks.singleFork',
+      '--no-fileParallelism',
+    ].join(' ');
+  }
+  return ['node', shellQuote(relativeScript)].join(' ');
+}
+
+function usesFliwrightVitest(source: string): boolean {
+  return /from\s+['"]@fliwright\/vitest['"]/.test(source) ||
+    /import\s*\(\s*['"]@fliwright\/vitest['"]\s*\)/.test(source);
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:=@%+-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }

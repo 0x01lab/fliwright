@@ -1,3 +1,4 @@
+import type { FliwrightLogKind } from '../logging.js';
 import type {
   AgentVisibleFailure,
   TimelineArtifactRef,
@@ -5,6 +6,7 @@ import type {
   TimelineNode,
   TimelineNodeKind,
   TimelineNodeStartOptions,
+  TimelineNodeStatus,
   TimelineRecorderOptions,
   TimelineRunStatus,
 } from './types.js';
@@ -47,6 +49,7 @@ export class TimelineRecorder {
     };
     this.nodes.push(node);
     this.stack.push(node.id);
+    this.logNode('debug', node, 'running');
     return node;
   }
 
@@ -56,6 +59,7 @@ export class TimelineRecorder {
     node.endedAt = new Date().toISOString();
     if (metadata) node.metadata = { ...(node.metadata ?? {}), ...metadata };
     this.popStack(id);
+    this.logNode('success', node, 'passed');
     return node;
   }
 
@@ -69,6 +73,7 @@ export class TimelineRecorder {
     this.failures.push(normalized);
     this.status = 'failed';
     this.popStack(id);
+    this.logNode('error', node, 'failed', normalized.message, normalized);
     return node;
   }
 
@@ -78,6 +83,7 @@ export class TimelineRecorder {
     node.endedAt = new Date().toISOString();
     if (metadata) node.metadata = { ...(node.metadata ?? {}), ...metadata };
     this.popStack(id);
+    this.logNode('warn', node, 'skipped');
     return node;
   }
 
@@ -136,4 +142,58 @@ export class TimelineRecorder {
     this.counter += 1;
     return `${kind}-${this.counter}`;
   }
+
+  private logNode(
+    level: 'debug' | 'success' | 'error' | 'warn',
+    node: TimelineNode,
+    status: TimelineNodeStatus,
+    message = node.title,
+    error?: unknown,
+  ): void {
+    const logger = this.options.logger;
+    if (!logger) return;
+    logger.log({
+      level,
+      kind: logKindForNode(node.kind),
+      message,
+      status,
+      timelineNodeId: node.id,
+      ...(node.endedAt ? { durationMs: elapsedMs(node.startedAt, node.endedAt) } : {}),
+      ...(node.metadata ? { data: node.metadata } : {}),
+      ...(error ? { error } : {}),
+    });
+  }
+}
+
+function logKindForNode(kind: TimelineNodeKind): FliwrightLogKind {
+  switch (kind) {
+    case 'script':
+      return 'script';
+    case 'action':
+      return 'action';
+    case 'assertion':
+      return 'assertion';
+    case 'mock':
+      return 'mock';
+    case 'ai-call':
+      return 'ai';
+    case 'failure':
+      return 'diagnostic';
+    case 'page':
+    case 'frame':
+    case 'manual':
+    case 'step':
+    case 'branch':
+    case 'optional':
+      return 'step';
+    default:
+      return 'user';
+  }
+}
+
+function elapsedMs(startedAt: string, endedAt: string): number {
+  const start = Date.parse(startedAt);
+  const end = Date.parse(endedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.max(0, end - start);
 }

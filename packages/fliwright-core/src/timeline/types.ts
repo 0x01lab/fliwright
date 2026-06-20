@@ -1,9 +1,12 @@
+import type { FliwrightLogger } from '../logging.js';
+
 export type TimelineRunMode = 'script' | 'test';
 
 export type TimelineNodeKind =
   | 'script'
   | 'page'
   | 'frame'
+  | 'manual'
   | 'step'
   | 'branch'
   | 'optional'
@@ -108,6 +111,7 @@ export interface TimelineRecorderOptions {
   testName: string;
   mode?: TimelineRunMode;
   startedAt?: string;
+  logger?: FliwrightLogger;
 }
 
 export interface TimelineNodeStartOptions {

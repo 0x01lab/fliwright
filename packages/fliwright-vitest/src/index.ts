@@ -7,7 +7,7 @@ import {
   test as vitestTest,
 } from 'vitest';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { dirname } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import {
   AgentRuntime,
@@ -15,20 +15,35 @@ import {
   AssertionError,
   Assertion,
   FailureCollector,
+  FileLogSink,
   FliwrightDriver,
   FlowRuntime,
   FliwrightAgentError,
+  JsonlLogSink,
   MockRuntime,
   Page as FliwrightPage,
+  PrettyLogFormatter,
   TraceCollector,
   TraceStore,
+  StructuredLogger,
   TimelineArtifactStore,
   TimelineRecorder,
   isActionMethod,
   createExpect,
   resolveAiConfig,
 } from '@fliwright/core';
-import type { AiRuntimeConfig, AgentPolicy, FailureContext, HealingReport, Locator, Page, TimelineRunMode, VMServiceEvent, TraceMode } from '@fliwright/core';
+import type { AiRuntimeConfig, AgentPolicy, FailureContext, FliwrightLogger, FliwrightLogLevel, FliwrightLogEvent, HealingReport, Locator, LogSink, Page, TimelineRunMode, VMServiceEvent, TraceMode } from '@fliwright/core';
+
+export type FliwrightLogFormat = 'pretty' | 'compact' | 'jsonl' | 'silent';
+export type FliwrightLogOutput = 'stderr' | 'stdout' | 'file' | 'jsonl-file';
+
+export interface FliwrightLogConfig {
+  level?: FliwrightLogLevel;
+  format?: FliwrightLogFormat;
+  outputs?: FliwrightLogOutput[];
+  filePath?: string;
+  jsonlPath?: string;
+}
 
 export interface FliwrightConfig {
   vmServiceUrl: string;
@@ -39,6 +54,7 @@ export interface FliwrightConfig {
   requireAssertions?: boolean;
   agentPolicy?: AgentPolicy;
   timelineDir?: string;
+  log?: FliwrightLogConfig;
 }
 
 export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUrl: string }): FliwrightConfig {
@@ -75,6 +91,7 @@ interface FliwrightTimelineContext {
   recorder: TimelineRecorder;
   artifactStore: TimelineArtifactStore;
   runId: string;
+  logger: FliwrightLogger;
   timelinePath?: string;
 }
 
@@ -86,6 +103,7 @@ interface FliwrightFixtures {
   mock: MockRuntime;
   agent: AgentRuntime;
   timeline: FliwrightTimelineContext;
+  logger: FliwrightLogger;
 }
 
 export function createFliwrightTest(config: FliwrightConfig) {
@@ -97,17 +115,25 @@ export function createFliwrightTest(config: FliwrightConfig) {
         cwd: config.timelineDir ?? process.cwd(),
         runId: testRunId,
       });
+      const logger = createRunLogger(config, {
+        runId: testRunId,
+        testName,
+        mode: config.mode ?? 'test',
+        runDir: artifactStore.runDir,
+      });
       const recorder = new TimelineRecorder({
         runId: testRunId,
         testName,
         mode: config.mode ?? 'test',
+        logger,
       });
-      const timeline: FliwrightTimelineContext = { recorder, artifactStore, runId: testRunId };
+      const timeline: FliwrightTimelineContext = { recorder, artifactStore, runId: testRunId, logger };
       const ctx = testContext.getStore();
       if (ctx) ctx.timeline = timeline;
 
       let failed = false;
       try {
+        logger.info(`${config.mode === 'script' ? 'Script' : 'Test'} started`);
         await use(timeline);
         if (config.requireAssertions && !timeline.recorder.toJSON().nodes.some((node) => node.kind === 'assertion')) {
           throw new FliwrightAgentError({
@@ -122,10 +148,12 @@ export function createFliwrightTest(config: FliwrightConfig) {
       } catch (error) {
         failed = true;
         captureTimelineFailure(timeline, error, testName);
+        logger.error(`${config.mode === 'script' ? 'Script' : 'Test'} failed`, error);
         throw error;
       } finally {
         const data = timeline.recorder.complete(failed ? 'failed' : 'passed');
         timeline.timelinePath = await timeline.artifactStore.writeTimeline(data);
+        if (!failed) logger.success(`${config.mode === 'script' ? 'Script' : 'Test'} passed`);
       }
     },
     driver: async ({ task, timeline }, use) => {
@@ -230,6 +258,9 @@ export function createFliwrightTest(config: FliwrightConfig) {
     agent: async ({ aiRuntime, timeline }, use) => {
       await use(new AgentRuntime({ aiRuntime, recorder: timeline.recorder }));
     },
+    logger: async ({ timeline }, use) => {
+      await use(timeline.logger);
+    },
   });
 
   return fliwrightTest;
@@ -243,12 +274,14 @@ export const test = createFliwrightTest({
   vmServiceUrl: toWebSocketUrl(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL ?? ''),
   timeout: parsePositiveInt(process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS) ?? 5000,
   screenshot: parseScreenshotMode(process.env.FLIWRIGHT_SCREENSHOT_MODE),
+  log: logConfigFromEnv(),
 });
 
 export const script = createFliwrightScript({
   vmServiceUrl: toWebSocketUrl(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL ?? ''),
   timeout: parsePositiveInt(process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS) ?? 5000,
   screenshot: parseScreenshotMode(process.env.FLIWRIGHT_SCREENSHOT_MODE),
+  log: logConfigFromEnv(),
 });
 
 export function beforeEach(hook: FliwrightHook, timeout?: number): void {
@@ -454,6 +487,131 @@ function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function createRunLogger(
+  config: FliwrightConfig,
+  options: {
+    runId: string;
+    testName: string;
+    mode: TimelineRunMode;
+    runDir: string;
+  },
+): FliwrightLogger {
+  const logConfig = mergeLogConfig(config.log, logConfigFromEnv());
+  return new StructuredLogger({
+    runId: options.runId,
+    testName: options.testName,
+    mode: options.mode,
+    kind: options.mode === 'script' ? 'script' : 'test',
+    level: logConfig.level ?? 'info',
+    sinks: createLogSinks(logConfig, options.runDir),
+  });
+}
+
+function createLogSinks(config: FliwrightLogConfig, runDir: string): LogSink[] {
+  const format = config.format ?? 'pretty';
+  if (format === 'silent') return [];
+
+  const outputs = config.outputs ?? ['jsonl-file'];
+  const sinks: LogSink[] = [];
+  for (const output of outputs) {
+    switch (output) {
+      case 'stderr':
+        sinks.push(new FileDescriptorLogSink(2, format));
+        break;
+      case 'stdout':
+        sinks.push(new FileDescriptorLogSink(1, format));
+        break;
+      case 'file':
+        sinks.push(new FileLogSink(resolveLogPath(config.filePath, runDir, 'logs/run.log'), new PrettyLogFormatter({ color: false })));
+        break;
+      case 'jsonl-file':
+        sinks.push(new JsonlLogSink(resolveLogPath(config.jsonlPath, runDir, 'logs/events.jsonl')));
+        break;
+      default:
+        break;
+    }
+  }
+  return sinks;
+}
+
+class FileDescriptorLogSink implements LogSink {
+  private readonly sink: LogSink;
+
+  constructor(fd: 1 | 2, format: FliwrightLogFormat) {
+    const stream = fd === 1 ? process.stdout : process.stderr;
+    this.sink = new (class implements LogSink {
+      write(event: FliwrightLogEvent): void {
+        stream.write(`${formatEventForStream(event, format)}\n`);
+      }
+    })();
+  }
+
+  write(event: FliwrightLogEvent): void {
+    void this.sink.write(event);
+  }
+}
+
+function formatEventForStream(event: FliwrightLogEvent, format: FliwrightLogFormat): string {
+  switch (format) {
+    case 'jsonl':
+      return JSON.stringify(event);
+    case 'compact':
+      return `${event.level.toUpperCase()} ${event.kind}: ${event.message}`;
+    case 'pretty':
+    default:
+      return new PrettyLogFormatter({ color: true }).format(event);
+  }
+}
+
+function resolveLogPath(path: string | undefined, runDir: string, fallback: string): string {
+  const template = path ?? join(runDir, fallback);
+  const expanded = template.replace('{runDir}', runDir);
+  return resolve(process.cwd(), expanded);
+}
+
+function mergeLogConfig(primary?: FliwrightLogConfig, fallback?: FliwrightLogConfig): FliwrightLogConfig {
+  return {
+    ...fallback,
+    ...primary,
+    outputs: primary?.outputs ?? fallback?.outputs,
+  };
+}
+
+function logConfigFromEnv(): FliwrightLogConfig | undefined {
+  const level = parseLogLevel(process.env.FLIWRIGHT_LOG_LEVEL);
+  const format = parseLogFormat(process.env.FLIWRIGHT_LOG_FORMAT);
+  const outputs = parseLogOutputs(process.env.FLIWRIGHT_LOG_OUTPUT);
+  const config: FliwrightLogConfig = {
+    ...(level ? { level } : {}),
+    ...(format ? { format } : {}),
+    ...(outputs ? { outputs } : {}),
+    ...(process.env.FLIWRIGHT_LOG_FILE ? { filePath: process.env.FLIWRIGHT_LOG_FILE } : {}),
+    ...(process.env.FLIWRIGHT_LOG_JSONL ? { jsonlPath: process.env.FLIWRIGHT_LOG_JSONL } : {}),
+  };
+  return Object.keys(config).length ? config : undefined;
+}
+
+function parseLogLevel(value: string | undefined): FliwrightLogLevel | undefined {
+  if (value === 'trace' || value === 'debug' || value === 'info' || value === 'warn' || value === 'error' || value === 'success') {
+    return value;
+  }
+  return undefined;
+}
+
+function parseLogFormat(value: string | undefined): FliwrightLogFormat | undefined {
+  if (value === 'pretty' || value === 'compact' || value === 'jsonl' || value === 'silent') return value;
+  return undefined;
+}
+
+function parseLogOutputs(value: string | undefined): FliwrightLogOutput[] | undefined {
+  if (!value) return undefined;
+  const outputs = value.split(',').map((part) => part.trim()).filter(Boolean);
+  const parsed = outputs.filter((output): output is FliwrightLogOutput =>
+    output === 'stderr' || output === 'stdout' || output === 'file' || output === 'jsonl-file',
+  );
+  return parsed.length ? parsed : undefined;
 }
 
 function toWebSocketUrl(url: string): string {

@@ -8,6 +8,7 @@ import {
 } from '@fliwright/cli/capabilities/form';
 import { loadConfig, resolveWorkspacePath } from '../config.js';
 import type { FormRulesEntry, FormRule, FormRunSummary } from '../types.js';
+import { formRuleFromAnalyzeField } from './FormRuleService.js';
 
 export interface PreviewField {
   id: string;
@@ -185,26 +186,12 @@ export function dataSetLabels(rules: FormRule[]): DataSetLabel[] {
 }
 
 export function formRuleSnippetForField(field: FormAnalyzeResult['fields'][number]): FormRuleSnippet {
+  const rule = formRuleFromAnalyzeField(field);
   return {
-    find: bestFindForField(field),
+    find: rule.find!,
     type: 'PRESET_SKILL',
-    data: field.generatedValue ? [field.generatedValue] : [],
+    data: rule.data ?? [],
   };
-}
-
-function bestFindForField(field: FormAnalyzeResult['fields'][number]): SelectorQuery {
-  if (field.semanticsId) return { match: { semanticIdentifier: field.semanticsId } };
-  if (field.name) return { match: { name: field.name } };
-  if (field.key) return { match: { key: field.key } };
-  if (field.ancestorKey) {
-    return {
-      match: { textContains: field.label ?? field.hintText ?? field.name ?? field.key ?? field.id },
-      within: { match: { key: field.ancestorKey } },
-    };
-  }
-  if (field.label) return { match: { textContains: field.label }, fallback: { semanticsLabel: field.label } };
-  if (field.hintText) return { match: { textContains: field.hintText }, fallback: { hintText: field.hintText } };
-  return { match: { id: field.id } };
 }
 
 export function formatFormFillDebug(result: FormFillResult): string[] {

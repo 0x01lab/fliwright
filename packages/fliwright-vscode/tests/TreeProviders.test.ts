@@ -203,7 +203,7 @@ describe('tree providers', () => {
 
     const item = provider.getTreeItem(fields[0]!);
     expect(item.contextValue).toBe('formAnalyzeField');
-    expect(item.command).toMatchObject({ command: 'fliwright.insertFormFieldSelector' });
+    expect(item.command).toMatchObject({ command: 'fliwright.addAnalyzedFieldToFormRules' });
   });
 
   it('discovers runnable scripts only under .fliwright/scripts', async () => {

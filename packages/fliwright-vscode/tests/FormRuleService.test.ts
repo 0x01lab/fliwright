@@ -81,6 +81,72 @@ describe('FormRuleService', () => {
       rules: expect.any(Array),
     });
   });
+
+  it('creates rules from analyzed fields', async () => {
+    const root = await createWorkspace();
+
+    const uri = await new FormRuleService().createFromAnalyzeFields(Uri.file(root), 'analyzed', [
+      {
+        id: 'email-field',
+        semanticType: 'email',
+        generatedValue: 'qa@example.com',
+        selector: 'name=email',
+        name: 'email',
+      },
+    ]);
+    const raw = await readText(root, '.fliwright/forms/analyzed.json');
+
+    expect(uri.fsPath).toBe(path.join(root, '.fliwright/forms/analyzed.json'));
+    expect(JSON.parse(raw).rules).toEqual([
+      {
+        find: { match: { name: 'email' } },
+        type: 'PRESET_SKILL',
+        data: ['qa@example.com'],
+      },
+    ]);
+  });
+
+  it('appends analyzed fields and skips duplicate selectors', async () => {
+    const root = await createWorkspace();
+    await writeJson(root, '.fliwright/forms/login.json', {
+      version: 1,
+      locale: 'zh-CN',
+      rules: [
+        {
+          find: { match: { name: 'email' } },
+          type: 'PRESET_SKILL',
+          data: ['old@example.com'],
+        },
+      ],
+    });
+    const service = new FormRuleService();
+    const uri = Uri.file(path.join(root, '.fliwright/forms/login.json'));
+
+    const added = await service.appendAnalyzeFields(uri, [
+      {
+        id: 'email-field',
+        semanticType: 'email',
+        generatedValue: 'new@example.com',
+        selector: 'name=email',
+        name: 'email',
+      },
+      {
+        id: 'phone-field',
+        semanticType: 'phone',
+        generatedValue: '13800000000',
+        selector: 'name=phone',
+        name: 'phone',
+      },
+    ]);
+    const raw = await readText(root, '.fliwright/forms/login.json');
+
+    expect(added).toBe(1);
+    expect(JSON.parse(raw).rules).toHaveLength(2);
+    expect(JSON.parse(raw).rules[1]).toMatchObject({
+      find: { match: { name: 'phone' } },
+      data: ['13800000000'],
+    });
+  });
 });
 
 function rulesFile() {

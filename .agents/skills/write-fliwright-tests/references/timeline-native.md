@@ -10,10 +10,10 @@ import { test, script, expect } from '@fliwright/vitest';
 
 | Runner | Use for | Fixture shape |
 | --- | --- | --- |
-| `test` | E2E verification that should pass/fail in CI | `{ page, driver, flow, mock, agent, aiRuntime, timeline }` |
-| `script` | Automation tasks, account setup, data entry, cleanup flows | `{ page, driver, flow, mock, agent, aiRuntime, timeline }` |
+| `test` | E2E verification that should pass/fail in CI | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
+| `script` | Automation tasks, account setup, data entry, cleanup flows | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
 
-Both write `.fliwright/runs/<runId>/timeline.json`. `test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions.
+Both write `.fliwright/runs/<runId>/timeline.json` and `.fliwright/runs/<runId>/logs/events.jsonl`. `test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions.
 
 ## Standard Test Shape
 
@@ -21,7 +21,9 @@ Both write `.fliwright/runs/<runId>/timeline.json`. `test` can require at least 
 import { test, expect } from '@fliwright/vitest';
 import { expect as viExpect } from 'vitest';
 
-test('registers a user', async ({ page, flow, mock }) => {
+test('registers a user', async ({ page, flow, mock, logger }) => {
+  logger.info('Starting registration test');
+
   await mock.rules('Use successful registration API', async () => {
     await mock.clearRoutes();
     await mock.clearCalls();
@@ -57,7 +59,9 @@ test('registers a user', async ({ page, flow, mock }) => {
 ```typescript
 import { script } from '@fliwright/vitest';
 
-script('auto register fill', async ({ page, flow, mock, agent }) => {
+script('auto register fill', async ({ page, flow, mock, agent, logger }) => {
+  logger.info('Starting auto registration fill');
+
   await flow.page('Register page', { route: '/register' }, async () => {
     await page.navigate('/register');
   });
@@ -83,6 +87,8 @@ script('auto register fill', async ({ page, flow, mock, agent }) => {
     snapshot: true,
     diagnostics: true,
   });
+
+  logger.success('Registration form filled');
 });
 ```
 
@@ -97,6 +103,7 @@ await flow.page(title, async () => { ... })
 await flow.branch(title, metadata, async () => { ... })
 await flow.optional(title, { when }, async () => { ... })
 await flow.frame(title, { screenshot?, snapshot?, diagnostics?, metadata? })
+await flow.manual(title, { message?, timeoutMs?, pollIntervalMs?, metadata?, resumeWhen? })
 await flow.assertion(title, async () => { ... }, metadata?)
 ```
 
@@ -106,7 +113,43 @@ Guidance:
 - Use `flow.page` when entering or validating a screen/route.
 - Use `flow.optional` for genuinely optional UI, such as dismissing a popup only when it exists.
 - Use `flow.frame` to leave artifacts in automation scripts even when there is no assertion.
+- Use `flow.manual` when the script must pause for human work such as a captcha drag, QR-code login, SMS code, or external approval.
+- For manual work performed inside the running app, prefer `resumeWhen` and make the runtime observe the post-manual app state. Do not depend on terminal stdin, VS Code buttons, or external `continue` files for this path.
 - Prefer `expect(locator, title?).to*` for locator assertions; reserve `flow.assertion` for custom non-locator checks that need a timeline node.
+
+```typescript
+await flow.manual('Complete captcha', {
+  message: 'Please complete the slider captcha in the running app.',
+  timeoutMs: 180_000,
+  pollIntervalMs: 700,
+  resumeWhen: async () => page.getByText('Verification required', { exact: true }).isVisible(),
+});
+await expect(page.getByText('Verification required'), 'Verification page is visible').toBeVisible();
+await flow.step('Fill verification code', async () => {
+  await page.getByType('EditableText').first({ visible: true }).fill('000000');
+});
+```
+
+Manual-step pattern:
+
+- First identify the concrete app state that proves the human action finished, such as a route-specific title, a newly visible form, or a success page.
+- Pass that state check as `resumeWhen`; keep it narrow enough that the script cannot continue just because the original captcha or QR overlay disappeared.
+- Continue the automated flow immediately after the manual node. For example, after a slider captcha sends the app to a two-factor page, wait for the exact title and fill the OTP input.
+- If the manual action happens outside the Flutter app and no app state can prove completion, introduce a product-visible confirmation state where possible. External terminal input should not be the primary design for app-based manual work.
+
+## Structured `logger`
+
+Use `logger` for progress, non-secret diagnostic metadata, and business facts that are not already represented by a timeline node.
+
+```typescript
+logger.debug('Generated fixture data', { role: 'demo-user' });
+logger.info('Open settings screen');
+logger.warn('Optional onboarding modal was absent');
+logger.error('Failed to load optional seed data', error);
+logger.success('Settings screen is ready');
+```
+
+Automatic timeline events are already logged for `flow`, `mock`, `agent`, and locator `expect` nodes. Add explicit `logger` calls for high-level script readability and facts an agent may need later. See [logging.md](./logging.md).
 
 ## Timeline-Aware `expect`
 
@@ -185,3 +228,9 @@ fliwright_agent_diagnose({ path?, runId?, failureIndex?, failure? })
 ```
 
 For local debugging, open `.fliwright/runs/<runId>/timeline.json` and inspect `agentVisibleFailures`, failed nodes, and artifact paths.
+
+For chronological log events, read `.fliwright/runs/<runId>/logs/events.jsonl` or enable live output with:
+
+```bash
+FLIWRIGHT_LOG_OUTPUT=stderr,jsonl-file FLIWRIGHT_LOG_LEVEL=debug pnpm vitest run tests/login.test.ts
+```

@@ -99,7 +99,11 @@ viExpect(result.fields.find(f => f.semanticType === 'email')?.status).toBe('skip
 | `scope` | 按类型名将抽取范围限定到某个控件子树，例如 `'RegisterPage'` |
 | `skipObscureFields` | 跳过密码/隐蔽字段（默认 false） |
 | `locale` | faker 生成时使用的区域（例如 `'zh-CN'`） |
-| `rulesPath` | 要加载进 skill registry 的表单规则 JSON 文件路径 |
+| `rulesFile` | 要加载进 skill registry 的表单规则 JSON 文件路径 |
+| `rulesDir` | 要加载进 skill registry 的表单规则目录；默认自动发现 `.fliwright/forms/*.json` |
+| `requireRuleMatch` | 只填充命中规则的字段，登录/注册关键路径推荐开启 |
+| `dataIndex` | 固定选择 `data[]` 中第几组数据；省略时按字段轮换 |
+| `aiRuntime` | 供 `ai:` / `{ "prompt": "..." }` 数据 DSL 调用的 AI runtime |
 
 当屏幕上同时存在多个表单时（例如带设置面板的 ShellRoute），限定范围就很重要：
 
@@ -125,6 +129,21 @@ const scoped = await page.formHelper.analyze({ scope: 'RegisterPage' });
       "match": { "semanticType": "email" },
       "type": "PRESET_SKILL",
       "data": ["qa@example.com"]
+    },
+    {
+      "find": { "match": { "semanticIdentifier": "order.id" } },
+      "type": "PRESET_SKILL",
+      "data": ["re:ORD-[0-9]{8}"]
+    },
+    {
+      "match": { "semanticType": "fullName" },
+      "type": "LLM_GENERATE",
+      "data": [
+        {
+          "prompt": "生成一个中文测试用户姓名，不要解释",
+          "fallback": "测试用户"
+        }
+      ]
     }
   ]
 }
@@ -136,6 +155,31 @@ const scoped = await page.formHelper.analyze({ scope: 'RegisterPage' });
 `data[]` —— 见 [ai.md](./ai.md)）。加载器（`JsonRuleLoader`）读取这些规则，skill registry 在
 回退到 faker 之前会先查询它们。VS Code 扩展会加载
 `.fliwright/forms/*.json`，并把文件/目录传给 `FormHelper`。
+
+### `data[]` DSL
+
+`data[]` 里的普通字符串永远按固定值处理，所以 `"https://example.com"` 不会因为包含冒号而被误判。只有明确前缀或对象字段才启用 DSL：
+
+| 写法 | 含义 |
+| --- | --- |
+| `"qa@example.com"` | 固定值 |
+| `"text:literal:value"` / `{ "value": "literal:value" }` | 固定值，适合值本身需要 DSL 前缀时转义 |
+| `"re:ORD-[0-9]{8}"` / `"regex:..."` / `{ "regex": "..." }` | 按正则生成值 |
+| `"ai:生成一个测试公司名"` / `"prompt:..."` / `{ "prompt": "...", "fallback": "测试公司" }` | 调用 `aiRuntime.generate()` 生成 `{ "value": "..." }` |
+
+在 script/test 中使用 AI 规则时，把 fixture 的 `aiRuntime` 传给 form helper：
+
+```typescript
+script('fill generated profile', async ({ page, aiRuntime }) => {
+  await page.formHelper.fill({
+    rulesFile: '.fliwright/forms/profile.json',
+    requireRuleMatch: true,
+    aiRuntime,
+  });
+});
+```
+
+没有传 `aiRuntime` 时，prompt 规则如果声明了 `fallback` 就使用 fallback；否则会报错，避免静默填入不确定值。
 
 ## 何时用 formHelper vs 显式 locator
 

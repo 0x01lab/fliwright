@@ -12,6 +12,7 @@
 | --- | --- | --- |
 | [getting-started.md](./getting-started.md) | 桥接设置、第一个测试、环境变量、运行测试 | 你在写第一个 Fliwright 测试 |
 | [timeline-native.md](./timeline-native.md) | 新版 `script`/`test`、`flow`、timeline-aware `mock`、`agent`、`expect(locator, title?)`、timeline/MCP inspection | 你在写新版自动化脚本、清理录制产物、或需要 AI/agent 可读失败 |
+| [logging.md](./logging.md) | `logger` fixture、结构化 JSONL 日志、pretty/compact/jsonl 格式、stderr/stdout/file 输出、日志环境变量 | 你需要脚本进度输出、agent 可读日志、CI 日志或调试细节 |
 | [test-harness.md](./test-harness.md) | `@fliwright/vitest` fixture：`test`、`script`、`flow`/`mock`/`agent` fixture、`expect`、`createFliwrightTest`、hooks、环境变量、失败上下文 | 你在决定如何接入 driver 生命周期 |
 | [selectors.md](./selectors.md) | 选择器格式、`getByX`、作用域（`descendant`/`ancestor`/`and`/`or`/`nth`/`first`/`last`/`filter`/`containing`）、`subtype`/`tooltip`/`state` | 你需要稳定地定位某个控件 |
 | [actions.md](./actions.md) | `click`/`longPress`/`drag`/`dragTo`/`slideTo`/`pinch`/`type`/`fill`/`clear`/`pressKey`/`setCheckbox`/`selectOption`/`scrollIntoView` + 底层 `clickAt`/`dragFrom` | 你要做手势 / 输入 |

@@ -1,5 +1,7 @@
 import { describe, it, expect, test as vitestTest, vi } from 'vitest';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Assertion, Locator } from '@fliwright/core';
 import { AiRuntime } from '@fliwright/core';
 import {
@@ -15,8 +17,8 @@ import {
   test as fliwrightTest,
 } from '../src/index.js';
 
-vi.mock(import('@fliwright/core'), async importOriginal => {
-  const actual = await importOriginal();
+vi.mock(import('@fliwright/core'), async () => {
+  const actual = await import('../../fliwright-core/src/index.js');
 
   class MockDriver {
     readonly page = {
@@ -187,6 +189,38 @@ testWithTimeline('records locator expect assertions in the timeline', async ({ p
     metadata: expect.objectContaining({
       matcher: 'toBeVisible',
     }),
+  }));
+});
+
+const testWithLogger = createFliwrightTest({
+  vmServiceUrl: 'ws://localhost:12345/ws',
+  timelineDir: await mkdtemp(join(tmpdir(), 'fliwright-vitest-logs-')),
+  log: {
+    level: 'debug',
+    format: 'jsonl',
+    outputs: ['jsonl-file'],
+    jsonlPath: '{runDir}/logs/events.jsonl',
+  },
+});
+
+let persistedLogPath = '';
+
+testWithLogger('provides a logger fixture and writes jsonl logs', async ({ logger, timeline }) => {
+  logger.info('custom user log', { screen: 'login' });
+  persistedLogPath = join(timeline.artifactStore.runDir, 'logs', 'events.jsonl');
+});
+
+vitestTest('logger jsonl file is persisted', async () => {
+  const lines = (await readFile(persistedLogPath, 'utf8')).trim().split('\n');
+  const events = lines.map((line) => JSON.parse(line) as { kind: string; message: string; data?: Record<string, unknown> });
+  expect(events).toContainEqual(expect.objectContaining({
+    kind: 'test',
+    message: 'Test started',
+  }));
+  expect(events).toContainEqual(expect.objectContaining({
+    kind: 'test',
+    message: 'custom user log',
+    data: { screen: 'login' },
   }));
 });
 

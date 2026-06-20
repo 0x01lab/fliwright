@@ -58,6 +58,36 @@ Visible widgets on screen:
 
 **如果正在跑的应用崩溃或进入不稳定状态，立刻停掉 E2E。** 不要继续在一个坏掉的界面上点来点去。先重启/重新构建应用。
 
+## 人工步骤 / Human-in-the-loop
+
+| 症状 | 原因 | 修复 |
+| --- | --- | --- |
+| 人工拖完 captcha 后脚本仍卡住 | 脚本只“提示人操作”，没有定义运行时可观察的完成条件 | 用 `flow.manual(..., { resumeWhen })` 轮询完成后的 app 状态 |
+| 在 VS Code、Claude Code、terminal 中无法继续 | 依赖 stdin、按钮、或外部 continue 文件来通知运行时 | 对 app 内人工操作不要依赖外部通知；让 runtime 观察页面标题、表单、路由或成功态 |
+| 人工步骤过早继续 | 完成条件太宽，例如只判断 captcha 文案消失或原表单不可见 | 改成业务上明确的下一状态，例如 two-factor 页面上的 `Verification required` |
+
+推荐模式：
+
+```typescript
+await flow.manual('Complete Aliyun captcha', {
+  message: 'Please manually complete the slider captcha in the running app.',
+  timeoutMs: 180_000,
+  pollIntervalMs: 700,
+  resumeWhen: async () => page.getByText('Verification required', { exact: true }).isVisible(),
+});
+
+await expect(
+  page.getByText('Verification required', { exact: true }),
+  'Two-factor verification page is visible',
+).toBeVisible({ timeout: 10_000 });
+
+await flow.step('Fill two-factor verification code', async () => {
+  await page.getByType('EditableText').first({ visible: true }).fill('000000');
+});
+```
+
+原则：人工动作发生在 app 里，完成信号也应来自 app。优先选择“下一业务页面的稳定文本/key/semantics”，不要把“按回车”“点插件按钮”“touch 文件”作为主要继续机制。
+
 ## Mock
 
 | 症状 | 原因 | 修复 |

@@ -15,8 +15,8 @@ import { test, script, expect } from '@fliwright/vitest';
 ## 默认的 `test` fixture
 
 ```typescript
-test('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline }) => { /* … */ });
-script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline }) => { /* … */ });
+test('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, logger }) => { /* … */ });
+script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, logger }) => { /* … */ });
 ```
 
 它替你做的事：
@@ -25,12 +25,13 @@ script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline }) 
 | --- | --- |
 | VM URL | 读 `process.env.FLIWRIGHT_VM_URL`，兜底 `FLIWRIGHT_VM_SERVICE_URL`；HTTP→WS 转换自动完成 |
 | Driver | 每进程一个**共享** `FliwrightDriver`，懒创建并连接 |
-| Fixtures | 提供 `{ page, driver, flow, mock, agent, aiRuntime, timeline }`。`flow`、`mock`、`agent` 和 locator `expect` 都会写入 timeline。`script` 与 `test` 类似，但 mode 是 `script` 且不要求 assertion。 |
+| Fixtures | 提供 `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }`。`flow`、`mock`、`agent` 和 locator `expect` 都会写入 timeline；`logger` 写结构化运行日志。`script` 与 `test` 类似，但 mode 是 `script` 且不要求 assertion。 |
 | 诊断信息 | 启动 `driver.listenToDiagnostics()`，把日志/stderr 收集进失败报告 |
 | 失败上下文 | 当 `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH` 被设置时，写入断言详情 + 控件树 + 截图 + 诊断信息 + 源码 + 自愈建议 |
 | Trace | 当 `FLIWRIGHT_TRACE_DIR` + `FLIWRIGHT_TRACE` 被设置时，按动作记录 trace（见 [driver-lifecycle.md](./driver-lifecycle.md)） |
 | 截图模式 | 由 `FLIWRIGHT_SCREENSHOT_MODE` 控制 |
 | Timeline | 每次运行写 `.fliwright/runs/<runId>/timeline.json`；失败节点会带 agent-visible failure 和 artifact refs |
+| Logs | 默认写 `.fliwright/runs/<runId>/logs/events.jsonl`；需要实时输出时配置 `FLIWRIGHT_LOG_OUTPUT=stderr,jsonl-file` |
 
 `mock` fixture 是 timeline-aware 的 mock facade；需要底层能力时再退回 `driver.mock`：
 
@@ -74,6 +75,20 @@ script('fill registration form', async ({ page, flow, agent }) => {
 
 See [timeline-native.md](./timeline-native.md) for all `flow`/`mock`/`agent` APIs and timeline-aware `expect`.
 
+## `logger` fixture
+
+Use `logger` for progress and structured diagnostics, especially in long-running `script` automation:
+
+```typescript
+script('fill registration form', async ({ page, logger }) => {
+  logger.info('Open registration page');
+  await page.navigate('/register');
+  logger.success('Registration page opened', { route: '/register' });
+});
+```
+
+`logger` supports `trace` / `debug` / `info` / `warn` / `error` / `success` methods and writes JSONL by default. See [logging.md](./logging.md).
+
 ## 自定义配置：`createFliwrightTest` + `defineConfig`
 
 当某个文件必须写死/变换 VM URL、改超时、或关掉截图时用。
@@ -100,6 +115,7 @@ const test = createFliwrightTest(defineConfig({
 | `requireAssertions` | `boolean` | `false` | 为 `true` 时，测试结束前必须至少有一个 locator `expect(...).to*` timeline assertion node |
 | `agentPolicy` | `AgentPolicy` | *(未设)* | 主动/被动 agent 策略 |
 | `timelineDir` | `string` | `process.cwd()` | `.fliwright/runs/<runId>` 的根目录 |
+| `log` | `FliwrightLogConfig` | `{ outputs: ['jsonl-file'] }` | 结构化日志 level、format、outputs 和路径。见 [logging.md](./logging.md)。 |
 
 ```typescript
 export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUrl: string }): FliwrightConfig
@@ -159,6 +175,11 @@ viExpect(await page.getByText('Ready').count()).toBe(1);
 | `FLIWRIGHT_MOCK_CONTROLLER_URL` | 工具侧 mock 控制器的 WebSocket URL。 |
 | `FLIWRIGHT_TRACE` | Trace 模式：`full` \| `on-failure` \| `off`。 |
 | `FLIWRIGHT_TRACE_DIR` | 写单测试 trace 产物的目录。 |
+| `FLIWRIGHT_LOG_LEVEL` | 日志最低级别：`trace` \| `debug` \| `info` \| `warn` \| `error` \| `success`。 |
+| `FLIWRIGHT_LOG_FORMAT` | `pretty` \| `compact` \| `jsonl` \| `silent`。 |
+| `FLIWRIGHT_LOG_OUTPUT` | 逗号分隔输出：`stderr`、`stdout`、`file`、`jsonl-file`。默认 `jsonl-file`。 |
+| `FLIWRIGHT_LOG_FILE` | 普通文件日志路径，支持 `{runDir}`。 |
+| `FLIWRIGHT_LOG_JSONL` | JSONL 日志路径，支持 `{runDir}`。 |
 | `FLIWRIGHT_AI_PROVIDER` | AI provider：`mock` \| `claude` \| `codex` \| `custom-cli` \| `none`（默认 `none`）。见 [ai.md](./ai.md)。 |
 | `FLIWRIGHT_AI_ENABLED` | `true` \| `false`（默认：`provider !== 'none'`）。 |
 | `FLIWRIGHT_AI_TIMEOUT_MS` | 单次 AI 调用超时（默认 `60000`）。 |

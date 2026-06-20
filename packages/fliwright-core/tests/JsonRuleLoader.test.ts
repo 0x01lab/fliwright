@@ -77,6 +77,30 @@ describe('JsonRuleLoader', () => {
     expect(value).toMatch(/^ORD\d{10}$/);
   });
 
+  it('treats ordinary data strings as fixed values even when they contain colons', () => {
+    writeRuleFile('rules.json', {
+      version: 1,
+      rules: [
+        { match: { hintText: 'url' }, type: 'PRESET_SKILL', data: ['https://example.com/login'] },
+      ],
+    });
+    const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'));
+    expect(skills[0].generate({} as any, 'zh_CN')).toBe('https://example.com/login');
+  });
+
+  it('supports regex data DSL entries', () => {
+    writeRuleFile('rules.json', {
+      version: 1,
+      rules: [
+        { match: { hintText: '订单号' }, type: 'PRESET_SKILL', data: ['re:ORD-[0-9]{6}'] },
+        { match: { hintText: '客户号' }, type: 'PRESET_SKILL', data: [{ regex: 'CUST-[A-Z]{3}' }] },
+      ],
+    });
+    const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'));
+    expect(skills[0].generate({} as any, 'zh_CN')).toMatch(/^ORD-\d{6}$/);
+    expect(skills[1].generate({} as any, 'zh_CN')).toMatch(/^CUST-[A-Z]{3}$/);
+  });
+
   it('loaded skill matches by semanticType', () => {
     writeRuleFile('rules.json', {
       version: 1,
@@ -183,6 +207,48 @@ describe('JsonRuleLoader', () => {
     const discoverLoader = new JsonRuleLoader(tmpDir);
     const skills = discoverLoader.autoDiscover();
     expect(skills).toHaveLength(1);
+  });
+
+  it('autoDiscover finds files in .fliwright/forms/ directory', () => {
+    const formsDir = path.join(tmpDir, '.fliwright', 'forms');
+    fs.mkdirSync(formsDir, { recursive: true });
+    fs.writeFileSync(path.join(formsDir, 'login.json'), JSON.stringify({
+      version: 1,
+      rules: [{ find: { match: { semanticIdentifier: 'login.username' } }, type: 'PRESET_SKILL', data: ['qa@example.com'] }],
+    }));
+    const discoverLoader = new JsonRuleLoader(tmpDir);
+    const skills = discoverLoader.autoDiscover();
+    expect(skills).toHaveLength(1);
+    expect(skills[0].match({ semanticsId: 'login.username' } as any)).toBe(true);
+  });
+
+  it('autoDiscover keeps legacy paths compatible with .fliwright/forms/', () => {
+    const formsDir = path.join(tmpDir, '.fliwright', 'forms');
+    fs.mkdirSync(formsDir, { recursive: true });
+    fs.writeFileSync(path.join(formsDir, 'login.json'), JSON.stringify({
+      version: 1,
+      rules: [{ match: { hintText: 'new' }, type: 'LLM_GENERATE', data: ['current'] }],
+    }));
+    writeRuleFile('fliwright.form-rules.json', {
+      version: 1,
+      rules: [{ match: { hintText: 'legacy-file' }, type: 'LLM_GENERATE', data: ['file'] }],
+    });
+    const legacyDir = path.join(tmpDir, 'fliwright.form-rules');
+    fs.mkdirSync(legacyDir);
+    fs.writeFileSync(path.join(legacyDir, 'legacy-dir.json'), JSON.stringify({
+      version: 1,
+      rules: [{ match: { hintText: 'legacy-dir' }, type: 'LLM_GENERATE', data: ['dir'] }],
+    }));
+
+    const discoverLoader = new JsonRuleLoader(tmpDir);
+    const skills = discoverLoader.autoDiscover();
+
+    expect(skills).toHaveLength(3);
+    expect(skills.map((skill) => skill.name)).toEqual([
+      'rule:hintText=new',
+      'rule:hintText=legacy-file',
+      'rule:hintText=legacy-dir',
+    ]);
   });
 
   it('autoDiscover finds files in fliwright.form-rules/ directory', () => {

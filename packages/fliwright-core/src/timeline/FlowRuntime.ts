@@ -3,6 +3,8 @@ import { FliwrightAgentError } from '../agent/FliwrightAgentError.js';
 import type { AgentVisibleFailure, TimelineArtifactRef, TimelineNodeStartOptions } from './types.js';
 import { TimelineArtifactStore } from './TimelineArtifactStore.js';
 import { TimelineRecorder } from './TimelineRecorder.js';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
 export interface FlowRuntimeOptions {
   recorder: TimelineRecorder;
@@ -15,6 +17,15 @@ export interface FlowFrameOptions {
   snapshot?: boolean;
   diagnostics?: boolean;
   metadata?: Record<string, unknown>;
+}
+
+export interface FlowManualOptions {
+  message?: string;
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+  metadata?: Record<string, unknown>;
+  resumeWhen?: () => boolean | Promise<boolean>;
+  confirm?: (prompt: string, options: { signal: AbortSignal }) => void | Promise<void>;
 }
 
 export class FlowRuntime {
@@ -72,6 +83,34 @@ export class FlowRuntime {
       const failure = createAgentFailure(error, title, node.id, 'step_failed');
       this.options.recorder.failNode(node.id, failure);
       throw wrapAgentError(error, failure);
+    }
+  }
+
+  async manual(title: string, options: FlowManualOptions = {}): Promise<void> {
+    const message = options.message ?? title;
+    const node = this.options.recorder.startNode('manual', title, {
+      metadata: {
+        ...(options.metadata ?? {}),
+        message,
+        ...(options.timeoutMs != null ? { timeoutMs: options.timeoutMs } : {}),
+        ...(options.pollIntervalMs != null ? { pollIntervalMs: options.pollIntervalMs } : {}),
+        completion: options.resumeWhen ? 'resumeWhen' : options.confirm ? 'confirm' : 'manual-file',
+      },
+    });
+    const controller = new AbortController();
+    const timer = options.timeoutMs == null
+      ? undefined
+      : setTimeout(() => controller.abort(), options.timeoutMs);
+
+    try {
+      await waitForManualCompletion(message, options, controller.signal);
+      this.options.recorder.passNode(node.id);
+    } catch (error) {
+      const failure = createAgentFailure(error, title, node.id, 'step_failed');
+      this.options.recorder.failNode(node.id, failure, { manual: true });
+      throw wrapAgentError(error, failure);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -143,6 +182,29 @@ export class FlowRuntime {
   }
 }
 
+async function waitForManualCompletion(prompt: string, options: FlowManualOptions, signal: AbortSignal): Promise<void> {
+  if (options.resumeWhen) {
+    await waitForManualResumeCondition(prompt, options.resumeWhen, {
+      signal,
+      pollIntervalMs: options.pollIntervalMs ?? 500,
+    });
+    return;
+  }
+  await (options.confirm ?? defaultManualConfirm)(prompt, { signal });
+}
+
+async function waitForManualResumeCondition(
+  prompt: string,
+  resumeWhen: () => boolean | Promise<boolean>,
+  options: { signal: AbortSignal; pollIntervalMs: number },
+): Promise<void> {
+  while (!options.signal.aborted) {
+    if (await resumeWhen()) return;
+    await delay(options.pollIntervalMs);
+  }
+  throw new Error(`Manual checkpoint aborted: ${prompt}`);
+}
+
 export function createAgentFailure(
   error: unknown,
   title: string,
@@ -196,4 +258,70 @@ function defaultRecoveryHints(code: AgentVisibleFailure['code'], message: string
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null;
+}
+
+async function defaultManualConfirm(prompt: string, options: { signal: AbortSignal }): Promise<void> {
+  const dir = resolve(process.env.FLIWRIGHT_MANUAL_DIR ?? join(process.cwd(), '.fliwright', 'manual'));
+  const id = `manual-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const requestPath = join(dir, `${id}.json`);
+  const continuePath = join(dir, `${id}.continue.json`);
+  const cancelPath = join(dir, `${id}.cancel.json`);
+  await mkdir(dir, { recursive: true });
+  await writeFile(requestPath, JSON.stringify({
+    id,
+    status: 'waiting',
+    message: prompt,
+    continueFile: continuePath,
+    cancelFile: cancelPath,
+    continueCommand: `touch ${shellQuote(continuePath)}`,
+    cancelCommand: `touch ${shellQuote(cancelPath)}`,
+    createdAt: new Date().toISOString(),
+  }, null, 2));
+
+  process.stdout.write([
+    '',
+    'Fliwright manual checkpoint is waiting for human input.',
+    prompt,
+    `Request: ${requestPath}`,
+    `After completing the manual action, run: touch ${shellQuote(continuePath)}`,
+    `To cancel this checkpoint, run: touch ${shellQuote(cancelPath)}`,
+    '',
+  ].join('\n'));
+
+  while (!options.signal.aborted) {
+    if (await fileExists(cancelPath)) {
+      throw new Error(`Manual checkpoint cancelled: ${prompt}`);
+    }
+    if (await fileExists(continuePath)) {
+      await writeFile(requestPath, JSON.stringify({
+        id,
+        status: 'continued',
+        message: prompt,
+        continueFile: continuePath,
+        cancelFile: cancelPath,
+        continuedAt: new Date().toISOString(),
+      }, null, 2));
+      return;
+    }
+    await delay(250);
+  }
+  throw new Error(`Manual checkpoint aborted: ${prompt}`);
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await readFile(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:=@%+-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }

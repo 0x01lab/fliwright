@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import RandExp from 'randexp';
 import { Selector } from './Selector.js';
+import { generateFormDataEntry } from './FormDataDsl.js';
 import type { FormSkill, FormFieldMeta, FormRule, FormRulesFile, MatchCriteria, SemanticType } from './types.js';
 
 export class JsonRuleLoader {
@@ -35,6 +36,8 @@ export class JsonRuleLoader {
 
   autoDiscover(dataIndex?: number): FormSkill[] {
     const skills: FormSkill[] = [];
+    const workspaceFormsDir = path.join(this.projectRoot, '.fliwright', 'forms');
+    skills.push(...this.loadFromDir(workspaceFormsDir, dataIndex));
     const singleFile = path.join(this.projectRoot, 'fliwright.form-rules.json');
     skills.push(...this.loadFromFile(singleFile, dataIndex));
     const rulesDir = path.join(this.projectRoot, 'fliwright.form-rules');
@@ -60,10 +63,10 @@ export class JsonRuleLoader {
         type: 'PRESET_SKILL',
         find,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
-        generate: () => {
-          const value = rule.data![index % rule.data!.length];
+        generate: (field, locale, options) => {
+          const entry = rule.data![index % rule.data!.length];
           if (auto) index++;
-          return value;
+          return generateFormDataEntry(entry, { field, locale, options });
         },
       };
     }
@@ -76,10 +79,10 @@ export class JsonRuleLoader {
         type: 'LLM_GENERATE',
         find,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
-        generate: () => {
-          const value = rule.data![index % rule.data!.length];
+        generate: (field, locale, options) => {
+          const entry = rule.data![index % rule.data!.length];
           if (auto) index++;
-          return value;
+          return generateFormDataEntry(entry, { field, locale, options });
         },
       };
     }

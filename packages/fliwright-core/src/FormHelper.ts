@@ -18,7 +18,7 @@ import { Locator } from './Locator.js';
 type RuleMatchField = FormFieldMeta & { semanticType?: SemanticType };
 type MatchedFormSkill = {
   find?: SelectorQuery;
-  generate: (field: FormFieldMeta, locale: string) => string;
+  generate: (field: FormFieldMeta, locale: string, options?: FormHelperOptions) => string | Promise<string>;
 };
 
 export class FormHelper {
@@ -48,11 +48,11 @@ export class FormHelper {
     const semanticTypes = inferrer.infer(fields);
 
     return {
-      fields: fields.map((field) => {
+      fields: await Promise.all(fields.map(async (field) => {
         const semanticType = semanticTypes.get(field.id) ?? 'text';
         const matchField: RuleMatchField = { ...field, semanticType };
         const skill = registry.match(matchField);
-        const generatedValue = this.generateFieldValue(field, semanticType, generator, skill, options);
+        const generatedValue = await this.generateFieldValue(field, semanticType, generator, skill, options);
         return {
           id: field.id,
           semanticType,
@@ -70,7 +70,7 @@ export class FormHelper {
           semanticsHint: field.semanticsHint,
           role: field.role,
         };
-      }),
+      })),
     };
   }
 
@@ -184,7 +184,7 @@ export class FormHelper {
       result.skipped++;
       return;
     }
-    const generatedValue = this.generateFieldValue(field, semanticType, generator, skill, options);
+    const generatedValue = await this.generateFieldValue(field, semanticType, generator, skill, options);
 
     try {
       await this.fillWithFallback(field, generatedValue, skill?.find);
@@ -256,14 +256,14 @@ export class FormHelper {
     return matchingIds;
   }
 
-  private generateFieldValue(
+  private async generateFieldValue(
     field: FormFieldMeta,
     semanticType: SemanticType,
     generator: FakerGenerator,
     skill: MatchedFormSkill | null,
     options?: FormHelperOptions,
-  ): string {
-    if (skill) return skill.generate(field, options?.locale ?? 'zh_CN');
+  ): Promise<string> {
+    if (skill) return skill.generate(field, options?.locale ?? 'zh_CN', options);
 
     if (field.controlType === 'checkbox') {
       const option = this.firstFillableOption(field);

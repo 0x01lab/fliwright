@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TimelineRecorder } from '../../src/index.js';
+import { MemoryLogSink, StructuredLogger, TimelineRecorder } from '../../src/index.js';
 
 describe('TimelineRecorder', () => {
   it('records nested page step and frame nodes', () => {
@@ -64,5 +64,37 @@ describe('TimelineRecorder', () => {
       kind: 'optional',
       status: 'skipped',
     });
+  });
+
+  it('emits structured log events for node lifecycle changes', () => {
+    const sink = new MemoryLogSink();
+    const logger = new StructuredLogger({
+      runId: 'run-4',
+      testName: 'log test',
+      mode: 'test',
+      level: 'debug',
+      sinks: [sink],
+    });
+    const recorder = new TimelineRecorder({ runId: 'run-4', testName: 'log test', logger });
+
+    const step = recorder.startNode('step', 'Tap submit', { metadata: { selector: 'text=Submit' } });
+    recorder.passNode(step.id);
+
+    expect(sink.events).toEqual([
+      expect.objectContaining({
+        level: 'debug',
+        kind: 'step',
+        status: 'running',
+        timelineNodeId: step.id,
+        message: 'Tap submit',
+      }),
+      expect.objectContaining({
+        level: 'success',
+        kind: 'step',
+        status: 'passed',
+        timelineNodeId: step.id,
+        data: { selector: 'text=Submit' },
+      }),
+    ]);
   });
 });

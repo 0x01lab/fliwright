@@ -146,8 +146,8 @@ function analyzeFieldItem(element: FormAnalyzeFieldEntry): vscode.TreeItem {
   item.contextValue = 'formAnalyzeField';
   item.iconPath = new vscode.ThemeIcon('symbol-string');
   item.command = {
-    command: 'fliwright.insertFormFieldSelector',
-    title: 'Insert Form Field Selector',
+    command: 'fliwright.addAnalyzedFieldToFormRules',
+    title: 'Add Analyzed Field to Form Rules',
     arguments: [element],
   };
   return item;

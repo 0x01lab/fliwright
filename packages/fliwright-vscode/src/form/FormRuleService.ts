@@ -2,7 +2,8 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { loadConfig, resolveWorkspacePath } from '../config.js';
 import { jsonErrorMessage, readJson, writeJson } from '../json.js';
-import type { FormDiscoveryResult, FormRulesEntry, FormRulesFile, InvalidFileEntry } from '../types.js';
+import type { FormAnalyzeResult } from '@fliwright/core';
+import type { FormDiscoveryResult, FormRule, FormRulesEntry, FormRulesFile, InvalidFileEntry } from '../types.js';
 
 const RULE_TYPES = new Set(['PRESET_SKILL', 'REGEXP_MOCK', 'LLM_GENERATE']);
 const MATCH_KEYS = new Set([
@@ -106,6 +107,44 @@ export class FormRuleService {
     return uri;
   }
 
+  async createFromAnalyzeFields(
+    workspaceRoot: vscode.Uri,
+    fileName: string,
+    fields: FormAnalyzeResult['fields'],
+  ): Promise<vscode.Uri> {
+    const uri = await this.createEmptyRulesFile(workspaceRoot, fileName);
+    await this.appendAnalyzeFields(uri, fields);
+    return uri;
+  }
+
+  async appendAnalyzeFields(
+    uri: vscode.Uri,
+    fields: FormAnalyzeResult['fields'],
+  ): Promise<number> {
+    const file = await readJson<FormRulesFile>(uri);
+    this.validateRulesFile(file);
+    const existing = new Set(file.rules.map(ruleIdentity));
+    const nextRules = fields
+      .map(formRuleFromAnalyzeField)
+      .filter((rule) => !existing.has(ruleIdentity(rule)));
+    file.rules.push(...nextRules);
+    await writeJson(uri, file);
+    return nextRules.length;
+  }
+
+  private async createEmptyRulesFile(workspaceRoot: vscode.Uri, fileName: string): Promise<vscode.Uri> {
+    const config = loadConfig();
+    const root = resolveWorkspacePath(workspaceRoot, config.formRulesDir);
+    await vscode.workspace.fs.createDirectory(root);
+    const uri = vscode.Uri.joinPath(root, ensureJsonFileName(fileName));
+    await writeJson(uri, {
+      version: 1,
+      locale: config.formLocale,
+      rules: [],
+    });
+    return uri;
+  }
+
   private validateRulesFile(file: FormRulesFile): void {
     if (file.version !== 1) throw new Error('version must be 1');
     if (!Array.isArray(file.rules)) throw new Error('rules must be an array');
@@ -173,6 +212,33 @@ export class FormRuleService {
       }
     }
   }
+}
+
+export function formRuleFromAnalyzeField(field: FormAnalyzeResult['fields'][number]): FormRule {
+  return {
+    find: bestFindForField(field),
+    type: 'PRESET_SKILL',
+    data: field.generatedValue ? [field.generatedValue] : [],
+  };
+}
+
+function bestFindForField(field: FormAnalyzeResult['fields'][number]) {
+  if (field.semanticsId) return { match: { semanticIdentifier: field.semanticsId } };
+  if (field.name) return { match: { name: field.name } };
+  if (field.key) return { match: { key: field.key } };
+  if (field.ancestorKey) {
+    return {
+      match: { textContains: field.label ?? field.hintText ?? field.name ?? field.key ?? field.id },
+      within: { match: { key: field.ancestorKey } },
+    };
+  }
+  if (field.label) return { match: { textContains: field.label }, fallback: { semanticsLabel: field.label } };
+  if (field.hintText) return { match: { textContains: field.hintText }, fallback: { hintText: field.hintText } };
+  return { match: { id: field.id } };
+}
+
+function ruleIdentity(rule: FormRule): string {
+  return JSON.stringify(rule.find ?? rule.match ?? {});
 }
 
 function ensureJsonFileName(fileName: string): string {

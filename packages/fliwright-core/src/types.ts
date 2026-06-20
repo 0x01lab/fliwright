@@ -1,3 +1,5 @@
+import type { AiRuntime } from './ai/AiRuntime.js';
+
 /** Function signature for sending VM Service JSON-RPC requests. */
 export type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
@@ -536,21 +538,38 @@ export interface FormHelperOptions {
   requireRuleMatch?: boolean;
   /** Pick a specific index from PRESET_SKILL/LLM_GENERATE `data` arrays. When omitted, cycles automatically. */
   dataIndex?: number;
+  /** Optional AI runtime used by form-rule data DSL entries such as `ai:...` or `{ "prompt": "..." }`. */
+  aiRuntime?: AiRuntime;
 }
+
+export type FormRuleDataEntry =
+  | string
+  | {
+      value?: string;
+      fixed?: string;
+      regex?: string;
+      regexp?: string;
+      prompt?: string;
+      ai?: string;
+      fallback?: string;
+      system?: string;
+      timeoutMs?: number;
+      temperature?: number;
+    };
 
 export interface FormSkill {
   name: string;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
   find?: SelectorQuery;
   match: (field: FormFieldMeta) => boolean;
-  generate: (field: FormFieldMeta, locale: string) => string;
+  generate: (field: FormFieldMeta, locale: string, options?: FormHelperOptions) => string | Promise<string>;
 }
 
 export interface FormRule {
   find?: SelectorQuery;
   match?: Record<string, string>;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
-  data?: string[];
+  data?: FormRuleDataEntry[];
   pattern?: string;
 }
 

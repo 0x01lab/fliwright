@@ -39,6 +39,7 @@ export type {
   FormFillResult,
   FormAnalyzeResult,
   FormHelperOptions,
+  FormRuleDataEntry,
   FormSkill,
   FormRule,
   FormRulesFile,
@@ -75,6 +76,33 @@ export { FailureCollector } from './FailureCollector.js';
 export { TraceCollector, isActionMethod, TraceStore } from './TraceCollector.js';
 export type { TraceStep, TraceMeta, TraceData, TraceMode } from './TraceCollector.js';
 export { EventAggregator } from './EventAggregator.js';
+export {
+  CompactLogFormatter,
+  ConsoleLogSink,
+  FileLogSink,
+  JsonLogFormatter,
+  JsonlLogSink,
+  MemoryLogSink,
+  MultiLogSink,
+  PrettyLogFormatter,
+  StructuredLogger,
+  createNoopLogger,
+  normalizeLogError,
+} from './logging.js';
+export type {
+  FliwrightLogError,
+  FliwrightLogEvent,
+  FliwrightLogInput,
+  FliwrightLogKind,
+  FliwrightLogLevel,
+  FliwrightLogMode,
+  FliwrightLogStatus,
+  FliwrightLogger,
+  FliwrightLoggerOptions,
+  LogFormatter,
+  LogSink,
+  PrettyLogFormatterOptions,
+} from './logging.js';
 export { CodeGenerator } from './CodeGenerator.js';
 export { MockManager } from './MockManager.js';
 export { MockRuleStore } from './MockRuleStore.js';
@@ -167,7 +195,7 @@ export { TimelineRecorder } from './timeline/TimelineRecorder.js';
 export { TimelineArtifactStore } from './timeline/TimelineArtifactStore.js';
 export type { TimelineArtifactStoreOptions } from './timeline/TimelineArtifactStore.js';
 export { FlowRuntime, createAgentFailure, wrapAgentError } from './timeline/FlowRuntime.js';
-export type { FlowFrameOptions, FlowRuntimeOptions } from './timeline/FlowRuntime.js';
+export type { FlowFrameOptions, FlowManualOptions, FlowRuntimeOptions } from './timeline/FlowRuntime.js';
 export { FliwrightAgentError } from './agent/FliwrightAgentError.js';
 export { AgentRuntime } from './agent/AgentRuntime.js';
 export type { AgentRuntimeOptions } from './agent/AgentRuntime.js';

@@ -9,19 +9,21 @@ import { test, expect, createFliwrightTest, defineConfig,
          createFliwrightScript, script,
          beforeEach, afterEach, beforeAll, afterAll, describe } from '@fliwright/vitest';
 
-// fixture: test('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline }) => {})
-// fixture: script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline }) => {})
+// fixture: test('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, logger }) => {})
+// fixture: script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, logger }) => {})
 // expect(locator, title?): Assertion    // auto-wait + healing + timeline assertion
 // createFliwrightTest(config): test     // custom config
 // createFliwrightScript(config): script // mode='script', requireAssertions=false
 // defineConfig(overrides & { vmServiceUrl }): FliwrightConfig   // fills defaults
 //   FliwrightConfig { vmServiceUrl; timeout?: 5000; screenshot?: 'file'|'base64'|'off';
-//                     ai?; mode?: 'test'|'script'; requireAssertions?; agentPolicy?; timelineDir? }
+//                     ai?; mode?: 'test'|'script'; requireAssertions?; agentPolicy?; timelineDir?; log? }
 ```
 
 环境变量：`FLIWRIGHT_VM_URL`、`FLIWRIGHT_VM_SERVICE_URL`、`FLIWRIGHT_SCREENSHOT_MODE`、
 `FLIWRIGHT_FAILURE_TIMEOUT_MS`、`FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`、
-`FLIWRIGHT_MOCK_CONTROLLER_URL`、`FLIWRIGHT_TRACE`、`FLIWRIGHT_TRACE_DIR`。
+`FLIWRIGHT_MOCK_CONTROLLER_URL`、`FLIWRIGHT_TRACE`、`FLIWRIGHT_TRACE_DIR`、
+`FLIWRIGHT_LOG_LEVEL`、`FLIWRIGHT_LOG_FORMAT`、`FLIWRIGHT_LOG_OUTPUT`、
+`FLIWRIGHT_LOG_FILE`、`FLIWRIGHT_LOG_JSONL`。
 
 ## Timeline Fixtures
 
@@ -33,6 +35,7 @@ flow.page(title, body)
 flow.branch(title, metadata, body)
 flow.optional(title, { when? }, body)
 flow.frame(title, { screenshot?, snapshot?, diagnostics?, metadata? })
+flow.manual(title, { message?, timeoutMs?, pollIntervalMs?, metadata?, resumeWhen? })
 flow.assertion(title, body, metadata?)
 
 // mock — timeline-aware facade over driver.mock
@@ -55,6 +58,14 @@ agent.ask(titleOrPrompt, request?)
 agent.generate<T>(titleOrPrompt, { schema?, fallback?, prompt? })
 agent.verify(prompt, { includeScreenshot?, includeSnapshot?, timeoutMs? })
 agent.inspect<T>(titleOrPrompt, { schema?, prompt?, includeScreenshot?, includeSnapshot? })
+
+// logger — structured run logs
+logger.trace(message, data?)
+logger.debug(message, data?)
+logger.info(message, data?)
+logger.warn(message, data?)
+logger.error(message, error?, data?)
+logger.success(message, data?)
 ```
 
 ## `page` — `Page`

@@ -52,6 +52,9 @@
     "onCommand:fliwright.openFormRules",
     "onCommand:fliwright.openScript",
     "onCommand:fliwright.insertFormFieldSelector",
+    "onCommand:fliwright.addAnalyzedFieldToFormRules",
+    "onCommand:fliwright.createFormRulesFromLastAnalyze",
+    "onCommand:fliwright.appendLastAnalyzeToFormRules",
     "onCommand:fliwright.applyMockRule",
     "onCommand:fliwright.stopMockRule",
     "onCommand:fliwright.applyDefaultMocks",
@@ -227,6 +230,20 @@
         "title": "Fliwright: Insert Form Field Selector"
       },
       {
+        "command": "fliwright.addAnalyzedFieldToFormRules",
+        "title": "Fliwright: Add Analyzed Field to Form Rules"
+      },
+      {
+        "command": "fliwright.createFormRulesFromLastAnalyze",
+        "title": "Fliwright: Create Form Rules From Last Analyze",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "fliwright.appendLastAnalyzeToFormRules",
+        "title": "Fliwright: Append Last Analyze to Form Rules",
+        "icon": "$(add)"
+      },
+      {
         "command": "fliwright.analyzeForm",
         "title": "Fliwright: Analyze Current Form",
         "icon": "$(inspect)"
@@ -398,9 +415,14 @@
           "group": "navigation@3"
         },
         {
-          "command": "fliwright.fillForm",
+          "command": "fliwright.createFormRulesFromLastAnalyze",
           "when": "view == fliwright.formData",
           "group": "navigation@4"
+        },
+        {
+          "command": "fliwright.fillForm",
+          "when": "view == fliwright.formData",
+          "group": "navigation@5"
         },
         {
           "command": "fliwright.runScript",
@@ -493,6 +515,21 @@
           "command": "fliwright.fillFormWithRules",
           "when": "view == fliwright.formData && viewItem == formRulesFile",
           "group": "inline@3"
+        },
+        {
+          "command": "fliwright.appendLastAnalyzeToFormRules",
+          "when": "view == fliwright.formData && viewItem == formRulesFile",
+          "group": "inline@4"
+        },
+        {
+          "command": "fliwright.addAnalyzedFieldToFormRules",
+          "when": "view == fliwright.formData && viewItem == formAnalyzeField",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.insertFormFieldSelector",
+          "when": "view == fliwright.formData && viewItem == formAnalyzeField",
+          "group": "inline@2"
         },
         {
           "command": "fliwright.runScript",

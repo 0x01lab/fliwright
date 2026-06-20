@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FormHelper } from '../src/FormHelper.js';
+import { AiRuntime, FormHelper, MockAiAdapter } from '../src/index.js';
 
 function createMockSendRequest(responses: Record<string, unknown>) {
   return vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
@@ -210,6 +210,75 @@ describe('FormHelper', () => {
           .map(c => selectorAst(c[1]));
         expect(typeSelectors).toContainEqual({ match: { name: 'email' } });
         expect(typeSelectors).not.toContainEqual({ kind: 'id', value: 'w3' });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('fills fields from regex data DSL entries', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { hintText: '邮箱地址' },
+            type: 'PRESET_SKILL',
+            data: ['regex:qa[0-9]{4}@example\\.com'],
+          }],
+        }));
+
+        const result = await helper.fill({ rulesFile, requireRuleMatch: true });
+        expect(result.filled).toBe(1);
+        expect(result.fields.find(f => f.id === 'w3')?.generatedValue).toMatch(/^qa\d{4}@example\.com$/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('fills fields from AI prompt data DSL entries', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      const adapter = new MockAiAdapter((request) => {
+        expect(request.prompt).toContain('Generate a QA email address');
+        expect(request.prompt).toContain('"hintText":"邮箱地址"');
+        return { text: '{"value":"ai.user@example.com"}', json: { value: 'ai.user@example.com' } };
+      });
+      const aiRuntime = new AiRuntime({ adapter });
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { hintText: '邮箱地址' },
+            type: 'LLM_GENERATE',
+            data: [{ prompt: 'Generate a QA email address' }],
+          }],
+        }));
+
+        const result = await helper.fill({ rulesFile, requireRuleMatch: true, aiRuntime });
+        expect(result.filled).toBe(1);
+        expect(result.fields.find(f => f.id === 'w3')?.generatedValue).toBe('ai.user@example.com');
+        expect(fillCalls(sendRequest)[0][1]).toMatchObject({ text: 'ai.user@example.com' });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('uses AI data DSL fallback when no runtime is provided', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { hintText: '邮箱地址' },
+            type: 'LLM_GENERATE',
+            data: [{ prompt: 'Generate a QA email address', fallback: 'fallback@example.com' }],
+          }],
+        }));
+
+        const result = await helper.analyze({ rulesFile, requireRuleMatch: true });
+        expect(result.fields.find(f => f.id === 'w3')?.generatedValue).toBe('fallback@example.com');
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
