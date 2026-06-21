@@ -81,7 +81,9 @@
     "onCommand:fliwright.openTraceViewer",
     "onCommand:fliwright.showLastTrace",
     "onCommand:fliwright.openRunViewer",
-    "onCommand:fliwright.showLastRun"
+    "onCommand:fliwright.showLastRun",
+    "onCommand:fliwright.viewTestRun",
+    "onCommand:fliwright.viewScriptRun"
   ],
   "contributes": {
     "viewsContainers": {
@@ -114,10 +116,6 @@
         {
           "id": "fliwright.tests",
           "name": "Tests"
-        },
-        {
-          "id": "fliwright.runs",
-          "name": "Runs"
         },
         {
           "id": "fliwright.state",
@@ -362,6 +360,18 @@
         "command": "fliwright.showLastRun",
         "title": "Fliwright: Show Last Run",
         "icon": "$(history)"
+      },
+      {
+        "command": "fliwright.viewTestRun",
+        "title": "Fliwright: View Test Run",
+        "category": "Fliwright",
+        "icon": "$(history)"
+      },
+      {
+        "command": "fliwright.viewScriptRun",
+        "title": "Fliwright: View Script Run",
+        "category": "Fliwright",
+        "icon": "$(history)"
       }
     ],
     "menus": {
@@ -457,26 +467,6 @@
           "group": "navigation@2"
         },
         {
-          "command": "fliwright.startRecording",
-          "when": "view == fliwright.runs && !fliwright.recording.isRecording",
-          "group": "navigation@1"
-        },
-        {
-          "command": "fliwright.stopRecording",
-          "when": "view == fliwright.runs && fliwright.recording.isRecording",
-          "group": "navigation@2"
-        },
-        {
-          "command": "fliwright.insertRecordedTest",
-          "when": "view == fliwright.runs && fliwright.recording.hasPreview",
-          "group": "navigation@3"
-        },
-        {
-          "command": "fliwright.openRecording",
-          "when": "view == fliwright.runs",
-          "group": "navigation@4"
-        },
-        {
           "command": "fliwright.refreshStateProviders",
           "when": "view == fliwright.state",
           "group": "navigation@1"
@@ -559,8 +549,13 @@
           "group": "inline@1"
         },
         {
-          "command": "fliwright.openFailure",
-          "when": "view == fliwright.runs && viewItem == failure",
+          "command": "fliwright.viewTestRun",
+          "when": "view == fliwright.tests && viewItem =~ /testFile|testCase/",
+          "group": "inline@2"
+        },
+        {
+          "command": "fliwright.viewScriptRun",
+          "when": "view == fliwright.scripts && viewItem == scriptFile",
           "group": "inline@1"
         },
         {

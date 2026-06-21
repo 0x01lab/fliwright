@@ -44,6 +44,7 @@ import { RecordingPanel } from './webview/RecordingPanel.js';
 import { TraceViewerPanel } from './trace/TraceViewerPanel.js';
 import { TraceService } from './trace/TraceService.js';
 import { RunViewerPanel } from './runviewer/RunViewerPanel.js';
+import { RunViewerService } from './runviewer/RunViewerService.js';
 import { TraceStore } from '@fliwright/core';
 import type { TraceMode } from '@fliwright/core';
 
@@ -117,6 +118,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const traceService = new TraceService();
   const traceViewerPanel = new TraceViewerPanel(context.extensionUri);
   const runViewerPanel = new RunViewerPanel(context.extensionUri);
+  const runViewerService = new RunViewerService();
   void updateRecordingContext(recorderService.getSession());
 
   context.subscriptions.push(session);
@@ -725,6 +727,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.showLastRun', async () => {
       await runViewerPanel.openLatest();
+    }),
+    vscode.commands.registerCommand('fliwright.viewTestRun', async (node?: any) => {
+      const root = requireWorkspaceRoot();
+      const runsDir = await runViewerService.getRunsDir(root);
+      if (!runsDir || !node?.id) { vscode.window.showInformationMessage('No run recorded for this test yet.'); return; }
+      const loaded = await runViewerService.findLatestRunForTest(runsDir, node.id);
+      if (!loaded) { vscode.window.showInformationMessage('No run recorded for this test yet.'); return; }
+      await runViewerPanel.openRun(loaded.runDir);
+    }),
+    vscode.commands.registerCommand('fliwright.viewScriptRun', async (node?: any) => {
+      const root = requireWorkspaceRoot();
+      const runsDir = await runViewerService.getRunsDir(root);
+      if (!runsDir || !node?.uri) { vscode.window.showInformationMessage('No run recorded for this script yet.'); return; }
+      const loaded = await runViewerService.findLatestRunForScript(runsDir, relPathOf(root, node.uri));
+      if (!loaded) { vscode.window.showInformationMessage('No run recorded for this script yet.'); return; }
+      await runViewerPanel.openRun(loaded.runDir);
     }),
     vscode.commands.registerCommand('fliwright.startRecording', async () => {
       await runCommand('Start Recording', async () => {
