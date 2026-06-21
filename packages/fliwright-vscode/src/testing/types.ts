@@ -16,6 +16,9 @@ export interface TestGroupNode {
   id: string;                 // "<relPath>::<ancestor titles joined by '/'>/<title>"
   label: string;
   status: TestNodeStatus;
+  /** Eagerly-built subtree (group→children are produced in one pass per file
+   *  so getChildren(testGroup) can simply return this array). */
+  children?: TestTreeNode[];
 }
 
 export interface TestCaseNode {
