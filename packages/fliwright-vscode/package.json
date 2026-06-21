@@ -556,7 +556,7 @@
         {
           "command": "fliwright.viewScriptRun",
           "when": "view == fliwright.scripts && viewItem == scriptFile",
-          "group": "inline@1"
+          "group": "inline@3"
         },
         {
           "command": "fliwright.readStateProvider",
