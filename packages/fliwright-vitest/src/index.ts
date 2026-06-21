@@ -55,6 +55,7 @@ export interface FliwrightConfig {
   requireAssertions?: boolean;
   agentPolicy?: AgentPolicy;
   timelineDir?: string;
+  runsRoot?: string;
   log?: FliwrightLogConfig;
 }
 
@@ -64,6 +65,15 @@ export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUr
     screenshot: 'file',
     ...overrides,
   };
+}
+
+/**
+ * Decide where run artifacts go for a fliwright test run.
+ * Precedence: explicit config.runsRoot > FLIWRIGHT_RUNS_ROOT env > undefined
+ * (the caller — createFliwrightTest — falls back to legacy cwd/.fliwright when undefined).
+ */
+export function resolveRunsRoot(config: { runsRoot?: string }): string | undefined {
+  return config.runsRoot ?? process.env.FLIWRIGHT_RUNS_ROOT;
 }
 
 let sharedDriver: FliwrightDriver | null = null;
@@ -112,8 +122,10 @@ export function createFliwrightTest(config: FliwrightConfig) {
     timeline: async ({ task }, use) => {
       const testName = getTestName(task);
       const testRunId = `${process.env.FLIWRIGHT_RUN_ID ?? runId}-${safeName(testName)}`;
+      const runsRoot = resolveRunsRoot(config);
       const artifactStore = new TimelineArtifactStore({
         cwd: config.timelineDir ?? process.cwd(),
+        ...(runsRoot ? { runsRoot } : {}),
         runId: testRunId,
       });
       const logger = createRunLogger(config, {
