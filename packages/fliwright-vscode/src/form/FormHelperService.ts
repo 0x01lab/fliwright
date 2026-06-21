@@ -7,7 +7,7 @@ import {
   fillFormFieldsCapability,
 } from '@fliwright/cli/capabilities/form';
 import { loadConfig, resolveWorkspacePath } from '../config.js';
-import type { FormRulesEntry, FormRule, FormRunSummary } from '../types.js';
+import type { FormRuleDataEntry, FormRulesEntry, FormRule, FormRunSummary } from '../types.js';
 import { formRuleFromAnalyzeField } from './FormRuleService.js';
 
 export interface PreviewField {
@@ -21,12 +21,17 @@ export interface PreviewField {
 export interface FormRuleSnippet {
   find: SelectorQuery;
   type: 'PRESET_SKILL';
-  data: string[];
+  data: FormRuleDataEntry[];
 }
 
 export class FormHelperService {
   private lastSummary: FormRunSummary | undefined;
   private lastAnalyze: FormAnalyzeResult | undefined;
+  private debugLog: ((message: string) => void) | undefined;
+
+  setDebugLogger(logger: ((message: string) => void) | undefined): void {
+    this.debugLog = logger;
+  }
 
   getLastSummary(): FormRunSummary | undefined {
     return this.lastSummary;
@@ -38,7 +43,12 @@ export class FormHelperService {
 
   async analyze(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry, dataIndex?: number): Promise<FormAnalyzeResult> {
     const options = this.options(workspaceRoot, rulesFile, dataIndex);
-    const result = await analyzeFormCapability(driver, options);
+    const result = await this.runOperation(
+      'analyze',
+      options,
+      () => analyzeFormCapability(driver, options),
+      { rulesFile, dataIndex },
+    );
     this.lastAnalyze = result;
     this.lastSummary = {
       action: 'analyze',
@@ -51,7 +61,12 @@ export class FormHelperService {
 
   async fill(driver: FliwrightDriver, workspaceRoot: vscode.Uri, rulesFile?: FormRulesEntry, dataIndex?: number): Promise<FormFillResult> {
     const options = this.options(workspaceRoot, rulesFile, dataIndex);
-    const result = await fillFormCapability(driver, options);
+    const result = await this.runOperation(
+      'fill',
+      options,
+      () => fillFormCapability(driver, options),
+      { rulesFile, dataIndex },
+    );
     this.lastAnalyze = undefined;
     this.lastSummary = {
       action: 'fill',
@@ -73,7 +88,12 @@ export class FormHelperService {
     dataIndex?: number,
   ): Promise<FormFillResult> {
     const options = this.options(workspaceRoot, rulesFile, dataIndex);
-    const result = await fillFormFieldsCapability(driver, fieldHints, options);
+    const result = await this.runOperation(
+      'fillSelected',
+      options,
+      () => fillFormFieldsCapability(driver, fieldHints, options),
+      { rulesFile, dataIndex, fieldHints },
+    );
     this.lastAnalyze = undefined;
     this.lastSummary = {
       action: 'fill',
@@ -90,12 +110,13 @@ export class FormHelperService {
   previewFields(result: FormAnalyzeResult): PreviewField[] {
     return result.fields.map((field) => {
       const label = field.label ?? field.hintText ?? field.name ?? field.key ?? field.semanticsId ?? field.selector;
-      const masked = isSensitiveField(label, field.semanticType, field.generatedValue);
+      const generatedValue = formatGeneratedValue(field.generatedValue);
+      const masked = isSensitiveField(label, field.semanticType, generatedValue);
       return {
         id: field.id,
         label,
         semanticType: field.semanticType,
-        generatedValue: masked ? maskValue(field.generatedValue) : field.generatedValue,
+        generatedValue: masked ? maskValue(generatedValue) : generatedValue,
         masked,
       };
     });
@@ -116,6 +137,82 @@ export class FormHelperService {
       dataIndex,
     };
   }
+
+  private async runOperation<T>(
+    operation: 'analyze' | 'fill' | 'fillSelected',
+    options: FormHelperOptions,
+    run: () => Promise<T>,
+    context: { rulesFile?: FormRulesEntry; dataIndex?: number; fieldHints?: string[] },
+  ): Promise<T> {
+    const config = loadConfig();
+    const timeoutMs = normalizeTimeout(config.formOperationTimeoutMs);
+    const start = Date.now();
+    this.logDebug(`${operation} started ${formatOperationContext(options, context)}`);
+
+    try {
+      const result = await withTimeout(run(), timeoutMs, () => (
+        `FormHelper ${operation} timed out after ${timeoutMs}ms. `
+        + `This usually means a VM Service extension call did not return; check the Flutter debug console for bridge logs and try narrowing the selected fields. `
+        + formatOperationContext(options, context)
+      ));
+      this.logDebug(`${operation} finished in ${Date.now() - start}ms ${formatResultSummary(result)}`);
+      return result;
+    } catch (error) {
+      this.logDebug(`${operation} failed after ${Date.now() - start}ms: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
+
+  private logDebug(message: string): void {
+    if (!loadConfig().formDebug) return;
+    this.debugLog?.(`[FormHelperDebug] ${new Date().toISOString()} ${message}`);
+  }
+}
+
+function normalizeTimeout(value: number): number {
+  return Number.isFinite(value) && value >= 1000 ? value : 60_000;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: () => string): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(message())), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
+function formatOperationContext(
+  options: FormHelperOptions,
+  context: { rulesFile?: FormRulesEntry; dataIndex?: number; fieldHints?: string[] },
+): string {
+  const parts = [
+    `rules=${context.rulesFile ? formRulesFileName(context.rulesFile) : options.rulesFile ?? options.rulesDir ?? 'auto'}`,
+    `locale=${options.locale ?? 'default'}`,
+    `requireRuleMatch=${options.requireRuleMatch === true}`,
+  ];
+  if (context.dataIndex !== undefined) parts.push(`dataIndex=${context.dataIndex}`);
+  if (context.fieldHints) {
+    parts.push(`selected=${context.fieldHints.length}`);
+    parts.push(`hints=${context.fieldHints.map(quoteDebugValue).join(', ')}`);
+  }
+  return parts.join(' ');
+}
+
+function formatResultSummary(result: unknown): string {
+  if (!result || typeof result !== 'object') return '';
+  const value = result as Partial<FormAnalyzeResult & FormFillResult>;
+  if (Array.isArray(value.fields) && typeof value.filled === 'number') {
+    return `fields=${value.fields.length} filled=${value.filled} skipped=${value.skipped ?? 0} errors=${value.errors?.length ?? 0}`;
+  }
+  if (Array.isArray(value.fields)) return `fields=${value.fields.length}`;
+  return '';
+}
+
+function quoteDebugValue(value: string): string {
+  const trimmed = value.length > 80 ? `${value.slice(0, 77)}...` : value;
+  return JSON.stringify(trimmed);
 }
 
 function isSensitiveField(label: string, semanticType: string, value: string): boolean {
@@ -129,7 +226,8 @@ function isSensitiveField(label: string, semanticType: string, value: string): b
 }
 
 function looksLikeToken(value: string): boolean {
-  return /^[A-Za-z0-9_-]{24,}$/.test(value) || value.split('.').length === 3;
+  const text = formatGeneratedValue(value);
+  return /^[A-Za-z0-9_-]{24,}$/.test(text) || text.split('.').length === 3;
 }
 
 function maskValue(value: string): string {
@@ -175,6 +273,7 @@ export function dataSetLabels(rules: FormRule[]): DataSetLabel[] {
     const preview = rules
       .filter(r => (r.type === 'PRESET_SKILL' || r.type === 'LLM_GENERATE') && r.data && r.data[i] !== undefined)
       .map(r => r.data![i])
+      .map(formatGeneratedValue)
       .join(' / ');
     results.push({
       index: i,
@@ -198,7 +297,8 @@ export function formatFormFillDebug(result: FormFillResult): string[] {
   const lines = ['Form fill debug:'];
   for (const field of result.fields) {
     const error = result.errors.find((entry) => entry.fieldId === field.id)?.error;
-    const value = field.generatedValue ? ` value=${JSON.stringify(field.generatedValue)}` : '';
+    const generatedValue = formatGeneratedValue(field.generatedValue);
+    const value = generatedValue ? ` value=${JSON.stringify(generatedValue)}` : '';
     const errorText = error ? ` error=${error}` : '';
     const reason = field.reason ? ` reason=${field.reason}` : '';
     const metadata = [
@@ -215,4 +315,16 @@ export function formatFormFillDebug(result: FormFillResult): string[] {
     );
   }
   return lines;
+}
+
+function formatGeneratedValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map((entry) => formatGeneratedValue(entry)).join(',');
+  if (value == null) return '';
+  if (typeof value === 'object') {
+    const entry = value as Record<string, unknown>;
+    if (entry.value !== undefined) return formatGeneratedValue(entry.value);
+    if (entry.fixed !== undefined) return formatGeneratedValue(entry.fixed);
+  }
+  return String(value);
 }

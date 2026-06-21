@@ -12,13 +12,14 @@ export interface ResolveVmServiceOptions {
 
 export interface VmServiceCandidate {
   url: string;
-  source: 'cache' | 'log' | 'port-scan';
+  source: 'cache' | 'workspace-config' | 'log' | 'port-scan';
   label: string;
   confidence: number;
 }
 
 export interface DiscoverVmServiceOptions {
   cachedUrl?: string | null;
+  workspaceConfigUrl?: string | null;
   logText?: string;
   ports?: number[];
 }
@@ -58,6 +59,16 @@ export async function discoverVmServiceCandidates(options: DiscoverVmServiceOpti
       source: 'cache',
       label: 'Last successful connection',
       confidence: 80,
+    });
+  }
+
+  const workspaceConfigUrl = normalizeVmServiceUrl(options.workspaceConfigUrl);
+  if (workspaceConfigUrl) {
+    add({
+      url: workspaceConfigUrl,
+      source: 'workspace-config',
+      label: '.fliwright/config.json',
+      confidence: 90,
     });
   }
 

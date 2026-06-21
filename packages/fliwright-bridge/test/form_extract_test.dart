@@ -68,6 +68,7 @@ void main() {
       );
       final fields = result['fields'] as List;
       expect(fields, hasLength(1));
+      expect(fields.first['ref'], startsWith('e'));
       expect(fields.first, containsPair('ancestorKey', 'emailContainer'));
       expect(fields.first, containsPair('semanticsId', 'login.email'));
       expect(fields.first, containsPair('semanticsLabel', 'Email address'));

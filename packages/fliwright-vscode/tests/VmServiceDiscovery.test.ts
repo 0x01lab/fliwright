@@ -74,12 +74,14 @@ describe('VmServiceDiscovery', () => {
 
     const candidates = await discoverVmServiceCandidates({
       cachedUrl: 'http://127.0.0.1:11111/cache=/',
+      workspaceConfigUrl: 'http://127.0.0.1:33333/workspace=/',
       logText: 'A Dart VM Service is available at: http://127.0.0.1:22222/log=/',
       ports: [],
     });
 
     expect(candidates.map((candidate) => [candidate.source, candidate.url])).toEqual([
       ['log', 'ws://127.0.0.1:22222/log=/ws'],
+      ['workspace-config', 'ws://127.0.0.1:33333/workspace=/ws'],
       ['cache', 'ws://127.0.0.1:11111/cache=/ws'],
     ]);
   });

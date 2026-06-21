@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Uri } from 'vscode';
+import { Uri, __setConfiguration } from 'vscode';
 import { FormHelperService, formRuleSnippetForField, formatFormFillDebug } from '../src/form/FormHelperService.js';
 
 describe('FormHelperService', () => {
@@ -106,6 +106,39 @@ describe('FormHelperService', () => {
     expect(receivedOptions).toMatchObject({ requireRuleMatch: true });
     expect(service.getLastSummary()).toMatchObject({ action: 'fill', filled: 1, skipped: 1 });
     expect(service.getLastAnalyze()).toBeUndefined();
+  });
+
+  it('writes form debug logs when enabled', async () => {
+    __setConfiguration({ formDebug: true, formOperationTimeoutMs: 1000 });
+    const service = new FormHelperService();
+    const logs: string[] = [];
+    service.setDebugLogger((message) => logs.push(message));
+
+    try {
+      const result = await service.analyze({ page: { formHelper: { analyze: async () => ({ fields: [] }) } } } as any, Uri.file('/workspace'));
+
+      expect(result.fields).toEqual([]);
+      expect(logs.join('\n')).toContain('[FormHelperDebug]');
+      expect(logs.join('\n')).toContain('analyze started');
+      expect(logs.join('\n')).toContain('analyze finished');
+    } finally {
+      __setConfiguration({});
+    }
+  });
+
+  it('times out hung form helper operations', async () => {
+    __setConfiguration({ formOperationTimeoutMs: 1000 });
+    const service = new FormHelperService();
+
+    try {
+      await expect(service.fillSelected(
+        { page: { formHelper: { fillFields: async () => new Promise(() => undefined) } } } as any,
+        Uri.file('/workspace'),
+        ['Name'],
+      )).rejects.toThrow('FormHelper fillSelected timed out after 1000ms');
+    } finally {
+      __setConfiguration({});
+    }
   });
 
   it('creates rule snippets with find wrapper and structured match keys', () => {

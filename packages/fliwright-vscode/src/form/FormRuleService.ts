@@ -177,7 +177,23 @@ export class FormRuleService {
       if ((rule.type === 'PRESET_SKILL' || rule.type === 'LLM_GENERATE') && rule.data !== undefined && !Array.isArray(rule.data)) {
         throw new Error(`rules[${index}].data must be an array`);
       }
+      if (rule.action !== undefined) {
+        this.validateAction(rule.action, index);
+      }
     });
+  }
+
+  private validateAction(action: unknown, index: number): void {
+    if (!action || typeof action !== 'object' || Array.isArray(action)) {
+      throw new Error(`rules[${index}].action must be an object`);
+    }
+    const value = action as Record<string, unknown>;
+    if (typeof value.script !== 'string' || value.script.length === 0) {
+      throw new Error(`rules[${index}].action.script must be a string`);
+    }
+    if (value.args !== undefined && (!value.args || typeof value.args !== 'object' || Array.isArray(value.args))) {
+      throw new Error(`rules[${index}].action.args must be an object`);
+    }
   }
 
   private validateFind(find: unknown, index: number): void {
@@ -193,6 +209,14 @@ export class FormRuleService {
     }
     if (query.within !== undefined) {
       this.validateFind(query.within, index);
+    }
+    if (query.or !== undefined) {
+      if (!Array.isArray(query.or)) throw new Error(`rules[${index}].find.or must be an array`);
+      for (const entry of query.or) this.validateFind(entry, index);
+    }
+    if (query.and !== undefined) {
+      if (!Array.isArray(query.and)) throw new Error(`rules[${index}].find.and must be an array`);
+      for (const entry of query.and) this.validateFind(entry, index);
     }
     if (query.position !== undefined && (typeof query.position !== 'object' || Array.isArray(query.position))) {
       throw new Error(`rules[${index}].find.position must be an object`);
@@ -215,11 +239,61 @@ export class FormRuleService {
 }
 
 export function formRuleFromAnalyzeField(field: FormAnalyzeResult['fields'][number]): FormRule {
-  return {
+  const rule: FormRule = {
     find: bestFindForField(field),
     type: 'PRESET_SKILL',
     data: field.generatedValue ? [field.generatedValue] : [],
   };
+  const action = actionForAnalyzeField(field);
+  if (action) rule.action = action;
+  return rule;
+}
+
+function actionForAnalyzeField(field: FormAnalyzeResult['fields'][number]) {
+  if (field.controlType !== 'select' || !field.semanticsId) return undefined;
+  const optionSemanticId = optionSemanticIdTemplate(field);
+  if (!optionSemanticId) return undefined;
+  return {
+    script: isLikelyMultiSelectField(field) ? 'multiSelect.byOptionSemantics' : 'select.byOptionSemantics',
+    args: {
+      open: { match: { semanticIdentifier: field.semanticsId } },
+      optionSemanticId,
+      ...(isLikelyMultiSelectField(field) ? { done: { match: { text: 'Done' } } } : {}),
+    },
+  };
+}
+
+function optionSemanticIdTemplate(field: FormAnalyzeResult['fields'][number]): string | undefined {
+  const generated = field.generatedValue?.trim();
+  const exact = generated
+    ? field.options?.find((option) => option.value === generated || option.label === generated)
+    : undefined;
+  const sample = exact?.semanticsId ?? field.options?.find((option) => option.semanticsId)?.semanticsId;
+  if (!sample) return undefined;
+  const sampleValue = exact?.value ?? field.options?.find((option) => option.semanticsId === sample)?.value;
+  if (sampleValue && sample.endsWith(`.${sampleValue}`)) {
+    return `${sample.slice(0, -sampleValue.length)}\${value}`;
+  }
+  const sampleLabel = exact?.label ?? field.options?.find((option) => option.semanticsId === sample)?.label;
+  if (sampleLabel && sample.endsWith(`.${sampleLabel}`)) {
+    return `${sample.slice(0, -sampleLabel.length)}\${value}`;
+  }
+  return undefined;
+}
+
+function isLikelyMultiSelectField(field: FormAnalyzeResult['fields'][number]): boolean {
+  const text = [
+    field.name,
+    field.label,
+    field.hintText,
+    field.semanticsId,
+    field.semanticsLabel,
+    field.semanticsHint,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return text.includes('multiselect')
+    || text.includes('multi select')
+    || text.includes('multiple')
+    || text.includes('jurisdictions');
 }
 
 function bestFindForField(field: FormAnalyzeResult['fields'][number]) {

@@ -23,6 +23,8 @@ export function loadConfig(): ExtensionConfig {
     formRulesFile: config.get<string | null>('formRulesFile', null),
     formLocale: config.get<string>('formLocale', 'zh_CN'),
     formPreviewBeforeFill: config.get<boolean>('formPreviewBeforeFill', true),
+    formDebug: config.get<boolean>('formDebug', false),
+    formOperationTimeoutMs: config.get<number>('formOperationTimeoutMs', 60_000),
     codeLensEnabled: config.get<boolean>('codeLensEnabled', true),
     scriptGlob: config.get<string>('scriptGlob', '.fliwright/scripts/**/*.{js,mjs,cjs}'),
   };

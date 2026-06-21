@@ -15,6 +15,7 @@ import type {
 import { Selector } from './Selector.js';
 import { FormHelper } from './FormHelper.js';
 import type { AssertionTimelineOptions } from './Assertion.js';
+import { SelectController } from './SelectRecipes.js';
 
 export type NavigationWaitUntil = 'none' | 'settled';
 
@@ -243,12 +244,20 @@ export class Page {
   }
 
   private _formHelper: FormHelper | null = null;
+  private _select: SelectController | null = null;
 
   get formHelper(): FormHelper {
     if (!this._formHelper) {
       this._formHelper = new FormHelper(this.sendRequest);
     }
     return this._formHelper;
+  }
+
+  get select(): SelectController {
+    if (!this._select) {
+      this._select = new SelectController(this);
+    }
+    return this._select;
   }
 
   // ── Raw Coordinates ──────────────────────────────────────────

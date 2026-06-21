@@ -1,17 +1,23 @@
+import { readWorkspaceConfig } from '@fliwright/core';
+
 const SCAN_PORTS = [8181, 9189, 54321];
 
 export interface ResolveOptions {
   cliFlag?: string;
   configUrl?: string;
+  cwd?: string;
 }
 
 export async function resolveVmUrl(options: ResolveOptions = {}): Promise<string | null> {
   if (options.cliFlag) return options.cliFlag;
 
-  const envUrl = process.env.FLIWRIGHT_VM_URL;
+  const envUrl = process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL;
   if (envUrl) return envUrl;
 
   if (options.configUrl) return options.configUrl;
+
+  const workspaceUrl = (await readWorkspaceConfig(options.cwd)).vmServiceUrl;
+  if (workspaceUrl) return workspaceUrl;
 
   return discoverVmServiceUrl();
 }

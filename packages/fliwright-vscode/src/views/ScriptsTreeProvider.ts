@@ -30,8 +30,8 @@ export class ScriptsTreeProvider implements vscode.TreeDataProvider<ScriptTreeNo
     item.contextValue = 'scriptFile';
     item.iconPath = new vscode.ThemeIcon(element.lastResult?.passed === false ? 'error' : 'terminal');
     item.command = {
-      command: 'fliwright.runScript',
-      title: 'Run Script',
+      command: 'fliwright.openScript',
+      title: 'Open Script',
       arguments: [element],
     };
     return item;

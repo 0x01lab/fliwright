@@ -21,7 +21,7 @@ export interface RunOptions {
 }
 
 export interface RunDeps {
-  resolveVmUrl?: (options: { cliFlag?: string; configUrl?: string }) => Promise<string | null>;
+  resolveVmUrl?: (options: { cliFlag?: string; configUrl?: string; cwd?: string }) => Promise<string | null>;
   onVmResolved?: (url: string) => void;
 }
 
@@ -41,6 +41,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
   const vmUrl = await resolver({
     cliFlag: options.vmUrl,
     configUrl: config.vmServiceUrl,
+    cwd,
   });
 
   if (!vmUrl) {

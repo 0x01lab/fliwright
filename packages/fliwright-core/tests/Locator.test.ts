@@ -179,6 +179,7 @@ describe('Locator', () => {
       text: 'exact@example.com',
       replaceAll: 'true',
       targetId: 'address-email-field',
+      targetRect: JSON.stringify({ x: 20, y: 100, width: 360, height: 48 }),
     });
   });
 

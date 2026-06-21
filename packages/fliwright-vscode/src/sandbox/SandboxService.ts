@@ -114,11 +114,21 @@ export class SandboxService {
     const selectedByKey = new Map(
       (options.selectedEntries ?? []).map((entry) => [appliedKey(entry.method, entry.endpoint), entry] as const),
     );
-    // Desired state = endpoints that SHOULD have an active route: restored selections
-    // plus (when applyDefaultRules) endpoints that resolve to a default rule. Routes
-    // merely observed in Flutter are not desired on their own — only what VSCode
-    // selects is. This set drives the prune pass below.
+    // Desired state = endpoints that SHOULD have an active route: valid routes
+    // already observed in Flutter, restored selections, plus (when
+    // applyDefaultRules) endpoints that resolve to a default rule. This lets
+    // VSCode adopt rule changes made by external Fliwright scripts/tests when
+    // their route id contains rule metadata.
     const desiredActiveKeys = new Set<string>();
+    for (const route of sync.routes) {
+      const parsed = parseRouteId(route.id);
+      if (!parsed) continue;
+      const applied = sync.applied.find((rule) => (
+        appliedKey(rule.method, rule.endpoint) === appliedKey(parsed.method, parsed.endpoint)
+        && rule.ruleName === parsed.ruleName
+      ));
+      if (applied) desiredActiveKeys.add(appliedKey(applied.method, applied.endpoint));
+    }
     for (const entry of options.selectedEntries ?? []) {
       desiredActiveKeys.add(appliedKey(entry.method, entry.endpoint));
     }

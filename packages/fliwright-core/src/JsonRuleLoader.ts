@@ -62,6 +62,7 @@ export class JsonRuleLoader {
         name,
         type: 'PRESET_SKILL',
         find,
+        action: rule.action,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: (field, locale, options) => {
           const entry = rule.data![index % rule.data!.length];
@@ -78,6 +79,7 @@ export class JsonRuleLoader {
         name,
         type: 'LLM_GENERATE',
         find,
+        action: rule.action,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: (field, locale, options) => {
           const entry = rule.data![index % rule.data!.length];
@@ -93,6 +95,7 @@ export class JsonRuleLoader {
         name,
         type: 'REGEXP_MOCK',
         find,
+        action: rule.action,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: () => randexp.gen(),
       };

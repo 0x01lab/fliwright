@@ -293,12 +293,18 @@ export class Locator {
     this.assertSuccessResponse(response, 'type');
   }
 
-  async fill(text: string, options?: { delay?: number; charDelay?: number; timeout?: number }): Promise<void> {
+  async fill(text: string, options?: {
+    delay?: number;
+    charDelay?: number;
+    timeout?: number;
+    checkStable?: boolean;
+  }): Promise<void> {
     const response = await this.sendAction('fill', {
       text,
       charDelay: options?.charDelay ?? options?.delay,
       replaceAll: true,
       timeout: options?.timeout,
+      checkStable: options?.checkStable,
     });
     this.assertSuccessResponse(response, 'fill');
   }
@@ -388,13 +394,17 @@ export class Locator {
       charDelay: options?.charDelay,
       replaceAll: true,
       targetId: resolved.id,
+      targetRect: resolved.rect ? JSON.stringify(resolved.rect) : undefined,
     });
     this.assertSuccessResponse(response, 'fill');
   }
 
   /** Click using a pre-resolved widget. */
   async clickResolved(resolved: WidgetInfo): Promise<void> {
-    const response = await this.sendAction('tap', { targetId: resolved.id });
+    const response = await this.sendAction('tap', {
+      targetId: resolved.id,
+      targetRect: resolved.rect ? JSON.stringify(resolved.rect) : undefined,
+    });
     this.assertSuccessResponse(response, 'click');
   }
 

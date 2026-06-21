@@ -460,6 +460,7 @@ export interface FormFieldMeta {
   semanticsLabel?: string;
   semanticsHint?: string;
   role?: string;
+  ref?: string;
   hintText?: string;
   label?: string;
   keyboardType?: string;
@@ -540,13 +541,15 @@ export interface FormHelperOptions {
   dataIndex?: number;
   /** Optional AI runtime used by form-rule data DSL entries such as `ai:...` or `{ "prompt": "..." }`. */
   aiRuntime?: AiRuntime;
+  /** Optional custom action scripts used by form-rule `action.script` entries. */
+  actionScripts?: Record<string, FormActionScript>;
 }
 
 export type FormRuleDataEntry =
   | string
   | {
-      value?: string;
-      fixed?: string;
+      value?: string | string[];
+      fixed?: string | string[];
       regex?: string;
       regexp?: string;
       prompt?: string;
@@ -561,9 +564,35 @@ export interface FormSkill {
   name: string;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
   find?: SelectorQuery;
+  action?: FormRuleAction;
   match: (field: FormFieldMeta) => boolean;
   generate: (field: FormFieldMeta, locale: string, options?: FormHelperOptions) => string | Promise<string>;
 }
+
+export interface FormRuleAction {
+  script: string;
+  args?: Record<string, unknown>;
+}
+
+export interface FormActionLocator {
+  click(options?: unknown): Promise<void>;
+  fill(text: string, options?: unknown): Promise<void>;
+  type(text: string, options?: unknown): Promise<void>;
+  selectOption(value: string | number, options?: unknown): Promise<void>;
+  scrollIntoView(options?: unknown): Promise<void>;
+}
+
+export interface FormActionScriptContext {
+  field: FormFieldMeta;
+  value: string;
+  action: FormRuleAction;
+  fieldSelector: SelectorQuery;
+  option?: FormFieldOption;
+  sendRequest: SendRequest;
+  locator: (selector: SelectorInput) => FormActionLocator;
+}
+
+export type FormActionScript = (context: FormActionScriptContext) => void | Promise<void>;
 
 export interface FormRule {
   find?: SelectorQuery;
@@ -571,6 +600,7 @@ export interface FormRule {
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
   data?: FormRuleDataEntry[];
   pattern?: string;
+  action?: FormRuleAction;
 }
 
 export interface FormRulesFile {

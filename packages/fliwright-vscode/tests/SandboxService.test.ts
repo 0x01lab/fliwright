@@ -248,7 +248,7 @@ describe('SandboxService', () => {
     expect(service.getAppliedRules()).toHaveLength(0);
   });
 
-  it('prunes VSCode-managed Flutter routes that are not in the restored selection', async () => {
+  it('adopts VSCode-managed Flutter routes even when they were set outside VS Code', async () => {
     const service = new SandboxService();
     const removeFlutterRoute = vi.fn().mockResolvedValue(undefined);
     const listFlutterRoutes = vi.fn().mockResolvedValue([
@@ -262,12 +262,14 @@ describe('SandboxService', () => {
       { restoreSelections: true, selectedEntries: [] },
     );
 
-    expect(removeFlutterRoute).toHaveBeenCalledWith('/v1/token', 'GET');
-    expect(sync.pruned).toBe(1);
-    // Pruned routes must not appear in the returned applied set, otherwise the
-    // caller re-saves them to the selection store and resurrects them later.
-    expect(sync.applied).toEqual([]);
-    expect(service.getAppliedRules()).toHaveLength(0);
+    expect(removeFlutterRoute).not.toHaveBeenCalled();
+    expect(sync.pruned).toBe(0);
+    expect(sync.applied).toMatchObject([
+      { endpoint: '/v1/token', method: 'GET', ruleName: 'success' },
+    ]);
+    expect(service.getAppliedRules()).toMatchObject([
+      { endpoint: '/v1/token', method: 'GET', ruleName: 'success' },
+    ]);
   });
 
   it('prunes foreign (non-VSCode) Flutter routes too when the desired state is empty', async () => {

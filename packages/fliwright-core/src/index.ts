@@ -39,6 +39,10 @@ export type {
   FormFillResult,
   FormAnalyzeResult,
   FormHelperOptions,
+  FormRuleAction,
+  FormActionLocator,
+  FormActionScriptContext,
+  FormActionScript,
   FormRuleDataEntry,
   FormSkill,
   FormRule,
@@ -65,9 +69,21 @@ export { Protocol } from './Protocol.js';
 export { VMServiceConnector, setConnectorDebugLog } from './VMServiceConnector.js';
 export { FliwrightDriver } from './Driver.js';
 export type { DriverOptions } from './Driver.js';
+export {
+  FLIWRIGHT_WORKSPACE_CONFIG_PATH,
+  clearWorkspaceVmServiceUrl,
+  readWorkspaceConfig,
+  readWorkspaceConfigSync,
+  workspaceConfigPath,
+  writeWorkspaceConfig,
+  writeWorkspaceVmServiceUrl,
+} from './WorkspaceConfig.js';
+export type { FliwrightWorkspaceConfig } from './WorkspaceConfig.js';
 
 export { Page } from './Page.js';
 export type { NavigationWaitUntil, PageNavigationOptions, ResetToHomeOptions } from './Page.js';
+export { SelectController, builtInSelectRecipes } from './SelectRecipes.js';
+export type { SelectRecipe, SelectRecipeContext, SelectRecipeUseOptions } from './SelectRecipes.js';
 export { Locator } from './Locator.js';
 export { Selector } from './Selector.js';
 export { Assertion, AssertionError, createExpect } from './Assertion.js';
@@ -114,6 +130,7 @@ export { SnapshotStore } from './SnapshotStore.js';
 export { SelfHealingEngine } from './SelfHealingEngine.js';
 export { MultiDimensionalHealingStrategy, ngramSimilarity } from './strategies/MultiDimensionalHealingStrategy.js';
 export { FormHelper } from './FormHelper.js';
+export { builtInFormActionScripts } from './FormActionScripts.js';
 export { SemanticInferrer } from './SemanticInferrer.js';
 export { FakerGenerator } from './FakerGenerator.js';
 export { SkillRegistry } from './SkillRegistry.js';
@@ -204,6 +221,8 @@ export type { AgentDiagnosis, PassiveAgentContext, PassiveAgentOptions } from '.
 export { AgentRepair } from './agent/AgentRepair.js';
 export type { AgentRepairOptions, RepairProposal, RepairResult, SafeRepairAction } from './agent/AgentRepair.js';
 export { MockRuntime, matchesCall } from './mocks/MockRuntime.js';
+export { FliwrightMockService, mock } from './mocks/MockService.js';
+export type { FliwrightMockServiceOptions } from './mocks/MockService.js';
 export type {
   MockBackend,
   MockTimelineMetadata,

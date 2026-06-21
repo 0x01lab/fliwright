@@ -67,6 +67,7 @@ function field(overrides: Partial<FormFieldMeta> & { id: string }): FormFieldMet
     rect: { x: 10, y: 100, width: 300, height: 48 },
     obscureText: false,
     enabled: true,
+    ref: `ref-${overrides.id}`,
     selector: `text=${overrides.hintText ?? overrides.label ?? 'Field'}`,
     ...overrides,
   };
@@ -317,7 +318,7 @@ describe('SemanticInferrer: inference priority', () => {
 
 describe('FormHelper: selector type parsing', () => {
   it('fills by extracted field id while preserving the reported selector', async () => {
-    const fields = [field({ id: 'f1', hintText: 'Name', selector: 'text=姓名' })];
+    const fields = [field({ id: 'f1', hintText: 'Name', selector: 'text=姓名', ref: undefined })];
     const send = createMockSendRequest({
       'ext.fliwright.extractForm': { fields },
       ...DEFAULT_MOCK_RESPONSES,
@@ -329,7 +330,7 @@ describe('FormHelper: selector type parsing', () => {
   });
 
   it('handles key= selector', async () => {
-    const fields = [field({ id: 'f1', hintText: 'Name', selector: 'key=name_field' })];
+    const fields = [field({ id: 'f1', hintText: 'Name', selector: 'key=name_field', ref: undefined })];
     const send = createMockSendRequest({
       'ext.fliwright.extractForm': { fields },
       ...DEFAULT_MOCK_RESPONSES,
@@ -340,7 +341,7 @@ describe('FormHelper: selector type parsing', () => {
   });
 
   it('handles byType= selector', async () => {
-    const fields = [field({ id: 'f1', hintText: 'Name', selector: 'byType=TextFormField' })];
+    const fields = [field({ id: 'f1', hintText: 'Name', selector: 'byType=TextFormField', ref: undefined })];
     const send = createMockSendRequest({
       'ext.fliwright.extractForm': { fields },
       ...DEFAULT_MOCK_RESPONSES,
@@ -351,7 +352,7 @@ describe('FormHelper: selector type parsing', () => {
   });
 
   it('handles bare text selector (no prefix)', async () => {
-    const fields = [field({ id: 'f1', hintText: 'Name', selector: '姓名' })];
+    const fields = [field({ id: 'f1', hintText: 'Name', selector: '姓名', ref: undefined })];
     const send = createMockSendRequest({
       'ext.fliwright.extractForm': { fields },
       ...DEFAULT_MOCK_RESPONSES,
@@ -480,6 +481,18 @@ describe('FormHelper: large form with all semantic types', () => {
     const typeCalls = fillCalls(send);
     expect(typeCalls.length).toBe(9);
     expect(typeCalls.every(c => (c[1] as Record<string, unknown>).replaceAll === 'true')).toBe(true);
+    expect(typeCalls.map(c => (c[1] as Record<string, unknown>).ref)).toEqual([
+      'ref-f1',
+      'ref-f2',
+      'ref-f3',
+      'ref-f4',
+      'ref-f5',
+      'ref-f7',
+      'ref-f8',
+      'ref-f9',
+      'ref-f10',
+    ]);
+    expect(typeCalls.every(c => (c[1] as Record<string, unknown>).selector === undefined)).toBe(true);
   });
 });
 
@@ -629,8 +642,8 @@ describe('FormHelper: error handling', () => {
 
   it('continues filling other fields after one error', async () => {
     const fields = [
-      field({ id: 'f1', hintText: 'Name', selector: 'text=Name' }),
-      field({ id: 'f2', hintText: 'Phone', selector: 'text=Phone' }),
+      field({ id: 'f1', hintText: 'Name', selector: 'text=Name', ref: undefined }),
+      field({ id: 'f2', hintText: 'Phone', selector: 'text=Phone', ref: undefined }),
     ];
     const send = vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
       if (method === 'ext.fliwright.extractForm') return Promise.resolve({ fields });

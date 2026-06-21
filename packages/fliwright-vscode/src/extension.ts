@@ -2,7 +2,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { FormAnalyzeResult, FormFillResult } from '@fliwright/core';
-import { setConnectorDebugLog } from '@fliwright/core';
+import {
+  clearWorkspaceVmServiceUrl,
+  readWorkspaceConfigSync,
+  setConnectorDebugLog,
+  writeWorkspaceVmServiceUrl,
+} from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
 import { FailureContextStore } from './failure/FailureContextStore.js';
 import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug, dataSetLabels } from './form/FormHelperService.js';
@@ -36,6 +41,7 @@ import { setEditorOutput } from './editor/TestEditorPanel.js';
 import { RecordingPanel } from './webview/RecordingPanel.js';
 import { TraceViewerPanel } from './trace/TraceViewerPanel.js';
 import { TraceService } from './trace/TraceService.js';
+import { RunViewerPanel } from './runviewer/RunViewerPanel.js';
 import { TraceStore } from '@fliwright/core';
 import type { TraceMode } from '@fliwright/core';
 
@@ -60,6 +66,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const session = new FliwrightSession();
   const sandboxService = new SandboxService();
   const formHelperService = new FormHelperService();
+  formHelperService.setDebugLogger((message) => output.appendLine(message));
   const testDiscoveryService = new TestDiscoveryService();
   const scriptDiscoveryService = new ScriptDiscoveryService();
   const runner = new VitestRunner();
@@ -92,6 +99,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const traceService = new TraceService();
   const traceViewerPanel = new TraceViewerPanel(context.extensionUri);
+  const runViewerPanel = new RunViewerPanel(context.extensionUri);
   void updateRecordingContext(recorderService.getSession());
 
   context.subscriptions.push(session);
@@ -120,6 +128,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const latestUrl = urls.at(-1);
     if (!latestUrl) return;
 
+    void persistWorkspaceVmServiceUrl(latestUrl, 'Flutter debug output');
     scheduleAutoConnect('Flutter debug output', 100, {
       forceReconnect: Boolean(session.currentUrl && session.currentUrl !== latestUrl),
     });
@@ -235,6 +244,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.debug.onDidStartDebugSession((debugSession) => {
       if (/flutter|dart/i.test(`${debugSession.type} ${debugSession.name}`)) {
+        void clearPersistedWorkspaceVmServiceUrl('Flutter debug session started');
         scheduleAutoConnect('Flutter debug session', 500);
       }
     }),
@@ -363,6 +373,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         clearStateProviderWatches();
         sandboxService.resetController();
         await session.disconnect();
+        await clearPersistedWorkspaceVmServiceUrl('VS Code disconnected');
         vscode.window.showInformationMessage('Disconnected from VM Service');
       });
     }),
@@ -648,6 +659,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.showLastTrace', async () => {
       await traceViewerPanel.openLatest();
+    }),
+    vscode.commands.registerCommand('fliwright.openRunViewer', async () => {
+      await runViewerPanel.openWithPicker();
+    }),
+    vscode.commands.registerCommand('fliwright.showLastRun', async () => {
+      await runViewerPanel.openLatest();
     }),
     vscode.commands.registerCommand('fliwright.startRecording', async () => {
       await runCommand('Start Recording', async () => {
@@ -977,8 +994,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     session.setScanning(options.reason, options.forceReconnect);
+    const workspaceRoot = getWorkspaceRoot();
     const candidates = await discoverVmServiceCandidates({
       cachedUrl: context.workspaceState.get<string>(LAST_VM_SERVICE_URL_KEY),
+      workspaceConfigUrl: workspaceRoot ? readWorkspaceConfigSync(workspaceRoot.fsPath).vmServiceUrl : undefined,
       logText: debugLogBuffer,
     });
 
@@ -1033,12 +1052,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   async function onConnected(url: string, notify: boolean): Promise<void> {
     await context.workspaceState.update(LAST_VM_SERVICE_URL_KEY, url);
+    await persistWorkspaceVmServiceUrl(url, 'VS Code connected');
     startHealthCheck();
     await appendMockStartupDebug();
     await configureMocksAfterConnect();
     output.appendLine(`Connected to VM Service: ${url}`);
     if (notify) {
       vscode.window.showInformationMessage(`Connected to ${url}`);
+    }
+  }
+
+  async function persistWorkspaceVmServiceUrl(url: string, source: string): Promise<void> {
+    const root = getWorkspaceRoot();
+    if (!root) return;
+    try {
+      await writeWorkspaceVmServiceUrl(url, { cwd: root.fsPath, source });
+      output.appendLine(`Wrote VM Service URL to .fliwright/config.json (${source}): ${url}`);
+    } catch (error) {
+      output.appendLine(`Failed to write .fliwright/config.json: ${messageOf(error)}`);
+    }
+  }
+
+  async function clearPersistedWorkspaceVmServiceUrl(source: string): Promise<void> {
+    const root = getWorkspaceRoot();
+    if (!root) return;
+    try {
+      await clearWorkspaceVmServiceUrl({ cwd: root.fsPath, source });
+      output.appendLine(`Cleared VM Service URL in .fliwright/config.json (${source}).`);
+    } catch (error) {
+      output.appendLine(`Failed to clear .fliwright/config.json VM Service URL: ${messageOf(error)}`);
     }
   }
 
@@ -1706,6 +1748,10 @@ function isActiveSessionState(status: string): boolean {
 
 function mockEndpointKey(method: string, endpoint: string): string {
   return `${method.toUpperCase()} ${endpoint}`;
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function logMockRouteSample(label: string, routes: Array<{ method: string; endpoint: string; ruleName: string }>): void {

@@ -6,8 +6,8 @@ import { Assertion, Locator } from '@fliwright/core';
 import { AiRuntime } from '@fliwright/core';
 import {
   afterEach as fliwrightAfterEach,
-  beforeEach as fliwrightBeforeEach,
   beforeAll as fliwrightBeforeAll,
+  beforeEach as fliwrightBeforeEach,
   createFliwrightScript,
   createFliwrightTest,
   defineConfig,

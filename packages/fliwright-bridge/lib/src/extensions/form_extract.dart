@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'inspect.dart';
 import '../bridge.dart';
+import '../ref_registry.dart';
 
 class FormExtractExtension {
+  static const _refGroupId = 'form-extract';
+
   static void register(ExtensionRegistry registry) {
     registry.register('ext.fliwright.extractForm', _extractForm);
   }
@@ -22,6 +25,7 @@ class FormExtractExtension {
     final fields = <Map<String, dynamic>>[];
     final seenEditableKeys = <String>{};
     final seenNamedFields = <String>{};
+    RefRegistry.disposeGroup(_refGroupId);
 
     // Use depth-tracking walk for O(N) scope filtering instead of
     // per-element O(depth) ancestor walks.
@@ -71,6 +75,7 @@ class FormExtractExtension {
           'type': info['type'],
           'controlType': 'textInput',
           if (info['rect'] != null) 'rect': info['rect'],
+          ..._refMetadata(element, info),
           ..._stableMetadata(info),
           if (keyboardType != null) 'keyboardType': keyboardType,
           'obscureText': widget.obscureText,
@@ -81,7 +86,9 @@ class FormExtractExtension {
         return;
       }
 
-      final name = _readString(widget, 'name');
+      final name = _shouldProbeNamedField(widget)
+          ? _readString(widget, 'name')
+          : null;
       if (name != null) {
         if (seenNamedFields.contains(name)) return;
         if (_hasEditableDescendant(element)) return;
@@ -188,6 +195,7 @@ class FormExtractExtension {
       'type': overrideType ?? info['type'],
       'controlType': 'textInput',
       if (info['rect'] != null) 'rect': info['rect'],
+      ..._refMetadata(element, info),
       ..._stableMetadata(info),
       if (hintText != null) 'hintText': hintText,
       if (label != null) 'label': label,
@@ -210,6 +218,49 @@ class FormExtractExtension {
       if (info['semanticsHint'] != null) 'semanticsHint': info['semanticsHint'],
       if (info['role'] != null) 'role': info['role'],
     };
+  }
+
+  static String? _fieldRef(Element element, Map<String, dynamic> info) {
+    final rect = info['rect'];
+    if (rect is! Map<String, dynamic>) return null;
+    final x = rect['x'];
+    final y = rect['y'];
+    final width = rect['width'];
+    final height = rect['height'];
+    if (x is! num || y is! num || width is! num || height is! num) {
+      return null;
+    }
+    return RefRegistry.registerEntry(
+      rect: Rect.fromLTWH(
+        x.toDouble(),
+        y.toDouble(),
+        width.toDouble(),
+        height.toDouble(),
+      ),
+      element: element,
+      groupId: _refGroupId,
+      isTextField: true,
+      renderObject: element.renderObject,
+      semanticsId: int.tryParse(info['semanticsId']?.toString() ?? ''),
+      role: info['role']?.toString() ?? 'textbox',
+      label: info['semanticsLabel']?.toString() ??
+          info['text']?.toString() ??
+          info['key']?.toString() ??
+          info['name']?.toString(),
+      enabled: true,
+      metadata: {
+        if (info['type'] != null) 'type': info['type'],
+        if (info['key'] != null) 'key': info['key'],
+      },
+    );
+  }
+
+  static Map<String, dynamic> _refMetadata(
+    Element element,
+    Map<String, dynamic> info,
+  ) {
+    final ref = _fieldRef(element, info);
+    return ref == null ? const <String, dynamic>{} : {'ref': ref};
   }
 
   static Map<String, dynamic>? _extractNamedField(
@@ -236,6 +287,7 @@ class FormExtractExtension {
       'type': info['type'],
       'controlType': controlType,
       if (info['rect'] != null) 'rect': info['rect'],
+      ..._refMetadata(element, info),
       ..._stableMetadata(info),
       if (label != null) 'label': label,
       'name': name,
@@ -524,6 +576,21 @@ class FormExtractExtension {
     return null;
   }
 
+  static bool _shouldProbeNamedField(Widget widget) {
+    final type = widget.runtimeType.toString().toLowerCase();
+    return type.contains('field') ||
+        type.contains('form') ||
+        type.contains('input') ||
+        type.contains('dropdown') ||
+        type.contains('select') ||
+        type.contains('radio') ||
+        type.contains('checkbox') ||
+        type.contains('switch') ||
+        type.contains('choice') ||
+        type.contains('country') ||
+        type.contains('phone');
+  }
+
   static String? _readString(Object? target, String name) {
     final value = _readAny(target, name);
     return value is String && value.isNotEmpty ? value : null;
@@ -609,7 +676,9 @@ class FormExtractExtension {
     Set<String> seenNamedFields,
   ) {
     element.visitAncestorElements((ancestor) {
-      final name = _readString(ancestor.widget, 'name');
+      final name = _shouldProbeNamedField(ancestor.widget)
+          ? _readString(ancestor.widget, 'name')
+          : null;
       if (name != null) {
         seenNamedFields.add(name);
         return false;

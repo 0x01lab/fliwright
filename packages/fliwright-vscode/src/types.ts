@@ -18,6 +18,8 @@ export interface ExtensionConfig {
   formRulesFile: string | null;
   formLocale: string;
   formPreviewBeforeFill: boolean;
+  formDebug: boolean;
+  formOperationTimeoutMs: number;
   codeLensEnabled: boolean;
   scriptGlob: string;
 }
@@ -97,8 +99,29 @@ export interface FormRule {
   find?: SelectorQuery;
   match?: Record<string, string>;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
-  data?: string[];
+  data?: FormRuleDataEntry[];
   pattern?: string;
+  action?: FormRuleAction;
+}
+
+export type FormRuleDataEntry =
+  | string
+  | {
+      value?: string | string[];
+      fixed?: string | string[];
+      regex?: string;
+      regexp?: string;
+      prompt?: string;
+      ai?: string;
+      fallback?: string;
+      system?: string;
+      timeoutMs?: number;
+      temperature?: number;
+    };
+
+export interface FormRuleAction {
+  script: string;
+  args?: Record<string, unknown>;
 }
 
 export interface FormRulesEntry {

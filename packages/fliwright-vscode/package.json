@@ -79,7 +79,9 @@
     "onCommand:fliwright.openRiverpodSetupHelp",
     "onCommand:fliwright.openVisualEditor",
     "onCommand:fliwright.openTraceViewer",
-    "onCommand:fliwright.showLastTrace"
+    "onCommand:fliwright.showLastTrace",
+    "onCommand:fliwright.openRunViewer",
+    "onCommand:fliwright.showLastRun"
   ],
   "contributes": {
     "viewsContainers": {
@@ -349,6 +351,16 @@
       {
         "command": "fliwright.showLastTrace",
         "title": "Fliwright: Show Last Trace",
+        "icon": "$(history)"
+      },
+      {
+        "command": "fliwright.openRunViewer",
+        "title": "Fliwright: Open Run Viewer",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "fliwright.showLastRun",
+        "title": "Fliwright: Show Last Run",
         "icon": "$(history)"
       }
     ],
@@ -665,6 +677,17 @@
           "type": "boolean",
           "default": true,
           "description": "Preview generated form data before filling the current screen."
+        },
+        "fliwright.formDebug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Write detailed FormHelper analyze/fill timing logs to the Fliwright output channel."
+        },
+        "fliwright.formOperationTimeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 1000,
+          "description": "Maximum time in milliseconds to wait for a FormHelper analyze/fill operation before surfacing a timeout."
         },
         "fliwright.codeLensEnabled": {
           "type": "boolean",

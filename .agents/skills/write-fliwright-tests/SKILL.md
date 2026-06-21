@@ -54,6 +54,7 @@ AI 编写建议：保持 CI 确定性（`provider: 'mock'` 或 `'none'`）；捕
 - 新测试里优先用对象或辅助选择器（`page.getByKey('submit')`、`page.getByText('Submit')`、`page.locator({ text: 'Submit' })`），而不是含义模糊的纯字符串。
 - 用 descendant/ancestor locator、`.and(...)`、`.nth(...)` 或路由/表单上下文来限定含义模糊的控件，别依赖“取第一个”的行为。
 - 替换字段值用 `fill()`，追加/键入行为用 `type()`。除非被测行为本身基于坐标，否则在 locator 上用 `click()`、`longPress()`、`drag()`、`pinch()`，而不是坐标。
+- select 操作要按组件实现选择策略：标准 `DropdownButton`/暴露 items+onChanged 的控件可用 `selectOption()`；自定义 bottom sheet/dialog select 按真实用户路径点击字段、等待弹层、点击 option、必要时确认；国家/地区这类带搜索框和虚拟列表的 picker 才使用“搜索框 `fill()`/`type()` 触发 `TextField.onChanged` + 点击目标 option + 滚动兜底”的专用流程。复杂 select 建议封装成可复用 helper 或子脚本，供 formHelper 规则动作调用。
 - 尽可能通过 UI 来断言状态：`await expect(page.getByText('Done')).toBeVisible()`、`toHaveText`、`toContainText`、`toBeEnabled` 或 `not`。
 - 新版测试只使用一套公开 locator 断言：`await expect(locator, 'Title').toBeVisible()`、`toHaveText()`、`toContainText()`、`toBeEnabled()`、`toBeDisabled()`。第二个参数或 options 里的 `title` 会写入 timeline metadata。
 - 在 `script` 模式中不要为了满足测试而硬塞 assertion；需要记录事实时用 `flow.frame()` 或 `agent.verify()`，需要可失败的 UI 校验时才用 `expect(locator, title?).to*`。

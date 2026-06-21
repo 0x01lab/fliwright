@@ -95,6 +95,36 @@ void main() {
     expect(double.parse(clicks.first['y']!), closeTo(expectedY, 0.1));
   });
 
+  testWidgets('action uses precomputed target rect without resolving selector', (
+    tester,
+  ) async {
+    final types = <Map<String, String>>[];
+    FliwrightBridge.registry.reset();
+    InspectExtension.register(FliwrightBridge.registry);
+    FliwrightBridge.registry.register('ext.fliwright.type', (params) async {
+      types.add(params);
+      return {'success': true};
+    });
+    await tester.pumpWidget(_snapFixture());
+
+    final result = await FliwrightBridge.registry.invoke(
+      'ext.fliwright.action',
+      {
+        'action': 'fill',
+        'selector': '{"match":{"text":"does-not-exist"}}',
+        'targetId': 'precomputed-email',
+        'targetRect': '{"x":20,"y":40,"width":300,"height":48}',
+        'text': 'exact@example.com',
+      },
+    );
+
+    expect(result['success'], isTrue);
+    expect(types, hasLength(1));
+    expect(types.single['targetId'], 'precomputed-email');
+    expect(types.single['targetRect'], '{"x":20,"y":40,"width":300,"height":48}');
+    expect(types.single['replaceAll'], 'true');
+  });
+
   testWidgets('extended actions can target snapshot refs', (tester) async {
     final clicks = <Map<String, String>>[];
     final hovers = <Map<String, String>>[];

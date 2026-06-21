@@ -3,8 +3,10 @@ import type {
   FormFieldMeta,
   FormFillResult,
   FormAnalyzeResult,
+  FormRuleAction,
   FormHelperOptions,
   SemanticType,
+  SelectorInput,
   SelectorQuery,
   SendRequest,
   WidgetInfo,
@@ -14,10 +16,12 @@ import { FakerGenerator } from './FakerGenerator.js';
 import { SkillRegistry } from './SkillRegistry.js';
 import { JsonRuleLoader } from './JsonRuleLoader.js';
 import { Locator } from './Locator.js';
+import { builtInFormActionScripts } from './FormActionScripts.js';
 
 type RuleMatchField = FormFieldMeta & { semanticType?: SemanticType };
 type MatchedFormSkill = {
   find?: SelectorQuery;
+  action?: FormRuleAction;
   generate: (field: FormFieldMeta, locale: string, options?: FormHelperOptions) => string | Promise<string>;
 };
 
@@ -187,7 +191,7 @@ export class FormHelper {
     const generatedValue = await this.generateFieldValue(field, semanticType, generator, skill, options);
 
     try {
-      await this.fillWithFallback(field, generatedValue, skill?.find);
+      await this.fillWithFallback(field, generatedValue, skill, options);
       result.fields.push({
         id: field.id,
         semanticType,
@@ -281,16 +285,22 @@ export class FormHelper {
   private async fillWithFallback(
     field: FormFieldMeta,
     generatedValue: string,
-    ruleFind?: SelectorQuery,
+    skill?: MatchedFormSkill | null,
+    options?: FormHelperOptions,
   ): Promise<void> {
-    const primarySelector = ruleFind ?? this.selectorForFill(field);
+    const primarySelector = skill?.find ?? this.selectorForFill(field);
     const primaryLocator = new Locator(primarySelector, this.sendRequest);
 
     try {
-      await this.applyFieldValue(field, primarySelector, generatedValue);
+      await this.applyFieldValue(field, primarySelector, generatedValue, undefined, skill?.action, options);
       return;
     } catch (primaryError) {
       const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
+      if (skill?.action) {
+        throw new Error(
+          `Form action ${skill.action.script} failed for ${primaryLocator.selectorString}: ${primaryMessage}`,
+        );
+      }
       const fallbackSelector = this.parseSelector(field.selector);
       const primarySelectorText = primaryLocator.selectorString;
       const fallbackSelectorText = new Locator(fallbackSelector, this.sendRequest).selectorString;
@@ -311,7 +321,7 @@ export class FormHelper {
       }
 
       try {
-        await this.applyFieldValue(field, fallbackSelector, generatedValue);
+        await this.applyFieldValue(field, fallbackSelector, generatedValue, undefined, skill?.action, options);
       } catch (fallbackError) {
         const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
         if (this.isTextInputField(field)) {
@@ -338,13 +348,21 @@ export class FormHelper {
     fieldSelector: SelectorQuery,
     generatedValue: string,
     resolved?: WidgetInfo,
+    action?: FormRuleAction,
+    options?: FormHelperOptions,
   ): Promise<void> {
+    if (action) {
+      await this.applyActionScript(field, fieldSelector, generatedValue, action, options);
+      return;
+    }
+
     if (!field.controlType || field.controlType === 'textInput') {
-      const locator = new Locator(fieldSelector, this.sendRequest);
-      if (resolved) {
-        await locator.fillWithResolved(generatedValue, resolved);
+      const locator = new Locator(field.ref ? { ref: field.ref } : fieldSelector, this.sendRequest);
+      const resolvedTarget = resolved ?? this.resolvedFieldTarget(field);
+      if (!field.ref && resolvedTarget) {
+        await locator.fillWithResolved(generatedValue, resolvedTarget);
       } else {
-        await locator.fill(generatedValue);
+        await locator.fill(generatedValue, field.ref ? { checkStable: false } : undefined);
       }
       return;
     }
@@ -423,6 +441,28 @@ export class FormHelper {
     }
   }
 
+  private async applyActionScript(
+    field: FormFieldMeta,
+    fieldSelector: SelectorQuery,
+    generatedValue: string,
+    action: FormRuleAction,
+    options?: FormHelperOptions,
+  ): Promise<void> {
+    const script = options?.actionScripts?.[action.script] ?? builtInFormActionScripts[action.script];
+    if (!script) {
+      throw new Error(`Unknown form action script: ${action.script}`);
+    }
+    await script({
+      field,
+      value: generatedValue,
+      action,
+      fieldSelector,
+      option: this.resolveOption(field, generatedValue),
+      sendRequest: this.sendRequest,
+      locator: (selector: SelectorInput) => new Locator(selector, this.sendRequest),
+    });
+  }
+
   private resolveOption(field: FormFieldMeta, target: string): FormFieldOption | undefined {
     const normalizedTarget = this.normalizeOptionValue(target);
     if (!normalizedTarget) return this.firstFillableOption(field);
@@ -466,6 +506,16 @@ export class FormHelper {
 
   private isTextInputField(field: FormFieldMeta): boolean {
     return !field.controlType || field.controlType === 'textInput';
+  }
+
+  private resolvedFieldTarget(field: FormFieldMeta): WidgetInfo | undefined {
+    if (!field.id || !field.rect) return undefined;
+    return {
+      id: field.id,
+      type: field.type,
+      rect: field.rect,
+      properties: {},
+    };
   }
 
   private delay(ms: number): Promise<void> {

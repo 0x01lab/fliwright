@@ -24,6 +24,7 @@ export interface ToolMockResult {
 
 interface ToolMockRoute {
   id: string;
+  explicitId: boolean;
   method?: string;
   pathPattern: string;
   response: MockRouteResponse;
@@ -84,9 +85,10 @@ export class ToolMockServer {
     });
   }
 
-  route(path: string, response: MockRouteResponse & { method?: string }): void {
+  route(path: string, response: MockRouteResponse & { method?: string; id?: string }): void {
     const route: ToolMockRoute = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: response.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      explicitId: response.id !== undefined,
       method: response.method,
       pathPattern: path,
       response: {
@@ -132,12 +134,12 @@ export class ToolMockServer {
     }));
   }
 
-  getRouteResponse(path: string, method?: string): MockRouteResponse | null {
+  getRouteResponse(path: string, method?: string): (MockRouteResponse & { id?: string }) | null {
     const route = this.routes.find((candidate) => (
       candidate.pathPattern === path &&
       (!method || (candidate.method ?? '').toUpperCase() === method.toUpperCase())
     ));
-    return route ? { ...route.response } : null;
+    return route ? { ...(route.explicitId ? { id: route.id } : {}), ...route.response } : null;
   }
 
   async loadRules(mockDir = '.fliwright/mocks'): Promise<void> {
@@ -145,7 +147,11 @@ export class ToolMockServer {
     for (const endpoint of this.ruleStore.listEndpoints()) {
       const response = this.ruleStore.getActiveResponse(endpoint.endpoint, endpoint.method);
       if (response) {
-        this.route(endpoint.endpoint, { ...response, method: endpoint.method });
+        this.route(endpoint.endpoint, {
+          ...response,
+          id: mockRuleRouteId(endpoint.endpoint, endpoint.method, endpoint.activeRule),
+          method: endpoint.method,
+        });
       }
     }
   }
@@ -156,8 +162,12 @@ export class ToolMockServer {
       item.endpoint === endpoint && (!method || item.method.toUpperCase() === method.toUpperCase())
     ));
     const response = entry ? this.ruleStore.getActiveResponse(endpoint, entry.method) : null;
-    if (response) {
-      this.route(endpoint, { ...response, method: entry?.method });
+    if (response && entry) {
+      this.route(endpoint, {
+        ...response,
+        id: mockRuleRouteId(endpoint, entry.method, entry.activeRule),
+        method: entry.method,
+      });
     }
   }
 
@@ -351,4 +361,8 @@ function writeJson(res: http.ServerResponse, status: number, body: unknown): voi
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify(body));
+}
+
+export function mockRuleRouteId(endpoint: string, method: string, ruleName: string): string {
+  return `fliwright-vscode:${encodeURIComponent(method.toUpperCase())}:${encodeURIComponent(endpoint)}:${encodeURIComponent(ruleName)}`;
 }

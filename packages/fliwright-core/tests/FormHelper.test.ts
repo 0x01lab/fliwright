@@ -355,6 +355,515 @@ describe('FormHelper', () => {
       ]);
     });
 
+    it('runs form action scripts for select rules', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'employmentStatus' },
+            find: { match: { semanticIdentifier: 'kyc.personalInfo.employmentStatus.select' } },
+            type: 'PRESET_SKILL',
+            data: ['FULL_TIME'],
+            action: {
+              script: 'select.byOptionSemantics',
+              args: {
+                open: { match: { semanticIdentifier: 'kyc.personalInfo.employmentStatus.select' } },
+                optionSemanticId: 'kyc.personalInfo.employmentStatus.option.${value}',
+              },
+            },
+          }],
+        }));
+        const selectField = {
+          id: 'select1',
+          type: 'FormBuilderField<String>',
+          controlType: 'select',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'employmentStatus',
+          semanticsId: 'kyc.personalInfo.employmentStatus.select',
+          label: 'Employment status',
+          obscureText: false,
+          enabled: true,
+          selector: 'name=employmentStatus',
+          options: [
+            {
+              label: 'Employed',
+              value: 'FULL_TIME',
+              semanticsId: 'kyc.personalInfo.employmentStatus.option.FULL_TIME',
+            },
+          ],
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [selectField], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: true });
+          }
+          return Promise.resolve({});
+        });
+
+        const result = await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(result.filled, JSON.stringify(result.errors)).toBe(1);
+        const tapSelectors = tapCalls(send as ReturnType<typeof createMockSendRequest>).map((call) => selectorAst(call[1]));
+        expect(tapSelectors).toEqual([
+          { match: { semanticIdentifier: 'kyc.personalInfo.employmentStatus.select' } },
+          { match: { semanticIdentifier: 'kyc.personalInfo.employmentStatus.option.FULL_TIME' } },
+        ]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('runs reusable select recipes from form rules', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'resAddrCountry' },
+            find: { match: { semanticIdentifier: 'kyc.personalInfo.resAddrCountry.select' } },
+            type: 'PRESET_SKILL',
+            data: ['HK'],
+            action: {
+              script: 'select.recipe',
+              args: {
+                recipe: 'countryPicker',
+                search: { match: { key: 'kyc.countrySelect.searchField', type: 'EditableText' } },
+                searchText: 'Hong Kong',
+                optionSemanticsId: 'kyc.personalInfo.resAddrCountry.option.${value}',
+              },
+            },
+          }],
+        }));
+        const selectField = {
+          id: 'country1',
+          type: 'FormBuilderField<String>',
+          controlType: 'select',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'resAddrCountry',
+          semanticsId: 'kyc.personalInfo.resAddrCountry.select',
+          label: 'Place of residence',
+          obscureText: false,
+          enabled: true,
+          selector: 'name=resAddrCountry',
+          options: [
+            { label: 'Hong Kong', value: 'HK', semanticsId: 'kyc.personalInfo.resAddrCountry.option.HK' },
+          ],
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [selectField], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: true });
+          }
+          if (method === 'ext.fliwright.resolve') {
+            return Promise.resolve({ matches: [], widgets: [], count: 0 });
+          }
+          if (method === 'ext.fliwright.settle') {
+            return Promise.resolve({ success: true });
+          }
+          return Promise.resolve({});
+        });
+
+        const result = await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(result.filled).toBe(1);
+        const actions = send.mock.calls
+          .filter((call) => call[0] === 'ext.fliwright.action')
+          .map((call) => call[1] as Record<string, unknown>);
+        expect(actions.map((action) => action.action)).toEqual(['tap', 'fill', 'tap']);
+        expect(selectorAst(actions[0])).toEqual({ match: { semanticIdentifier: 'kyc.personalInfo.resAddrCountry.select' } });
+        expect(actions[0]).not.toHaveProperty('waitForAnimations');
+        expect(selectorAst(actions[1])).toEqual({ match: { key: 'kyc.countrySelect.searchField', type: 'EditableText' } });
+        expect(actions[1]).toMatchObject({ text: 'Hong Kong', replaceAll: 'true' });
+        expect(selectorAst(actions[2])).toEqual({ match: { semanticIdentifier: 'kyc.personalInfo.resAddrCountry.option.HK' } });
+        expect(actions[2]).not.toHaveProperty('waitForAnimations');
+        expect(send).toHaveBeenCalledWith('ext.fliwright.settle', {
+          timeout: '500',
+          stableFrames: '2',
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('runs tap action scripts for custom checkbox and radio rows', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'relatedParticipantYes' },
+            type: 'PRESET_SKILL',
+            data: ['No'],
+            action: {
+              script: 'tap.bySelector',
+              args: { target: { match: { key: 'kyc.personalInfo.relatedParticipant.noRadio' } } },
+            },
+          }],
+        }));
+        const field = {
+          id: 'radio1',
+          type: 'FormBuilderField<bool>',
+          controlType: 'radio',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'relatedParticipantYes',
+          label: 'SFC associated',
+          obscureText: false,
+          enabled: true,
+          selector: 'name=relatedParticipantYes',
+          options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }],
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [field], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: true });
+          }
+          return Promise.resolve({});
+        });
+
+        const result = await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(result.filled).toBe(1);
+        const tapSelectors = tapCalls(send as ReturnType<typeof createMockSendRequest>).map((call) => selectorAst(call[1]));
+        expect(tapSelectors).toEqual([{ match: { key: 'kyc.personalInfo.relatedParticipant.noRadio' } }]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('scopes text tap action scripts to a specific form field', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'usPerson' },
+            type: 'PRESET_SKILL',
+            data: ['Non-US person'],
+            action: {
+              script: 'tap.byText',
+              args: {
+                optionText: 'No',
+                within: { match: { name: 'usPerson' } },
+              },
+            },
+          }],
+        }));
+        const field = {
+          id: 'fatca-radio',
+          type: 'FormBuilderField<bool>',
+          controlType: 'radio',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'usPerson',
+          label: 'FATCA',
+          obscureText: false,
+          enabled: true,
+          selector: 'name=usPerson',
+          options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }],
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [field], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: true });
+          }
+          return Promise.resolve({});
+        });
+
+        const result = await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(result.filled).toBe(1);
+        const tapSelectors = tapCalls(send as ReturnType<typeof createMockSendRequest>).map((call) => selectorAst(call[1]));
+        expect(tapSelectors).toEqual([{
+          match: { text: 'No' },
+          within: { match: { name: 'usPerson' } },
+        }]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('uses short timeouts for form action script taps', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'usPerson' },
+            type: 'PRESET_SKILL',
+            data: ['Non-US person'],
+            action: {
+              script: 'tap.byText',
+              args: {
+                optionText: 'No',
+                within: { match: { name: 'usPerson' } },
+              },
+            },
+          }],
+        }));
+        const field = {
+          id: 'fatca-radio',
+          type: 'FormBuilderField<bool>',
+          controlType: 'radio',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'usPerson',
+          label: 'FATCA',
+          obscureText: false,
+          enabled: true,
+          selector: 'name=usPerson',
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [field], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: true });
+          }
+          return Promise.resolve({});
+        });
+
+        await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(tapCalls(send as ReturnType<typeof createMockSendRequest>)[0][1]).toMatchObject({
+          timeout: '1500',
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('does not retry action scripts with fallback selectors after action failure', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'employmentStatus' },
+            find: { match: { semanticIdentifier: 'kyc.personalInfo.employmentStatus.select' } },
+            type: 'PRESET_SKILL',
+            data: ['FULL_TIME'],
+            action: {
+              script: 'select.byOptionSemantics',
+              args: {
+                open: { match: { semanticIdentifier: 'kyc.personalInfo.employmentStatus.select' } },
+                optionSemanticId: 'kyc.personalInfo.employmentStatus.option.${value}',
+              },
+            },
+          }],
+        }));
+        const field = {
+          id: 'select1',
+          type: 'FormBuilderField<String>',
+          controlType: 'select',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'employmentStatus',
+          semanticsId: 'kyc.personalInfo.employmentStatus.select',
+          label: 'Employment status',
+          obscureText: false,
+          enabled: true,
+          selector: 'name=employmentStatus',
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [field], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: false, error: 'not found' });
+          }
+          return Promise.resolve({});
+        });
+
+        const result = await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(result.filled).toBe(0);
+        expect(result.errors[0].error).toContain('Form action select.byOptionSemantics failed');
+        expect(tapCalls(send as ReturnType<typeof createMockSendRequest>)).toHaveLength(1);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('runs checkbox ensure action scripts without toggling an already selected value', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'sameAsResidentialAddress' },
+            type: 'PRESET_SKILL',
+            data: ['true'],
+            action: {
+              script: 'checkbox.ensure',
+              args: { target: { match: { key: 'kyc.personalInfo.sameAddressCheckbox' } } },
+            },
+          }],
+        }));
+        const field = {
+          id: 'same-address-checkbox',
+          type: 'FormBuilderField<bool>',
+          controlType: 'checkbox',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'sameAsResidentialAddress',
+          key: 'kyc.personalInfo.sameAddressCheckbox',
+          value: true,
+          label: 'Same as residential address',
+          obscureText: false,
+          enabled: true,
+          selector: 'key=kyc.personalInfo.sameAddressCheckbox',
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [field], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: true });
+          }
+          return Promise.resolve({});
+        });
+
+        const result = await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(result.filled).toBe(1);
+        expect(tapCalls(send as ReturnType<typeof createMockSendRequest>)).toHaveLength(0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('runs multi-select action scripts and confirms the sheet', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'sofJurisdictions' },
+            find: { match: { semanticIdentifier: 'kyc.personalInfo.sofJurisdictions.select' } },
+            type: 'PRESET_SKILL',
+            data: ['HK,US'],
+            action: {
+              script: 'multiSelect.byOptionSemantics',
+              args: {
+                optionSemanticId: 'kyc.personalInfo.sofJurisdictions.option.${value}',
+                done: { match: { text: 'Done' } },
+              },
+            },
+          }],
+        }));
+        const multiField = {
+          id: 'multi1',
+          type: 'FormBuilderField<List<String>>',
+          controlType: 'select',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'sofJurisdictions',
+          semanticsId: 'kyc.personalInfo.sofJurisdictions.select',
+          label: 'Origin of source of funds',
+          obscureText: false,
+          enabled: true,
+          selector: 'name=sofJurisdictions',
+          options: [
+            { label: 'Hong Kong', value: 'HK', semanticsId: 'kyc.personalInfo.sofJurisdictions.option.HK' },
+            { label: 'United States', value: 'US', semanticsId: 'kyc.personalInfo.sofJurisdictions.option.US' },
+          ],
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [multiField], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: true });
+          }
+          return Promise.resolve({});
+        });
+
+        const result = await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(result.filled).toBe(1);
+        const tapSelectors = tapCalls(send as ReturnType<typeof createMockSendRequest>).map((call) => selectorAst(call[1]));
+        expect(tapSelectors).toEqual([
+          { match: { semanticIdentifier: 'kyc.personalInfo.sofJurisdictions.select' } },
+          { match: { semanticIdentifier: 'kyc.personalInfo.sofJurisdictions.option.HK' } },
+          { match: { semanticIdentifier: 'kyc.personalInfo.sofJurisdictions.option.US' } },
+          { match: { text: 'Done' } },
+        ]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('runs multi-select action scripts from array fixed data DSL entries', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'sofJurisdictions' },
+            find: { match: { semanticIdentifier: 'kyc.personalInfo.sofJurisdictions.select' } },
+            type: 'PRESET_SKILL',
+            data: [{ fixed: ['HK', 'US'] }],
+            action: {
+              script: 'multiSelect.byOptionSemantics',
+              args: {
+                optionSemanticId: 'kyc.personalInfo.sofJurisdictions.option.${value}',
+              },
+            },
+          }],
+        }));
+        const multiField = {
+          id: 'multi1',
+          type: 'FormBuilderField<List<String>>',
+          controlType: 'select',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'sofJurisdictions',
+          semanticsId: 'kyc.personalInfo.sofJurisdictions.select',
+          label: 'Origin of source of funds',
+          obscureText: false,
+          enabled: true,
+          selector: 'name=sofJurisdictions',
+          options: [
+            { label: 'Hong Kong', value: 'HK', semanticsId: 'kyc.personalInfo.sofJurisdictions.option.HK' },
+            { label: 'United States', value: 'US', semanticsId: 'kyc.personalInfo.sofJurisdictions.option.US' },
+          ],
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [multiField], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: true });
+          }
+          return Promise.resolve({});
+        });
+
+        const result = await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(result.filled).toBe(1);
+        const tapSelectors = tapCalls(send as ReturnType<typeof createMockSendRequest>).map((call) => selectorAst(call[1]));
+        expect(tapSelectors).toEqual([
+          { match: { semanticIdentifier: 'kyc.personalInfo.sofJurisdictions.select' } },
+          { match: { semanticIdentifier: 'kyc.personalInfo.sofJurisdictions.option.HK' } },
+          { match: { semanticIdentifier: 'kyc.personalInfo.sofJurisdictions.option.US' } },
+        ]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it('clicks inline radio options within the field scope', async () => {
       const radioField = {
         id: 'radio1',

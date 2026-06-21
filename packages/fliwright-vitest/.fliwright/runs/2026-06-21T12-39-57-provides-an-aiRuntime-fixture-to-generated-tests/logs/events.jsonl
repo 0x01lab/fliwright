@@ -1,0 +1,2 @@
+{"version":1,"id":"log-1","runId":"2026-06-21T12-39-57-provides-an-aiRuntime-fixture-to-generated-tests","testName":"provides an aiRuntime fixture to generated tests","mode":"test","level":"info","kind":"test","message":"Test started","timestamp":"2026-06-21T12:39:57.447Z"}
+{"version":1,"id":"log-2","runId":"2026-06-21T12-39-57-provides-an-aiRuntime-fixture-to-generated-tests","testName":"provides an aiRuntime fixture to generated tests","mode":"test","level":"success","kind":"test","message":"Test passed","timestamp":"2026-06-21T12:39:57.449Z"}

@@ -197,3 +197,39 @@ await page.getByKey('password').fill('correct-horse-battery-staple');
 // formHelper to smoke-fill the rest
 await page.formHelper.fill({ skipObscureFields: false });
 ```
+
+## Select 字段与组件专用动作
+
+`formHelper` 能处理带明确 `options` 的 checkbox / radio / select，但 Flutter
+里的 select 组件实现差异很大。写规则或脚本时先分清组件能力：
+
+| 组件形态 | 推荐方式 |
+| --- | --- |
+| 标准 dropdown，桥接能看到 `items` / `onChanged` | `locator.selectOption(value)` 或 formHelper 的内置 select 填充 |
+| 自定义 bottom sheet / dialog select | 写组件专用 helper：打开字段、等待 option、点击 option、必要时点确认 |
+| 国家/地区 picker 这类 searchable + 虚拟列表 | 写国家选择 helper：打开字段、输入国家名触发 `TextField.onChanged`、等待/滚动到 option、点击 option |
+
+不要把某个组件的流程直接套到所有 select 上。例如 KYC 国家/地区 picker 需要搜索框和
+`*.option.HK` semantics；普通 employment status select 可能只需要打开后点击
+`FULL_TIME` option。
+
+当某类复杂 select 在多个表单中复用时，用 `select.recipe` 调用同一套
+`page.select` recipe，而不是在每个 `.fliwright/forms/*.json` 里重复写低层点击步骤：
+
+```json
+{
+  "match": { "name": "resAddrCountry" },
+  "find": { "match": { "semanticIdentifier": "kyc.personalInfo.resAddrCountry.select" } },
+  "type": "PRESET_SKILL",
+  "data": ["HK"],
+  "action": {
+    "script": "select.recipe",
+    "args": {
+      "recipe": "countryPicker",
+      "search": { "match": { "key": "kyc.countrySelect.searchField", "type": "EditableText" } },
+      "searchText": "Hong Kong",
+      "optionSemanticsId": "kyc.personalInfo.resAddrCountry.option.${value}"
+    }
+  }
+}
+```

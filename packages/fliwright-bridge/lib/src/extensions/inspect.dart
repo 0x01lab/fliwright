@@ -128,6 +128,17 @@ class InspectExtension {
       );
     }
 
+    final precomputedTargetId = params['targetId'];
+    final precomputedRect = _parseRectJson(params['targetRect']);
+    if (precomputedTargetId != null && precomputedRect != null) {
+      return _actionWithResolvedTarget(
+        action: action,
+        rect: precomputedRect,
+        targetId: precomputedTargetId,
+        params: params,
+      );
+    }
+
     final resolveParams = Map<String, String>.from(params);
     resolveParams['strict'] = params['strict'] ?? 'true';
     resolveParams['visible'] = params['visible'] ?? 'hitTestable';
@@ -236,6 +247,17 @@ class InspectExtension {
       default:
         return {'error': 'Unknown action: $action', 'success': false};
     }
+  }
+
+  static Map<String, dynamic>? _parseRectJson(String? json) {
+    if (json == null || json.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 
   static RefEntry? _resolveQueryRef(String ref) {

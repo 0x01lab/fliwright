@@ -38,8 +38,10 @@ export function generateFormDataEntry(
 function parseFormDataEntry(entry: FormRuleDataEntry): ParsedDataEntry {
   if (typeof entry === 'string') return parseStringEntry(entry);
 
-  if (typeof entry.value === 'string') return { kind: 'fixed', value: entry.value };
-  if (typeof entry.fixed === 'string') return { kind: 'fixed', value: entry.fixed };
+  const value = fixedValue(entry.value);
+  if (value !== undefined) return { kind: 'fixed', value };
+  const fixed = fixedValue(entry.fixed);
+  if (fixed !== undefined) return { kind: 'fixed', value: fixed };
   if (typeof entry.regex === 'string') return { kind: 'regex', pattern: entry.regex };
   if (typeof entry.regexp === 'string') return { kind: 'regex', pattern: entry.regexp };
 
@@ -56,6 +58,12 @@ function parseFormDataEntry(entry: FormRuleDataEntry): ParsedDataEntry {
   }
 
   return { kind: 'fixed', value: '' };
+}
+
+function fixedValue(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map((entry) => String(entry)).join(',');
+  return undefined;
 }
 
 function parseStringEntry(value: string): ParsedDataEntry {

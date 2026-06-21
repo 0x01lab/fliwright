@@ -221,7 +221,7 @@ describe('tree providers', () => {
     });
   });
 
-  it('shows script rows as runnable tree items', async () => {
+  it('opens script rows from the label click', async () => {
     const root = await createWorkspace();
     await writeText(root, '.fliwright/scripts/auto-register-fill.mjs', 'console.log("script");\n');
     const provider = new ScriptsTreeProvider(new ScriptDiscoveryService());
@@ -231,7 +231,7 @@ describe('tree providers', () => {
 
     const item = provider.getTreeItem(script!);
     expect(item.contextValue).toBe('scriptFile');
-    expect(item.command).toMatchObject({ command: 'fliwright.runScript' });
+    expect(item.command).toMatchObject({ command: 'fliwright.openScript' });
   });
 
   it('updates state provider rows without replacing the whole tree', () => {

@@ -508,6 +508,7 @@ void main() {
       tester,
     ) async {
       final controller = TextEditingController();
+      final changes = <String>[];
       addTearDown(controller.dispose);
 
       InspectExtension.register(FliwrightBridge.registry);
@@ -524,6 +525,7 @@ void main() {
                 width: 320,
                 child: TextField(
                   controller: controller,
+                  onChanged: changes.add,
                   decoration: const InputDecoration(
                     labelText: 'Username / Email',
                   ),
@@ -546,6 +548,54 @@ void main() {
       final typeResult = result!;
       expect(typeResult['success'], isTrue);
       expect(controller.text, 'user@example.com');
+      expect(changes, ['user@example.com']);
+    });
+
+    testWidgets('type notifies TextField onChanged for each appended value', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      final changes = <String>[];
+      addTearDown(controller.dispose);
+
+      InspectExtension.register(FliwrightBridge.registry);
+      FliwrightBridge.registry.register('ext.fliwright.click', (_) async {
+        return {'success': true};
+      });
+      TypeExtension.register(FliwrightBridge.registry);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 320,
+                child: TextField(
+                  controller: controller,
+                  onChanged: changes.add,
+                  decoration: const InputDecoration(
+                    labelText: 'Country search',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final result = await tester.runAsync(() {
+        return FliwrightBridge.registry.invoke('ext.fliwright.type', {
+          'selector': 'text=Country search',
+          'text': 'HK',
+          'replaceAll': 'false',
+        });
+      });
+
+      expect(result, isNotNull);
+      final typeResult = result!;
+      expect(typeResult['success'], isTrue);
+      expect(controller.text, 'HK');
+      expect(changes, ['H', 'HK']);
     });
 
     testWidgets('type fills custom editable text by ancestor name', (

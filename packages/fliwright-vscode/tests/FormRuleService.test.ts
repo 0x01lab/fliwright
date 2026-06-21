@@ -45,6 +45,30 @@ describe('FormRuleService', () => {
     expect(result.invalid).toHaveLength(0);
   });
 
+  it('accepts form action scripts', async () => {
+    const root = await createWorkspace();
+    await writeJson(root, '.fliwright/forms/kyc.json', {
+      version: 1,
+      rules: [{
+        match: { name: 'employmentStatus' },
+        find: { match: { semanticIdentifier: 'kyc.personalInfo.employmentStatus.select' } },
+        type: 'PRESET_SKILL',
+        data: ['FULL_TIME'],
+        action: {
+          script: 'select.byOptionSemantics',
+          args: {
+            optionSemanticId: 'kyc.personalInfo.employmentStatus.option.${value}',
+          },
+        },
+      }],
+    });
+
+    const result = await new FormRuleService().discover(Uri.file(root));
+
+    expect(result.files).toHaveLength(1);
+    expect(result.invalid).toHaveLength(0);
+  });
+
   it('reports unsupported match keys', async () => {
     const root = await createWorkspace();
     await writeJson(root, '.fliwright/forms/bad.json', {
@@ -104,6 +128,67 @@ describe('FormRuleService', () => {
         data: ['qa@example.com'],
       },
     ]);
+  });
+
+  it('creates action script rules for analyzed select fields', async () => {
+    const root = await createWorkspace();
+
+    await new FormRuleService().createFromAnalyzeFields(Uri.file(root), 'selects', [
+      {
+        id: 'employment-field',
+        semanticType: 'option',
+        generatedValue: 'FULL_TIME',
+        selector: 'name=employmentStatus',
+        name: 'employmentStatus',
+        controlType: 'select',
+        semanticsId: 'kyc.personalInfo.employmentStatus.select',
+        options: [
+          {
+            label: 'Employed',
+            value: 'FULL_TIME',
+            semanticsId: 'kyc.personalInfo.employmentStatus.option.FULL_TIME',
+          },
+        ],
+      },
+      {
+        id: 'sof-field',
+        semanticType: 'option',
+        generatedValue: 'HK',
+        selector: 'name=sofJurisdictions',
+        name: 'sofJurisdictions',
+        controlType: 'select',
+        semanticsId: 'kyc.personalInfo.sofJurisdictions.select',
+        options: [
+          {
+            label: 'Hong Kong',
+            value: 'HK',
+            semanticsId: 'kyc.personalInfo.sofJurisdictions.option.HK',
+          },
+        ],
+      },
+    ]);
+    const raw = await readText(root, '.fliwright/forms/selects.json');
+    const rules = JSON.parse(raw).rules;
+
+    expect(rules[0]).toMatchObject({
+      action: {
+        script: 'select.byOptionSemantics',
+        args: {
+          open: { match: { semanticIdentifier: 'kyc.personalInfo.employmentStatus.select' } },
+          optionSemanticId: 'kyc.personalInfo.employmentStatus.option.${value}',
+        },
+      },
+    });
+    expect(rules[1]).toMatchObject({
+      action: {
+        script: 'multiSelect.byOptionSemantics',
+        args: {
+          open: { match: { semanticIdentifier: 'kyc.personalInfo.sofJurisdictions.select' } },
+          optionSemanticId: 'kyc.personalInfo.sofJurisdictions.option.${value}',
+          done: { match: { text: 'Done' } },
+        },
+      },
+    });
   });
 
   it('appends analyzed fields and skips duplicate selectors', async () => {

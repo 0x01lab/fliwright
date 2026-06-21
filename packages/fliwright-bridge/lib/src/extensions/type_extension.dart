@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 
 import '../bridge.dart';
+import '../ref_registry.dart';
 import 'diagnostics.dart';
 
 class TypeExtension {
@@ -12,6 +13,8 @@ class TypeExtension {
 
   static Future<Map<String, dynamic>> _type(Map<String, String> params) async {
     final selector = params['selector'] ?? '';
+    final ref = params['ref'];
+    final precomputedEntry = ref == null ? null : RefRegistry.lookupEntry(ref);
     final precomputedId = params['targetId'];
     final precomputedRectJson = params['targetRect'];
     if (selector.isEmpty &&
@@ -43,9 +46,21 @@ class TypeExtension {
     String? targetId;
     String? targetType;
     Map<String, dynamic>? rect;
+    Element? precomputedElement;
     int matchedCount = 0;
 
-    if (precomputedId != null && precomputedRectJson != null) {
+    if (precomputedEntry != null) {
+      targetId = '${precomputedEntry.element.hashCode}';
+      targetType = precomputedEntry.metadata['type']?.toString();
+      rect = {
+        'x': precomputedEntry.rect.left,
+        'y': precomputedEntry.rect.top,
+        'width': precomputedEntry.rect.width,
+        'height': precomputedEntry.rect.height,
+      };
+      precomputedElement = precomputedEntry.element;
+      matchedCount = 1;
+    } else if (precomputedId != null && precomputedRectJson != null) {
       // Fast path: caller already resolved the widget via inspect.
       targetId = precomputedId;
       rect = _parseRectJson(precomputedRectJson);
@@ -183,14 +198,16 @@ class TypeExtension {
     // Strategy B (PROMOTED): if we have targetId, locate the element directly
     // and search its subtree for EditableText. This is O(depth) instead of
     // O(N) and works even when focus is intercepted (e.g. FormBuilder).
-    if (targetId != null) {
-      Element? targetEl;
-      _walkTree(root, (Element element) {
-        if (targetEl != null) return;
-        if ('${element.hashCode}' == targetId) {
-          targetEl = element;
-        }
-      });
+    if (targetId != null || precomputedElement != null) {
+      Element? targetEl = precomputedElement;
+      if (targetEl == null && targetId != null) {
+        _walkTree(root, (Element element) {
+          if (targetEl != null) return;
+          if ('${element.hashCode}' == targetId) {
+            targetEl = element;
+          }
+        });
+      }
       if (targetEl != null) {
         // The target element itself might be the EditableText.
         if (targetEl!.widget is EditableText) {
@@ -320,11 +337,17 @@ class TypeExtension {
 
     final controller = focusedEditable!.controller;
     final currentText = controller.text;
+    var notifiedEditableChanged = false;
     String newText;
 
     if (key != null && key.isNotEmpty) {
       try {
         newText = _applyKey(controller, key);
+        notifiedEditableChanged = _notifyEditableTextChanged(
+          focusedEditable!,
+          currentText,
+          newText,
+        );
       } catch (error) {
         return normalizedFailure(
           code: 'actionability_failed',
@@ -350,20 +373,35 @@ class TypeExtension {
         selection: TextSelection.collapsed(offset: newText.length),
         composing: TextRange.empty,
       );
+      notifiedEditableChanged = _notifyEditableTextChanged(
+        focusedEditable!,
+        currentText,
+        newText,
+      );
     } else {
       // Type character-by-character to simulate realistic input.
       // Each step uses controller.value (single notification per char)
       // so that onChanged fires exactly once per keystroke — the same
       // sequence a real user would produce.
       final buffer = StringBuffer(currentText);
+      var previousText = currentText;
       for (final rune in text.runes) {
         final char = String.fromCharCode(rune);
         buffer.write(char);
+        final nextText = buffer.toString();
         controller.value = TextEditingValue(
-          text: buffer.toString(),
+          text: nextText,
           selection: TextSelection.collapsed(offset: buffer.length),
           composing: TextRange.empty,
         );
+        notifiedEditableChanged =
+            _notifyEditableTextChanged(
+              focusedEditable!,
+              previousText,
+              nextText,
+            ) ||
+            notifiedEditableChanged;
+        previousText = nextText;
         if (charDelayMs > 0) {
           await Future<void>.delayed(Duration(milliseconds: charDelayMs));
         }
@@ -375,7 +413,7 @@ class TypeExtension {
     // changed.  This is critical for flutter_form_builder and other
     // form libraries that track state via FormField.didChange rather
     // than only through the TextEditingController.
-    if (editableElement != null) {
+    if (editableElement != null && !notifiedEditableChanged) {
       _notifyFormField(editableElement!, newText);
     }
 
@@ -398,6 +436,19 @@ class TypeExtension {
       },
       extra: {'currentText': newText},
     );
+  }
+
+  /// Direct controller edits update the visual text and controller listeners,
+  /// but they do not invoke EditableText.onChanged. Fire that callback
+  /// explicitly so automation follows the same contract as user input.
+  static bool _notifyEditableTextChanged(
+    EditableText editable,
+    String previousText,
+    String nextText,
+  ) {
+    if (previousText == nextText || editable.onChanged == null) return false;
+    editable.onChanged!(nextText);
+    return true;
   }
 
   /// Walk up from [editableElement] to find a [FormField] ancestor

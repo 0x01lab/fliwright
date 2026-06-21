@@ -300,4 +300,113 @@ describe('Page', () => {
       'No ref found for query',
     );
   });
+
+  it('select.standardDropdown delegates to selectOption', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    await page.select.use('standardDropdown', {
+      field: { key: 'employmentStatus' },
+      value: 'FULL_TIME',
+      timeoutMs: 1200,
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.action', {
+      action: 'selectOption',
+      selector: JSON.stringify({ match: { key: 'employmentStatus' } }),
+      strict: 'true',
+      visible: 'hitTestable',
+      value: 'FULL_TIME',
+      timeout: '1200',
+    });
+  });
+
+  it('select.searchablePicker opens, searches, and clicks the option', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    await page.select.use('searchablePicker', {
+      open: { semantics: { identifier: 'kyc.personalInfo.resAddrCountry.select' } },
+      search: { match: { key: 'kyc.countrySelect.searchField', type: 'EditableText' } },
+      searchText: 'Hong Kong',
+      value: 'HK',
+      optionSemanticsId: 'kyc.personalInfo.resAddrCountry.option.${value}',
+      timeoutMs: 1500,
+    });
+
+    const actionCalls = sendRequest.mock.calls.filter((call) => call[0] === 'ext.fliwright.action');
+    expect(actionCalls).toHaveLength(3);
+    expect(actionCalls[0][1]).toMatchObject({
+      action: 'tap',
+      selector: JSON.stringify({ match: { semanticIdentifier: 'kyc.personalInfo.resAddrCountry.select' } }),
+    });
+    expect(actionCalls[0][1]).not.toHaveProperty('waitForAnimations');
+    expect(actionCalls[1][1]).toMatchObject({
+      action: 'fill',
+      text: 'Hong Kong',
+      replaceAll: 'true',
+    });
+    expect(JSON.parse((actionCalls[1][1] as Record<string, string>).selector)).toEqual({
+      match: { key: 'kyc.countrySelect.searchField', type: 'EditableText' },
+    });
+    expect(actionCalls[2][1]).toMatchObject({
+      action: 'tap',
+      selector: JSON.stringify({ match: { semanticIdentifier: 'kyc.personalInfo.resAddrCountry.option.HK' } }),
+    });
+    expect(actionCalls[2][1]).not.toHaveProperty('waitForAnimations');
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.settle', {
+      timeout: '500',
+      stableFrames: '2',
+    });
+  });
+
+  it('select recipes only wait for animations when explicitly requested', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    await page.select.use('bottomSheetOption', {
+      open: { key: 'employmentStatus' },
+      value: 'FULL_TIME',
+      optionSemanticsId: 'kyc.personalInfo.employmentStatus.option.${value}',
+      clickWaitForAnimations: true,
+      settleTimeoutMs: 250,
+      timeoutMs: 800,
+    });
+
+    const actionCalls = sendRequest.mock.calls.filter((call) => call[0] === 'ext.fliwright.action');
+    expect(actionCalls[0][1]).toMatchObject({
+      action: 'tap',
+      waitForAnimations: 'true',
+      settleTimeout: '250',
+    });
+    expect(actionCalls[1][1]).toMatchObject({
+      action: 'tap',
+      waitForAnimations: 'true',
+      settleTimeout: '250',
+    });
+  });
+
+  it('allows registering project-specific select recipes', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    page.select.register('project.quickSelect', async ({ page: recipePage }, options) => {
+      await recipePage.locator(options.open!).click();
+      await recipePage.locator({ text: `Value ${options.value}` }).click();
+    });
+
+    await page.select.use('project.quickSelect', {
+      open: { key: 'customSelect' },
+      value: 'A',
+    });
+
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.action', expect.objectContaining({
+      action: 'tap',
+      selector: JSON.stringify({ match: { key: 'customSelect' } }),
+    }));
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.action', expect.objectContaining({
+      action: 'tap',
+      selector: JSON.stringify({ match: { text: 'Value A' } }),
+    }));
+  });
 });

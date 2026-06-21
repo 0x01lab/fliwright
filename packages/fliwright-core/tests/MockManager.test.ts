@@ -127,6 +127,7 @@ describe('MockManager', () => {
     expect(store.loadFromDirectory).toHaveBeenCalledWith('/workspace/.fliwright/mocks');
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.addRoute', {
       route: JSON.stringify({
+        id: 'fliwright-vscode:POST:%2Fapi%2Fregister:success',
         path: '/api/register',
         method: 'POST',
         response: {
@@ -166,7 +167,7 @@ describe('MockManager', () => {
     expect(result.body).toEqual({ fail: true });
   });
 
-  it('switchRule() forwards the selected rule to the Flutter rule store', async () => {
+  it('switchRule() forwards the selected rule to the Flutter rule store on first use', async () => {
     const sendRequest = createMockSendRequest({
       'ext.fliwright.mock.addRoute': { success: true },
     });
@@ -180,12 +181,12 @@ describe('MockManager', () => {
         ['error', { name: 'error', status: 500, body: { fail: true } }],
       ]),
     });
-    await mock.route('/api/test', { method: 'GET', status: 200, body: { ok: true } });
-
     await mock.switchRule('/api/test', 'error', 'GET');
 
-    expect(sendRequest).toHaveBeenLastCalledWith('ext.fliwright.mock.addRoute', {
+    expect(sendRequest).toHaveBeenCalledOnce();
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.addRoute', {
       route: JSON.stringify({
+        id: 'fliwright-vscode:GET:%2Fapi%2Ftest:error',
         path: '/api/test',
         method: 'GET',
         response: {

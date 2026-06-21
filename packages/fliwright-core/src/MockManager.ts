@@ -156,7 +156,7 @@ export class MockManager implements MockAdapter {
         endpoint.endpoint === route.path &&
         (!route.method || endpoint.method.toUpperCase() === route.method.toUpperCase())
       ));
-      const response = entry ? this._server.ruleStore.getActiveResponse(entry.endpoint, entry.method) : null;
+      const response = entry ? this._server.getRouteResponse(entry.endpoint, entry.method) : null;
       if (response) await this.route(route.path, { ...response, method: route.method });
     }
   }
@@ -180,14 +180,12 @@ export class MockManager implements MockAdapter {
    */
   async switchRule(endpoint: string, ruleName: string, method?: string): Promise<void> {
     this._server.switchRule(endpoint, ruleName, method);
-    if (this.usesFlutterStore) {
-      const entry = this._server.ruleStore.listEndpoints().find((item) => (
-        item.endpoint === endpoint && (!method || item.method.toUpperCase() === method.toUpperCase())
-      ));
-      const response = entry ? this._server.ruleStore.getActiveResponse(endpoint, entry.method) : null;
-      if (response && entry) {
-        await this.route(endpoint, { ...response, method: entry.method });
-      }
+    const entry = this._server.ruleStore.listEndpoints().find((item) => (
+      item.endpoint === endpoint && (!method || item.method.toUpperCase() === method.toUpperCase())
+    ));
+    const response = entry ? this._server.getRouteResponse(endpoint, entry.method) : null;
+    if (response && entry) {
+      await this.route(endpoint, { ...response, method: entry.method });
     }
   }
 

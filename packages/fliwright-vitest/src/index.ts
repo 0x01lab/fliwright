@@ -23,6 +23,7 @@ import {
   MockRuntime,
   Page as FliwrightPage,
   PrettyLogFormatter,
+  readWorkspaceConfigSync,
   TraceCollector,
   TraceStore,
   StructuredLogger,
@@ -270,19 +271,9 @@ export function createFliwrightScript(config: FliwrightConfig) {
   return createFliwrightTest({ ...config, mode: 'script', requireAssertions: false });
 }
 
-export const test = createFliwrightTest({
-  vmServiceUrl: toWebSocketUrl(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL ?? ''),
-  timeout: parsePositiveInt(process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS) ?? 5000,
-  screenshot: parseScreenshotMode(process.env.FLIWRIGHT_SCREENSHOT_MODE),
-  log: logConfigFromEnv(),
-});
+export const test = createFliwrightTest(testConfigFromEnv());
 
-export const script = createFliwrightScript({
-  vmServiceUrl: toWebSocketUrl(process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL ?? ''),
-  timeout: parsePositiveInt(process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS) ?? 5000,
-  screenshot: parseScreenshotMode(process.env.FLIWRIGHT_SCREENSHOT_MODE),
-  log: logConfigFromEnv(),
-});
+export const script = createFliwrightScript(testConfigFromEnv());
 
 export function beforeEach(hook: FliwrightHook, timeout?: number): void {
   vitestBeforeEach<FliwrightHookContext>(hook, timeout);
@@ -471,6 +462,20 @@ function collectDiagnostics(driver: FliwrightDriver): VMServiceEvent[] | undefin
   } catch {
     return undefined;
   }
+}
+
+function testConfigFromEnv(): FliwrightConfig {
+  return {
+    vmServiceUrl: toWebSocketUrl(
+      process.env.FLIWRIGHT_VM_URL
+      ?? process.env.FLIWRIGHT_VM_SERVICE_URL
+      ?? readWorkspaceConfigSync().vmServiceUrl
+      ?? '',
+    ),
+    timeout: parsePositiveInt(process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS) ?? 5000,
+    screenshot: parseScreenshotMode(process.env.FLIWRIGHT_SCREENSHOT_MODE),
+    log: logConfigFromEnv(),
+  };
 }
 
 function parseScreenshotMode(value: string | undefined): 'file' | 'base64' | 'off' {

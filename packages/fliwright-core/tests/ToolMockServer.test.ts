@@ -77,6 +77,27 @@ describe('ToolMockServer', () => {
     expect(result.body).toEqual({ version: 2 });
   });
 
+  it('preserves explicit route ids for external route sync', () => {
+    const server = new ToolMockServer();
+
+    server.route('/api/ping', {
+      id: 'fliwright-vscode:GET:%2Fapi%2Fping:success',
+      method: 'GET',
+      status: 200,
+    });
+
+    expect(server.listRoutes()).toEqual([
+      { id: 'fliwright-vscode:GET:%2Fapi%2Fping:success', method: 'GET', path: '/api/ping' },
+    ]);
+    expect(server.getRouteResponse('/api/ping', 'GET')).toEqual({
+      id: 'fliwright-vscode:GET:%2Fapi%2Fping:success',
+      status: 200,
+      headers: undefined,
+      body: undefined,
+      delay: undefined,
+    });
+  });
+
   it('removes routes by method and path when method is provided', () => {
     const server = new ToolMockServer();
     server.route('/api/user', { method: 'GET', status: 200 });
