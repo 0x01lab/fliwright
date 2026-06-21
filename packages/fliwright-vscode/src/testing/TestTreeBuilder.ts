@@ -49,6 +49,12 @@ export function buildTestTree(source: string): ParsedFile {
       continue;
     }
 
+    if (c === '/' && isRegexStart(source, i)) {
+      const end = findRegexEnd(source, i);
+      i = end < 0 ? n : end + 1;
+      continue;
+    }
+
     if (c === '{') { depth++; i++; continue; }
     if (c === '}') {
       depth--;
@@ -225,6 +231,11 @@ function findOpeningBrace(source: string, callParenPos: number, from: number): n
       i = ce < 0 ? source.length : ce + 2;
       continue;
     }
+    if (c === '/' && isRegexStart(source, i)) {
+      const end = findRegexEnd(source, i);
+      i = end < 0 ? source.length : end + 1;
+      continue;
+    }
     if (c === '{') return i;
     if (c === '(') parenDepth++;
     else if (c === ')') parenDepth--;
@@ -254,6 +265,11 @@ function skipCallArgs(source: string, openParen: number): number {
     if (c === '/' && source[i + 1] === '*') {
       const ce = source.indexOf('*/', i + 2);
       i = ce < 0 ? source.length : ce + 2;
+      continue;
+    }
+    if (c === '/' && isRegexStart(source, i)) {
+      const end = findRegexEnd(source, i);
+      i = end < 0 ? source.length : end + 1;
       continue;
     }
     if (c === '{') {
@@ -294,6 +310,11 @@ function findMatchingBrace(source: string, open: number): number {
       i = ce < 0 ? source.length : ce + 2;
       continue;
     }
+    if (c === '/' && isRegexStart(source, i)) {
+      const end = findRegexEnd(source, i);
+      i = end < 0 ? source.length : end + 1;
+      continue;
+    }
     if (c === '{') depth++;
     else if (c === '}') {
       depth--;
@@ -302,4 +323,68 @@ function findMatchingBrace(source: string, open: number): number {
     i++;
   }
   return -1;
+}
+
+/**
+ * Decide whether the `/` at `pos` opens a regex literal (vs. division). Scan
+ * backwards from `pos - 1` skipping whitespace and comments; the previous
+ * significant character determines it. Regex follows operator/punctuation that
+ * cannot end an expression; division follows an operand (identifier, number,
+ * `)`, `]`, or string end — which we approximate by "any other char"). The
+ * start-of-file case is regex.
+ */
+function isRegexStart(source: string, pos: number): boolean {
+  let j = pos - 1;
+  while (j >= 0) {
+    const c = source[j];
+    if (/\s/.test(c)) { j--; continue; }
+    // Line comment: scan back to its `//` start.
+    if (c === '/' && source[j - 1] === '/') {
+      let k = j - 2;
+      while (k >= 0 && source[k] !== '\n') k--;
+      j = k - 1;
+      continue;
+    }
+    // Block comment close `*/`: scan back to its `/*` start.
+    if (c === '/' && source[j - 1] === '*') {
+      const open = source.lastIndexOf('/*', j - 2);
+      if (open < 0) return false;
+      j = open - 1;
+      continue;
+    }
+    // First significant char.
+    return '(,=:[!&|?{};>'.includes(c);
+  }
+  return true; // start of file
+}
+
+/**
+ * Given the opening `/` of a regex literal at `start`, return the index of the
+ * last character belonging to the literal (the closing `/`, or the last flag
+ * letter after it). Handles `\/` escapes and character classes `[...]` (where
+ * `/` is literal). Returns -1 if unterminated.
+ */
+function findRegexEnd(source: string, start: number): number {
+  let i = start + 1;
+  let inClass = false;
+  let close = -1;
+  while (i < source.length) {
+    const c = source[i];
+    if (c === '\\') { i += 2; continue; }
+    if (inClass) {
+      if (c === ']') inClass = false;
+      i++;
+      continue;
+    }
+    if (c === '[') { inClass = true; i++; continue; }
+    if (c === '/') { close = i; break; }
+    if (c === '\n') return -1; // regex literals can't span lines
+    i++;
+  }
+  if (close < 0) return -1;
+  // Skip trailing flag letters (gimsuy, etc.). Don't consume a `/` that is
+  // actually the next regex/division start.
+  let j = close + 1;
+  while (j < source.length && /[a-z]/.test(source[j])) j++;
+  return j - 1;
 }

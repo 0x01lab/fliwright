@@ -80,6 +80,45 @@ describe('TestTreeBuilder', () => {
     expect(outer.children[1]).toMatchObject({ title: 'after' });
   });
 
+  // Regression: regex literals containing `{` or `)` must be lexed as opaque
+  // tokens. Otherwise `/foo{/` increments brace depth (eating siblings) and
+  // `/bar)/` corrupts paren balance in skipCallArgs.
+  it('ignores regex literals containing braces and parens', () => {
+    const src = `test('a', () => { const r = /foo{/; expect(x).toMatch(/bar)/); });
+  describe('after', () => { test('inner', () => {}); });
+  test('top', () => {});`;
+    const f = buildTestTree(src);
+    expect(f.nodes.map((n) => n.title)).toEqual(['a', 'after', 'top']);
+  });
+
+  // Edge cases for division-vs-regex disambiguation: a `/` after an operand
+  // is division, not a regex literal. Must not consume the rest of the line.
+  it('treats / after an identifier as division, not regex', () => {
+    const src = `
+      test('div', () => {
+        const x = a / b / c;
+        expect(x).toBeDefined();
+      });
+      test('next', () => {});
+    `;
+    const f = buildTestTree(src);
+    expect(f.nodes.map((n) => n.title)).toEqual(['div', 'next']);
+  });
+
+  // Edge case: regex with flags and a character class containing `/`.
+  it('handles regex flags and character classes', () => {
+    const src = `
+      test('re', () => {
+        const re = /^https?:\\/\\//gi;
+        const re2 = /[/]/;
+        expect(re).toBeDefined();
+      });
+      test('after', () => {});
+    `;
+    const f = buildTestTree(src);
+    expect(f.nodes.map((n) => n.title)).toEqual(['re', 'after']);
+  });
+
   // Regression: block comments and multi-line strings must not cause phantom
   // nodes or break brace-depth tracking.
   it('skips block comments and strings spanning the body', () => {
