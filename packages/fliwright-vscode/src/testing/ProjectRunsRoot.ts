@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 import type * as vscode from 'vscode';
 
