@@ -19,3 +19,5 @@ coverage/
 docs/features
 .worktrees/
 **/.fliwright/config.json
+**/.fliwright/runs/
+**/.fliwright/traces/
