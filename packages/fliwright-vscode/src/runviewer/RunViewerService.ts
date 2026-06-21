@@ -1,6 +1,7 @@
 // packages/fliwright-vscode/src/runviewer/RunViewerService.ts
 import * as vscode from 'vscode';
 import type { TimelineData, FliwrightLogEvent } from '@fliwright/core';
+import { projectRunsRoot } from '../testing/ProjectRunsRoot.js';
 
 export interface RunSummary {
   runDir: vscode.Uri;
@@ -36,13 +37,27 @@ export class RunViewerService {
   }
 
   /**
-   * Resolve the <root>/.fliwright/runs directory, or undefined if it does not exist.
+   * Resolve the runs directory for a workspace root.
+   *
+   * Prefers the migrated per-project root under the user home
+   * (`~/.fliwright/projects/<hash>/runs`, from projectRunsRoot); falls back to
+   * the legacy project-local `<root>/.fliwright/runs` for back-compat. Returns
+   * undefined when neither exists.
    */
   async getRunsDir(root: vscode.Uri): Promise<vscode.Uri | undefined> {
-    const runsDir = vscode.Uri.joinPath(root, '.fliwright', 'runs');
+    // Prefer the migrated per-project root under the user home.
+    const migrated = vscode.Uri.file(projectRunsRoot(root).runsDir);
     try {
-      await vscode.workspace.fs.stat(runsDir);
-      return runsDir;
+      await vscode.workspace.fs.stat(migrated);
+      return migrated;
+    } catch {
+      /* fall through to legacy */
+    }
+    // Back-compat: legacy project-local runs dir.
+    const legacy = vscode.Uri.joinPath(root, '.fliwright', 'runs');
+    try {
+      await vscode.workspace.fs.stat(legacy);
+      return legacy;
     } catch {
       return undefined;
     }
@@ -93,8 +108,70 @@ export class RunViewerService {
     return { timeline, logs, runDir };
   }
 
+  /**
+   * Scan runs newest-first and return the first run whose result.json contains
+   * a test result matching `testNodeId`. Pure find — no UI.
+   *
+   * The test node id has the form `<relPath>::<anc1>/<anc2>/.../<title>`. The
+   * run's result.json `results[].name` is vitest's full-name form
+   * `<anc1> > <anc2> > ... > <title>` (` > `-joined). Matching therefore takes
+   * the chain after `::` and joins it with ` > `. This is the inverse of the
+   * pattern built in `runCurrentTest` (`id.split('::')[1]?.split('/').join(' > ')`).
+   */
+  async findLatestRunForTest(
+    runsDir: vscode.Uri,
+    testNodeId: string,
+  ): Promise<LoadedRun | undefined> {
+    const summaries = await this.listRuns(runsDir); // newest-first
+    for (const s of summaries) {
+      const resultJson = await this.readResultJson(s.runDir);
+      if (!resultJson) continue;
+      if (runResultContainsNode(resultJson, testNodeId)) {
+        return this.loadRun(s.runDir);
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Scan runs newest-first and return the first script-mode run.
+   *
+   * For v1, relPath matching is best-effort: we accept the newest run whose
+   * timeline.json has `mode === 'script'`. If a script run's testName matches
+   * the script's basename we prefer that; otherwise the newest script run wins.
+   */
+  async findLatestRunForScript(
+    runsDir: vscode.Uri,
+    scriptRelPath: string,
+  ): Promise<LoadedRun | undefined> {
+    const summaries = await this.listRuns(runsDir); // newest-first
+    const scriptBasename = scriptRelPath.split('/').pop();
+    let fallback: LoadedRun | undefined;
+    for (const s of summaries) {
+      if (s.mode !== 'script') continue;
+      const loaded = await this.loadRun(s.runDir);
+      if (!loaded) continue;
+      // Prefer a script run whose testName matches the script basename.
+      if (scriptBasename && loaded.timeline.testName === scriptBasename) {
+        return loaded;
+      }
+      // First (newest) script run is the fallback.
+      if (!fallback) fallback = loaded;
+    }
+    return fallback;
+  }
+
   screenshotUri(runDir: vscode.Uri, relPath: string): vscode.Uri {
     return vscode.Uri.joinPath(runDir, relPath);
+  }
+
+  private async readResultJson(runDir: vscode.Uri): Promise<any | undefined> {
+    try {
+      const buf = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(runDir, 'result.json'));
+      return JSON.parse(Buffer.from(buf).toString('utf8'));
+    } catch {
+      return undefined;
+    }
   }
 
   private async loadTimeline(runDir: vscode.Uri): Promise<TimelineData | undefined> {
@@ -130,4 +207,17 @@ export class RunViewerService {
     }
     return logs;
   }
+}
+
+/**
+ * Check whether a run's result.json contains a test matching a Tests-panel
+ * node id (`<relPath>::<a>/<b>`). The result names use the vitest full-name
+ * form `<a> > <b>`, so the chain after `::` is joined with ` > `.
+ */
+function runResultContainsNode(resultJson: any, testNodeId: string): boolean {
+  const chain = testNodeId.split('::')[1];
+  if (!chain) return false;
+  const needle = chain.split('/').join(' > ');
+  const results = Array.isArray(resultJson?.results) ? resultJson.results : [];
+  return results.some((r: any) => r?.name === needle);
 }

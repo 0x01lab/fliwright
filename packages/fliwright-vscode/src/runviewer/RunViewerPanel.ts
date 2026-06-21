@@ -81,6 +81,16 @@ export class RunViewerPanel {
     await this.show(loaded.runDir, loaded.timeline, loaded.logs);
   }
 
+  /**
+   * Open a specific run directory (e.g. one resolved by
+   * `RunViewerService.findLatestRunForTest` / `findLatestRunForScript`).
+   * Mirrors `openForRun` — kept as a separate, intent-revealing entry point
+   * for the `viewTestRun` / `viewScriptRun` command handlers.
+   */
+  async openRun(runDir: vscode.Uri): Promise<void> {
+    await this.openForRun(runDir);
+  }
+
   private async show(
     runDir: vscode.Uri,
     timeline: TimelineData,
