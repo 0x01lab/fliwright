@@ -550,7 +550,7 @@
         },
         {
           "command": "fliwright.viewTestRun",
-          "when": "view == fliwright.tests && viewItem =~ /testFile|testCase/",
+          "when": "view == fliwright.tests && viewItem == testCase",
           "group": "inline@2"
         },
         {

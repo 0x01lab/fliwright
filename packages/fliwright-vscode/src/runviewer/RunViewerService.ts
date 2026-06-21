@@ -21,9 +21,11 @@ export interface LoadedRun {
 }
 
 /**
- * Reads timeline run data from <workspaceRoot>/.fliwright/runs/<runId>/.
+ * Reads timeline run data from run directories.
  *
- * Each run directory holds:
+ * The runs root resolves migrated-first (`~/.fliwright/projects/<hash>/runs`,
+ * from projectRunsRoot) with a legacy fallback to the project-local
+ * `<workspaceRoot>/.fliwright/runs`. Within that root each run directory holds:
  *   - timeline.json           (TimelineData — the source of truth)
  *   - logs/events.jsonl       (one FliwrightLogEvent per line)
  *   - artifacts/screenshots/* (PNGs referenced by node artifacts[])
@@ -131,6 +133,34 @@ export class RunViewerService {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Index-first variant of `findLatestRunForTest` for the View button.
+   *
+   * `index.json` (maintained by `TestStatusStore.recordRun`) already knows the
+   * exact latest runId keyed by test node id, so we prefer it as the primary
+   * lookup — re-scanning every run's result.json is O(runs×tests) and can
+   * return a stale run if timeline/result clocks differ. The scan
+   * (`findLatestRunForTest`) remains the fallback when the indexed run's
+   * directory has been pruned (loadRun returns undefined for a missing
+   * timeline.json) or the index has no entry for the node.
+   *
+   * Takes the index map explicitly so the lookup is unit-testable without
+   * constructing a `TestStatusStore`.
+   */
+  async findLatestRunForTestIndexed(
+    runsDir: vscode.Uri,
+    testNodeId: string,
+    index: Map<string, { runId: string }>,
+  ): Promise<LoadedRun | undefined> {
+    const entry = index.get(testNodeId);
+    if (entry?.runId) {
+      const loaded = await this.loadRun(vscode.Uri.joinPath(runsDir, entry.runId));
+      if (loaded) return loaded;
+      // Indexed run dir is gone (pruned) — fall through to the scan.
+    }
+    return this.findLatestRunForTest(runsDir, testNodeId);
   }
 
   /**

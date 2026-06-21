@@ -732,7 +732,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const root = requireWorkspaceRoot();
       const runsDir = await runViewerService.getRunsDir(root);
       if (!runsDir || !node?.id) { vscode.window.showInformationMessage('No run recorded for this test yet.'); return; }
-      const loaded = await runViewerService.findLatestRunForTest(runsDir, node.id);
+      // Index-first: index.json (maintained by TestStatusStore.recordRun) knows
+      // the exact latest runId for each node id; the scan is only a fallback
+      // when the indexed run dir has been pruned (or there's no index entry).
+      const index = await statusStore.loadIndex();
+      const loaded = await runViewerService.findLatestRunForTestIndexed(runsDir, node.id, index);
       if (!loaded) { vscode.window.showInformationMessage('No run recorded for this test yet.'); return; }
       await runViewerPanel.openRun(loaded.runDir);
     }),
