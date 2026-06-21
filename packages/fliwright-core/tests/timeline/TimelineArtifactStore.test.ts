@@ -1,7 +1,7 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TimelineArtifactStore, TimelineRecorder } from '../../src/index.js';
 
 describe('TimelineArtifactStore', () => {
@@ -31,3 +31,38 @@ describe('TimelineArtifactStore', () => {
     ]);
   });
 });
+
+describe('TimelineArtifactStore runsRoot', () => {
+  let sandbox: string;
+  beforeAll(async () => {
+    sandbox = await makeSandbox();
+  });
+  afterAll(async () => {
+    await rm(sandbox, { recursive: true, force: true });
+  });
+
+  it('uses legacy project .fliwright/runs when no runsRoot and no env', () => {
+    const store = new TimelineArtifactStore({ cwd: sandbox, runId: 'r1' });
+    expect(store.runDir).toBe(join(sandbox, '.fliwright', 'runs', 'r1'));
+  });
+
+  it('uses options.runsRoot when provided', () => {
+    const custom = join(sandbox, 'custom-runs');
+    const store = new TimelineArtifactStore({ cwd: sandbox, runsRoot: custom, runId: 'r2' });
+    expect(store.runDir).toBe(join(custom, 'r2'));
+  });
+
+  it('writes timeline.json under runsRoot', async () => {
+    const custom = join(sandbox, 'custom-runs');
+    const store = new TimelineArtifactStore({ runsRoot: custom, runId: 'r3' });
+    await store.writeTimeline({ version: 1, runId: 'r3', testName: 't', mode: 'test', status: 'passed', startedAt: '', nodes: [] });
+    const written = await readFile(store.timelinePath, 'utf8');
+    expect(JSON.parse(written).runId).toBe('r3');
+  });
+});
+
+async function makeSandbox(): Promise<string> {
+  const dir = join(tmpdir(), `fliwright-${Math.random().toString(36).slice(2)}`);
+  await mkdir(dir, { recursive: true });
+  return dir;
+}

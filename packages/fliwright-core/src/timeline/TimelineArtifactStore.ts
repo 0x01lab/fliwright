@@ -4,6 +4,8 @@ import type { TimelineArtifactRef, TimelineData } from './types.js';
 
 export interface TimelineArtifactStoreOptions {
   cwd?: string;
+  /** Absolute root for run artifacts. Overrides env + legacy default. */
+  runsRoot?: string;
   runId: string;
 }
 
@@ -11,7 +13,10 @@ export class TimelineArtifactStore {
   readonly runDir: string;
 
   constructor(options: TimelineArtifactStoreOptions) {
-    this.runDir = join(options.cwd ?? process.cwd(), '.fliwright', 'runs', options.runId);
+    const root = options.runsRoot
+      ?? process.env.FLIWRIGHT_RUNS_ROOT
+      ?? join(options.cwd ?? process.cwd(), '.fliwright', 'runs');
+    this.runDir = join(root, options.runId);
   }
 
   get timelinePath(): string {
