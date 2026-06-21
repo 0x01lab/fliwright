@@ -14,7 +14,7 @@
 
 - **Monorepo** at `/Users/leo.he/projects/fliwright`. Three packages change: `packages/fliwright-core`, `packages/fliwright-vitest`, `packages/fliwright-vscode`.
 - **Branch:** `design/tests-panel-treeview-runs-migration` (already created; design doc committed there). All work continues on this branch.
-- **Test runner for the extension's own tests:** `pnpm --filter fliwright-vscode test` (runs vitest). Core tests: `pnpm --filter fliwright-core test`. Vitest-package tests: `pnpm --filter fliwright-vitest test`.
+- **Test runner for the extension's own tests:** `pnpm --filter @fliwright/vscode test` (runs vitest). Core tests: `pnpm --filter @fliwright/core test`. Vitest-package tests: `pnpm --filter @fliwright/vitest test`.
 - **Lint gate before commit:** run the package's lint if a script exists (`pnpm --filter <pkg> lint`); do not commit on lint errors.
 - **Node ESM:** all imports use explicit `.js` extensions (e.g. `'./types.js'`) — match existing files.
 - **No new runtime deps** without justification. The static parser uses regex + depth tracking, no AST library.
@@ -148,7 +148,7 @@ Note: to test env-var fallback without polluting other tests, we test the `optio
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter fliwright-core test src/timeline/TimelineArtifactStore.test.ts`
+Run: `pnpm --filter @fliwright/core test src/timeline/TimelineArtifactStore.test.ts`
 Expected: FAIL — `options.runsRoot` does not exist; `runDir` ignores it (`runDir` for r2 still equals the legacy path).
 
 - [ ] **Step 3: Write minimal implementation**
@@ -178,13 +178,13 @@ export class TimelineArtifactStore {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter fliwright-core test src/timeline/TimelineArtifactStore.test.ts`
+Run: `pnpm --filter @fliwright/core test src/timeline/TimelineArtifactStore.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-core lint || true
+pnpm --filter @fliwright/core lint || true
 git add packages/fliwright-core/src/timeline/TimelineArtifactStore.ts packages/fliwright-core/src/timeline/TimelineArtifactStore.test.ts
 git commit -m "feat(core): TimelineArtifactStore honors runsRoot / FLIWRIGHT_RUNS_ROOT"
 ```
@@ -237,7 +237,7 @@ describe('createFliwrightTest runsRoot plumbing', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter fliwright-vitest test src/runsRoot.test.ts`
+Run: `pnpm --filter @fliwright/vitest test src/runsRoot.test.ts`
 Expected: FAIL — `resolveRunsRoot` is not exported.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -276,18 +276,18 @@ export function resolveRunsRoot(config: { runsRoot?: string }): string | undefin
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter fliwright-vitest test src/runsRoot.test.ts`
+Run: `pnpm --filter @fliwright/vitest test src/runsRoot.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Run full vitest-package test suite**
 
-Run: `pnpm --filter fliwright-vitest test`
+Run: `pnpm --filter @fliwright/vitest test`
 Expected: PASS (no regressions; the existing tests that don't set `runsRoot` still use the legacy path).
 
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-vitest lint || true
+pnpm --filter @fliwright/vitest lint || true
 git add packages/fliwright-vitest/src/index.ts packages/fliwright-vitest/src/runsRoot.test.ts
 git commit -m "feat(vitest): route timeline artifacts through runsRoot / FLIWRIGHT_RUNS_ROOT"
 ```
@@ -349,7 +349,7 @@ describe('ProjectRunsRoot', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter fliwright-vscode test tests/ProjectRunsRoot.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/ProjectRunsRoot.test.ts`
 Expected: FAIL — module does not exist.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -400,13 +400,13 @@ export async function ensureProjectRunsRoot(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter fliwright-vscode test tests/ProjectRunsRoot.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/ProjectRunsRoot.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-vscode lint || true
+pnpm --filter @fliwright/vscode lint || true
 git add packages/fliwright-vscode/src/testing/ProjectRunsRoot.ts packages/fliwright-vscode/tests/ProjectRunsRoot.test.ts
 git commit -m "feat(vscode): ProjectRunsRoot resolver for ~/.fliwright/projects/<hash>"
 ```
@@ -501,7 +501,7 @@ describe('TestTreeBuilder', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter fliwright-vscode test tests/TestTreeBuilder.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/TestTreeBuilder.test.ts`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -604,13 +604,13 @@ function countBetween(source: string, from: number, to: number, open: string, cl
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter fliwright-vscode test tests/TestTreeBuilder.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/TestTreeBuilder.test.ts`
 Expected: PASS (5 tests). Fix the parser until all pass.
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-vscode lint || true
+pnpm --filter @fliwright/vscode lint || true
 git add packages/fliwright-vscode/src/testing/TestTreeBuilder.ts packages/fliwright-vscode/tests/TestTreeBuilder.test.ts
 git commit -m "feat(vscode): TestTreeBuilder static describe/test parser"
 ```
@@ -717,13 +717,13 @@ describe('testing node utils', () => {
 
 - [ ] **Step 3: Run test**
 
-Run: `pnpm --filter fliwright-vscode test tests/testing-types.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/testing-types.test.ts`
 Expected: PASS.
 
 - [ ] **Step 4: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-vscode lint || true
+pnpm --filter @fliwright/vscode lint || true
 git add packages/fliwright-vscode/src/testing/types.ts packages/fliwright-vscode/tests/testing-types.test.ts
 git commit -m "feat(vscode): test tree node types and helpers"
 ```
@@ -824,7 +824,7 @@ i.e. the caller (Task 9) supplies the workspace-relative file path that produced
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter fliwright-vscode test tests/TestStatusStore.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/TestStatusStore.test.ts`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -913,13 +913,13 @@ function splitName(name: string): { ancestors: string[]; title: string } {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter fliwright-vscode test tests/TestStatusStore.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/TestStatusStore.test.ts`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-vscode lint || true
+pnpm --filter @fliwright/vscode lint || true
 git add packages/fliwright-vscode/src/testing/TestStatusStore.ts packages/fliwright-vscode/tests/TestStatusStore.test.ts
 git commit -m "feat(vscode): TestStatusStore persists per-test last status"
 ```
@@ -980,7 +980,7 @@ describe('VitestRunner run args', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter fliwright-vscode test tests/VitestRunner.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/VitestRunner.test.ts`
 Expected: FAIL — `testNamePattern`/`runsRoot` not on `RunParams`; `-t` not added.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1033,13 +1033,13 @@ Leave `parseVitestJson` and the rest untouched.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter fliwright-vscode test tests/VitestRunner.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/VitestRunner.test.ts`
 Expected: PASS (both the original parse test and the new args test).
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-vscode lint || true
+pnpm --filter @fliwright/vscode lint || true
 git add packages/fliwright-vscode/src/runner/TestRunner.ts packages/fliwright-vscode/src/runner/VitestRunner.ts packages/fliwright-vscode/tests/VitestRunner.test.ts
 git commit -m "feat(vscode): VitestRunner supports -t filter and FLIWRIGHT_RUNS_ROOT"
 ```
@@ -1150,7 +1150,7 @@ describe('TestsTreeProvider', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter fliwright-vscode test tests/TestsTreeProvider.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/TestsTreeProvider.test.ts`
 Expected: FAIL — constructor signature mismatch / old flat behavior.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1339,13 +1339,13 @@ function relPathOf(root: vscode.Uri, uri: vscode.Uri): string {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter fliwright-vscode test tests/TestsTreeProvider.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/TestsTreeProvider.test.ts`
 Expected: PASS (2 tests). Resolve the group-children recursion so statuses aggregate correctly.
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-vscode lint || true
+pnpm --filter @fliwright/vscode lint || true
 git add packages/fliwright-vscode/src/views/TestsTreeProvider.ts packages/fliwright-vscode/tests/TestsTreeProvider.test.ts
 git commit -m "feat(vscode): TestsTreeProvider renders file/describe/test tree with statuses"
 ```
@@ -1486,18 +1486,18 @@ Add a small helper `relPathOfRoot(root, uri)` mirroring the one in Task 8 (or ex
 
 - [ ] **Step 3: Typecheck + run full extension test suite**
 
-Run: `pnpm --filter fliwright-vscode test`
+Run: `pnpm --filter @fliwright/vscode test`
 Expected: PASS. Any test importing `RunsTreeProvider` must be updated (search: `grep -rn "RunsTreeProvider" packages/fliwright-vscode/tests`). The existing `TreeProviders.test.ts` does NOT import it (confirmed in spec exploration), so no test edits expected.
 
 - [ ] **Step 4: Build check**
 
-Run: `pnpm --filter fliwright-vscode compile` (or the package's build script — check `package.json` `scripts`). If no compile script, run `tsc -p packages/fliwright-vscode/tsconfig.json --noEmit`.
+Run: `pnpm --filter @fliwright/vscode compile` (or the package's build script — check `package.json` `scripts`). If no compile script, run `tsc -p packages/fliwright-vscode/tsconfig.json --noEmit`.
 Expected: no type errors.
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-vscode lint || true
+pnpm --filter @fliwright/vscode lint || true
 git add -A packages/fliwright-vscode
 git rm packages/fliwright-vscode/src/views/RunsTreeProvider.ts 2>/dev/null || true
 git commit -m "feat(vscode): wire runs-root migration, single-run guard, status recording; remove Runs panel"
@@ -1524,7 +1524,7 @@ In `getTreeItem`, for a script entry, set `item.contextValue = 'scriptFile'` and
 
 - [ ] **Step 3: Typecheck**
 
-Run: `pnpm --filter fliwright-vscode lint || true` then `tsc -p packages/fliwright-vscode/tsconfig.json --noEmit`
+Run: `pnpm --filter @fliwright/vscode lint || true` then `tsc -p packages/fliwright-vscode/tsconfig.json --noEmit`
 Expected: clean.
 
 - [ ] **Step 4: Commit**
@@ -1597,7 +1597,7 @@ describe('RunViewerService.openForTest', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter fliwright-vscode test tests/RunViewerService.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/RunViewerService.test.ts`
 Expected: FAIL — method missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1664,13 +1664,13 @@ In `RunViewerPanel.ts`, add `openRun(runDir: vscode.Uri)` that loads via `RunVie
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter fliwright-vscode test tests/RunViewerService.test.ts`
+Run: `pnpm --filter @fliwright/vscode test tests/RunViewerService.test.ts`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-pnpm --filter fliwright-vscode lint || true
+pnpm --filter @fliwright/vscode lint || true
 git add packages/fliwright-vscode/src/runviewer/RunViewerService.ts packages/fliwright-vscode/src/runviewer/RunViewerPanel.ts packages/fliwright-vscode/tests/RunViewerService.test.ts
 git commit -m "feat(vscode): RunViewerService resolves migrated root + openForTest/openForScript"
 ```
@@ -1767,8 +1767,8 @@ git commit -m "feat(vscode): package.json — remove Runs view, add viewRun comm
 
 Run (in `/Users/leo.he/projects/fliwright`):
 ```bash
-pnpm --filter fliwright-vscode install
-pnpm --filter fliwright-vscode package
+pnpm --filter @fliwright/vscode install
+pnpm --filter @fliwright/vscode package
 ```
 Expected: a `.vsix` produced, no errors.
 
