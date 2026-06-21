@@ -21,6 +21,12 @@
 - **Naming:** env var is `FLIWRIGHT_RUNS_ROOT` (absolute path). Test-node ids are `<relPath>::<ancestor titles joined by />` with `/` separators (the parse side) — see Task 4.
 - **`parseVitestJson` must stay unchanged** (covered by `tests/VitestRunner.test.ts`); only `run()` and `RunParams` change.
 - **Single concurrent run** (Task 9): a run in progress rejects a second invocation.
+- **Lazy parsing contract (critical for performance):** mirroring VSCode's native Test Explorer and the Jest/Playwright extensions, source parsing of `.test.ts` must be **on-expand, never at activation**. Concretely:
+  - At activation / root expansion, the provider lists only **file nodes** (cheap: one `findFiles` glob + status map lookup; zero source parsing).
+  - `describe`/`test` nodes are built **only when the user expands that file's row** (TreeView calls `getChildren(testFile)` lazily — never proactively).
+  - File nodes use `TreeItemCollapsibleState.Collapsed` (never `Expanded`), so activation does not cascade-expand every file.
+  - A **per-file parse cache** (`Map<fileUri, ParsedFile>`) holds the parsed tree after first expand; re-expand reuses it. The cache entry for a file is invalidated **only** on that file's `onDidSaveTextDocument` (debounced) — not on unrelated saves.
+  - `loadStatusMap()` reads `index.json` only (no source parsing); statuses are stamped onto nodes as they are built during expand.
 
 ---
 
@@ -1115,6 +1121,28 @@ describe('TestsTreeProvider', () => {
     const roots = await provider.getChildren();
     expect(roots[0].kind).toBe('empty');
   });
+
+  it('does NOT parse any file source until a file row is expanded (lazy)', async () => {
+    // Spy on the parser; requesting root children must not invoke it.
+    const ws = await createWorkspace();
+    const builder = await import('../src/testing/TestTreeBuilder.js');
+    const spy = vi.spyOn(builder, 'buildTestTree');
+    const fileUri = await writeText(ws, 'tests/lazy.test.ts', `test('never expanded', () => {})`);
+    const discovery = { discover: vi.fn().mockResolvedValue([{ kind: 'testFile', uri: fileUri, label: 'lazy.test.ts' }]) } as any;
+    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()) } as unknown as TestStatusStore;
+    const provider = new TestsTreeProvider(discovery as any, store);
+
+    const files = await provider.getChildren();        // root expansion
+    expect(spy).not.toHaveBeenCalled();                // no parse yet
+    expect(files[0].kind).toBe('testFile');
+
+    await provider.getChildren(files[0]!);             // NOW expand the file
+    expect(spy).toHaveBeenCalledTimes(1);              // parsed once
+
+    await provider.getChildren(files[0]!);             // expand again
+    expect(spy).toHaveBeenCalledTimes(1);              // served from cache, no re-parse
+    spy.mockRestore();
+  });
 });
 ```
 
@@ -1147,6 +1175,9 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   readonly onDidChangeTreeData = this.emitter.event;
   private roots: TestFileNode[] | undefined;
   private statusMap: Map<string, { status: TestNodeStatus; ranAt?: number; durationMs?: number }> = new Map();
+  /** Per-file parse cache: parsed subtree is built ONCE on first expand and reused.
+   *  Source parsing is lazy (only when the file row is expanded) per the lazy-parsing contract. */
+  private readonly parseCache: Map<string, ParsedFile> = new Map(); // key = fileUri.toString()
 
   constructor(
     private readonly discovery: TestDiscoveryService,
@@ -1159,8 +1190,17 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
     this.emitter.fire(undefined);
   }
 
+  /** Called by onDidSaveTextDocument (debounced, Task 9) to invalidate ONE file's parse cache. */
+  invalidateFile(uri: vscode.Uri): void {
+    this.parseCache.delete(uri.toString());
+    // Re-fire for just this file's subtree so an expanded row refreshes; VSCode re-requests children.
+    const fileNode = this.roots?.find((f) => f.uri.toString() === uri.toString());
+    this.emitter.fire(fileNode);
+  }
+
   async getChildren(element?: TestTreeNode): Promise<TestTreeNode[]> {
     if (!this.roots) {
+      // Activation path: status map (index.json only, no parsing) + file list (findFiles, no parsing).
       this.statusMap = await this.loadStatusMap();
       this.roots = await this.discoverRoots();
     }
@@ -1169,8 +1209,14 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
     }
     switch (element.kind) {
       case 'testFile': {
-        const code = new TextDecoder().decode(await vscode.workspace.fs.readFile(element.uri));
-        const parsed = buildTestTree(code);
+        // LAZY: this branch runs only when the user expands the file row. Parse once, cache.
+        const key = element.uri.toString();
+        let parsed = this.parseCache.get(key);
+        if (!parsed) {
+          const code = new TextDecoder().decode(await vscode.workspace.fs.readFile(element.uri));
+          parsed = buildTestTree(code);
+          this.parseCache.set(key, parsed);
+        }
         return parsed.nodes.map((n) => this.toNode(element.relPath, [], n, element.uri));
       }
       case 'testGroup':
@@ -1418,7 +1464,25 @@ Add a small helper `relPathOfRoot(root, uri)` mirroring the one in Task 8 (or ex
 
 (f) Remove `runsTree.prependRun(...)`, `runsTree.failuresList`, and the `fliwright.openRunViewer` command that depended on the in-memory list (replace its body to delegate to `runViewerPanel.openWithPicker()` which reads from disk — keep the command name if menus reference it, or remove and update menus in Task 12).
 
-(g) Delete `packages/fliwright-vscode/src/views/RunsTreeProvider.ts`.
+(g) **Wire the lazy-parse cache invalidation on save.** Add a debounced save listener in `activate()` (disposables-pushed) that calls `testsTree.invalidateFile(uri)` only for `.test.ts` files:
+
+```ts
+  const saveDebounce = new Map<string, NodeJS.Timeout>();
+  context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((doc) => {
+    if (!doc.fileName.endsWith('.test.ts')) return;
+    const key = doc.uri.toString();
+    const existing = saveDebounce.get(key);
+    if (existing) clearTimeout(existing);
+    saveDebounce.set(key, setTimeout(() => {
+      saveDebounce.delete(key);
+      testsTree.invalidateFile(doc.uri);   // invalidate ONE file's parse cache + re-fire its subtree
+    }, 300));
+  }));
+```
+
+(Use `setTimeout`/`clearTimeout` from the global scope — this runs in the extension host, not a workflow script, so timers are allowed.)
+
+(h) Delete `packages/fliwright-vscode/src/views/RunsTreeProvider.ts`.
 
 - [ ] **Step 3: Typecheck + run full extension test suite**
 
