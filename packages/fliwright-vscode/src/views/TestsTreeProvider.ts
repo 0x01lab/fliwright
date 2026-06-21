@@ -1,8 +1,8 @@
-import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { AnnotationParser } from '../editor/AnnotationParser.js';
 import type { TestDiscoveryService } from '../runner/TestDiscoveryService.js';
 import type { TestStatusStore } from '../testing/TestStatusStore.js';
+import { relPathOf } from '../testing/relPath.js';
 // Namespace import so test spies (vi.spyOn(builder, 'buildTestTree')) on the
 // module namespace are observed at call time — required by the lazy-parse test.
 import * as TestTreeBuilder from '../testing/TestTreeBuilder.js';
@@ -285,14 +285,4 @@ function statusIcon(s: TestNodeStatus): string {
 
 function stepIcon(s: string): string {
   return s === 'passed' ? 'check' : s === 'failed' ? 'error' : 'circle-outline';
-}
-
-/**
- * Workspace-relative path with FORWARD slashes, matching the relPath form used
- * by TestStatusStore.recordRun and testNodeId — `<a>/<b>/<c>.ts`. Getting this
- * form right is load-bearing for status patching: a mismatch silently no-ops.
- */
-function relPathOf(root: vscode.Uri, uri: vscode.Uri): string {
-  const rel = path.relative(root.fsPath, uri.fsPath);
-  return rel.split(path.sep).join('/');
 }

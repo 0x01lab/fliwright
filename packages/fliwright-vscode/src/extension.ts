@@ -26,14 +26,16 @@ import { clearFlutterMockRoutes, formatMockRuleDebug, SandboxService } from './s
 import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
-import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRule, FormRulesEntry, InvalidFileEntry, MockDiscoveryResult, MockEndpointEntry, MockRuleEntry, RunEntry, RunResult, ScriptFileEntry, StateProviderEntry, TestFileEntry } from './types.js';
+import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRule, FormRulesEntry, InvalidFileEntry, MockDiscoveryResult, MockEndpointEntry, MockRuleEntry, RunResult, ScriptFileEntry, StateProviderEntry } from './types.js';
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
 import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
-import { RunsTreeProvider } from './views/RunsTreeProvider.js';
 import { ScriptsTreeProvider } from './views/ScriptsTreeProvider.js';
 import { StateTreeProvider } from './views/StateTreeProvider.js';
 import { TestsTreeProvider } from './views/TestsTreeProvider.js';
+import { ensureProjectRunsRoot } from './testing/ProjectRunsRoot.js';
+import { TestStatusStore } from './testing/TestStatusStore.js';
+import { relPathOf } from './testing/relPath.js';
 import { FailurePanel } from './webview/FailurePanel.js';
 import { EditorBridge } from './editor/EditorBridge.js';
 import { TestEditorProvider } from './editor/TestEditorProvider.js';
@@ -79,9 +81,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const devicesTree = new DevicesTreeProvider();
   const mockTree = new MockApiTreeProvider(mockService);
   const formTree = new FormDataTreeProvider(formService);
-  const testsTree = new TestsTreeProvider(testDiscoveryService);
+  // Resolve the migrated per-project runs root (~/​.fliwright/​projects/​<hash>/​runs).
+  // Best-effort: if the workspace root is unavailable or mkdir fails, fall back to
+  // undefined so run recording is skipped (the tests tree still works against an
+  // empty in-memory store). The store is always constructed so TestsTreeProvider
+  // gets its second arg (loadIndex tolerates a missing index.json).
+  let runsRoot: string | undefined;
+  const wsRootForRuns = getWorkspaceRoot();
+  if (wsRootForRuns) {
+    try {
+      runsRoot = await ensureProjectRunsRoot(wsRootForRuns);
+    } catch (err) {
+      output.appendLine(`[Fliwright] Failed to ensure runs root: ${err instanceof Error ? err.message : String(err)}`);
+      runsRoot = undefined;
+    }
+  }
+  const statusStore = new TestStatusStore(runsRoot ?? '');
+  const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore);
   const scriptsTree = new ScriptsTreeProvider(scriptDiscoveryService);
-  const runsTree = new RunsTreeProvider();
   const stateTree = new StateTreeProvider();
   const statusBar = new StatusBarService();
   const failurePanel = new FailurePanel(context.extensionUri);
@@ -263,12 +280,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerTreeDataProvider('fliwright.formData', formTree),
     vscode.window.registerTreeDataProvider('fliwright.scripts', scriptsTree),
     vscode.window.registerTreeDataProvider('fliwright.tests', testsTree),
-    vscode.window.registerTreeDataProvider('fliwright.runs', runsTree),
     vscode.window.registerTreeDataProvider('fliwright.state', stateTree),
     vscode.languages.registerCodeLensProvider(
       [{ language: 'typescript', scheme: 'file' }, { language: 'typescriptreact', scheme: 'file' }],
       new FliwrightCodeLensProvider(),
     ),
+  );
+
+  // ── Lazy-parse cache invalidation on save ───────────
+  // Debounce (300ms) per-file: drop ONE file's parse cache so an edited .test.ts
+  // is re-parsed on next expand while every other file stays cached. timers run
+  // on the extension host.
+  const saveDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      if (!doc.fileName.endsWith('.test.ts')) return;
+      const key = doc.uri.toString();
+      const existing = saveDebounce.get(key);
+      if (existing) clearTimeout(existing);
+      saveDebounce.set(
+        key,
+        setTimeout(() => {
+          saveDebounce.delete(key);
+          testsTree.invalidateFile(doc.uri);
+        }, 300),
+      );
+    }),
   );
 
   // ── Visual Test Editor ──────────────────────────────
@@ -633,17 +670,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.fillFormWithRules', async (node?: FormRulesEntry) => {
       await fillFormWithRules(formRulesNode(node));
     }),
-    vscode.commands.registerCommand('fliwright.runCurrentTest', async (node?: TestFileEntry) => {
-      await runTests(node);
+    vscode.commands.registerCommand('fliwright.runCurrentTest', async (node?: unknown) => {
+      // Accept the new Tests panel nodes (TestFileNode / TestCaseNode, typed as
+      // `unknown` because the legacy tree entries still feed this command).
+      // For a testCase, derive a vitest -t pattern from the node id's ancestor
+      // chain (`<relPath>::<anc1>/<anc2>/.../<title>`) so only that case runs.
+      const n = node as { kind?: string; id?: string; uri?: vscode.Uri; fileUri?: vscode.Uri } | undefined;
+      if (n?.kind === 'testCase' && n.id) {
+        const pattern = n.id.split('::')[1]?.split('/').join(' > ');
+        await runTests(n, { testNamePattern: pattern });
+      } else {
+        await runTests(n, {});
+      }
     }),
     vscode.commands.registerCommand('fliwright.runWorkspaceTests', async () => {
-      await runTests(undefined, true);
+      await runTests(undefined, { workspace: true });
     }),
     vscode.commands.registerCommand('fliwright.runScript', async (node?: ScriptFileEntry) => {
       await runScript(node);
     }),
     vscode.commands.registerCommand('fliwright.openFailure', async (node?: FailureTreeEntry) => {
-      const failure = node?.kind === 'failure' ? node.failure : runsTree.failuresList[0];
+      // Failure surfacing now resolves from the latest run via the failure
+      // store on disk (the in-memory runsTree.failuresList is gone). Without a
+      // tree node, surface the latest failure context file directly.
+      let failure = node?.kind === 'failure' ? node.failure : undefined;
+      if (!failure) {
+        const root = getWorkspaceRoot();
+        if (root) {
+          try {
+            const dir = resolveWorkspacePath(root, loadConfig().failureContextDir);
+            const latest = await failureStore.loadLatest(dir);
+            failure = latest[0];
+          } catch { /* ignore — nothing to surface */ }
+        }
+      }
       if (!failure) return;
 
       // Open visual editor if source file is available, otherwise fall back to FailurePanel
@@ -1231,71 +1291,107 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   }
 
-  async function runTests(node?: TestFileEntry, workspace = false): Promise<void> {
-    await runCommand(workspace ? 'Run Workspace Tests' : 'Run Current Test', async () => {
-      const root = requireWorkspaceRoot();
-      const file = workspace ? undefined : node?.uri ?? vscode.window.activeTextEditor?.document.uri;
-      const failureContextDir = resolveWorkspacePath(root, loadConfig().failureContextDir);
+  // Single concurrent run guard. Held for the lifetime of one runTests call
+  // (success or failure) so a second invocation is rejected up-front instead of
+  // racing the runner. Lives in activate() scope: shared across all runTests
+  // invocations during the extension's activation lifetime.
+  let runningPromise: Promise<void> | undefined;
 
-      // Trace configuration
-      const traceMode = getTraceMode();
-      const traceDir = vscode.Uri.joinPath(root, '.fliwright', 'traces');
+  /**
+   * Run tests for a node (file/case), the active editor, or the whole workspace.
+   *
+   * `opts.workspace` runs the whole workspace; `opts.testNamePattern` is a vitest
+   * `-t` pattern (used when a single testCase node is invoked). On completion the
+   * result is recorded via `TestStatusStore.recordRun` (so the Tests panel picks
+   * up statuses) and the tests tree is refreshed.
+   */
+  async function runTests(
+    node: { uri?: vscode.Uri; fileUri?: vscode.Uri } | undefined,
+    opts: { workspace?: boolean; testNamePattern?: string } = {},
+  ): Promise<void> {
+    if (runningPromise) {
+      void vscode.window.showWarningMessage('A Fliwright run is already in progress.');
+      return;
+    }
+    runningPromise = (async () => {
+      await runCommand(opts.workspace ? 'Run Workspace Tests' : 'Run Test', async () => {
+        const root = requireWorkspaceRoot();
+        const file = opts.workspace
+          ? undefined
+          : node?.uri ?? node?.fileUri ?? vscode.window.activeTextEditor?.document.uri;
+        const failureContextDir = resolveWorkspacePath(root, loadConfig().failureContextDir);
 
-      session.setRunning(workspace ? 'workspace tests' : file?.fsPath ?? 'current test');
-      const result = await runner.run({
-        workspaceRoot: root,
-        testFile: file,
-        vmServiceUrl: session.currentUrl,
-        failureContextDir,
-        traceMode,
-        traceDir: traceMode !== 'off' ? traceDir : undefined,
-      });
-      const failures = await failureStore.loadLatest(failureContextDir, result);
-      const run: RunEntry = {
-        kind: 'run',
-        id: `${Date.now()}`,
-        label: workspace ? 'Workspace tests' : file?.fsPath.split(/[\\/]/).pop() ?? 'Current test',
-        filePath: file?.fsPath,
-        result,
-        ranAt: Date.now(),
-      };
-      runsTree.prependRun(run, failures);
-      statusBar.setRunResult(result);
-      session.setConnectedIdle();
-      output.appendLine(`Run complete: ${result.passedTests}/${result.totalTests} passed, ${result.failedTests} failed.`);
+        // Trace configuration. Prefer the per-project runs root when available
+        // (migrated layout) so artifacts land alongside the run result.json.
+        const traceMode = getTraceMode();
+        const traceDir = runsRoot ? vscode.Uri.file(runsRoot) : vscode.Uri.joinPath(root, '.fliwright', 'traces');
 
-      // Cleanup old trace runs (keep last 10)
-      if (traceMode !== 'off') {
-        try {
-          const deleted = await traceService.cleanupOldRuns(traceDir);
-          if (deleted > 0) output.appendLine(`Cleaned up ${deleted} old trace run(s).`);
-        } catch { /* non-critical */ }
-      }
+        session.setRunning(opts.workspace ? 'workspace tests' : file?.fsPath ?? 'tests');
+        const result = await runner.run({
+          workspaceRoot: root,
+          testFile: file,
+          testNamePattern: opts.testNamePattern,
+          runsRoot,
+          vmServiceUrl: session.currentUrl,
+          failureContextDir,
+          traceMode,
+          traceDir: traceMode !== 'off' ? traceDir : undefined,
+        });
+        const failures = await failureStore.loadLatest(failureContextDir, result);
 
-      if (result.failedTests > 0) {
-        const actions = traceMode !== 'off' ? ['View Trace', 'Open Failure'] : ['Open Failure'];
-        vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, ...actions).then(async (selection) => {
-          if (selection === 'View Trace') {
-            await traceViewerPanel.openLatest();
-          } else if (selection === 'Open Failure' && failures[0]) {
-            const failure = failures[0];
-            if (failure.source?.file) {
-              const uri = vscode.Uri.file(failure.source.file);
-              await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
-            } else {
-              failurePanel.open(failure);
+        // Record the run into the per-project status store so the Tests panel
+        // can join statuses onto tree nodes by id. Only when we have a store
+        // with a real runsDir AND a target file (relPath is undefined for
+        // workspace runs — recordRun keys by node id which needs relPath).
+        if (runsRoot && file) {
+          try {
+            await statusStore.recordRun(`${Date.now()}`, Date.now(), root, result, relPathOf(root, file));
+          } catch (err) {
+            output.appendLine(`[Fliwright] Failed to record run status: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+
+        statusBar.setRunResult(result);
+        session.setConnectedIdle();
+        testsTree.refresh();
+        output.appendLine(`Run complete: ${result.passedTests}/${result.totalTests} passed, ${result.failedTests} failed.`);
+
+        // Cleanup old trace runs (keep last 10)
+        if (traceMode !== 'off') {
+          try {
+            const deleted = await traceService.cleanupOldRuns(traceDir);
+            if (deleted > 0) output.appendLine(`Cleaned up ${deleted} old trace run(s).`);
+          } catch { /* non-critical */ }
+        }
+
+        if (result.failedTests > 0) {
+          const actions = traceMode !== 'off' ? ['View Trace', 'Open Failure'] : ['Open Failure'];
+          vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, ...actions).then(async (selection) => {
+            if (selection === 'View Trace') {
+              await traceViewerPanel.openLatest();
+            } else if (selection === 'Open Failure' && failures[0]) {
+              const failure = failures[0];
+              if (failure.source?.file) {
+                const uri = vscode.Uri.file(failure.source.file);
+                await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+              } else {
+                failurePanel.open(failure);
+              }
             }
-          }
-        });
-      } else {
-        const actions = traceMode !== 'off' ? ['View Trace'] : [];
-        vscode.window.showInformationMessage(`Fliwright tests passed: ${result.passedTests}/${result.totalTests}`, ...actions).then(async (selection) => {
-          if (selection === 'View Trace') {
-            await traceViewerPanel.openLatest();
-          }
-        });
-      }
+          });
+        } else {
+          const actions = traceMode !== 'off' ? ['View Trace'] : [];
+          vscode.window.showInformationMessage(`Fliwright tests passed: ${result.passedTests}/${result.totalTests}`, ...actions).then(async (selection) => {
+            if (selection === 'View Trace') {
+              await traceViewerPanel.openLatest();
+            }
+          });
+        }
+      });
+    })().finally(() => {
+      runningPromise = undefined;
     });
+    await runningPromise;
   }
 
   async function runScript(node?: ScriptFileEntry): Promise<void> {
