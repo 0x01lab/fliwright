@@ -9,6 +9,8 @@ export interface RunParams {
   failureContextDir: vscode.Uri;
   traceMode?: TraceMode;
   traceDir?: vscode.Uri;
+  testNamePattern?: string;
+  runsRoot?: string;
 }
 
 export interface TestRunner {

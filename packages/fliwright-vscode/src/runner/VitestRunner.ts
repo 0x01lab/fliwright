@@ -5,23 +5,34 @@ import type { RunParams, TestRunner } from './TestRunner.js';
 
 export class VitestRunner implements TestRunner {
   async run(params: RunParams): Promise<RunResult> {
-    const args = ['vitest', 'run'];
-    if (params.testFile) args.push(path.relative(params.workspaceRoot.fsPath, params.testFile.fsPath));
-    args.push('--reporter=json');
-
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: params.failureContextDir.fsPath,
-    };
-    if (params.vmServiceUrl) env.FLIWRIGHT_VM_URL = params.vmServiceUrl;
-    if (params.traceMode && params.traceMode !== 'off' && params.traceDir) {
-      env.FLIWRIGHT_TRACE = params.traceMode;
-      env.FLIWRIGHT_TRACE_DIR = params.traceDir.fsPath;
-    }
+    const args = buildVitestArgs(params);
+    const env = buildRunEnv(params);
 
     const execution = await runCommand('pnpm', args, params.workspaceRoot.fsPath, env);
     return parseVitestJson(execution.stdout, execution.stderr, execution.exitCode);
   }
+}
+
+export function buildVitestArgs(params: RunParams): string[] {
+  const args = ['vitest', 'run'];
+  if (params.testFile) args.push(path.relative(params.workspaceRoot.fsPath, params.testFile.fsPath));
+  if (params.testNamePattern) args.push('-t', params.testNamePattern);
+  args.push('--reporter=json');
+  return args;
+}
+
+export function buildRunEnv(params: RunParams): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: params.failureContextDir.fsPath,
+  };
+  if (params.runsRoot) env.FLIWRIGHT_RUNS_ROOT = params.runsRoot;
+  if (params.vmServiceUrl) env.FLIWRIGHT_VM_URL = params.vmServiceUrl;
+  if (params.traceMode && params.traceMode !== 'off' && params.traceDir) {
+    env.FLIWRIGHT_TRACE = params.traceMode;
+    env.FLIWRIGHT_TRACE_DIR = params.traceDir.fsPath;
+  }
+  return env;
 }
 
 interface CommandResult {
