@@ -328,10 +328,16 @@ function findMatchingBrace(source: string, open: number): number {
 /**
  * Decide whether the `/` at `pos` opens a regex literal (vs. division). Scan
  * backwards from `pos - 1` skipping whitespace and comments; the previous
- * significant character determines it. Regex follows operator/punctuation that
- * cannot end an expression; division follows an operand (identifier, number,
- * `)`, `]`, or string end — which we approximate by "any other char"). The
- * start-of-file case is regex.
+ * significant character determines it.
+ *
+ * Covered as regex-triggering: punctuation `( , = : [ ! & | ? { } ; >` plus
+ * arithmetic/bitwise binary operators `+ - * % ^ ~`. Start-of-file is regex.
+ *
+ * Known limitation: this is a single-char back-scan, so `/` following an
+ * identifier, number, `)`, `]`, or string end is treated as division, and so
+ * is `/` immediately after the keywords `return`, `typeof`, `in`, `of`,
+ * `delete`, `void`, `new`, `instanceof`, `do`, `else` (which would require an
+ * identifier back-scan to handle correctly).
  */
 function isRegexStart(source: string, pos: number): boolean {
   let j = pos - 1;
@@ -353,7 +359,7 @@ function isRegexStart(source: string, pos: number): boolean {
       continue;
     }
     // First significant char.
-    return '(,=:[!&|?{};>'.includes(c);
+    return '(,=:[!&|?{};>+-*%^~'.includes(c);
   }
   return true; // start of file
 }

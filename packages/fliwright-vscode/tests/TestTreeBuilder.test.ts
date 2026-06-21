@@ -91,6 +91,15 @@ describe('TestTreeBuilder', () => {
     expect(f.nodes.map((n) => n.title)).toEqual(['a', 'after', 'top']);
   });
 
+  // Regression: `/` after arithmetic/bitwise binary operators must start a
+  // regex literal (previously mis-detected as division, consuming the line).
+  it('treats regex after arithmetic/bitwise binary operators as regex', () => {
+    const src = `test('a', () => { const x = 1 + /foo{}/; });
+  describe('after', () => { test('inner', () => {}); });`;
+    const f = buildTestTree(src);
+    expect(f.nodes.map((n) => n.title)).toEqual(['a', 'after']);
+  });
+
   // Edge cases for division-vs-regex disambiguation: a `/` after an operand
   // is division, not a regex literal. Must not consume the rest of the line.
   it('treats / after an identifier as division, not regex', () => {
