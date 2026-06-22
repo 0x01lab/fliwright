@@ -24,6 +24,7 @@
 | [screenshots-snapshots.md](./screenshots-snapshots.md) | `screenshot` / `screenshotFullPage` / `snapshot` / `findRef` / `ref`、桥接能力表 | 你在探查控件树、抓图、或处理 refs |
 | [driver-lifecycle.md](./driver-lifecycle.md) | 手动 `FliwrightDriver`、`connect`/`dispose`、`sendRequest`、诊断信息、原始扩展 | 你需要自定义插件、原始扩展、或旧桥接兼容 |
 | [state.md](./state.md) | `driver.state`（StateAdapter / Riverpod）：`read` / `write` / `override` / `watch` / `listProviders`，跳过 UI 直接进入业务态 | 你要跳过登录、覆盖 provider、或断言 UI 没展示的状态 |
+| [app-instance.md](./app-instance.md) | `driver.app`（AppInstance）：`info` / `getSnapshot` / `listCapabilities` / `getCapability` / `invoke`，越过 widget 树询问 app 身份与能力 | 你要断言 app 身份/环境，或调 app 暴露的测试专用能力（如 `auth.signIn`） |
 | [cli.md](./cli.md) | `fliwright run` / `init` / `doctor` / `record` / `mock:start`、选项、reporter、环境变量、VM 发现、自动化脚本 | 你在运行测试或搭自动化 |
 | [mcp-workflow.md](./mcp-workflow.md) | `fliwright_snap` / `observe` / `record` / `generate_test` / `run` / `get_failure` | 你在通过 MCP 发现行为了或验证 |
 | [troubleshooting.md](./troubleshooting.md) | 常见修复、桥接就绪检查、抖动选择器、崩溃 | 一个测试失败了，你需要解法 |

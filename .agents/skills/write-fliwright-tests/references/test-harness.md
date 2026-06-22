@@ -30,8 +30,8 @@ script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, lo
 | 失败上下文 | 当 `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH` 被设置时，写入断言详情 + 控件树 + 截图 + 诊断信息 + 源码 + 自愈建议 |
 | Trace | 当 `FLIWRIGHT_TRACE_DIR` + `FLIWRIGHT_TRACE` 被设置时，按动作记录 trace（见 [driver-lifecycle.md](./driver-lifecycle.md)） |
 | 截图模式 | 由 `FLIWRIGHT_SCREENSHOT_MODE` 控制 |
-| Timeline | 每次运行写 `.fliwright/runs/<runId>/timeline.json`；失败节点会带 agent-visible failure 和 artifact refs |
-| Logs | 默认写 `.fliwright/runs/<runId>/logs/events.jsonl`；需要实时输出时配置 `FLIWRIGHT_LOG_OUTPUT=stderr,jsonl-file` |
+| Timeline | 每次运行写 `<runsRoot>/<runId>/timeline.json`；失败节点会带 agent-visible failure 和 artifact refs |
+| Logs | 默认写 `<runsRoot>/<runId>/logs/events.jsonl`；需要实时输出时配置 `FLIWRIGHT_LOG_OUTPUT=stderr,jsonl-file` |
 
 `mock` fixture 是 timeline-aware 的 mock facade；需要底层能力时再退回 `driver.mock`：
 
@@ -114,7 +114,8 @@ const test = createFliwrightTest(defineConfig({
 | `mode` | `'test' \| 'script'` | `'test'` | 写入 timeline 的运行模式 |
 | `requireAssertions` | `boolean` | `false` | 为 `true` 时，测试结束前必须至少有一个 locator `expect(...).to*` timeline assertion node |
 | `agentPolicy` | `AgentPolicy` | *(未设)* | 主动/被动 agent 策略 |
-| `timelineDir` | `string` | `process.cwd()` | `.fliwright/runs/<runId>` 的根目录 |
+| `timelineDir` | `string` | `process.cwd()` | 兜底根目录的 base；仅当未设 `runsRoot`/`FLIWRIGHT_RUNS_ROOT` 时，产物落 `<timelineDir>/.fliwright/runs/<runId>/` |
+| `runsRoot` | `string` | *(未设)* | 显式产物根目录，优先级高于 `FLIWRIGHT_RUNS_ROOT` 与 `timelineDir`。经 VS Code 运行时扩展自动注入 `FLIWRIGHT_RUNS_ROOT` 指向 `~/.fliwright/projects/<project-slug>/runs` |
 | `log` | `FliwrightLogConfig` | `{ outputs: ['jsonl-file'] }` | 结构化日志 level、format、outputs 和路径。见 [logging.md](./logging.md)。 |
 
 ```typescript

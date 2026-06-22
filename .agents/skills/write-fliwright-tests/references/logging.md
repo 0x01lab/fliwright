@@ -52,10 +52,10 @@ Use levels like this:
 By default, Fliwright writes structured JSONL logs to:
 
 ```text
-.fliwright/runs/<runId>/logs/events.jsonl
+<runsRoot>/<runId>/logs/events.jsonl
 ```
 
-The terminal is quiet unless you opt in. This keeps Vitest/CLI JSON output parseable.
+`<runsRoot>` 默认是项目内 `.fliwright/runs`；经 VS Code 运行时扩展会注入 `FLIWRIGHT_RUNS_ROOT`，把产物改到 `~/.fliwright/projects/<project-slug>/runs`，也可用 `FLIWRIGHT_RUNS_ROOT` 或 `defineConfig({ runsRoot })` 手动指定。The terminal is quiet unless you opt in. This keeps Vitest/CLI JSON output parseable.
 
 ## Config
 

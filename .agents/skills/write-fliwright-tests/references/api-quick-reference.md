@@ -16,10 +16,10 @@ import { test, expect, createFliwrightTest, defineConfig,
 // createFliwrightScript(config): script // mode='script', requireAssertions=false
 // defineConfig(overrides & { vmServiceUrl }): FliwrightConfig   // fills defaults
 //   FliwrightConfig { vmServiceUrl; timeout?: 5000; screenshot?: 'file'|'base64'|'off';
-//                     ai?; mode?: 'test'|'script'; requireAssertions?; agentPolicy?; timelineDir?; log? }
+//                     ai?; mode?: 'test'|'script'; requireAssertions?; agentPolicy?; timelineDir?; runsRoot?; log? }
 ```
 
-环境变量：`FLIWRIGHT_VM_URL`、`FLIWRIGHT_VM_SERVICE_URL`、`FLIWRIGHT_SCREENSHOT_MODE`、
+环境变量：`FLIWRIGHT_VM_URL`、`FLIWRIGHT_VM_SERVICE_URL`、`FLIWRIGHT_RUNS_ROOT`、`FLIWRIGHT_SCREENSHOT_MODE`、
 `FLIWRIGHT_FAILURE_TIMEOUT_MS`、`FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`、
 `FLIWRIGHT_MOCK_CONTROLLER_URL`、`FLIWRIGHT_TRACE`、`FLIWRIGHT_TRACE_DIR`、
 `FLIWRIGHT_LOG_LEVEL`、`FLIWRIGHT_LOG_FORMAT`、`FLIWRIGHT_LOG_OUTPUT`、
@@ -196,7 +196,7 @@ driver.mock.controllerUrl: string | null
 new FliwrightDriver(options?: { plugins?: FliwrightPlugin[] })
 driver.connect(vmServiceUrl): Promise<void>     // needs ws://…/ws
 driver.dispose(): Promise<void>
-driver.page / driver.mock / driver.healing / driver.recorder / driver.state
+driver.page / driver.mock / driver.healing / driver.recorder / driver.state / driver.app
 driver.sdkVersion: string | null
 driver.sendRequest(method, params?): Promise<unknown>
 driver.reloadSources(): Promise<unknown>
@@ -205,6 +205,21 @@ driver.getDiagnostics(opts?): VMServiceEvent[]
 driver.clearDiagnostics(): void
 driver.getStateAdapter(name) / getMockAdapter(name) / getFinderStrategy(name) / getHealingStrategy(name)
 driver.notifyTestStart(name) / notifyTestEnd(name, result)
+```
+
+## `driver.app` — `AppInstance`
+
+```typescript
+driver.app.info(): Promise<AppInfo>                                     // ext.fliwright.app.info
+driver.app.getSnapshot<T>(): Promise<AppSnapshot & { snapshot: T }>     // ext.fliwright.app.snapshot
+driver.app.listCapabilities(): Promise<AppCapabilityDescriptor[]>       // ext.fliwright.app.capabilities
+driver.app.hasCapability(name): Promise<boolean>
+driver.app.getCapability<T>(name): Promise<AppCapabilityProxy<T> | undefined>
+driver.app.invoke<TIn, TOut>(capability, method, input?): Promise<TOut> // ext.fliwright.app.invoke
+driver.app.capability<T>(name): AppCapabilityProxy<T>   // typed proxy: anyMethod(input) -> invoke(name, 'anyMethod', input)
+//   AppInfo { id; name?; environment?; capabilities: string[] }
+//   AppCapabilityDescriptor { name; description?; methods: string[] }
+//   AppCapabilityProxy<T> = T & { invoke(method, input?): Promise<unknown> }
 ```
 
 ## `fliwright` CLI
@@ -234,6 +249,7 @@ fliwright mock:start [--host <h>] [--port <p>] [--mock-dir <d>]
 | formHelper/extractForm | `ext.fliwright.extractForm` |
 | screenshot | `ext.fliwright.screenshot` |
 | mocks | `ext.fliwright.mock.*` |
+| app 身份/能力 | `ext.fliwright.app.info` / `.snapshot` / `.capabilities` / `.invoke` |
 | click/dragFrom（原始） | `ext.fliwright.click` / `ext.fliwright.dragFrom` |
 | 导航 | `ext.fliwright.navigate` / `.currentRoute` / `.goBack` |
 | settle | `ext.fliwright.settle` |
