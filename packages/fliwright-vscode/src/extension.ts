@@ -22,12 +22,11 @@ import { ScreenshotPreviewPanel, ScreenshotService } from './screenshot/Screensh
 import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
-import { MockRuleSelectionStore } from './sandbox/MockRuleSelectionStore.js';
 import { clearFlutterMockRoutes, formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js';
 import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
-import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRule, FormRulesEntry, InvalidFileEntry, MockDiscoveryResult, MockEndpointEntry, MockRuleEntry, RunResult, ScriptFileEntry, StateProviderEntry } from './types.js';
+import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRule, FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunResult, ScriptFileEntry, StateProviderEntry } from './types.js';
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
 import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
@@ -51,8 +50,6 @@ import type { TraceMode } from '@fliwright/core';
 
 let output: vscode.OutputChannel;
 const LAST_VM_SERVICE_URL_KEY = 'fliwright.vmServiceUrl.lastSuccess';
-const MOCK_AUTO_DEFAULTS_SUPPRESSED_KEY = 'fliwright.mock.autoDefaultsSuppressed.v1';
-const MOCK_SUPPRESSED_ENDPOINTS_KEY = 'fliwright.mock.suppressedEndpoints.v1';
 const DEBUG_LOG_BUFFER_LIMIT = 20000;
 const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 5000;
 
@@ -65,7 +62,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   setConnectorDebugLog((message) => output.appendLine(message));
 
   const mockService = new MockConfigService();
-  const mockSelectionStore = new MockRuleSelectionStore(context.workspaceState);
   const formService = new FormRuleService();
   const session = new FliwrightSession();
   const sandboxService = new SandboxService();
@@ -1402,96 +1398,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       watching: false,
     })));
   }
-
-  function isMockAutoDefaultsSuppressed(): boolean {
-    return context.workspaceState.get<boolean>(MOCK_AUTO_DEFAULTS_SUPPRESSED_KEY, false);
-  }
-
-  async function setMockAutoDefaultsSuppressed(suppressed: boolean): Promise<void> {
-    await context.workspaceState.update(
-      MOCK_AUTO_DEFAULTS_SUPPRESSED_KEY,
-      suppressed ? true : undefined,
-    );
-  }
-
-  function getSuppressedMockEndpoints(): Array<{ endpoint: string; method: string; updatedAt: number }> {
-    const value = context.workspaceState.get<unknown>(MOCK_SUPPRESSED_ENDPOINTS_KEY);
-    if (!value || typeof value !== 'object') return [];
-    const candidate = value as { version?: unknown; endpoints?: unknown };
-    if (candidate.version !== 1 || !Array.isArray(candidate.endpoints)) return [];
-    return candidate.endpoints.filter((entry): entry is { endpoint: string; method: string; updatedAt: number } => (
-      entry != null &&
-      typeof entry === 'object' &&
-      typeof (entry as { endpoint?: unknown }).endpoint === 'string' &&
-      typeof (entry as { method?: unknown }).method === 'string' &&
-      typeof (entry as { updatedAt?: unknown }).updatedAt === 'number'
-    )).map((entry) => ({
-      endpoint: entry.endpoint,
-      method: entry.method.toUpperCase(),
-      updatedAt: entry.updatedAt,
-    }));
-  }
-
-  async function writeSuppressedMockEndpoints(
-    endpoints: Array<{ endpoint: string; method: string; updatedAt: number }>,
-  ): Promise<void> {
-    const byKey = new Map<string, { endpoint: string; method: string; updatedAt: number }>();
-    for (const endpoint of endpoints) {
-      byKey.set(mockEndpointKey(endpoint.method, endpoint.endpoint), {
-        endpoint: endpoint.endpoint,
-        method: endpoint.method.toUpperCase(),
-        updatedAt: endpoint.updatedAt,
-      });
-    }
-    const normalized = Array.from(byKey.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-    await context.workspaceState.update(
-      MOCK_SUPPRESSED_ENDPOINTS_KEY,
-      normalized.length > 0 ? { version: 1, endpoints: normalized } : undefined,
-    );
-  }
-
-  async function suppressMockEndpoint(endpoint: { endpoint: string; method: string }): Promise<void> {
-    await writeSuppressedMockEndpoints([
-      ...getSuppressedMockEndpoints().filter((entry) => (
-        mockEndpointKey(entry.method, entry.endpoint) !== mockEndpointKey(endpoint.method, endpoint.endpoint)
-      )),
-      {
-        endpoint: endpoint.endpoint,
-        method: endpoint.method,
-        updatedAt: Date.now(),
-      },
-    ]);
-  }
-
-  async function unsuppressMockEndpoint(endpoint: { endpoint: string; method: string }): Promise<void> {
-    await writeSuppressedMockEndpoints(getSuppressedMockEndpoints().filter((entry) => (
-      mockEndpointKey(entry.method, entry.endpoint) !== mockEndpointKey(endpoint.method, endpoint.endpoint)
-    )));
-  }
-
-  async function clearSuppressedMockEndpoints(): Promise<void> {
-    await writeSuppressedMockEndpoints([]);
-  }
-
-  function suppressedMockEndpointsForDiscovery(
-    discovery: MockDiscoveryResult,
-    suppressAll: boolean,
-  ): Array<{ endpoint: string; method: string }> {
-    if (suppressAll) {
-      return discovery.endpoints.map((endpoint) => ({
-        endpoint: endpoint.endpointFile.endpoint,
-        method: endpoint.endpointFile.method,
-      }));
-    }
-    const discoveredKeys = new Set(
-      discovery.endpoints.map((endpoint) => (
-        mockEndpointKey(endpoint.endpointFile.method, endpoint.endpointFile.endpoint)
-      )),
-    );
-    return getSuppressedMockEndpoints().filter((entry) => (
-      discoveredKeys.has(mockEndpointKey(entry.method, entry.endpoint))
-    ));
-  }
 }
 
 function stateProvidersEmptyMessage(status?: { observerInstalled: boolean; containerReady: boolean; providerCount: number }): string {
@@ -1759,10 +1665,6 @@ async function runCommand(label: string, action: () => Promise<void>): Promise<v
 
 function isActiveSessionState(status: string): boolean {
   return status === 'connected' || status === 'recording' || status === 'running';
-}
-
-function mockEndpointKey(method: string, endpoint: string): string {
-  return `${method.toUpperCase()} ${endpoint}`;
 }
 
 function messageOf(error: unknown): string {
