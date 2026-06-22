@@ -1,0 +1,40 @@
+name: Release VS Code extension
+
+on:
+  push:
+    tags:
+      - 'vscode-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify extension
+        run: pnpm --filter @fliwright/vscode run lint && pnpm --filter @fliwright/vscode run test
+
+      - name: Package VSIX
+        run: pnpm --filter @fliwright/vscode run package
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: pnpm --filter @fliwright/vscode run publish:vsce:package
+
+      - name: Upload VSIX to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packages/fliwright-vscode/fliwright-vscode-*.vsix

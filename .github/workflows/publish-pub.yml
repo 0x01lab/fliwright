@@ -1,0 +1,58 @@
+name: Publish Dart packages
+
+on:
+  push:
+    tags:
+      - 'fliwright_bridge-v*'
+      - 'fliwright_bridge_riverpod-v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: dart-lang/setup-dart@v1
+
+      - name: Resolve package
+        id: package
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == fliwright_bridge_riverpod-v* ]]; then
+            pkg="fliwright-bridge-riverpod"
+          elif [[ "${GITHUB_REF_NAME}" == fliwright_bridge-v* ]]; then
+            pkg="fliwright-bridge"
+          else
+            echo "Unsupported tag: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          echo "dir=packages/${pkg}" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        working-directory: ${{ steps.package.outputs.dir }}
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: ${{ steps.package.outputs.dir }}
+        run: flutter analyze .
+
+      - name: Test
+        working-directory: ${{ steps.package.outputs.dir }}
+        run: flutter test
+
+      - name: Publish dry run
+        working-directory: ${{ steps.package.outputs.dir }}
+        run: flutter pub publish --dry-run
+
+      - name: Publish to pub.dev
+        working-directory: ${{ steps.package.outputs.dir }}
+        run: flutter pub publish --force
