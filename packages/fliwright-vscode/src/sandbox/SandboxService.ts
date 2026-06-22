@@ -146,10 +146,6 @@ async function routeRule(
   return normalizeRouteResult(await mockRuleController.applyFlutterRule(driver.mock, endpoint, method, rule));
 }
 
-function appliedKey(method: string, endpoint: string): string {
-  return `${method.toUpperCase()} ${endpoint}`;
-}
-
 function parseRouteId(id: string | undefined): { method: string; endpoint: string; ruleName: string } | undefined {
   return mockRuleController.parseRouteId(id);
 }

@@ -539,9 +539,19 @@ describe('SandboxService', () => {
       { id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success', method: 'GET', path: '/v1/token' },
       { id: 'test-script-route', method: 'POST', path: '/v1/profile' },
     ]);
+    const routeFlutter = vi.fn();
+    const removeFlutterRoute = vi.fn();
+    const clearFlutterRoutes = vi.fn();
 
-    const active = await service.getActiveRules({ mock: { listFlutterRoutes } } as any);
+    const active = await service.getActiveRules({
+      mock: { listFlutterRoutes, routeFlutter, removeFlutterRoute, clearFlutterRoutes },
+    } as any);
 
+    // getActiveRules is the sole connect/reload entry point from extension.ts,
+    // so it must remain read-only: never route/remove/clear the store.
+    expect(routeFlutter).not.toHaveBeenCalled();
+    expect(removeFlutterRoute).not.toHaveBeenCalled();
+    expect(clearFlutterRoutes).not.toHaveBeenCalled();
     expect(listFlutterRoutes).toHaveBeenCalledOnce();
     expect(active).toMatchObject([
       { endpoint: '/v1/token', method: 'GET', ruleName: 'success' },
