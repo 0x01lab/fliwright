@@ -27,6 +27,7 @@ export function buildRunEnv(params: RunParams): NodeJS.ProcessEnv {
     FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: params.failureContextDir.fsPath,
   };
   if (params.runsRoot) env.FLIWRIGHT_RUNS_ROOT = params.runsRoot;
+  if (params.runId) env.FLIWRIGHT_RUN_ID = params.runId;
   if (params.vmServiceUrl) env.FLIWRIGHT_VM_URL = params.vmServiceUrl;
   if (params.traceMode && params.traceMode !== 'off' && params.traceDir) {
     env.FLIWRIGHT_TRACE = params.traceMode;

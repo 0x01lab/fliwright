@@ -13,6 +13,7 @@ export interface MockTimelineMetadata {
     | 'clearCalls'
     | 'setPassthrough'
     | 'getCalls'
+    | 'waitForCall'
     | 'listRoutes'
     | 'listRules';
   endpoint?: string;
@@ -30,6 +31,12 @@ export interface NormalizedRequestMatcher {
   method?: string;
   headers?: Record<string, string | RegExp>;
   body?: unknown;
+}
+
+export interface WaitForMockCallOptions {
+  count?: number;
+  timeout?: number;
+  interval?: number;
 }
 
 export type TimelineMockResponse = MockRouteResponse & {

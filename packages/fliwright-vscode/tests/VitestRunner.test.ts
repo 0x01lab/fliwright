@@ -75,6 +75,15 @@ describe('buildRunEnv', () => {
     expect(env.FLIWRIGHT_RUNS_ROOT).toBe('/home/.fliwright/projects/abc/runs');
   });
 
+  it('sets FLIWRIGHT_RUN_ID when runId is provided', () => {
+    const env = buildRunEnv({
+      ...baseParams,
+      runId: '2026-06-22T10-00-00',
+    });
+
+    expect(env.FLIWRIGHT_RUN_ID).toBe('2026-06-22T10-00-00');
+  });
+
   it('does not set FLIWRIGHT_RUNS_ROOT when runsRoot is unset', () => {
     const env = buildRunEnv({ ...baseParams });
     expect(env.FLIWRIGHT_RUNS_ROOT).toBeUndefined();

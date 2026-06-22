@@ -2,7 +2,7 @@ import { FliwrightDriver } from '../Driver.js';
 import type { MockRouteResponse } from '../types.js';
 import { readWorkspaceConfigSync } from '../WorkspaceConfig.js';
 import { MockRuntime } from './MockRuntime.js';
-import type { NormalizedRequestMatcher } from './types.js';
+import type { NormalizedRequestMatcher, WaitForMockCallOptions } from './types.js';
 
 export interface FliwrightMockServiceOptions {
   createDriver?: () => FliwrightDriver;
@@ -102,6 +102,13 @@ export class FliwrightMockService {
 
   async findCalls(matcher: NormalizedRequestMatcher): Promise<Awaited<ReturnType<MockRuntime['findCalls']>>> {
     return this.requireRuntime().findCalls(matcher);
+  }
+
+  async waitForCall(
+    matcher: NormalizedRequestMatcher | string,
+    options?: WaitForMockCallOptions,
+  ): Promise<Awaited<ReturnType<MockRuntime['waitForCall']>>> {
+    return this.requireRuntime().waitForCall(matcher, options);
   }
 
   private requireRuntime(): MockRuntime {

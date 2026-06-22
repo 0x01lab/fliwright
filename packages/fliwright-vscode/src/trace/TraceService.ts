@@ -1,19 +1,39 @@
 // packages/fliwright-vscode/src/trace/TraceService.ts
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
 import { TraceStore } from '@fliwright/core';
-import type { TraceData, TraceMeta } from '@fliwright/core';
+import type { TraceData } from '@fliwright/core';
+import { projectRunsRootCandidates } from '../testing/ProjectRunsRoot.js';
+import { RunArtifactStore } from '../testing/RunArtifactStore.js';
 
 /**
  * Service for reading trace data from the workspace.
  */
 export class TraceService {
+  private readonly artifacts = new RunArtifactStore();
+
   /**
    * Find the .fliwright/traces directory in the workspace.
    */
   async getTraceDir(workspaceRoot: vscode.Uri): Promise<vscode.Uri | undefined> {
-    const traceDir = vscode.Uri.joinPath(workspaceRoot, '.fliwright', 'traces');
+    for (const candidate of projectRunsRootCandidates(workspaceRoot)) {
+      const traceDir = vscode.Uri.file(path.join(candidate.rootDir, 'traces'));
+      try {
+        await vscode.workspace.fs.stat(traceDir);
+        return traceDir;
+      } catch {
+        const accidentalRunsRoot = vscode.Uri.file(candidate.runsDir);
+        try {
+          await vscode.workspace.fs.stat(accidentalRunsRoot);
+          const runs = await TraceStore.listRuns(accidentalRunsRoot.fsPath);
+          if (runs.length > 0) return accidentalRunsRoot;
+        } catch {
+          /* keep looking */
+        }
+      }
+    }
+
+    const traceDir = vscode.Uri.file(this.artifacts.legacyTraceDir(workspaceRoot));
     try {
       await vscode.workspace.fs.stat(traceDir);
       return traceDir;

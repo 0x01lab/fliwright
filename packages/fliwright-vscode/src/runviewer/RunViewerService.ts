@@ -1,7 +1,8 @@
 // packages/fliwright-vscode/src/runviewer/RunViewerService.ts
 import * as vscode from 'vscode';
 import type { TimelineData, FliwrightLogEvent } from '@fliwright/core';
-import { projectRunsRoot } from '../testing/ProjectRunsRoot.js';
+import { projectRunsRootCandidates } from '../testing/ProjectRunsRoot.js';
+import { RunArtifactStore, type RunArtifactIndexEntry } from '../testing/RunArtifactStore.js';
 
 export interface RunSummary {
   runDir: vscode.Uri;
@@ -34,6 +35,8 @@ export interface LoadedRun {
  * service reads the files directly via vscode.workspace.fs.
  */
 export class RunViewerService {
+  private readonly artifacts = new RunArtifactStore();
+
   getWorkspaceRoot(): vscode.Uri | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri;
   }
@@ -47,16 +50,16 @@ export class RunViewerService {
    * undefined when neither exists.
    */
   async getRunsDir(root: vscode.Uri): Promise<vscode.Uri | undefined> {
-    // Prefer the migrated per-project root under the user home.
-    const migrated = vscode.Uri.file(projectRunsRoot(root).runsDir);
-    try {
-      await vscode.workspace.fs.stat(migrated);
-      return migrated;
-    } catch {
-      /* fall through to legacy */
+    for (const candidate of projectRunsRootCandidates(root)) {
+      const migrated = vscode.Uri.file(candidate.runsDir);
+      try {
+        await vscode.workspace.fs.stat(migrated);
+        return migrated;
+      } catch {
+        /* keep looking */
+      }
     }
-    // Back-compat: legacy project-local runs dir.
-    const legacy = vscode.Uri.joinPath(root, '.fliwright', 'runs');
+    const legacy = vscode.Uri.file(this.artifacts.legacyRunsDir(root));
     try {
       await vscode.workspace.fs.stat(legacy);
       return legacy;
@@ -152,12 +155,17 @@ export class RunViewerService {
   async findLatestRunForTestIndexed(
     runsDir: vscode.Uri,
     testNodeId: string,
-    index: Map<string, { runId: string }>,
+    index: Map<string, { runId: string; resultRunId?: string }>,
   ): Promise<LoadedRun | undefined> {
     const entry = index.get(testNodeId);
     if (entry?.runId) {
       const loaded = await this.loadRun(vscode.Uri.joinPath(runsDir, entry.runId));
       if (loaded) return loaded;
+      const derivedRunId = deriveTimelineRunId(entry, testNodeId, this.artifacts);
+      if (derivedRunId && derivedRunId !== entry.runId) {
+        const derived = await this.loadRun(vscode.Uri.joinPath(runsDir, derivedRunId));
+        if (derived) return derived;
+      }
       // Indexed run dir is gone (pruned) — fall through to the scan.
     }
     return this.findLatestRunForTest(runsDir, testNodeId);
@@ -237,6 +245,18 @@ export class RunViewerService {
     }
     return logs;
   }
+}
+
+function deriveTimelineRunId(
+  entry: Pick<RunArtifactIndexEntry, 'runId'> & Partial<Pick<RunArtifactIndexEntry, 'resultRunId'>>,
+  testNodeId: string,
+  artifacts: RunArtifactStore,
+): string | undefined {
+  const resultRunId = entry.resultRunId ?? entry.runId;
+  const chain = testNodeId.split('::')[1];
+  if (!chain) return undefined;
+  const testName = chain.split('/').join(' > ');
+  return artifacts.timelineRunId(resultRunId, testName);
 }
 
 /**

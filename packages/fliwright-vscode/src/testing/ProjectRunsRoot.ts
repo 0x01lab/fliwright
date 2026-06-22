@@ -20,10 +20,30 @@ export function projectRunsRoot(
   options: ProjectRunsRootOptions = {},
 ): ProjectRunsRootResult {
   const home = options.homeDir ?? homedir();
+  const hash = sanitizeProjectPathName(workspaceRoot.fsPath);
+  const rootDir = join(home, '.fliwright', 'projects', hash);
+  const runsDir = join(rootDir, 'runs');
+  return { hash, rootDir, runsDir };
+}
+
+export function legacyProjectRunsRoot(
+  workspaceRoot: vscode.Uri,
+  options: ProjectRunsRootOptions = {},
+): ProjectRunsRootResult {
+  const home = options.homeDir ?? homedir();
   const hash = createHash('sha1').update(workspaceRoot.fsPath).digest('hex').slice(0, 12);
   const rootDir = join(home, '.fliwright', 'projects', hash);
   const runsDir = join(rootDir, 'runs');
   return { hash, rootDir, runsDir };
+}
+
+export function projectRunsRootCandidates(
+  workspaceRoot: vscode.Uri,
+  options: ProjectRunsRootOptions = {},
+): ProjectRunsRootResult[] {
+  const primary = projectRunsRoot(workspaceRoot, options);
+  const legacy = legacyProjectRunsRoot(workspaceRoot, options);
+  return primary.rootDir === legacy.rootDir ? [primary] : [primary, legacy];
 }
 
 export async function ensureProjectRunsRoot(
@@ -36,4 +56,10 @@ export async function ensureProjectRunsRoot(
   // Use Date.now() — this runs in the extension host, not a workflow script.
   await writeFile(join(rootDir, 'meta.json'), JSON.stringify({ projectPath: workspaceRoot.fsPath, updatedAt: now }, null, 2), 'utf8');
   return runsDir;
+}
+
+export function sanitizeProjectPathName(projectPath: string): string {
+  const normalized = projectPath.replace(/\\/g, '/').replace(/\/+/g, '/');
+  const name = normalized.replace(/\//g, '-').replace(/^-+|-+$/g, '');
+  return name || 'project';
 }

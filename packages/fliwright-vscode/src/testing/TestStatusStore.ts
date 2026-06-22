@@ -2,13 +2,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { RunResult, TestCaseResult } from '../types.js';
 import { testNodeId } from './types.js';
+import type { RunArtifactIndexEntry } from './RunArtifactStore.js';
 
-export interface TestStatusEntry {
-  runId: string;
-  status: 'passed' | 'failed';
-  ranAt: number;
-  durationMs?: number;
-}
+export type TestStatusEntry = RunArtifactIndexEntry;
 
 interface IndexMap {
   [nodeId: string]: TestStatusEntry;
@@ -69,7 +65,7 @@ export class TestStatusStore {
     const map = await this.loadIndex();
     let changed = false;
     for (const [id, entry] of map) {
-      if (!keepRunIds.has(entry.runId)) {
+      if (!keepRunIds.has(entry.runId) && !keepRunIds.has(entry.resultRunId)) {
         map.delete(id);
         changed = true;
       }
@@ -80,10 +76,12 @@ export class TestStatusStore {
 
 function toEntry(runId: string, ranAt: number, tc: TestCaseResult): TestStatusEntry {
   return {
-    runId,
+    runId: `${runId}-${safeName(tc.name)}`,
+    resultRunId: runId,
     status: tc.passed ? 'passed' : 'failed',
     ranAt,
     durationMs: tc.duration || undefined,
+    mode: 'test',
   };
 }
 
@@ -95,4 +93,8 @@ function splitName(name: string): { ancestors: string[]; title: string } {
   const parts = name.split(' > ').map((s) => s.trim()).filter(Boolean);
   if (parts.length === 0) return { ancestors: [], title: name };
   return { ancestors: parts.slice(0, -1), title: parts[parts.length - 1] };
+}
+
+function safeName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'test';
 }

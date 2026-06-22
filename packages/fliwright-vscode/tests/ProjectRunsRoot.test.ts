@@ -2,22 +2,41 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { projectRunsRoot, ensureProjectRunsRoot } from '../src/testing/ProjectRunsRoot.js';
+import {
+  ensureProjectRunsRoot,
+  legacyProjectRunsRoot,
+  projectRunsRoot,
+  projectRunsRootCandidates,
+  sanitizeProjectPathName,
+} from '../src/testing/ProjectRunsRoot.js';
 
 const fakeUri = (fsPath: string) => ({ fsPath, scheme: 'file' } as any);
 
 describe('ProjectRunsRoot', () => {
-  it('produces a stable hash for a workspace path', () => {
+  it('uses the workspace path as the project directory name', () => {
     const a = projectRunsRoot(fakeUri('/repos/exio_app'), { homeDir: '/tmp/h' });
     const b = projectRunsRoot(fakeUri('/repos/exio_app'), { homeDir: '/tmp/h' });
     expect(a.hash).toBe(b.hash);
-    expect(a.runsDir).toBe(join('/tmp/h', '.fliwright', 'projects', a.hash, 'runs'));
+    expect(a.hash).toBe('repos-exio_app');
+    expect(a.runsDir).toBe(join('/tmp/h', '.fliwright', 'projects', 'repos-exio_app', 'runs'));
   });
 
   it('different paths map to different hashes', () => {
     const a = projectRunsRoot(fakeUri('/repos/A'), { homeDir: '/tmp/h' });
     const b = projectRunsRoot(fakeUri('/repos/B'), { homeDir: '/tmp/h' });
     expect(a.hash).not.toBe(b.hash);
+  });
+
+  it('keeps the legacy hash candidate for existing migrated data', () => {
+    const root = fakeUri('/repos/exio_app');
+    const candidates = projectRunsRootCandidates(root, { homeDir: '/tmp/h' });
+    expect(candidates[0]?.hash).toBe('repos-exio_app');
+    expect(candidates[1]?.hash).toBe(legacyProjectRunsRoot(root, { homeDir: '/tmp/h' }).hash);
+  });
+
+  it('sanitizes slash-separated project paths like Claude Code project names', () => {
+    expect(sanitizeProjectPathName('/Users/leo.he/projects/fliwright')).toBe('Users-leo.he-projects-fliwright');
+    expect(sanitizeProjectPathName('C:\\Users\\leo\\repo')).toBe('C:-Users-leo-repo');
   });
 
   it('ensureProjectRunsRoot creates dirs and writes meta.json', async () => {

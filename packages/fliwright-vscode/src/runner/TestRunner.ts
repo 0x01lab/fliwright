@@ -11,6 +11,7 @@ export interface RunParams {
   traceDir?: vscode.Uri;
   testNamePattern?: string;
   runsRoot?: string;
+  runId?: string;
 }
 
 export interface TestRunner {

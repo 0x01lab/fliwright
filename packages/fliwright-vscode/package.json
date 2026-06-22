@@ -36,6 +36,7 @@
     "publish:vsce": "pnpm run verify:release && cd .vsix-stage && pnpm dlx @vscode/vsce publish --packagePath ../fliwright-vscode-0.1.0.vsix"
   },
   "activationEvents": [
+    "onDebug",
     "onCommand:fliwright.reloadMocks",
     "onCommand:fliwright.reloadFormRules",
     "onCommand:fliwright.reloadScripts",
@@ -463,23 +464,18 @@
           "group": "navigation@2"
         },
         {
-          "command": "fliwright.runCurrentTest",
+          "command": "fliwright.runWorkspaceTests",
           "when": "view == fliwright.tests",
           "group": "navigation@1"
         },
         {
-          "command": "fliwright.runWorkspaceTests",
+          "command": "fliwright.refreshTests",
           "when": "view == fliwright.tests",
           "group": "navigation@2"
         },
         {
           "command": "fliwright.refreshStateProviders",
           "when": "view == fliwright.state",
-          "group": "navigation@1"
-        },
-        {
-          "command": "fliwright.refreshTests",
-          "when": "view == fliwright.tests",
           "group": "navigation@1"
         },
         {
@@ -556,7 +552,7 @@
         },
         {
           "command": "fliwright.runCurrentTest",
-          "when": "view == fliwright.tests && viewItem == testFile",
+          "when": "view == fliwright.tests && viewItem =~ /testFile|testCase/",
           "group": "inline@1"
         },
         {

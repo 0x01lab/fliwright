@@ -9,6 +9,10 @@ export interface ScriptRunParams {
   workspaceRoot: vscode.Uri;
   script: ScriptFileEntry;
   vmServiceUrl?: string;
+  runsRoot?: string;
+  runId?: string;
+  traceDir?: vscode.Uri;
+  traceMode?: 'full' | 'on-failure' | 'off';
   onOutput?: (chunk: string, stream: 'stdout' | 'stderr') => void;
 }
 
@@ -22,6 +26,12 @@ export class ScriptRunner {
     if (params.vmServiceUrl) {
       env.FLIWRIGHT_VM_SERVICE_URL = params.vmServiceUrl;
       env.FLIWRIGHT_VM_URL = params.vmServiceUrl;
+    }
+    if (params.runsRoot) env.FLIWRIGHT_RUNS_ROOT = params.runsRoot;
+    if (params.runId) env.FLIWRIGHT_RUN_ID = params.runId;
+    if (params.traceMode && params.traceMode !== 'off' && params.traceDir) {
+      env.FLIWRIGHT_TRACE = params.traceMode;
+      env.FLIWRIGHT_TRACE_DIR = params.traceDir.fsPath;
     }
 
     const command = await resolveScriptCommand(params.script.uri.fsPath, relativeScript, params.workspaceRoot.fsPath);

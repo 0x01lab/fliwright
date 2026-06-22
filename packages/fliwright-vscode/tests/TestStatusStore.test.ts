@@ -33,8 +33,8 @@ describe('TestStatusStore', () => {
     await store.recordRun('run-1', 1000, fakeRoot('/repo'), result, 'tests/a.test.ts');
 
     const idx = JSON.parse(readFileSync(join(runsDir, 'index.json'), 'utf8'));
-    expect(idx['tests/a.test.ts::suite/case A']).toMatchObject({ status: 'passed', runId: 'run-1' });
-    expect(idx['tests/a.test.ts::suite/case B']).toMatchObject({ status: 'failed', runId: 'run-1' });
+    expect(idx['tests/a.test.ts::suite/case A']).toMatchObject({ status: 'passed', runId: 'run-1-suite-case-A', resultRunId: 'run-1' });
+    expect(idx['tests/a.test.ts::suite/case B']).toMatchObject({ status: 'failed', runId: 'run-1-suite-case-B', resultRunId: 'run-1' });
     expect(existsSync(join(runsDir, 'run-1', 'result.json'))).toBe(true);
   });
 

@@ -162,6 +162,30 @@ describe('RunViewerService.findLatestRunForTestIndexed', () => {
     expect(run?.timeline.runId).toBe('run-2');
   });
 
+  it('derives the timeline run id from resultRunId for current VS Code records', async () => {
+    const svc = new RunViewerService();
+    const baseRunId = '2026-06-22T10-00-00';
+    const timelineRunId = `${baseRunId}-suite-wanted`;
+    mkdirSync(join(runsDir, timelineRunId), { recursive: true });
+    writeFileSync(
+      join(runsDir, timelineRunId, 'timeline.json'),
+      JSON.stringify({
+        runId: timelineRunId,
+        testName: 'suite > wanted',
+        mode: 'test',
+        status: 'passed',
+        startedAt: '2026-06-22T10:00:00Z',
+        nodes: [],
+      }),
+    );
+    const index = new Map<string, { runId: string; resultRunId: string }>([
+      [nodeId, { runId: 'stale-result-dir', resultRunId: baseRunId }],
+    ]);
+
+    const run = await svc.findLatestRunForTestIndexed(runsDirUri, nodeId, index);
+    expect(run?.timeline.runId).toBe(timelineRunId);
+  });
+
   it('falls back to the scan when the indexed run dir is pruned', async () => {
     const svc = new RunViewerService();
     // Index points at a runId whose directory does not exist; scan should still

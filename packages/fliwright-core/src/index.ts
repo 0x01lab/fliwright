@@ -222,6 +222,17 @@ export { AgentRepair } from './agent/AgentRepair.js';
 export type { AgentRepairOptions, RepairProposal, RepairResult, SafeRepairAction } from './agent/AgentRepair.js';
 export { MockRuntime, matchesCall } from './mocks/MockRuntime.js';
 export { FliwrightMockService, mock } from './mocks/MockService.js';
+export {
+  MockRuleController,
+  mockRuleController,
+  mockRuleRouteId,
+} from './mocks/MockRuleController.js';
+export type {
+  FlutterMockRouteTarget,
+  FlutterMockRouteSummary,
+  MockRuleRouteResponse,
+  ParsedMockRuleRouteId,
+} from './mocks/MockRuleController.js';
 export type { FliwrightMockServiceOptions } from './mocks/MockService.js';
 export type {
   MockBackend,
@@ -229,4 +240,5 @@ export type {
   NormalizedMockCall,
   NormalizedRequestMatcher,
   TimelineMockResponse,
+  WaitForMockCallOptions,
 } from './mocks/types.js';

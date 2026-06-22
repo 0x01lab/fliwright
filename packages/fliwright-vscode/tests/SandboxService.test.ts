@@ -320,6 +320,36 @@ describe('SandboxService', () => {
     ]);
   });
 
+  it('reconciles a restored selection over a different cached Flutter rule', async () => {
+    const service = new SandboxService();
+    const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const removeFlutterRoute = vi.fn().mockResolvedValue(undefined);
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success', method: 'GET', path: '/v1/token' },
+    ]);
+    const sendRequest = httpReadySendRequest([{ method: 'GET', path: '/v1/token' }]);
+    const selected = mockRule('error');
+
+    const sync = await service.reconcileFromFlutter(
+      { mock: { listFlutterRoutes, removeFlutterRoute, routeFlutter }, sendRequest } as any,
+      discovery(),
+      { selectedEntries: [selected] },
+    );
+
+    expect(routeFlutter).toHaveBeenCalledWith('/v1/token', expect.objectContaining({
+      id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:error',
+      method: 'GET',
+    }));
+    expect(removeFlutterRoute).not.toHaveBeenCalled();
+    expect(sync.applied).toEqual([]);
+    expect(sync.reconciled).toMatchObject([
+      { endpoint: '/v1/token', method: 'GET', ruleName: 'error' },
+    ]);
+    expect(service.getAppliedRules()).toMatchObject([
+      { endpoint: '/v1/token', method: 'GET', ruleName: 'error' },
+    ]);
+  });
+
   it('accepts wrapped VM service extension payloads', async () => {
     const routeFlutter = vi.fn().mockResolvedValue(undefined);
     const sendRequest = vi.fn().mockImplementation(async (method: string) => {

@@ -3,7 +3,7 @@ import { FliwrightAgentError } from '../agent/FliwrightAgentError.js';
 import type { MockRouteResponse } from '../types.js';
 import { TimelineRecorder } from '../timeline/TimelineRecorder.js';
 import type { AgentVisibleFailure } from '../timeline/types.js';
-import type { MockTimelineMetadata, NormalizedRequestMatcher } from './types.js';
+import type { MockTimelineMetadata, NormalizedRequestMatcher, WaitForMockCallOptions } from './types.js';
 
 export class MockRuntime {
   constructor(
@@ -85,6 +85,45 @@ export class MockRuntime {
     return calls.filter((call) => matchesCall(call, matcher));
   }
 
+  async waitForCall(
+    matcher: NormalizedRequestMatcher | string,
+    options: WaitForMockCallOptions = {},
+  ): Promise<Awaited<ReturnType<MockManager['getCalls']>>> {
+    const normalized = typeof matcher === 'string' ? { path: matcher } : matcher;
+    const expectedCount = Math.max(1, options.count ?? 1);
+    const timeout = Math.max(0, options.timeout ?? 5_000);
+    const interval = Math.max(25, options.interval ?? 100);
+    const startedAt = Date.now();
+    let matchedCalls: Awaited<ReturnType<MockManager['getCalls']>> = [];
+    let lastCalls: Awaited<ReturnType<MockManager['getCalls']>> = [];
+
+    return this.record('waitForCall', {
+      endpoint: typeof normalized.path === 'string' ? normalized.path : undefined,
+      method: normalized.method,
+    }, async () => {
+      while (true) {
+        lastCalls = await this.manager.getCalls() as typeof lastCalls;
+        matchedCalls = lastCalls.filter((call) => matchesCall(call, normalized)) as typeof matchedCalls;
+        if (matchedCalls.length >= expectedCount) {
+          return matchedCalls;
+        }
+
+        if (Date.now() - startedAt >= timeout) {
+          throw new Error(
+            `Timed out after ${timeout}ms waiting for ${describeMatcher(normalized)} `
+            + `to be called at least ${expectedCount} time(s); matched ${matchedCalls.length}. `
+            + `Recorded calls: ${summarizeCalls(lastCalls)}.`,
+          );
+        }
+        await delay(interval);
+      }
+    }, {
+      callCount: expectedCount,
+      timeout,
+      interval,
+    });
+  }
+
   private async record<T>(
     operation: MockTimelineMetadata['operation'],
     metadata: Omit<MockTimelineMetadata, 'operation'>,
@@ -144,6 +183,27 @@ function parseJsonOrString(value: string): unknown {
 
 function matchesValue(actual: string, expected: string | RegExp): boolean {
   return expected instanceof RegExp ? expected.test(actual) : actual === expected;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function describeMatcher(matcher: NormalizedRequestMatcher): string {
+  const parts = [
+    matcher.method?.toUpperCase(),
+    matcher.path instanceof RegExp ? matcher.path.toString() : matcher.path,
+    matcher.url instanceof RegExp ? matcher.url.toString() : matcher.url,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : 'mock request';
+}
+
+function summarizeCalls(calls: Array<{ method?: string; path?: string; url?: string; backend?: string }>): string {
+  if (calls.length === 0) return '(none)';
+  return calls
+    .slice(-5)
+    .map((call) => `${call.method ?? '?'} ${call.path ?? call.url ?? '?'}${call.backend ? ` [${call.backend}]` : ''}`)
+    .join(', ');
 }
 
 function mockTitle(operation: MockTimelineMetadata['operation'], endpoint?: string): string {

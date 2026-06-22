@@ -1,6 +1,8 @@
 import http from 'node:http';
 import type { MockCall, MockRouteResponse } from './types.js';
 import { MockRuleStore } from './MockRuleStore.js';
+import { mockRuleRouteId } from './mocks/MockRuleController.js';
+export { mockRuleRouteId } from './mocks/MockRuleController.js';
 
 export interface ToolMockRequest {
   method: string;
@@ -361,8 +363,4 @@ function writeJson(res: http.ServerResponse, status: number, body: unknown): voi
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify(body));
-}
-
-export function mockRuleRouteId(endpoint: string, method: string, ruleName: string): string {
-  return `fliwright-vscode:${encodeURIComponent(method.toUpperCase())}:${encodeURIComponent(endpoint)}:${encodeURIComponent(ruleName)}`;
 }

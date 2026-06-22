@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import type { FormAnalyzeResult, FormFillResult } from '@fliwright/core';
 import {
   clearWorkspaceVmServiceUrl,
+  mockRuleController,
   readWorkspaceConfigSync,
   setConnectorDebugLog,
   writeWorkspaceVmServiceUrl,
@@ -33,9 +34,9 @@ import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeP
 import { ScriptsTreeProvider } from './views/ScriptsTreeProvider.js';
 import { StateTreeProvider } from './views/StateTreeProvider.js';
 import { TestsTreeProvider } from './views/TestsTreeProvider.js';
-import { ensureProjectRunsRoot } from './testing/ProjectRunsRoot.js';
 import { TestStatusStore } from './testing/TestStatusStore.js';
 import { relPathOf } from './testing/relPath.js';
+import { RunArtifactStore } from './testing/RunArtifactStore.js';
 import { FailurePanel } from './webview/FailurePanel.js';
 import { EditorBridge } from './editor/EditorBridge.js';
 import { TestEditorProvider } from './editor/TestEditorProvider.js';
@@ -82,19 +83,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const devicesTree = new DevicesTreeProvider();
   const mockTree = new MockApiTreeProvider(mockService);
   const formTree = new FormDataTreeProvider(formService);
+  const runArtifactStore = new RunArtifactStore();
   // Resolve the migrated per-project runs root (~/​.fliwright/​projects/​<hash>/​runs).
   // Best-effort: if the workspace root is unavailable or mkdir fails, fall back to
   // undefined so run recording is skipped (the tests tree still works against an
   // empty in-memory store). The store is always constructed so TestsTreeProvider
   // gets its second arg (loadIndex tolerates a missing index.json).
   let runsRoot: string | undefined;
+  let traceRoot: string | undefined;
   const wsRootForRuns = getWorkspaceRoot();
   if (wsRootForRuns) {
     try {
-      runsRoot = await ensureProjectRunsRoot(wsRootForRuns);
+      runsRoot = await runArtifactStore.ensureRunsDir(wsRootForRuns);
+      traceRoot = runArtifactStore.traceDir(wsRootForRuns);
     } catch (err) {
       output.appendLine(`[Fliwright] Failed to ensure runs root: ${err instanceof Error ? err.message : String(err)}`);
       runsRoot = undefined;
+      traceRoot = undefined;
     }
   }
   const statusStore = new TestStatusStore(runsRoot ?? '');
@@ -1352,7 +1357,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // Trace configuration. Prefer the per-project runs root when available
         // (migrated layout) so artifacts land alongside the run result.json.
         const traceMode = getTraceMode();
-        const traceDir = runsRoot ? vscode.Uri.file(runsRoot) : vscode.Uri.joinPath(root, '.fliwright', 'traces');
+        const traceDir = traceRoot ? vscode.Uri.file(traceRoot) : vscode.Uri.joinPath(root, '.fliwright', 'traces');
+        const runId = runArtifactStore.generateBaseRunId();
 
         session.setRunning(opts.workspace ? 'workspace tests' : file?.fsPath ?? 'tests');
         const result = await runner.run({
@@ -1360,6 +1366,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           testFile: file,
           testNamePattern: opts.testNamePattern,
           runsRoot,
+          runId,
           vmServiceUrl: session.currentUrl,
           failureContextDir,
           traceMode,
@@ -1373,7 +1380,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // workspace runs — recordRun keys by node id which needs relPath).
         if (runsRoot && file) {
           try {
-            await statusStore.recordRun(`${Date.now()}`, Date.now(), root, result, relPathOf(root, file));
+            await runArtifactStore.recordTestRun(root, result, relPathOf(root, file), {
+              baseRunId: runId,
+              ranAt: Date.now(),
+            });
           } catch (err) {
             output.appendLine(`[Fliwright] Failed to record run status: ${err instanceof Error ? err.message : String(err)}`);
           }
@@ -1436,6 +1446,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
 
       const command = await terminalScriptCommand(root, script);
+      const runId = runArtifactStore.generateBaseRunId();
+      const traceMode = getTraceMode();
+      const scriptTraceDir = traceRoot ? traceRoot : vscode.Uri.joinPath(root, '.fliwright', 'traces').fsPath;
       const terminal = vscode.window.createTerminal({
         name: `Fliwright: ${script.label}`,
         cwd: root.fsPath,
@@ -1443,6 +1456,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           ...(session.currentUrl ? {
             FLIWRIGHT_VM_SERVICE_URL: session.currentUrl,
             FLIWRIGHT_VM_URL: session.currentUrl,
+          } : {}),
+          ...(runsRoot ? {
+            FLIWRIGHT_RUNS_ROOT: runsRoot,
+            FLIWRIGHT_RUN_ID: runId,
+          } : {}),
+          ...(traceMode !== 'off' ? {
+            FLIWRIGHT_TRACE: traceMode,
+            FLIWRIGHT_TRACE_DIR: scriptTraceDir,
           } : {}),
         },
       });
@@ -1997,18 +2018,7 @@ function formatFlutterMockRoute(route: { id?: string; method?: string; path?: st
 }
 
 function parseFlutterMockRouteId(id: string | undefined): { method: string; endpoint: string; ruleName: string } | undefined {
-  if (!id?.startsWith('fliwright-vscode:')) return undefined;
-  const parts = id.split(':');
-  if (parts.length !== 4) return undefined;
-  try {
-    return {
-      method: decodeURIComponent(parts[1] ?? '').toUpperCase(),
-      endpoint: decodeURIComponent(parts[2] ?? ''),
-      ruleName: decodeURIComponent(parts[3] ?? ''),
-    };
-  } catch {
-    return undefined;
-  }
+  return mockRuleController.parseRouteId(id);
 }
 
 function unwrapExtensionPayload<T>(value: unknown): T {

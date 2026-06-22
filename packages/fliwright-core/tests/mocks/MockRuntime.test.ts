@@ -55,4 +55,38 @@ describe('MockRuntime', () => {
       body: { email: 'ada@example.com' },
     })).resolves.toHaveLength(1);
   });
+
+  it('waitForCall resolves when a matching call appears', async () => {
+    const manager = new MockManager(createMockSendRequest());
+    const mock = new MockRuntime(manager);
+    await manager.route('/api/onboard-info', { method: 'GET', status: 200 });
+
+    const waitPromise = mock.waitForCall({
+      method: 'GET',
+      path: '/api/onboard-info',
+    }, { timeout: 500, interval: 10 });
+
+    setTimeout(() => {
+      manager['_server'].handleMockRequest({
+        method: 'GET',
+        path: '/api/onboard-info',
+        url: 'https://dev.ex.io/api/onboard-info',
+      });
+    }, 20);
+
+    await expect(waitPromise).resolves.toHaveLength(1);
+  });
+
+  it('waitForCall rejects with recorded call diagnostics on timeout', async () => {
+    const manager = new MockManager(createMockSendRequest());
+    const mock = new MockRuntime(manager);
+    await manager.route('/api/other', { method: 'POST', status: 200 });
+    manager['_server'].handleMockRequest({
+      method: 'POST',
+      path: '/api/other',
+      url: 'https://dev.ex.io/api/other',
+    });
+
+    await expect(mock.waitForCall('/api/missing', { timeout: 30, interval: 10 })).rejects.toThrow('POST /api/other');
+  });
 });
