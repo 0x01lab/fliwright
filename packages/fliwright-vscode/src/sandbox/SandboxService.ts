@@ -97,8 +97,18 @@ export class SandboxService {
     return { applied, skipped };
   }
 
-  async clear(driver: FliwrightDriver): Promise<void> {
+  /**
+   * Clear all Flutter mock routes for this driver. Returns the number of
+   * routes that were in the Flutter store BEFORE clearing — used by the
+   * stopSandbox command's log lines (tracked=N). Reading the count via
+   * listFlutterRoutes first preserves the log contract while keeping the
+   * reactive/store-truth model (no local "applied" set is tracked).
+   */
+  async clear(driver: FliwrightDriver): Promise<number> {
+    const routes = await mockRuleController.listFlutterRoutes(driver.mock);
+    const count = routes.length;
     await clearFlutterMockRoutes(driver);
+    return count;
   }
 }
 

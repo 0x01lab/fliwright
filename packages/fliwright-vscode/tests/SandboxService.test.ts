@@ -471,13 +471,25 @@ describe('SandboxService', () => {
     });
   });
 
-  it('clear empties the store and getActiveRules reflects it', async () => {
-    const listFlutterRoutes = vi.fn().mockResolvedValue([]);
-    const clearFlutterRoutes = vi.fn().mockResolvedValue(undefined);
+  it('clear returns the pre-clear route count and empties the store', async () => {
+    const before = [
+      { id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success', method: 'GET', path: '/v1/token' },
+      { id: 'fliwright-vscode:GET:%2Fv1%2Fprofile:success', method: 'GET', path: '/v1/profile' },
+    ];
+    // listFlutterRoutes reads the pre-clear store, then clearFlutterRoutes
+    // empties it; subsequent reads (e.g. getActiveRules) reflect an empty store.
+    const store: typeof before = [...before];
+    const listFlutterRoutes = vi.fn().mockImplementation(async () => [...store]);
+    const clearFlutterRoutes = vi.fn().mockImplementation(async () => {
+      store.length = 0;
+    });
     const service = new SandboxService();
-    await service.clear({ mock: { clearFlutterRoutes, listFlutterRoutes } } as any);
+    const driver = { mock: { clearFlutterRoutes, listFlutterRoutes } } as any;
+    const count = await service.clear(driver);
+    expect(count).toBe(before.length);
+    expect(listFlutterRoutes).toHaveBeenCalledOnce();
     expect(clearFlutterRoutes).toHaveBeenCalledOnce();
-    expect(await service.getActiveRules({ mock: { listFlutterRoutes } } as any)).toEqual([]);
+    expect(await service.getActiveRules(driver)).toEqual([]);
   });
 
   it('clears routes through the Flutter clearRoutes API even before Flutter mode is established', async () => {
@@ -497,6 +509,9 @@ describe('SandboxService', () => {
 
   it('falls back to the VM service clearRoutes extension when the core mock helper is unavailable', async () => {
     const routeFlutter = vi.fn().mockResolvedValue(undefined);
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success', method: 'GET', path: '/v1/token' },
+    ]);
     const sendRequest = vi.fn().mockImplementation((method: string) => {
       if (method === 'ext.fliwright.inspect') {
         return {
@@ -510,10 +525,11 @@ describe('SandboxService', () => {
       return {};
     });
     const service = new SandboxService();
-    await service.applyRule({ mock: { routeFlutter }, sendRequest } as any, mockRule('success'));
+    await service.applyRule({ mock: { routeFlutter, listFlutterRoutes }, sendRequest } as any, mockRule('success'));
 
-    await service.clear({ mock: {}, sendRequest } as any);
+    const count = await service.clear({ mock: { listFlutterRoutes }, sendRequest } as any);
 
+    expect(count).toBe(1);
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.clearRoutes');
   });
 
