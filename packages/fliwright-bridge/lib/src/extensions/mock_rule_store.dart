@@ -177,6 +177,22 @@ class MockRuleStore {
     return count;
   }
 
+  /// Clear only routes NOT owned by the VSCode extension — those whose id lacks
+  /// the `fliwright-vscode:` prefix that the TS-side `MockRuleController
+  /// .createRouteId` stamps on every route VSCode applies. The test
+  /// `mock.clearRoutes()` API routes through this so a test cleaning up its own
+  /// routes does not wipe mock rules the user applied in VSCode, which share
+  /// this same store. VSCode's "Stop All" still calls [clearRoutes] (everything).
+  /// Matching is unchanged: both prefixed and foreign routes intercept traffic
+  /// by method+path exactly as before.
+  Future<int> clearForeignRoutes() async {
+    final before = _routes.length;
+    _routes.removeWhere((_, route) => !route.id.startsWith('fliwright-vscode:'));
+    final removed = before - _routes.length;
+    if (removed > 0) await _persist();
+    return removed;
+  }
+
   List<MockRoute> getAllRoutes() => List.unmodifiable(_routes.values);
 
   Future<void> loadFromStorage() async {

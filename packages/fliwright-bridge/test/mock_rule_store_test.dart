@@ -83,4 +83,45 @@ void main() {
       expect(reloaded.findRoute('GET', '/api/c')?.id, 'c');
     });
   });
+
+  // Root-cause confirmation for "VSCode rules vanish after running a test":
+  // a test's mock.clearRoutes() -> ext.fliwright.mock.clearRoutes ->
+  // store.clearRoutes currently wipes EVERY route, including ones VSCode
+  // applied with a fliwright-vscode: id. VSCode and tests share one store, so
+  // a test clearing its own routes also clears VSCode's.
+  group('clearRoutes prefix behavior (root-cause confirmation)', () {
+    test('clearRoutes wipes both fliwright-vscode:-prefixed and foreign routes', () async {
+      final store = MockRuleStore();
+      await store.addRoute(_route('fliwright-vscode:GET:%2Fapi%2Fa:success', path: '/api/a'));
+      await store.addRoute(_route('test-injected-route', path: '/api/b'));
+      expect(store.getAllRoutes(), hasLength(2));
+
+      final cleared = await store.clearRoutes();
+
+      expect(cleared, 2);
+      expect(store.getAllRoutes(), isEmpty);
+      // VSCode's prefixed route is gone too — this is the conflict.
+      expect(store.findRoute('GET', '/api/a'), isNull);
+    });
+
+    test('clearForeignRoutes preserves fliwright-vscode:-prefixed routes, clears foreign', () async {
+      final store = MockRuleStore();
+      await store.addRoute(_route('fliwright-vscode:GET:%2Fapi%2Fa:success', path: '/api/a'));
+      await store.addRoute(_route('fliwright-vscode:POST:%2Fapi%2Fb:error', method: 'POST', path: '/api/b'));
+      await store.addRoute(_route('test-injected-1', path: '/api/c'));
+      await store.addRoute(_route('test-injected-2', path: '/api/d'));
+      expect(store.getAllRoutes(), hasLength(4));
+
+      final cleared = await store.clearForeignRoutes();
+
+      expect(cleared, 2);
+      final remaining = store.getAllRoutes();
+      expect(remaining, hasLength(2));
+      expect(remaining.every((r) => r.id.startsWith('fliwright-vscode:')), isTrue);
+      expect(store.findRoute('GET', '/api/a')?.id, 'fliwright-vscode:GET:%2Fapi%2Fa:success');
+      expect(store.findRoute('POST', '/api/b')?.id, 'fliwright-vscode:POST:%2Fapi%2Fb:error');
+      expect(store.findRoute('GET', '/api/c'), isNull);
+      expect(store.findRoute('GET', '/api/d'), isNull);
+    });
+  });
 }

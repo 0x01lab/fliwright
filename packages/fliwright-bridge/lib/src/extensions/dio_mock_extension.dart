@@ -83,6 +83,7 @@ class DioMockExtension {
     registry.register('ext.fliwright.mock.addRoute', _addRoute);
     registry.register('ext.fliwright.mock.removeRoute', _removeRoute);
     registry.register('ext.fliwright.mock.clearRoutes', _clearRoutes);
+    registry.register('ext.fliwright.mock.clearForeignRoutes', _clearForeignRoutes);
     registry.register('ext.fliwright.mock.listRoutes', _listRoutes);
     registry.register('ext.fliwright.mock.setPassthrough', _setPassthrough);
     registry.register('ext.fliwright.mock.getCalls', _getCalls);
@@ -160,6 +161,19 @@ class DioMockExtension {
     _syncInterceptorToStore();
     _log(
       'Cleared $count Dio route(s); '
+      'store=#${_store.debugId} routes=${_store.getAllRoutes().length} '
+      'interceptorInjected=${_interceptor != null}',
+    );
+    return {'cleared': count};
+  }
+
+  static Future<Map<String, dynamic>> _clearForeignRoutes(
+    Map<String, String> params,
+  ) async {
+    final count = await _store.clearForeignRoutes();
+    _syncInterceptorToStore();
+    _log(
+      'Cleared $count foreign Dio route(s) (preserved fliwright-vscode: routes); '
       'store=#${_store.debugId} routes=${_store.getAllRoutes().length} '
       'interceptorInjected=${_interceptor != null}',
     );

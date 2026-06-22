@@ -93,6 +93,19 @@ export class MockManager implements MockAdapter {
     this.usesFlutterStore = true;
   }
 
+  /**
+   * Clear only routes NOT owned by VSCode — those whose id lacks the
+   * `fliwright-vscode:` prefix (i.e. what a test injected). The test
+   * `clearRoutes()` API routes through here so a test cleaning up its own
+   * routes does not wipe mock rules the user applied in VSCode, which share
+   * the same Flutter store. VSCode "Stop All" still uses
+   * {@link clearFlutterRoutes} (clear everything).
+   */
+  async clearForeignRoutes(): Promise<void> {
+    await this.sendRequest('ext.fliwright.mock.clearForeignRoutes');
+    this.usesFlutterStore = true;
+  }
+
   async setPassthrough(enabled: boolean): Promise<void> {
     this.passthrough = enabled;
     const synced = await this.trySendRequest('ext.fliwright.mock.setPassthrough', {

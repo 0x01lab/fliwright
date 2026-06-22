@@ -44,7 +44,9 @@ export class MockRuntime {
   }
 
   async clearRoutes(): Promise<void> {
-    return this.record('clearRoutes', {}, () => this.manager.clear());
+    // Preserve VSCode-applied routes (fliwright-vscode: id): only clear what a
+    // test injected. VSCode "Stop All" uses the full clear via clearFlutterRoutes.
+    return this.record('clearRoutes', {}, () => this.manager.clearForeignRoutes());
   }
 
   async clearCalls(): Promise<void> {

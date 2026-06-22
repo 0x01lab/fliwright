@@ -31,6 +31,7 @@ class MockServerExtension {
     registry.register('ext.fliwright.mock.addRoute', _addRoute);
     registry.register('ext.fliwright.mock.removeRoute', _removeRoute);
     registry.register('ext.fliwright.mock.clearRoutes', _clearRoutes);
+    registry.register('ext.fliwright.mock.clearForeignRoutes', _clearForeignRoutes);
     registry.register('ext.fliwright.mock.listRoutes', _listRoutes);
     registry.register('ext.fliwright.mock.setPassthrough', _setPassthrough);
     registry.register('ext.fliwright.mock.getCalls', _getCalls);
@@ -116,6 +117,14 @@ class MockServerExtension {
   ) async {
     final count = await _store.clearRoutes();
     _log('Cleared $count route(s)');
+    return {'cleared': count};
+  }
+
+  static Future<Map<String, dynamic>> _clearForeignRoutes(
+    Map<String, String> params,
+  ) async {
+    final count = await _store.clearForeignRoutes();
+    _log('Cleared $count foreign route(s) (preserved fliwright-vscode: routes)');
     return {'cleared': count};
   }
 
