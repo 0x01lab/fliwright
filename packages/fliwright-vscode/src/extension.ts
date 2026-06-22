@@ -189,7 +189,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const message = 'VM Service connection lost. Searching for a new Flutter VM Service...';
         output.appendLine(`${message}${staleUrl ? ` (${staleUrl})` : ''}`);
         clearStateProviderWatches();
-        sandboxService.resetController();
+        mockTree.setAppliedRules([]);
         await session.markConnectionLost(message);
         scheduleAutoConnect('VM Service connection lost', 100, { forceReconnect: true });
       }).finally(() => {
@@ -414,7 +414,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Disconnect VM Service', async () => {
         stopHealthCheck();
         clearStateProviderWatches();
-        sandboxService.resetController();
+        mockTree.setAppliedRules([]);
         await session.disconnect();
         await clearPersistedWorkspaceVmServiceUrl('VS Code disconnected');
         vscode.window.showInformationMessage('Disconnected from VM Service');
@@ -493,12 +493,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.applyMockRule', async (node?: MockRuleEntry) => {
       await runCommand('Apply Mock Rule', async () => {
         if (!node || node.kind !== 'rule') throw new Error('Select a mock rule to apply.');
-        await setMockAutoDefaultsSuppressed(false);
-        await unsuppressMockEndpoint(node);
         output.appendLine(`Applying mock ${formatMockRuleDebug(node)}`);
         const applied = await sandboxService.applyRule(session.connectedDriver, node);
-        await mockSelectionStore.saveAppliedRule(applied);
-        mockTree.setAppliedRules(sandboxService.getAppliedRules());
+        mockTree.setAppliedRules(await sandboxService.getActiveRules(session.connectedDriver));
         output.appendLine(`Applied mock ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
         await appendMockControllerDebug('Flutter mock routes after apply:');
         vscode.window.showInformationMessage(`Applied ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
@@ -508,15 +505,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Stop Mock Rule', async () => {
         if (!node || node.kind !== 'rule') throw new Error('Select an active mock rule to stop.');
         const stopped = await sandboxService.stopRule(session.connectedDriver, node);
-        mockTree.setAppliedRules(sandboxService.getAppliedRules());
+        mockTree.setAppliedRules(await sandboxService.getActiveRules(session.connectedDriver));
         if (!stopped) {
           output.appendLine(`Skipped stopping inactive mock ${formatMockRuleDebug(node)}`);
           await appendMockControllerDebug('Flutter mock routes remain:');
           vscode.window.showWarningMessage(`Mock rule is not active: ${node.method} ${node.endpoint} -> ${node.rule.name}`);
           return;
         }
-        await suppressMockEndpoint(node);
-        await mockSelectionStore.removeRule(node);
         output.appendLine(`Stopped mock ${node.method} ${node.endpoint} -> ${node.rule.name}`);
         await appendMockControllerDebug('Flutter mock routes after stop:');
         vscode.window.showInformationMessage(`Stopped ${node.method} ${node.endpoint} -> ${node.rule.name}`);
@@ -524,8 +519,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.applyDefaultMocks', async () => {
       await runCommand('Apply Default Mocks', async () => {
-        await setMockAutoDefaultsSuppressed(false);
-        await clearSuppressedMockEndpoints();
         if (!mockTree.currentResult) await mockTree.refresh();
         const discovery = mockTree.currentResult;
         if (!discovery) throw new Error('Open a workspace to use Fliwright.');
@@ -545,11 +538,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           }
         }
         const result = await sandboxService.applyDefaultMocks(session.connectedDriver, discovery);
-        await mockSelectionStore.clear();
-        for (const applied of result.applied) {
-          await mockSelectionStore.saveAppliedRule(applied);
-        }
-        mockTree.setAppliedRules(sandboxService.getAppliedRules());
+        mockTree.setAppliedRules(await sandboxService.getActiveRules(session.connectedDriver));
         output.appendLine(`Applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);
         await appendMockControllerDebug('Flutter mock routes after apply-default:');
         vscode.window.showInformationMessage(`Applied ${result.applied.length} default mock route(s).`);
@@ -559,10 +548,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runCommand('Stop All Mock Routes', async () => {
         const driver = session.connectedDriver;
         const count = await sandboxService.clear(driver);
-        await setMockAutoDefaultsSuppressed(true);
-        await clearSuppressedMockEndpoints();
-        await mockSelectionStore.clear();
-        mockTree.setAppliedRules([]);
+        mockTree.setAppliedRules(await sandboxService.getActiveRules(driver));
 
         // Hard-clear fallback: verify the Flutter store is actually empty —
         // including the Dio interceptor's store (covers store-identity split) —
@@ -1081,7 +1067,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (options.forceReconnect) {
       stopHealthCheck();
       clearStateProviderWatches();
-      sandboxService.resetController();
+      mockTree.setAppliedRules([]);
       await session.disconnect(false);
     }
 
@@ -1095,7 +1081,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     if (candidates.length === 0) {
       await session.disconnect();
-      sandboxService.resetController();
+      mockTree.setAppliedRules([]);
       output.appendLine(`VM Service discovery found no candidates (${options.reason}).`);
       return false;
     }
@@ -1114,7 +1100,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       });
       if (!picked) {
         await session.disconnect();
-        sandboxService.resetController();
+        mockTree.setAppliedRules([]);
         return false;
       }
       orderedCandidates = [picked.candidate];
@@ -1138,7 +1124,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       throw new Error(lastError);
     }
     await session.disconnect();
-    sandboxService.resetController();
+    mockTree.setAppliedRules([]);
     return false;
   }
 
