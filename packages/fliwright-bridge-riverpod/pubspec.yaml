@@ -1,7 +1,14 @@
 name: fliwright_bridge_riverpod
-description: Riverpod observer adapter for the Fliwright Dart bridge.
+description: Riverpod observer adapter for Fliwright state inspection, watching, serialization, and writable provider overrides.
 version: 0.1.0
-publish_to: none
+repository: https://github.com/0x01lab/fliwright/tree/main/packages/fliwright-bridge-riverpod
+issue_tracker: https://github.com/0x01lab/fliwright/issues
+topics:
+  - flutter
+  - riverpod
+  - testing
+  - automation
+  - state
 
 environment:
   sdk: ^3.5.0
@@ -10,8 +17,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.0.0
-  fliwright_bridge:
-    path: ../fliwright-bridge
+  fliwright_bridge: ^0.1.0
 
 dev_dependencies:
   flutter_test:
