@@ -41,6 +41,30 @@ export class SandboxService {
     return applied;
   }
 
+  /**
+   * Read the current active mock rules straight from the Flutter store.
+   * Unified/reactive: VSCode reflects store truth rather than tracking a
+   * local "applied" set. Foreign routes (no fliwright-vscode: id) are surfaced
+   * with ruleName '(external)' so the tree still shows their endpoint as active.
+   */
+  async getActiveRules(driver: FliwrightDriver): Promise<AppliedMockRule[]> {
+    const routes = await mockRuleController.listFlutterRoutes(driver.mock);
+    const active: AppliedMockRule[] = [];
+    for (const route of routes) {
+      const parsed = parseRouteId(route.id);
+      const method = (parsed?.method ?? route.method)?.toUpperCase();
+      if (!method) continue;
+      active.push({
+        endpoint: parsed?.endpoint ?? route.path,
+        method: method as AppliedMockRule['method'],
+        ruleName: parsed?.ruleName ?? '(external)',
+        filePath: '',
+        appliedAt: 0,
+      });
+    }
+    return active;
+  }
+
   async syncFromFlutter(driver: FliwrightDriver, discovery: MockDiscoveryResult): Promise<{
     applied: AppliedMockRule[];
     routes: Array<{ id?: string; method?: string; path: string }>;

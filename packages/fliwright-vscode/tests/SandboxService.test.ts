@@ -790,6 +790,33 @@ describe('SandboxService', () => {
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.clearRoutes');
     expect(service.getAppliedRules()).toHaveLength(0);
   });
+
+  it('reads active rules from the Flutter store, marking foreign routes as external', async () => {
+    const service = new SandboxService();
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'fliwright-vscode:GET:%2Fv1%2Ftoken:success', method: 'GET', path: '/v1/token' },
+      { id: 'test-script-route', method: 'POST', path: '/v1/profile' },
+    ]);
+
+    const active = await service.getActiveRules({ mock: { listFlutterRoutes } } as any);
+
+    expect(listFlutterRoutes).toHaveBeenCalledOnce();
+    expect(active).toMatchObject([
+      { endpoint: '/v1/token', method: 'GET', ruleName: 'success' },
+      { endpoint: '/v1/profile', method: 'POST', ruleName: '(external)' },
+    ]);
+  });
+
+  it('getActiveRules skips routes with no resolvable method', async () => {
+    const service = new SandboxService();
+    const listFlutterRoutes = vi.fn().mockResolvedValue([
+      { id: 'no-method', path: '/v1/whatever' },
+    ]);
+
+    const active = await service.getActiveRules({ mock: { listFlutterRoutes } } as any);
+
+    expect(active).toEqual([]);
+  });
 });
 
 function mockRule(ruleName: string): MockRuleEntry {
