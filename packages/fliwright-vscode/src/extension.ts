@@ -748,6 +748,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (!loaded) { vscode.window.showInformationMessage('No run recorded for this script yet.'); return; }
       await runViewerPanel.openRun(loaded.runDir);
     }),
+    vscode.commands.registerCommand('fliwright.refreshTests', () => {
+      // Drop roots, the status map, and ALL per-file parse caches, then re-fire
+      // the tree. The next getChildren() re-discovers test files and re-reads
+      // index.json for statuses; source parsing stays lazy (on expand).
+      testsTree.refresh();
+    }),
     vscode.commands.registerCommand('fliwright.startRecording', async () => {
       await runCommand('Start Recording', async () => {
         const testName = await vscode.window.showInputBox({

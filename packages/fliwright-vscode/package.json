@@ -307,6 +307,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "fliwright.refreshTests",
+        "title": "Fliwright: Refresh Tests",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "fliwright.readStateProvider",
         "title": "Fliwright: Read State Provider",
         "icon": "$(eye)"
@@ -469,6 +474,11 @@
         {
           "command": "fliwright.refreshStateProviders",
           "when": "view == fliwright.state",
+          "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.refreshTests",
+          "when": "view == fliwright.tests",
           "group": "navigation@1"
         },
         {
