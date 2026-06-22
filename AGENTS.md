@@ -32,6 +32,10 @@ filenames, PascalCase classes, camelCase members.
   `pnpm --filter @fliwright/core test`.
 - Dart: `melos bootstrap` to fetch dependencies; `melos run analyze`
   (`dart analyze .`); `melos run test` (`dart test`).
+- China pub mirror (optional — use when pub.dev is unreachable): source
+  `scripts/use-cn-pub-mirror.sh` to route Flutter/Dart package resolution
+  through `pub.flutter-io.cn` before `flutter pub get` / `dart test`. It is
+  opt-in, session-scoped, and does not change resolved versions.
 - E2E smoke tests require a running Flutter VM service:
   `FLIWRIGHT_VM_SERVICE_URL=... pnpm --filter @fliwright/e2e-tests test:smoke`.
 - When someone mentions the "exio app", they mean the project at
