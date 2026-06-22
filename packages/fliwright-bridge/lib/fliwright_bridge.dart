@@ -2,6 +2,7 @@ library fliwright_bridge;
 
 export 'src/bridge.dart';
 export 'src/debug_value_encoder.dart';
+export 'src/extensions/app_instance.dart';
 export 'src/extensions/dio_mock_extension.dart';
 export 'src/extensions/dio_mock_interceptor.dart';
 export 'src/extensions/gesture.dart';

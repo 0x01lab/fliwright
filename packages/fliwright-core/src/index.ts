@@ -67,6 +67,16 @@ export type { HealingStrategy } from './interfaces/HealingStrategy.js';
 export { PluginRegistry } from './PluginRegistry.js';
 export { Protocol } from './Protocol.js';
 export { VMServiceConnector, setConnectorDebugLog } from './VMServiceConnector.js';
+export { AppInstance } from './AppInstance.js';
+export type {
+  AppCapabilityDescriptor,
+  AppCapabilityProxy,
+  AppEnvironment,
+  AppInfo,
+  AppSnapshot,
+  AuthCapability,
+  AuthStatus,
+} from './AppInstance.js';
 export { FliwrightDriver } from './Driver.js';
 export type { DriverOptions } from './Driver.js';
 export {

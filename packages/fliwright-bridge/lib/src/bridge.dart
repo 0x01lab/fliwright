@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'extension_registry.dart';
+import 'extensions/app_instance.dart';
 import 'extensions/capture_frame.dart';
 import 'extensions/context.dart';
 import 'extensions/dio_mock_extension.dart';
@@ -46,6 +47,7 @@ class FliwrightBridge {
     await MockServerExtension.reset();
     RiverpodExtension.reset();
     DioMockExtension.reset();
+    FliwrightAppInstance.reset();
     RefRegistry.disposeAll();
     FliwrightHttpOverrides.uninstall();
   }
@@ -81,6 +83,7 @@ class FliwrightBridge {
     QueryExtension.register(_registry);
     RecordingExtension.register(_registry);
     FormExtractExtension.register(_registry);
+    FliwrightAppInstance.register(_registry);
 
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
@@ -133,6 +136,7 @@ class FliwrightBridge {
     QueryExtension.register(_registry);
     RecordingExtension.register(_registry);
     FormExtractExtension.register(_registry);
+    FliwrightAppInstance.register(_registry);
 
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
@@ -173,6 +177,8 @@ class FliwrightBridge {
           'normalizedActionErrors': true,
           'normalizedMockCalls': true,
           'normalizedProviderState': true,
+          'appInstance': true,
+          'appCapabilities': true,
         },
       };
     });

@@ -1,4 +1,5 @@
 import { Page } from './Page.js';
+import { AppInstance } from './AppInstance.js';
 import { PluginRegistry } from './PluginRegistry.js';
 import { VMServiceConnector } from './VMServiceConnector.js';
 import type { MockWebSocket } from './VMServiceConnector.js';
@@ -20,6 +21,7 @@ export class FliwrightDriver {
   private registry = new PluginRegistry();
   private connector = new VMServiceConnector();
   private _page: Page | null = null;
+  private _app: AppInstance | null = null;
   private _mock: MockManager | null = null;
   private _healing: SelfHealingEngine | null = null;
   private _recorder: RecorderController | null = null;
@@ -68,6 +70,13 @@ export class FliwrightDriver {
       this._page = new Page((method, params) => this.connector.sendRequest(method, params));
     }
     return this._page;
+  }
+
+  get app(): AppInstance {
+    if (!this._app) {
+      this._app = new AppInstance((method, params) => this.connector.sendRequest(method, params));
+    }
+    return this._app;
   }
 
   async connect(vmServiceUrl: string): Promise<void> {
