@@ -1,14 +1,13 @@
 {
   "name": "@fliwright/vscode",
   "displayName": "Fliwright",
-  "description": "VS Code tools for Fliwright Flutter E2E testing.",
+  "description": "Flutter automation, recording, mocks, traces, and Riverpod state tools for Fliwright.",
   "version": "0.1.0",
-  "private": true,
   "publisher": "fliwright",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/0x01lab/fliwright.git",
+    "url": "https://github.com/0x01lab/fliwright.git",
     "directory": "packages/fliwright-vscode"
   },
   "bugs": {
@@ -21,8 +20,20 @@
   },
   "categories": [
     "Testing",
+    "Debuggers",
     "Other"
   ],
+  "keywords": [
+    "flutter",
+    "dart",
+    "testing",
+    "e2e",
+    "automation",
+    "recording",
+    "riverpod",
+    "mocking"
+  ],
+  "icon": "media/fliwright-marketplace.png",
   "main": "./dist/extension.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && pnpm run bundle && pnpm run bundle:webview",
@@ -32,8 +43,9 @@
     "test": "vitest run",
     "test:integration": "node scripts/run-integration.mjs",
     "verify:release": "pnpm run lint && pnpm run test && pnpm run test:integration && pnpm run package",
-    "package": "pnpm run build && node scripts/stage-vsix.mjs && cd .vsix-stage && pnpm dlx @vscode/vsce package --no-dependencies --out ../fliwright-vscode-0.1.0.vsix",
-    "publish:vsce": "pnpm run verify:release && cd .vsix-stage && pnpm dlx @vscode/vsce publish --packagePath ../fliwright-vscode-0.1.0.vsix"
+    "package": "pnpm run build && node scripts/stage-vsix.mjs && cd .vsix-stage && ../node_modules/.bin/vsce package --no-dependencies --out ../fliwright-vscode-$(node -p \"require('./package.json').version\").vsix",
+    "publish:vsce": "pnpm run verify:release && pnpm run publish:vsce:package",
+    "publish:vsce:package": "cd .vsix-stage && ../node_modules/.bin/vsce publish --packagePath ../fliwright-vscode-$(node -p \"require('./package.json').version\").vsix"
   },
   "activationEvents": [
     "onDebug",
@@ -723,6 +735,7 @@
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.6.3",
     "@vscode/test-electron": "^2.4.1",
     "esbuild": "^0.21.5",
     "typescript": "^5.5.0",

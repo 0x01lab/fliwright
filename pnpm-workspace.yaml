@@ -2,4 +2,6 @@ packages:
   - 'packages/*'
   - 'e2e'
 allowBuilds:
+  '@vscode/vsce-sign': false
   esbuild: true
+  keytar: false

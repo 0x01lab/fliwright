@@ -1,22 +1,32 @@
-# Fliwright VS Code Extension
+# Fliwright
 
-VS Code extension shell for Fliwright local testing workflows.
+Flutter automation inside VS Code.
 
-## Current Scope
+Fliwright connects to a running Flutter VM Service and brings app automation,
+test recording, local API mocks, failure context, traces, and Riverpod state
+inspection into one native VS Code sidebar.
 
-This implementation slice provides native sidebar workflows for local Flutter testing:
+## Features
 
-- `Mock APIs`: scans `.fliwright/mocks/api/*.json`, validates endpoint mock files, lists response rules, opens configs, and copies endpoint/rule data.
-- `Devices`: connects and disconnects a running Flutter VM Service through `@fliwright/core`.
-- `Mock APIs`: applies a selected rule, applies default rules, and clears runtime mock routes through `driver.mock`.
-- `Form Data`: scans `.fliwright/forms/*.json`, previews generated values, and fills selected fields through `FormHelper`.
-- `Scripts`: scans `.fliwright/scripts/**/*.{js,mjs,cjs}` and runs selected scripts with the connected VM Service URL injected.
-- `Tests` / `Runs`: discovers Fliwright test files, runs Vitest, and opens persisted failure context.
-- `State`: lists, reads, watches, copies, and overrides Riverpod state providers exposed by the bridge.
-- Recording: starts/stops device interaction recording, previews generated TypeScript test code, and inserts it into an active editor or saves it as a new `*.test.ts` file.
-- Editor CodeLens: adds run and record actions for TypeScript Fliwright tests.
+- Connect to a local Flutter app through the VM Service.
+- Discover and run Fliwright TypeScript scripts and Vitest E2E tests.
+- Record device interactions into editable TypeScript test code.
+- Apply and clear local API mock rules from `.fliwright/mocks`.
+- Generate and fill form data from `.fliwright/forms` rules.
+- Inspect screenshots, run history, failure context, and traces.
+- List, read, watch, copy, and override Riverpod providers exposed by the
+  Fliwright bridge.
 
-Mock files are JSON-only. Legacy YAML mock files are intentionally unsupported.
+## Requirements
+
+- A Flutter app with `fliwright_bridge` initialized in a debug or test
+  entrypoint.
+- A reachable Flutter VM Service URL, or a locally running app on a common
+  Flutter debug port.
+- TypeScript Fliwright packages installed in the workspace when running tests or
+  automation scripts.
+
+Mock files are JSON-only. Legacy YAML mock files are not supported.
 
 ## Running Scripts
 
