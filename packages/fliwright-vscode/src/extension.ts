@@ -198,13 +198,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }, CONNECTION_HEALTH_CHECK_INTERVAL_MS);
   };
 
-  const requestMockStateSync = async (
-    reason: string,
-    options: { restoreSelections?: boolean; applyDefaultRules?: boolean } = {},
-  ): Promise<void> => {
+  const requestMockStateSync = async (reason: string): Promise<void> => {
     if (mockSyncInFlight) {
       mockSyncQueued = true;
-      output.appendLine(`Mock state sync queued (${reason}); another sync is running.`);
+      output.appendLine(`Mock state refresh queued (${reason}); another refresh is running.`);
       await mockSyncInFlight;
       return;
     }
@@ -214,35 +211,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         mockSyncQueued = false;
         if (!isActiveSessionState(session.state.status)) {
           output.appendLine(
-            `Mock state sync skipped (${reason}): VM Service is not connected `
-            + `(status=${session.state.status}). Clearing local mock active markers.`,
+            `Mock state refresh skipped (${reason}): VM Service is not connected `
+            + `(status=${session.state.status}).`,
           );
-          sandboxService.resetController();
           mockTree.setAppliedRules([]);
           return;
         }
 
         if (!mockTree.currentResult) {
-          output.appendLine(`Mock state sync (${reason}): loading workspace mock configs.`);
+          output.appendLine(`Mock state refresh (${reason}): loading workspace mock configs.`);
           await mockTree.refresh();
         }
         const discovery = mockTree.currentResult;
         if (!discovery) {
-          output.appendLine(`Mock state sync skipped (${reason}): no workspace mock discovery result.`);
+          output.appendLine(`Mock state refresh skipped (${reason}): no workspace mock discovery result.`);
           return;
         }
 
-        await waitForFlutterMockExtension(session.connectedDriver, reason);
+        try {
+          await waitForFlutterMockExtension(session.connectedDriver, reason);
+        } catch (error) {
+          output.appendLine(
+            `Mock state refresh skipped (${reason}): `
+            + `${error instanceof Error ? error.message : String(error)}`,
+          );
+          return;
+        }
+
+        // Purely reactive: read the unified store and reflect it. Never apply,
+        // prune, or clear on connect — the store owns the truth.
+        const activeRules = await sandboxService.getActiveRules(session.connectedDriver);
         output.appendLine(
-          `Mock state sync started (${reason}): `
-          + `${discovery.endpoints.length} endpoint file(s), ${discovery.invalid.length} invalid file(s).`,
+          `[MockStateSync] reactive read (${reason}): ${activeRules.length} active route(s) in store.`,
         );
-        output.appendLine(
-          `[MockStateSync] request reason=${reason} `
-          + `restoreSelections=${options.restoreSelections === true} `
-          + `applyDefaultRules=${options.applyDefaultRules === true}`,
-        );
-        await synchronizeMockStateAfterConnect(discovery, options);
+        mockTree.setAppliedRules(activeRules);
       } while (mockSyncQueued);
     })().finally(() => {
       mockSyncInFlight = undefined;
@@ -378,10 +380,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.reloadMocks', async () => {
       await runCommand('Reload Mock Configs', async () => {
         await mockTree.refresh();
-        await requestMockStateSync('mock configs reloaded', {
-          restoreSelections: true,
-          applyDefaultRules: false,
-        });
+        await requestMockStateSync('mock configs reloaded');
       });
     }),
     vscode.commands.registerCommand('fliwright.reloadFormRules', async () => {
@@ -1178,123 +1177,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   async function configureMocksAfterConnect(): Promise<void> {
-    const config = loadConfig();
-
-    if (config.autoStartMockController) {
-      await sandboxService.ensureController(session.connectedDriver);
-      output.appendLine('Mock rule store ready.');
-    }
-
     if (!mockTree.currentResult) await mockTree.refresh();
-    await requestMockStateSync('VM Service connected', { restoreSelections: true });
-  }
-
-  async function synchronizeMockStateAfterConnect(
-    discovery: MockDiscoveryResult,
-    options: { restoreSelections?: boolean; applyDefaultRules?: boolean } = {},
-  ): Promise<void> {
-    const shouldRestoreSelections = options.restoreSelections === true;
-    const shouldApplyDefaultRules = options.applyDefaultRules === true;
-    const selectedEntries = shouldRestoreSelections
-      ? mockSelectionStore.resolveSelections(discovery)
-        .filter((resolved) => resolved.entry)
-        .map((resolved) => resolved.entry!)
-      : [];
-    const autoDefaultsSuppressed = isMockAutoDefaultsSuppressed();
-    output.appendLine(
-      `[MockStateSync] plan restoreSelections=${shouldRestoreSelections} `
-      + `selectedEntries=${selectedEntries.length} `
-      + `applyDefaultRules=${shouldApplyDefaultRules} `
-      + `autoDefaultsSuppressed=${autoDefaultsSuppressed}`,
-    );
-    if (autoDefaultsSuppressed && shouldApplyDefaultRules) {
-      output.appendLine(
-        'Auto-apply default mocks is suppressed because all mock routes were stopped manually.',
-      );
-    }
-    const suppressedEndpoints = suppressedMockEndpointsForDiscovery(discovery, autoDefaultsSuppressed);
-    if (suppressedEndpoints.length > 0) {
-      output.appendLine(
-        `Mock state sync will keep ${suppressedEndpoints.length} stopped endpoint(s) inactive.`,
-      );
-    }
-    output.appendLine(
-      `[MockStateSync] suppressedEndpoints=${suppressedEndpoints.length}`,
-    );
-    const sync = await sandboxService.reconcileFromFlutter(session.connectedDriver, discovery, {
-      selectedEntries,
-      suppressedEndpoints,
-      applyDefaultRules: shouldApplyDefaultRules && !autoDefaultsSuppressed,
-      onStaleRoutes: async (stale) => {
-        const rebuildsRoutes = selectedEntries.length > 0 || (shouldApplyDefaultRules && !autoDefaultsSuppressed);
-        output.appendLine(
-          `Flutter mock cache is out of sync with workspace mocks: `
-          + `${stale.unmatched.length} stale route(s), ${stale.applied.length} reusable route(s). `
-          + (rebuildsRoutes ? 'Rebuilding Flutter mock routes.' : 'Clearing stale Flutter mock routes.'),
-        );
-        await appendMockControllerDebug('Flutter stale mock routes before rebuild:');
-      },
-    });
-    output.appendLine(
-      `[MockStateSync] flutterRoutes=${sync.routes.length} `
-      + `matched=${sync.applied.length} unmatched=${sync.unmatched.length} `
-      + `rebuilt=${sync.rebuilt} reconciled=${sync.reconciled.length} skipped=${sync.skipped} pruned=${sync.pruned}`,
-    );
-    logMockRouteSample('flutter.matched', sync.applied);
-    logFlutterRouteSample('flutter.unmatched', sync.unmatched);
-    logMockRouteSample('workspace.reconciled', sync.reconciled);
-
-    // Post-sync diagnostics: confirm the Flutter store reflects the desired
-    // state and surface store-identity split / ineffective-clear failures that
-    // would otherwise silently leave routes mocking.
-    const postState = await readFlutterMockDebugState(session.connectedDriver);
-    const postRoutes = (postState?.routes?.length ?? 0) + (postState?.interceptorState?.routes?.length ?? 0);
-    output.appendLine(
-      `[MockStateSync] post-sync store=#${postState?.storeId ?? 'unknown'} `
-      + `sharedStore=${postState?.interceptorState?.sharedStore === true} flutterRoutes=${postRoutes}`,
-    );
-    if (postState?.interceptorState && postState.interceptorState.sharedStore === false) {
-      output.appendLine(
-        '[MockStateSync] WARNING: Dio 拦截器与扩展未共享同一 store（sharedStore=false），'
-        + 'VSCode 的增删可能不影响实际匹配的路由表。',
-      );
-    }
-    if (postRoutes > 0 && sandboxService.getAppliedRules().length === 0) {
-      output.appendLine(
-        `[MockStateSync] WARNING: 期望 0 条路由但 Flutter 仍有 ${postRoutes} 条，`
-        + '可能存在 store 分裂或清理未生效；可用「Stop All Mock Routes」强制清空。',
-      );
-    }
-
-    if (sync.applied.length > 0) {
-      for (const applied of sync.applied) {
-        await mockSelectionStore.saveAppliedRule(applied);
-      }
-      output.appendLine(
-        `Synced ${sync.applied.length} mock route(s) from Flutter, `
-        + `left ${sync.unmatched.length} unmatched Flutter route(s).`,
-      );
-    } else if (sync.routes.length === 0 && sync.reconciled.length === 0) {
-      output.appendLine('No Flutter mock routes were cached at startup.');
-    }
-
-    if (sync.reconciled.length > 0) {
-      for (const applied of sync.reconciled) {
-        await mockSelectionStore.saveAppliedRule(applied);
-      }
-      output.appendLine(
-        `Reconciled ${sync.reconciled.length} missing mock route(s) from workspace config, `
-        + `skipped ${sync.skipped}.`,
-      );
-    }
-
-    const appliedRules = sandboxService.getAppliedRules();
-    output.appendLine(`[MockStateSync] treeAppliedRules=${appliedRules.length}`);
-    logMockRouteSample('tree.applied', appliedRules);
-    mockTree.setAppliedRules(appliedRules);
-    await appendMockControllerDebug(
-      sync.rebuilt ? 'Flutter mock routes after rebuild:' : 'Flutter mock routes after sync:',
-    );
+    await requestMockStateSync('VM Service connected');
   }
 
   async function appendMockStartupDebug(): Promise<void> {
