@@ -14,7 +14,7 @@ export function loadConfig(): ExtensionConfig {
     autoStartMockController: config.get<boolean>('autoStartMockController', true),
     vmServiceUrl: config.get<string | null>('vmServiceUrl', null),
     autoDiscoverVmService: config.get<boolean>('autoDiscoverVmService', true),
-    testGlob: config.get<string>('testGlob', 'tests/**/*.test.ts'),
+    testGlob: config.get<string>('testGlob', '.fliwright/tests/**/*.test.ts'),
     runner: config.get<'vitest' | 'cli'>('runner', 'vitest'),
     screenshotMode: config.get<'file' | 'base64' | 'off'>('screenshotMode', 'file'),
     failureContextDir: config.get<string>('failureContextDir', '.fliwright/failures'),

@@ -83,7 +83,8 @@
     "onCommand:fliwright.openRunViewer",
     "onCommand:fliwright.showLastRun",
     "onCommand:fliwright.viewTestRun",
-    "onCommand:fliwright.viewScriptRun"
+    "onCommand:fliwright.viewScriptRun",
+    "onCommand:fliwright.refreshTests"
   ],
   "contributes": {
     "viewsContainers": {
@@ -628,7 +629,7 @@
         },
         "fliwright.testGlob": {
           "type": "string",
-          "default": "tests/**/*.test.ts",
+          "default": ".fliwright/tests/**/*.test.ts",
           "description": "Workspace glob used to discover Fliwright test files."
         },
         "fliwright.runner": {
