@@ -21,3 +21,4 @@ docs/features
 **/.fliwright/config.json
 **/.fliwright/runs/
 **/.fliwright/traces/
+**/.fliwright/snapshots/
