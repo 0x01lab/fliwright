@@ -34,6 +34,8 @@ filenames, PascalCase classes, camelCase members.
   (`dart analyze .`); `melos run test` (`dart test`).
 - E2E smoke tests require a running Flutter VM service:
   `FLIWRIGHT_VM_SERVICE_URL=... pnpm --filter @fliwright/e2e-tests test:smoke`.
+- When someone mentions the "exio app", they mean the project at
+  `/Users/leo.he/projects/exio/exio_app`, which can be used for debugging.
 
 ### Testing
 
@@ -69,3 +71,19 @@ use it for lookup only. `docs/superpowers/` (plans and specs) is historical
 background — read a slice's design only when extending that slice. Regenerate
 `docs/features/` with the `/document-features` command after significant source
 changes.
+
+## Feature Documentation
+
+AI-consumable feature documentation lives in `docs/features/`. These docs summarize
+every implemented feature with full API signatures, type definitions, and usage
+examples, organized for fast lookup by AI agents.
+
+- **Start here:** [docs/features/index.md](./docs/features/index.md) — routing table
+  by package and by feature slice, MCP tool quick reference, agent quick-start guide
+- **Per-package overviews:** each package has a `README.md` under
+  `docs/features/<package>/`
+- **Per-class detailed docs:** one `.md` per exported class/tool/command inside each
+  package directory
+- **Cross-cutting pipelines:** top-level `*-pipeline.md` / `*-integration.md` files
+
+Regenerate with `/document-features` when source code changes significantly.
