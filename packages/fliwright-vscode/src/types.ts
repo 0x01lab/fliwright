@@ -36,21 +36,32 @@ export interface MockEndpointFile {
   description?: string;
   method: HttpMethod;
   endpoint: string;
-  rules: MockRule[];
+  baseRule?: MockRuleBase;
+  rules: MockRuleOverride[];
 }
 
-export interface MockRule {
-  name: string;
-  status: number;
+export interface MockRuleBase {
+  status?: number;
   delay?: number;
   headers?: Record<string, string>;
   body?: unknown;
 }
 
+export interface MockRule extends MockRuleBase {
+  name: string;
+  status: number;
+}
+
+export interface MockRuleOverride extends MockRuleBase {
+  name: string;
+  description?: string;
+  removeBodyFields?: string[];
+}
+
 export interface MockEndpointEntry {
   kind: 'endpoint';
   uri: vscode.Uri;
-  endpointFile: MockEndpointFile;
+  endpointFile: Omit<MockEndpointFile, 'rules'> & { rules: MockRule[] };
   indexed: boolean;
   defaultRule?: string;
 }

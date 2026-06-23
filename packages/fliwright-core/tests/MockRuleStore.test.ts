@@ -229,6 +229,206 @@ describe('MockRuleStore', () => {
       expect(store.listEndpoints()[0].activeRule).toBe('empty');
     });
 
+    it('expands endpoint baseRule into each rule override', async () => {
+      const mockIndex: MockIndex = {
+        version: 1,
+        defaultRule: 'success',
+        files: ['api/user.json'],
+      };
+      const mockEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'User',
+        method: 'GET',
+        endpoint: '/api/user',
+        baseRule: {
+          status: 200,
+          delay: 50,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Base': 'base',
+          },
+          body: {
+            success: true,
+            source: 'base',
+          },
+        },
+        rules: [
+          {
+            name: 'success',
+            body: {
+              name: 'Ada',
+            },
+          },
+          {
+            name: 'server_error',
+            status: 500,
+            headers: {
+              'X-Base': 'override',
+            },
+            body: {
+              success: false,
+              message: 'failed',
+            },
+          },
+        ],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) return JSON.stringify(mockIndex);
+        if (p.endsWith('user.json')) return JSON.stringify(mockEndpoint);
+        throw new Error(`Unexpected read: ${p}`);
+      });
+
+      await store.loadFromDirectory('/project/.fliwright/mocks');
+
+      expect(store.getActiveResponse('/api/user')).toEqual({
+        status: 200,
+        delay: 50,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Base': 'base',
+        },
+        body: {
+          success: true,
+          source: 'base',
+          name: 'Ada',
+        },
+      });
+
+      expect(store.switchRule('/api/user', 'server_error')).toEqual({
+        status: 500,
+        delay: 50,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Base': 'override',
+        },
+        body: {
+          success: false,
+          source: 'base',
+          message: 'failed',
+        },
+      });
+    });
+
+    it('skips baseRule endpoint files when a rule cannot resolve status', async () => {
+      const mockIndex: MockIndex = {
+        version: 1,
+        defaultRule: 'success',
+        files: ['api/bad.json'],
+      };
+      const mockEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'Bad',
+        method: 'GET',
+        endpoint: '/api/bad',
+        baseRule: {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+        rules: [
+          {
+            name: 'success',
+            body: {},
+          },
+        ],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) return JSON.stringify(mockIndex);
+        if (p.endsWith('bad.json')) return JSON.stringify(mockEndpoint);
+        throw new Error(`Unexpected read: ${p}`);
+      });
+
+      await store.loadFromDirectory('/project/.fliwright/mocks');
+
+      expect(store.listEndpoints()).toEqual([]);
+    });
+
+    it('replaces non-object bodies instead of merging them with base body', async () => {
+      const mockIndex: MockIndex = {
+        version: 1,
+        defaultRule: 'array_body',
+        files: ['api/body.json'],
+      };
+      const mockEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'Body',
+        method: 'GET',
+        endpoint: '/api/body',
+        baseRule: {
+          status: 200,
+          body: { ok: true, inherited: true },
+        },
+        rules: [
+          { name: 'array_body', body: [1, 2, 3] },
+          { name: 'string_body', body: 'plain text' },
+          { name: 'null_body', body: null },
+        ],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) return JSON.stringify(mockIndex);
+        if (p.endsWith('body.json')) return JSON.stringify(mockEndpoint);
+        throw new Error(`Unexpected read: ${p}`);
+      });
+
+      await store.loadFromDirectory('/project/.fliwright/mocks');
+
+      expect(store.getActiveResponse('/api/body')).toEqual({ status: 200, body: [1, 2, 3] });
+      expect(store.switchRule('/api/body', 'string_body')).toEqual({ status: 200, body: 'plain text' });
+      expect(store.switchRule('/api/body', 'null_body')).toEqual({ status: 200, body: null });
+    });
+
+    it('removes inherited body fields after applying rule body overrides', async () => {
+      const mockIndex: MockIndex = {
+        version: 1,
+        defaultRule: 'without_phone',
+        files: ['api/user.json'],
+      };
+      const mockEndpoint: MockEndpointConfig = {
+        version: 1,
+        name: 'User',
+        method: 'GET',
+        endpoint: '/api/user',
+        baseRule: {
+          status: 200,
+          body: {
+            username: 'ada',
+            phone: '+85268****85',
+            otpConfigured: true,
+          },
+        },
+        rules: [
+          {
+            name: 'without_phone',
+            body: { otpConfigured: false },
+            removeBodyFields: ['phone'],
+          },
+        ],
+      };
+
+      mockReadFile.mockImplementation(async (path: string) => {
+        const p = path.toString();
+        if (p.endsWith('mock-index.json')) return JSON.stringify(mockIndex);
+        if (p.endsWith('user.json')) return JSON.stringify(mockEndpoint);
+        throw new Error(`Unexpected read: ${p}`);
+      });
+
+      await store.loadFromDirectory('/project/.fliwright/mocks');
+
+      expect(store.getActiveResponse('/api/user')).toEqual({
+        status: 200,
+        body: {
+          username: 'ada',
+          otpConfigured: false,
+        },
+      });
+    });
+
     it('falls back to first rule when defaultRule does not match any rule', async () => {
       const mockIndex: MockIndex = {
         version: 1,

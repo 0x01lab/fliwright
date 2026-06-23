@@ -77,6 +77,7 @@ AI 编写建议：保持 CI 确定性（`provider: 'mock'` 或 `'none'`）；捕
 - 新版测试只使用一套公开 locator 断言：`await expect(locator, 'Title').toBeVisible()`、`toHaveText()`、`toContainText()`、`toBeEnabled()`、`toBeDisabled()`。第二个参数或 options 里的 `title` 会写入 timeline metadata。
 - 在 `script` 模式中不要为了满足测试而硬塞 assertion；需要记录事实时用 `flow.frame()` 或 `agent.verify()`，需要可失败的 UI 校验时才用 `expect(locator, title?).to*`。
 - 用 `logger.info/debug/warn/error/success` 记录脚本进度、业务事实、外部系统响应和诊断上下文；不要用 `console.log` 作为主要运行日志。默认日志会进 `<runsRoot>/<runId>/logs/events.jsonl`（runs 根目录解析规则见「运行产物与 runs 根目录」一节），需要实时终端输出时配置 `FLIWRIGHT_LOG_OUTPUT=stderr,jsonl-file`。
+- 写 `.fliwright/mocks/api/*.json` 时，重复字段多的端点优先用 `baseRule` + rule override；需要让某个响应“缺少继承字段”时用 `removeBodyFields`，不要用 `null` 伪装字段不存在。完整 schema 和合并语义见 [references/mocks.md](references/mocks.md)。
 - 不要加固定 sleep。用 `await page.waitFor(selector, timeout)` 或断言超时。
 - E2E 专用脚本可说明 VM Service URL 来自显式参数、`FLIWRIGHT_VM_URL` / `FLIWRIGHT_VM_SERVICE_URL`，或项目 `.fliwright/config.json`，但别把本机 URL 写进提交的测试。
 

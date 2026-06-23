@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { normalizeMockEndpointConfig } from '@fliwright/core';
 import { loadConfig, resolveWorkspacePath } from '../config.js';
 import { jsonErrorMessage, readJson, writeJson } from '../json.js';
 import type {
@@ -29,12 +30,16 @@ export class MockConfigService {
       try {
         const endpointFile = await readJson<MockEndpointFile>(uri);
         this.validateEndpointFile(endpointFile);
+        const normalizedEndpointFile = {
+          ...endpointFile,
+          rules: normalizeMockEndpointConfig(endpointFile).rules,
+        };
         const relativeToMockRoot = normalizeRelative(path.posix.relative(mockRoot.path, uri.path));
         const relativeToApiRoot = normalizeRelative(path.posix.relative(apiRoot.path, uri.path));
         endpoints.push({
           kind: 'endpoint',
           uri,
-          endpointFile,
+          endpointFile: normalizedEndpointFile,
           indexed: indexedFiles.size === 0
             || indexedFiles.has(relativeToMockRoot)
             || indexedFiles.has(`api/${relativeToApiRoot}`),
@@ -130,11 +135,19 @@ export class MockConfigService {
     if (!Array.isArray(file.rules) || file.rules.length === 0) throw new Error('rules must be a non-empty array');
     file.rules.forEach((rule, index) => {
       if (typeof rule.name !== 'string' || rule.name.trim() === '') throw new Error(`rules[${index}].name is required`);
-      if (!Number.isInteger(rule.status) || rule.status < 100 || rule.status > 599) {
+      const status = rule.status ?? file.baseRule?.status;
+      if (status === undefined || !Number.isInteger(status) || status < 100 || status > 599) {
         throw new Error(`rules[${index}].status must be an HTTP status code`);
       }
-      if (rule.delay !== undefined && (!Number.isFinite(rule.delay) || rule.delay < 0)) {
+      const delay = rule.delay ?? file.baseRule?.delay;
+      if (delay !== undefined && (!Number.isFinite(delay) || delay < 0)) {
         throw new Error(`rules[${index}].delay must be a non-negative number`);
+      }
+      if (
+        rule.removeBodyFields !== undefined &&
+        (!Array.isArray(rule.removeBodyFields) || rule.removeBodyFields.some((field) => typeof field !== 'string' || field.trim() === ''))
+      ) {
+        throw new Error(`rules[${index}].removeBodyFields must be an array of non-empty strings`);
       }
     });
   }

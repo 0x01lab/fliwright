@@ -125,13 +125,23 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
   }
 
   private ruleItem(element: MockRuleEntry): vscode.TreeItem {
-    const labels = [element.isDefault ? 'default' : '', element.applied ? 'active' : ''].filter(Boolean);
+    const applied = this.findAppliedRule(element);
+    const isApplied = Boolean(applied);
+    const labels = [element.isDefault ? 'default' : '', isApplied ? 'active' : ''].filter(Boolean);
     const item = new vscode.TreeItem(element.rule.name, vscode.TreeItemCollapsibleState.None);
     item.description = `${element.rule.status}${labels.length ? ` · ${labels.join(' · ')}` : ''}`;
     item.tooltip = `${element.method} ${element.endpoint}\n${JSON.stringify(element.rule.body ?? {}, null, 2)}`;
-    item.contextValue = element.applied ? 'mockRuleApplied' : 'mockRule';
-    item.iconPath = new vscode.ThemeIcon(element.applied ? 'pass-filled' : statusIcon(element.rule.status));
+    item.contextValue = isApplied ? 'mockRuleApplied' : 'mockRule';
+    item.iconPath = new vscode.ThemeIcon(isApplied ? 'pass-filled' : statusIcon(element.rule.status));
     return item;
+  }
+
+  private findAppliedRule(element: MockRuleEntry): AppliedMockRule | undefined {
+    return this.appliedRules.find((entry) => (
+      entry.endpoint === element.endpoint
+      && entry.method.toUpperCase() === element.method.toUpperCase()
+      && entry.ruleName === element.rule.name
+    ));
   }
 }
 

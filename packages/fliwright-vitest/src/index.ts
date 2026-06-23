@@ -117,7 +117,15 @@ interface FliwrightFixtures {
   logger: FliwrightLogger;
 }
 
-export function createFliwrightTest(config: FliwrightConfig) {
+export interface CreateFliwrightTestOptions {
+  /** When set, fixtures use this driver instead of lazily creating sharedDriver. */
+  driverProvider?: () => Promise<FliwrightDriver>;
+}
+
+export function createFliwrightTest(config: FliwrightConfig, options?: CreateFliwrightTestOptions) {
+  const resolveDriver = options?.driverProvider
+    ? () => options.driverProvider!()
+    : () => getSharedDriver(config);
   const fliwrightTest = vitestTest.extend<FliwrightFixtures>({
     timeline: async ({ task }, use) => {
       const testName = getTestName(task);
@@ -170,7 +178,7 @@ export function createFliwrightTest(config: FliwrightConfig) {
       }
     },
     driver: async ({ task, timeline }, use) => {
-      const driver = await getSharedDriver(config);
+      const driver = await resolveDriver();
       const testName = getTestName(task);
       const previous = currentTestContext;
       const ctx: FliwrightTestContext = { driver, testName, timeline };
@@ -184,7 +192,7 @@ export function createFliwrightTest(config: FliwrightConfig) {
       }
     },
     page: async ({ task, timeline }, use) => {
-      const driver = await getSharedDriver(config);
+      const driver = await resolveDriver();
       const testName = getTestName(task);
 
       // ── Trace collection setup ──────────────────────────────
@@ -251,7 +259,7 @@ export function createFliwrightTest(config: FliwrightConfig) {
       }
     },
     aiRuntime: async ({ task, timeline }, use) => {
-      const driver = await getSharedDriver(config);
+      const driver = await resolveDriver();
       const testName = getTestName(task);
       const runtime = new AiRuntime(resolveAiConfig(config.ai), {
         page: driver.page,

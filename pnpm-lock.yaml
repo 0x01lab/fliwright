@@ -98,6 +98,9 @@ importers:
       '@fliwright/core':
         specifier: workspace:*
         version: link:../fliwright-core
+      '@fliwright/tdd':
+        specifier: workspace:*
+        version: link:../fliwright-tdd
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.0
         version: 1.29.0(zod@3.25.76)
@@ -127,6 +130,22 @@ importers:
       vitest:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@25.9.1)
+
+  packages/fliwright-tdd:
+    dependencies:
+      '@fliwright/core':
+        specifier: workspace:*
+        version: link:../fliwright-core
+      '@fliwright/vitest':
+        specifier: workspace:*
+        version: link:../fliwright-vitest
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@25.9.1)
+    devDependencies:
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
 
   packages/fliwright-vitest:
     dependencies:

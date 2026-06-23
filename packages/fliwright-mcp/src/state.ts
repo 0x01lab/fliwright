@@ -1,5 +1,6 @@
 import type { RunResult, FailureEntry } from './types.js';
 import { MockRuleStore, type FliwrightDriver } from '@fliwright/core';
+import type { TddRuntime } from '@fliwright/tdd';
 
 export interface ServerState {
   getLastRunResult(): RunResult | null;
@@ -13,6 +14,8 @@ export interface ServerState {
   // ── Persistent Driver for MCP interaction tools ──
   getDriver(): FliwrightDriver | null;
   setDriver(driver: FliwrightDriver | null): void;
+  getTddRuntime(): TddRuntime | null;
+  setTddRuntime(runtime: TddRuntime | null): void;
 }
 
 export function createServerState(): ServerState {
@@ -21,6 +24,7 @@ export function createServerState(): ServerState {
   let vmServiceUrl: string | null = null;
   const ruleStore = new MockRuleStore();
   let driver: FliwrightDriver | null = null;
+  let tddRuntime: TddRuntime | null = null;
 
   return {
     getLastRunResult() { return lastRunResult; },
@@ -36,5 +40,7 @@ export function createServerState(): ServerState {
     getRuleStore(): MockRuleStore { return ruleStore; },
     getDriver(): FliwrightDriver | null { return driver; },
     setDriver(d: FliwrightDriver | null) { driver = d; },
+    getTddRuntime(): TddRuntime | null { return tddRuntime; },
+    setTddRuntime(runtime: TddRuntime | null) { tddRuntime = runtime; },
   };
 }

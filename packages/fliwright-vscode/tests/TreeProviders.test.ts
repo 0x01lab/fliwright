@@ -67,6 +67,15 @@ describe('tree providers', () => {
 
   it('marks applied mock rules in tree items', () => {
     const provider = new MockApiTreeProvider({} as MockConfigService);
+    provider.setAppliedRules([
+      {
+        endpoint: '/v1/token',
+        method: 'GET',
+        ruleName: 'success',
+        filePath: '/tmp/token.json',
+        appliedAt: 1,
+      },
+    ]);
 
     const item = provider.getTreeItem({
       kind: 'rule',
@@ -80,6 +89,35 @@ describe('tree providers', () => {
 
     expect(item.contextValue).toBe('mockRuleApplied');
     expect(item.description).toContain('active');
+  });
+
+  it('renders stale mock rule elements from the current applied state', () => {
+    const provider = new MockApiTreeProvider({} as MockConfigService);
+    const staleRule = {
+      kind: 'rule' as const,
+      uri: Uri.file('/tmp/token.json'),
+      endpoint: '/v1/token',
+      method: 'get',
+      rule: { name: 'success', status: 200 },
+      isDefault: false,
+      applied: false,
+    };
+
+    provider.setAppliedRules([
+      {
+        endpoint: '/v1/token',
+        method: 'GET',
+        ruleName: 'success',
+        filePath: '/tmp/token.json',
+        appliedAt: 1,
+      },
+    ]);
+
+    const item = provider.getTreeItem(staleRule);
+
+    expect(item.contextValue).toBe('mockRuleApplied');
+    expect(item.description).toContain('active');
+    expect(item.iconPath).toMatchObject({ id: 'pass-filled' });
   });
 
   it('shows at most one applied rule per mock endpoint', async () => {

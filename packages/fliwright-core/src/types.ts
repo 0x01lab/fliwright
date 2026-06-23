@@ -610,12 +610,24 @@ export interface FormRulesFile {
 }
 
 /** A named mock rule definition within an endpoint config file. */
-export interface MockRule {
-  name: string;
-  status: number;
+export interface MockRuleBase {
+  status?: number;
   delay?: number;
   headers?: Record<string, string>;
   body?: unknown;
+}
+
+/** A named mock rule definition within an endpoint config file. */
+export interface MockRule extends MockRuleBase {
+  name: string;
+  status: number;
+}
+
+/** A named mock rule override that can inherit response fields from baseRule. */
+export interface MockRuleOverride extends MockRuleBase {
+  name: string;
+  description?: string;
+  removeBodyFields?: string[];
 }
 
 /** Parsed structure of a .fliwright/mocks/api/*.json endpoint config file. */
@@ -625,6 +637,12 @@ export interface MockEndpointConfig {
   description?: string;
   method: string;
   endpoint: string;
+  baseRule?: MockRuleBase;
+  rules: MockRuleOverride[];
+}
+
+/** Endpoint config after baseRule inheritance has been expanded. */
+export interface NormalizedMockEndpointConfig extends Omit<MockEndpointConfig, 'rules'> {
   rules: MockRule[];
 }
 

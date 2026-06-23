@@ -190,6 +190,65 @@ switchRule(endpoint: string, ruleName: string, method?: string): Promise<void>
 }
 ```
 
+当多条规则大部分字段相同时，优先使用 `baseRule`，让 `rules[]` 只保留差异。
+`MockRuleStore` 会在加载时把它展开成普通 `MockRule`，所以 `loadRules()`、
+`switchRule()`、VS Code Mock APIs 树和 Flutter route 同步看到的都是最终响应。
+
+```json
+{
+  "version": 1,
+  "name": "User Info API",
+  "method": "POST",
+  "endpoint": "/api/v1/user/info",
+  "baseRule": {
+    "status": 200,
+    "delay": 0,
+    "headers": { "Content-Type": "application/json" },
+    "body": {
+      "username": "qa-user",
+      "email": "qa@example.com",
+      "phone": "+85268****85",
+      "otpConfigured": true
+    }
+  },
+  "rules": [
+    {
+      "name": "security-real-data"
+    },
+    {
+      "name": "security-mobile-add",
+      "removeBodyFields": ["phone"],
+      "body": {
+        "otpConfigured": false
+      }
+    },
+    {
+      "name": "error",
+      "status": 500,
+      "removeBodyFields": ["username", "email", "phone", "otpConfigured"],
+      "body": {
+        "error": "service unavailable"
+      }
+    }
+  ]
+}
+```
+
+Override 语义：
+
+| 字段 | 语义 |
+| --- | --- |
+| `baseRule.status` / `rules[].status` | `status` 可放在 base；单条 rule 可覆盖。最终每条 rule 必须有 `status`。 |
+| `baseRule.delay` / `rules[].delay` | 延迟毫秒数；rule 覆盖 base。 |
+| `baseRule.headers` / `rules[].headers` | 浅合并；同名 header 由 rule 覆盖。 |
+| `baseRule.body` / `rules[].body` | 两者都是 object 时浅合并；数组、字符串、数字、布尔值、null 会整体替换 base body。 |
+| `rules[].removeBodyFields` | 只用于 object body；在 body 合并后删除继承字段。适合“base 有 phone，但该场景不能返回 phone”的情况。 |
+| `rules[].description` | 给人看的说明；展开应用到 mock route 时不会进入最终响应。 |
+
+写压缩 mock 文件时要注意：只有确实应当被所有规则继承的字段才放入
+`baseRule.body`。如果某些规则需要“字段不存在”而不是“字段为空”，使用
+`removeBodyFields`；不要把值设成 `null`，除非真实 API 就会返回 `null`。
+
 一个索引（`.fliwright/mocks/mock-index.json`）列出默认激活的规则。如果它
 缺失，`loadRules()` 会扫描 `api/*.json`。之后可在用例中途切换场景：
 

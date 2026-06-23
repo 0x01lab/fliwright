@@ -1,6 +1,15 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { MockRule, MockRuleEntry, MockEndpointConfig, MockIndex, MockRouteResponse } from './types.js';
+import type {
+  MockRule,
+  MockRuleBase,
+  MockRuleEntry,
+  MockEndpointConfig,
+  MockIndex,
+  MockRouteResponse,
+  NormalizedMockEndpointConfig,
+  MockRuleOverride,
+} from './types.js';
 
 const FALLBACK_DEFAULT_RULE = 'success';
 
@@ -36,7 +45,7 @@ export class MockRuleStore {
       try {
         const content = await readFile(filePath, 'utf-8');
         const config = JSON.parse(content) as MockEndpointConfig;
-        this.registerEndpoint(config, source.defaultRule);
+        this.registerEndpoint(normalizeMockEndpointConfig(config), source.defaultRule);
       } catch (e) {
         // Skip files that fail to parse — log a warning
         const message = e instanceof Error ? e.message : String(e);
@@ -105,7 +114,7 @@ export class MockRuleStore {
   /**
    * Register a single endpoint config with a default active rule.
    */
-  private registerEndpoint(config: MockEndpointConfig, defaultRule: string): void {
+  private registerEndpoint(config: NormalizedMockEndpointConfig, defaultRule: string): void {
     const rules = new Map<string, MockRule>();
     for (const rule of config.rules) {
       rules.set(rule.name, rule);
@@ -197,6 +206,63 @@ export class MockRuleStore {
       }`,
     );
   }
+}
+
+export function normalizeMockEndpointConfig(config: MockEndpointConfig): NormalizedMockEndpointConfig {
+  const rules = config.rules.map((rule, index) => {
+    const merged = mergeMockRule(config.baseRule, rule);
+    if (merged.status === undefined) {
+      throw new Error(`rules[${index}].status is required when baseRule.status is not set`);
+    }
+    delete (merged as Partial<MockRuleOverride>).removeBodyFields;
+    delete (merged as Partial<MockRuleOverride>).description;
+    return merged as MockRule;
+  });
+
+  return {
+    ...config,
+    rules,
+  };
+}
+
+function mergeMockRule(base: MockRuleBase | undefined, rule: MockRuleOverride): MockRuleBase & { name: string } {
+  const merged: MockRuleBase & { name: string } = {
+    ...(base ?? {}),
+    ...rule,
+    name: rule.name,
+  };
+
+  if (base?.headers || rule.headers) {
+    merged.headers = {
+      ...(base?.headers ?? {}),
+      ...(rule.headers ?? {}),
+    };
+  }
+
+  if (isPlainRecord(base?.body) && isPlainRecord(rule.body)) {
+    merged.body = {
+      ...base.body,
+      ...rule.body,
+    };
+  }
+
+  if (rule.removeBodyFields?.length && isPlainRecord(merged.body)) {
+    const body = { ...merged.body };
+    for (const field of rule.removeBodyFields) {
+      delete body[field];
+    }
+    merged.body = body;
+  }
+
+  return merged;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  );
 }
 
 function routeKey(endpoint: string, method: string): string {

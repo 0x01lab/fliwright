@@ -47,8 +47,11 @@ export type {
   FormSkill,
   FormRule,
   FormRulesFile,
+  MockRuleBase,
   MockRule,
+  MockRuleOverride,
   MockEndpointConfig,
+  NormalizedMockEndpointConfig,
   MockIndex,
   MockRuleEntry,
   BridgeContext,
@@ -131,7 +134,7 @@ export type {
 } from './logging.js';
 export { CodeGenerator } from './CodeGenerator.js';
 export { MockManager } from './MockManager.js';
-export { MockRuleStore } from './MockRuleStore.js';
+export { MockRuleStore, normalizeMockEndpointConfig } from './MockRuleStore.js';
 export { ToolMockServer } from './ToolMockServer.js';
 export type { ToolMockRequest, ToolMockResult, ToolMockServerOptions } from './ToolMockServer.js';
 export { RecorderController } from './RecorderController.js';

@@ -22,6 +22,7 @@ import { registerActionTool } from './tools/action.js';
 import { registerDiagnosticsTool } from './tools/diagnostics.js';
 import { registerTimelineTool } from './tools/timeline.js';
 import { registerAgentDiagnoseTool } from './tools/agentDiagnose.js';
+import { registerTddTools } from './tools/tdd.js';
 
 export function createFliwrightServer() {
   const server = new McpServer({
@@ -56,6 +57,7 @@ export function createFliwrightServer() {
   registerDiagnosticsTool(server, state);
   registerTimelineTool(server, state);
   registerAgentDiagnoseTool(server, state);
+  registerTddTools(server, state);
 
   return { server, state };
 }
