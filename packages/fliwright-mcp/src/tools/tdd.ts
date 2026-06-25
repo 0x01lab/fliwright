@@ -63,6 +63,32 @@ export const TddCycleParamsSchema = z.object({
     .describe('Retry a structural-looking reload failure once with a hot restart (when restart is available).'),
   timeoutMs: z.number().int().positive().optional()
     .describe('Per-cycle wall-clock budget (ms). On expiry the caller gets a red `timeout` result while the body finishes.'),
+  repair: z.object({
+    mode: z.enum(['suggest', 'safe-apply'])
+      .describe("'suggest' emits a repair diff for approval (no apply, no loop); 'safe-apply' applies only guardrail-safe repairs and loops cycle(red) → repair → cycle until green or the cap."),
+    iterations: z.number().int().positive().optional()
+      .describe('Max repair→cycle iterations in safe-apply mode (default 3). Ignored for suggest.'),
+  }).optional()
+    .describe('Run an inline AI repair closed loop after the initial cycle when it is red (design P3). Requires a repair planner wired into the runtime.'),
+});
+
+export const TddRepairParamsSchema = z.object({
+  mode: z.enum(['suggest', 'safe-apply'])
+    .describe("'suggest' returns the repair diff/plan for approval and applies nothing; 'safe-apply' applies only guardrail-safe repairs and re-cycles until green or the iteration cap."),
+  testName: z.string().optional()
+    .describe('Override focused test name for the cycle driving this repair'),
+  iterations: z.number().int().positive().optional()
+    .describe('Max repair→cycle iterations in safe-apply mode (default 3). Ignored for suggest.'),
+  sync: z.enum(['none', 'reload', 'restart', 'auto']).optional().default('none')
+    .describe('App sync for each cycle in the loop.'),
+  fullReset: z.boolean().optional()
+    .describe('Force a full baseline reset for each cycle in the loop.'),
+  changes: z.array(z.string()).optional()
+    .describe('Changed file paths since the last sync; only consulted when sync is "auto".'),
+  autoEscalate: z.boolean().optional().default(true)
+    .describe('Retry a structural-looking reload failure once with a hot restart per cycle (when restart is available).'),
+  timeoutMs: z.number().int().positive().optional()
+    .describe('Per-cycle wall-clock budget (ms) for each cycle in the loop.'),
 });
 
 export const TddStopParamsSchema = z.object({
@@ -205,12 +231,47 @@ export async function handleTddCycle(
   const runtime = requireTddRuntime(state);
   const input = TddCycleParamsSchema.parse(params);
   await focusWorkflowTestIfNeeded(runtime, state, input.testName);
+  // Conditional spread keeps the cycle opts byte-for-byte identical to today when `repair` is absent
+  // (the existing tool contract asserts an exact opts object without a `repair` key).
+  const cycleOpts = input.repair
+    ? {
+      sync: input.sync,
+      fullReset: input.fullReset,
+      changes: input.changes,
+      autoEscalate: input.autoEscalate,
+      timeoutMs: input.timeoutMs,
+      repair: input.repair,
+    }
+    : {
+      sync: input.sync,
+      fullReset: input.fullReset,
+      changes: input.changes,
+      autoEscalate: input.autoEscalate,
+      timeoutMs: input.timeoutMs,
+    };
+  return await runtime.cycle(input.testName, cycleOpts);
+}
+
+/**
+ * Drives the AI repair closed loop standalone (design §7 P3). Runs an initial cycle on the focused
+ * test; if red, proposes/applies a guardrail-bounded repair and (in safe-apply) re-cycles until green
+ * or the iteration cap. Returns the final cycle result plus the repair trace (diffs suggested/applied).
+ * Requires a repair planner wired into the runtime.
+ */
+export async function handleTddRepair(
+  params: z.infer<typeof TddRepairParamsSchema>,
+  state: ServerState,
+): Promise<TddCycleResult> {
+  const runtime = requireTddRuntime(state);
+  const input = TddRepairParamsSchema.parse(params);
+  await focusWorkflowTestIfNeeded(runtime, state, input.testName);
   return await runtime.cycle(input.testName, {
     sync: input.sync,
     fullReset: input.fullReset,
     changes: input.changes,
     autoEscalate: input.autoEscalate,
     timeoutMs: input.timeoutMs,
+    repair: { mode: input.mode, iterations: input.iterations },
   });
 }
 
@@ -314,10 +375,23 @@ export function registerTddTools(server: McpServer, state: ServerState): void {
     'fliwright_tdd_cycle',
     'Reset baseline, sync the app (none/reload/restart/auto), and rerun the focused TDD test. '
       + 'With autoEscalate (default), a reload that fails with a structural-looking error is retried once with a hot restart when the runtime can restart. '
-      + 'On timeoutMs expiry the caller gets a red `timeout` result without wedging the loop.',
+      + 'On timeoutMs expiry the caller gets a red `timeout` result without wedging the loop. '
+      + 'Optionally run an inline AI repair closed loop (repair.mode) after a red cycle: suggest emits a diff for approval, safe-apply applies only guardrail-safe repairs and re-cycles until green or the cap.',
     TddCycleParamsSchema.shape,
     async (params) => ({
       content: [{ type: 'text', text: JSON.stringify(await handleTddCycle(params, state), null, 2) }],
+    }),
+  );
+
+  server.tool(
+    'fliwright_tdd_repair',
+    'Drive the AI repair closed loop for the focused TDD test (design P3). '
+      + 'Runs an initial cycle; if red, proposes a guardrail-bounded minimal repair and (in safe-apply) re-cycles until green or the iteration cap. '
+      + 'suggest returns the repair diff/plan for approval and applies nothing; safe-apply applies only safe runtime repairs and loops. '
+      + 'Returns the final cycle result plus a repair trace (diffs suggested/applied). Requires a repair planner wired into the runtime.',
+    TddRepairParamsSchema.shape,
+    async (params) => ({
+      content: [{ type: 'text', text: JSON.stringify(await handleTddRepair(params, state), null, 2) }],
     }),
   );
 

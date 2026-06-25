@@ -15,6 +15,8 @@ export type {
   StorageResetOutcome,
 } from './baseline/BaselineManager.js';
 export { StorageResetAdapter } from './baseline/StorageResetAdapter.js';
+export { TddRepairPlanner } from './repair/TddRepairPlanner.js';
+export type { TddRepairPlannerOptions } from './repair/TddRepairPlanner.js';
 export { TddRuntime } from './runtime/TddRuntime.js';
 export { PersistentTestExecutor } from './executor/PersistentTestExecutor.js';
 export type { BootOptions, TestRunOutcome } from './executor/PersistentTestExecutor.js';
@@ -89,5 +91,12 @@ export type {
   Scenario,
   StartOpts,
   TddCycleResult,
+  TddRepairCycleResult,
+  TddRepairOpts,
+  TddRepairPlan,
+  TddRepairPlannerLike,
+  TddRepairProposalEntry,
+  TddRepairStep,
+  TddRepairTrace,
   TddRuntimeDeps,
 } from './types.js';

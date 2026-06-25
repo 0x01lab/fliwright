@@ -6,6 +6,7 @@ import { SubprocessDaemonTransport } from '../daemon/SubprocessDaemonTransport.j
 import { decideSync, looksStructuralAfterReload } from '../daemon/ReloadStrategy.js';
 import { PersistentTestExecutor } from '../executor/PersistentTestExecutor.js';
 import { BaselineManager } from '../baseline/BaselineManager.js';
+import { TddRepairPlanner } from '../repair/TddRepairPlanner.js';
 import { buildTddFailureContext } from '../diagnostics/TddFailureContext.js';
 import type {
   CycleOpts,
@@ -13,6 +14,11 @@ import type {
   Scenario,
   StartOpts,
   TddCycleResult,
+  TddRepairCycleResult,
+  TddRepairOpts,
+  TddRepairPlannerLike,
+  TddRepairStep,
+  TddRepairTrace,
   TddRuntimeDeps,
 } from '../types.js';
 import { DEFAULT_CYCLE_TIMEOUT_MS } from '../types.js';
@@ -22,12 +28,17 @@ const defaultScenario: Scenario = {
   resetCategories: ['navigation', 'mock'],
 };
 
+/** Default cap on repair→cycle iterations (design §7 P3). Prevents unbounded AI edits. */
+const DEFAULT_REPAIR_ITERATIONS = 3;
+
 export class TddRuntime {
   private readonly daemon: NonNullable<TddRuntimeDeps['daemon']>;
   private readonly executor: NonNullable<TddRuntimeDeps['executor']>;
   private readonly driverFactory: NonNullable<TddRuntimeDeps['driverFactory']>;
   private readonly injectedBaseline?: NonNullable<TddRuntimeDeps['baseline']>;
   private baseline?: NonNullable<TddRuntimeDeps['baseline']>;
+  /** Optional AI repair planner (design §6.2, wired P3). Absent → no repair loop (additive). */
+  private repairPlanner?: TddRepairPlannerLike;
   private driver?: ReturnType<NonNullable<TddRuntimeDeps['driverFactory']>>;
   private app?: { appId: string; wsUri: string; supportsRestart: boolean };
   private vmServiceUrl?: string;
@@ -53,6 +64,7 @@ export class TddRuntime {
     this.driverFactory = deps.driverFactory ?? (() => new FliwrightDriver());
     this.injectedBaseline = deps.baseline;
     this.baseline = deps.baseline;
+    this.repairPlanner = deps.repair;
   }
 
   async start(opts: StartOpts): Promise<RuntimeSnapshot> {
@@ -90,6 +102,13 @@ export class TddRuntime {
       await this.driver.connect(vmServiceUrl);
       this.driverConnections += 1;
 
+      // Auto-wire the repair planner from the real driver's page so fliwright_tdd_repair works
+      // out of the box. Skipped when a planner was injected, and for non-FliwrightDriver test
+      // doubles (their page lacks the AgentRepair surface) — keeping the path additive.
+      if (!this.repairPlanner && this.driver instanceof FliwrightDriver) {
+        this.repairPlanner = TddRepairPlanner.forPage(this.driver.page);
+      }
+
       this.baseline = this.baseline ?? this.injectedBaseline ?? new BaselineManager(this.driver);
       await this.executor.boot({
         configRoot: opts.configRoot,
@@ -117,6 +136,10 @@ export class TddRuntime {
     // The caller's promise (deferred) is resolved separately so a timeout can return early, while the
     // chain task keeps awaiting the real body — guaranteeing the single-threaded executor is never
     // overlapped by the next cycle even after a timeout.
+    //
+    // When opts.repair is set, the same chain task also runs the AI repair closed loop after the
+    // initial cycle (design §7/§10 P3): the whole loop (initial cycle + repair proposals + re-cycles)
+    // lives inside this serialized task, so it can never overlap another cycle or be reentered.
     const deferred = makeDeferred<TddCycleResult>();
     const task = () => this.runCycleWithEscalation(testName, opts, deferred);
     this.cycleChain = this.cycleChain.then(task, task).then(noop, noop);
@@ -199,15 +222,76 @@ export class TddRuntime {
     try {
       const result = await runAll();
       clearTimeout(timer);
-      this.lastResult = result;
+      // AI repair closed loop (design §7/§10 P3). Runs only when requested AND a planner is wired.
+      // Entirely serialized: lives inside this chain task, so it never overlaps another cycle and is
+      // not reentrant. 'suggest' stops after one proposal (no apply, no loop); 'safe-apply' loops
+      // cycle(red) → repair → cycle until green or the iteration cap. Omitted → byte-for-byte today.
+      const finalResult = opts.repair && this.repairPlanner && result.status === 'red'
+        ? await this.runRepairLoop(testName, opts, result)
+        : result;
+      this.lastResult = finalResult;
       this.persistStatus();
-      deferred.resolve(result);
-      return result;
+      deferred.resolve(finalResult);
+      return finalResult;
     } catch (error) {
       clearTimeout(timer);
       deferred.reject(error);
       throw error;
     }
+  }
+
+  /**
+   * The AI repair closed loop (design §7/§10 P3). Runs serialized inside the cycle chain task after
+   * the initial red cycle. Proposes a minimal, guardrail-bounded repair via the wired planner, then
+   * (safe-apply only) re-cycles until green or the iteration cap. Never reentrant: the caller has
+   * already acquired the chain; this method calls {@link performCycle} directly (not {@link cycle}).
+   *
+   * In 'suggest' mode it proposes once, attaches the diff as a repair trace, and returns the original
+   * red result unchanged (nothing applied). In 'safe-apply' mode it applies only guardrail-safe
+   * repairs and re-cycles; reaching the cap still red is a terminal state surfaced via the trace.
+   */
+  private async runRepairLoop(
+    testName: string | undefined,
+    opts: CycleOpts,
+    initialRed: TddCycleResult,
+  ): Promise<TddRepairCycleResult> {
+    const repairOpts: TddRepairOpts = opts.repair!;
+    const planner = this.repairPlanner!;
+    const maxIterations = repairOpts.iterations && repairOpts.iterations > 0 ? repairOpts.iterations : DEFAULT_REPAIR_ITERATIONS;
+
+    const steps: TddRepairStep[] = [];
+    let current: TddCycleResult = initialRed;
+    let capped = false;
+
+    // Re-cycle options for each repair iteration: no nested repair, keep the caller's sync/reset
+    // policy, but disable auto-escalation (already attempted on the initial cycle).
+    const reCycleOpts: CycleOpts = {
+      ...opts,
+      repair: undefined,
+      autoEscalate: false,
+    };
+
+    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+      const planAndApplied = await planner.propose(current, repairOpts.mode);
+      const step: TddRepairStep = { iteration, plan: planAndApplied };
+      if (repairOpts.mode === 'safe-apply' && planAndApplied.applied) {
+        step.applied = planAndApplied.applied;
+      }
+      steps.push(step);
+
+      // 'suggest' never loops or applies: emit the diff and stop on the first proposal.
+      if (repairOpts.mode === 'suggest') break;
+
+      // safe-apply: nothing safe was applied this iteration → no point re-cycling, stop.
+      if (!planAndApplied.applied || planAndApplied.applied.length === 0) break;
+
+      current = await this.performCycle(testName, reCycleOpts);
+      if (current.status === 'green') break;
+      if (iteration === maxIterations) capped = true;
+    }
+
+    const trace: TddRepairTrace = { mode: repairOpts.mode, steps, capped };
+    return { ...current, repair: trace };
   }
 
   private timeoutResult(testName: string | undefined): TddCycleResult {

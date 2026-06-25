@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { createServerState } from '../src/state.js';
-import { handleTddCycle, handleTddFocus, handleTddPrepare, handleTddStart, handleTddStatus, handleTddStop, handleTddValidateSpec } from '../src/tools/tdd.js';
+import { handleTddCycle, handleTddFocus, handleTddPrepare, handleTddRepair, handleTddStart, handleTddStatus, handleTddStop, handleTddValidateSpec } from '../src/tools/tdd.js';
 
 describe('TDD MCP handlers', () => {
   it('starts, focuses, cycles, and stops a lazy runtime', async () => {
@@ -308,5 +308,93 @@ describe('TDD MCP handlers', () => {
       valid: true,
       coverage: { status: 'complete' },
     });
+  });
+});
+
+describe('fliwright_tdd_repair MCP handler', () => {
+  it('drives the repair closed loop and returns the repair trace', async () => {
+    const state = createServerState();
+    const repairTrace = {
+      mode: 'safe-apply' as const,
+      steps: [{ iteration: 1, plan: { mode: 'safe-apply' as const, diff: '# patch', proposals: [] }, applied: [{ accepted: true, action: { kind: 'dismissModal' } }] }],
+      capped: false,
+    };
+    const runtime = {
+      focus: vi.fn(async () => {}),
+      cycle: vi.fn(async () => ({
+        status: 'green' as const,
+        file: '/tmp/sample.test.ts',
+        testName: 'alpha',
+        durationMs: 7,
+        lastSync: 'none' as const,
+        baselineVersion: 1,
+        repair: repairTrace,
+      })),
+      snapshot: vi.fn(() => ({ connected: true, daemonStatus: 'running' as const, supportsRestart: false, launchMode: 'attach' as const, restartCapable: false, driverConnections: 1, fixtureDriverSharing: 'vm-service-url' as const, baselineVersion: 0 })),
+    } as any;
+    state.setTddRuntime(runtime);
+
+    const result = await handleTddRepair({ mode: 'safe-apply', iterations: 3 }, state);
+
+    expect(result.status).toBe('green');
+    expect((result as any).repair).toEqual(repairTrace);
+    expect(runtime.cycle).toHaveBeenCalledWith(undefined, expect.objectContaining({
+      repair: { mode: 'safe-apply', iterations: 3 },
+    }));
+  });
+
+  it('forwards suggest mode and per-cycle sync options into the runtime', async () => {
+    const state = createServerState();
+    const runtime = {
+      focus: vi.fn(async () => {}),
+      cycle: vi.fn(async () => ({ status: 'red' as const, file: '/tmp/sample.test.ts', durationMs: 1, lastSync: 'none' as const, baselineVersion: 1, repair: { mode: 'suggest', steps: [{ iteration: 1, plan: { mode: 'suggest', diff: '# d', proposals: [] } }], capped: false } })),
+      snapshot: vi.fn(() => ({ connected: true, daemonStatus: 'running' as const, supportsRestart: false, launchMode: 'attach' as const, restartCapable: false, driverConnections: 1, fixtureDriverSharing: 'vm-service-url' as const, baselineVersion: 0 })),
+    } as any;
+    state.setTddRuntime(runtime);
+
+    await handleTddRepair({ mode: 'suggest', sync: 'reload' }, state);
+
+    expect(runtime.cycle).toHaveBeenCalledWith(undefined, expect.objectContaining({
+      sync: 'reload',
+      repair: { mode: 'suggest', iterations: undefined },
+    }));
+  });
+
+  it('auto-focuses the workflow test before repair when the runtime is unfocused', async () => {
+    const state = createServerState();
+    const runtime = {
+      focus: vi.fn(async () => {}),
+      cycle: vi.fn(async () => ({ status: 'green' as const, file: '/tmp/g.test.ts', durationMs: 1, lastSync: 'none' as const, baselineVersion: 1 })),
+      snapshot: vi.fn(() => ({ connected: true, daemonStatus: 'running' as const, supportsRestart: false, launchMode: 'attach' as const, restartCapable: false, driverConnections: 1, fixtureDriverSharing: 'vm-service-url' as const, baselineVersion: 0 })),
+    } as any;
+    state.setTddRuntime(runtime);
+    state.setTddWorkflowContext({ testFile: '/tmp/generated.test.ts', testName: 'gen flow' });
+
+    await handleTddRepair({ mode: 'safe-apply' }, state);
+
+    expect(runtime.focus).toHaveBeenCalledWith('/tmp/generated.test.ts', 'gen flow');
+  });
+
+  it('requires a started runtime', async () => {
+    const state = createServerState();
+    await expect(handleTddRepair({ mode: 'suggest' }, state)).rejects.toThrow(/not started/i);
+  });
+});
+
+describe('fliwright_tdd_cycle inline repair option', () => {
+  it('passes the repair option through to the runtime when set', async () => {
+    const state = createServerState();
+    const runtime = {
+      focus: vi.fn(async () => {}),
+      cycle: vi.fn(async () => ({ status: 'green' as const, file: '/tmp/g.test.ts', durationMs: 1, lastSync: 'none' as const, baselineVersion: 1 })),
+      snapshot: vi.fn(() => ({ connected: true, daemonStatus: 'running' as const, supportsRestart: false, launchMode: 'attach' as const, restartCapable: false, driverConnections: 1, fixtureDriverSharing: 'vm-service-url' as const, baselineVersion: 0 })),
+    } as any;
+    state.setTddRuntime(runtime);
+
+    await handleTddCycle({ sync: 'none', repair: { mode: 'suggest' } }, state);
+
+    expect(runtime.cycle).toHaveBeenCalledWith(undefined, expect.objectContaining({
+      repair: { mode: 'suggest' },
+    }));
   });
 });
