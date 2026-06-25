@@ -68,4 +68,16 @@ describe('createServerState', () => {
     ]);
     expect(state.getFailuresByTestName()).toHaveLength(2);
   });
+
+  it('stores and retrieves TDD workflow context', () => {
+    const context = {
+      testName: 'checkout flow',
+      flowId: 'checkout',
+      selectorDiagnostics: [{ elementId: 'submit', status: 'missing' }],
+    };
+
+    state.setTddWorkflowContext(context);
+
+    expect(state.getTddWorkflowContext()).toEqual(context);
+  });
 });

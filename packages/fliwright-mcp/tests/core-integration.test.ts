@@ -186,14 +186,14 @@ describe('MCP + Core Integration', () => {
       }
     `;
 
-    const result = handleGenerateTest({
+    const result = await handleGenerateTest({
       source: flutterSource,
       testName: 'login page',
     });
 
     expect(result.testCode).toContain("import { test, expect, beforeEach } from '@fliwright/vitest'");
-    expect(result.testCode).toContain("await page.resetToHome({ homeRoute: '/' })");
-    expect(result.testCode).toContain("test('login page'");
+    expect(result.testCode).toContain('await page.resetToHome({ homeRoute: "/" })');
+    expect(result.testCode).toContain('test("login page"');
     expect(result.testCode).toContain('page.locator(');
     expect(result.testCode).toContain('.click()');
     expect(result.testCode).toContain('.type(');

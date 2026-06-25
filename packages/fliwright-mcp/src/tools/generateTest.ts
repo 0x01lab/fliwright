@@ -1,5 +1,9 @@
 import { z } from 'zod';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { analyzeInteractionSpecCoverage, generateRedFirstTestSuite, prepareRedFirstWorkflow } from '@fliwright/tdd';
+import type { InteractionSpec, WidgetCandidate } from '@fliwright/tdd';
 import type { ServerState } from '../state.js';
 import type { GenerateTestResult } from '../types.js';
 
@@ -9,13 +13,28 @@ interface ParsedWidget {
   hintText?: string;
 }
 
-interface SnapshotRefInput {
+export interface SnapshotRefInput {
   role: string;
   label: string;
   key?: string;
   type?: string;
   selector?: string;
   textField?: boolean;
+}
+
+export interface RedFirstGenerateTestParams {
+  mode?: 'red-first';
+  spec: InteractionSpec;
+  flowId?: string;
+  allFlows?: boolean;
+  flowIds?: string[];
+  testNamePrefix?: string;
+  snapshot?: string;
+  refs?: SnapshotRefInput[];
+  testName?: string;
+  resetToHomeBeforeEach?: boolean;
+  homeRoute?: string;
+  outputFile?: string;
 }
 
 function parseFlutterSource(source: string): ParsedWidget[] {
@@ -57,8 +76,8 @@ function parseFlutterSource(source: string): ParsedWidget[] {
   return widgets;
 }
 
-function escapeStr(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+function stringLiteral(value: string): string {
+  return JSON.stringify(value);
 }
 
 function normalizeSnapshotRefs(refs?: SnapshotRefInput[], snapshot?: string): SnapshotRefInput[] {
@@ -88,7 +107,7 @@ function appendSnapshotBasedSteps(lines: string[], refs: SnapshotRefInput[]): vo
   for (const field of textFields.slice(0, 3)) {
     const variable = uniqueVarName('field', field.label, lines);
     lines.push(`  const ${variable} = await page.findRef(${findQueryFor(field)});`);
-    lines.push(`  await ${variable}.fill('test_input');`);
+    lines.push(`  await ${variable}.fill(${stringLiteral('test_input')});`);
   }
 
   for (const button of buttons.slice(0, 2)) {
@@ -99,7 +118,7 @@ function appendSnapshotBasedSteps(lines: string[], refs: SnapshotRefInput[]): vo
 
   const assertionTarget = visibleText.at(-1) ?? buttons.at(-1) ?? textFields.at(-1);
   if (assertionTarget) {
-    lines.push(`  await expect(page.locator({ text: '${escapeStr(assertionTarget.label)}' })).toBeVisible();`);
+    lines.push(`  await expect(page.locator({ text: ${stringLiteral(assertionTarget.label)} })).toBeVisible();`);
   }
 }
 
@@ -109,25 +128,25 @@ function appendSourceBasedSteps(lines: string[], widgets: ParsedWidget[]): void 
   const textFieldWidgets = widgets.filter(w => w.type === 'textField');
 
   for (const field of textFieldWidgets) {
-    const selector = `{ text: '${escapeStr(field.hintText ?? field.text)}' }`;
+    const selector = `{ text: ${stringLiteral(field.hintText ?? field.text)} }`;
     lines.push(`  await page.locator(${selector}).click();`);
-    lines.push(`  await page.locator(${selector}).type('test_input');`);
+    lines.push(`  await page.locator(${selector}).type(${stringLiteral('test_input')});`);
   }
 
   for (const btn of buttonWidgets) {
-    lines.push(`  await page.locator({ text: '${escapeStr(btn.text)}' }).click();`);
+    lines.push(`  await page.locator({ text: ${stringLiteral(btn.text)} }).click();`);
   }
 
   if (textWidgets.length > 0) {
     const lastText = textWidgets[textWidgets.length - 1];
-    lines.push(`  await expect(page.locator({ text: '${escapeStr(lastText.text)}' })).toBeVisible();`);
+    lines.push(`  await expect(page.locator({ text: ${stringLiteral(lastText.text)} })).toBeVisible();`);
   }
 }
 
 function findQueryFor(ref: SnapshotRefInput): string {
-  if (ref.key) return `{ key: '${escapeStr(ref.key)}' }`;
-  const parts = [`role: '${escapeStr(ref.role)}'`, `text: '${escapeStr(ref.label)}'`];
-  if (ref.type) parts.push(`type: '${escapeStr(ref.type)}'`);
+  if (ref.key) return `{ key: ${stringLiteral(ref.key)} }`;
+  const parts = [`role: ${stringLiteral(ref.role)}`, `text: ${stringLiteral(ref.label)}`];
+  if (ref.type) parts.push(`type: ${stringLiteral(ref.type)}`);
   return `{ ${parts.join(', ')} }`;
 }
 
@@ -153,8 +172,14 @@ function toPascal(value: string): string {
   return ascii || 'Target';
 }
 
-export function handleGenerateTest(
+export async function handleGenerateTest(
   params: {
+    mode?: 'default' | 'red-first';
+    spec?: InteractionSpec;
+    flowId?: string;
+    allFlows?: boolean;
+    flowIds?: string[];
+    testNamePrefix?: string;
     source?: string;
     snapshot?: string;
     refs?: SnapshotRefInput[];
@@ -162,8 +187,15 @@ export function handleGenerateTest(
     testName?: string;
     resetToHomeBeforeEach?: boolean;
     homeRoute?: string;
+    outputFile?: string;
   },
-): GenerateTestResult {
+  state?: ServerState,
+): Promise<GenerateTestResult> {
+  if (params.mode === 'red-first') {
+    if (!params.spec) throw new Error("mode 'red-first' requires an InteractionSpec in params.spec.");
+    return await prepareRedFirstGeneratedTest(params as RedFirstGenerateTestParams, state);
+  }
+
   const testName = params.testName ?? 'generated test';
   const resetToHomeBeforeEach = params.resetToHomeBeforeEach ?? true;
   const homeRoute = params.homeRoute ?? '/';
@@ -177,12 +209,12 @@ export function handleGenerateTest(
 
   if (resetToHomeBeforeEach) {
     lines.push('beforeEach(async ({ page }) => {');
-    lines.push(`  await page.resetToHome({ homeRoute: '${escapeStr(homeRoute)}' });`);
+    lines.push(`  await page.resetToHome({ homeRoute: ${stringLiteral(homeRoute)} });`);
     lines.push('});');
     lines.push('');
   }
 
-  lines.push(`test('${escapeStr(testName)}', async ({ page }) => {`);
+  lines.push(`test(${stringLiteral(testName)}, async ({ page }) => {`);
 
   if (refs.length > 0) {
     appendSnapshotBasedSteps(lines, refs);
@@ -191,13 +223,102 @@ export function handleGenerateTest(
   }
   lines.push('});');
 
-  return {
+  const output = {
     testCode: lines.join('\n'),
     testName,
   };
+  return await persistGeneratedTest(output, params.outputFile);
+}
+
+export async function prepareRedFirstGeneratedTest(
+  params: RedFirstGenerateTestParams,
+  state?: ServerState,
+): Promise<GenerateTestResult> {
+  const outputFile = params.outputFile ? resolve(params.outputFile) : undefined;
+  const refs = normalizeSnapshotRefs(params.refs, params.snapshot);
+  if (params.allFlows) {
+    const coverage = analyzeInteractionSpecCoverage(params.spec);
+    const result = generateRedFirstTestSuite(params.spec, {
+      flowIds: params.flowIds,
+      testNamePrefix: params.testNamePrefix,
+      homeRoute: params.homeRoute,
+      resetToHomeBeforeEach: params.resetToHomeBeforeEach,
+      widgets: snapshotRefsToWidgetCandidates(refs),
+    });
+    const output = {
+      testCode: result.testCode,
+      testName: params.testName ?? params.testNamePrefix ?? 'red-first suite',
+      testFile: outputFile,
+      warnings: result.warnings,
+      selectorDiagnostics: result.selectorDiagnostics,
+      tests: result.tests,
+      coverage,
+    };
+    const persisted = await persistGeneratedTest(output, outputFile);
+    state?.setTddWorkflowContext({
+      testFile: persisted.testFile,
+      selectorDiagnostics: result.selectorDiagnostics,
+      tests: result.tests,
+      coverage,
+    });
+    return persisted;
+  }
+
+  const result = prepareRedFirstWorkflow(params.spec, {
+    flowId: params.flowId,
+    testName: params.testName,
+    homeRoute: params.homeRoute,
+    resetToHomeBeforeEach: params.resetToHomeBeforeEach,
+    widgets: snapshotRefsToWidgetCandidates(refs),
+    testFile: outputFile,
+  });
+  const output = {
+    testCode: result.testCode,
+    testName: result.testName,
+    testFile: outputFile,
+    warnings: result.warnings,
+    selectorDiagnostics: result.selectorDiagnostics,
+    workflow: result.workflow,
+    coverage: result.workflow.coverage,
+  };
+  const persisted = await persistGeneratedTest(output, outputFile);
+  state?.setTddWorkflowContext({
+    testName: result.testName,
+    flowId: result.flowId,
+    testFile: persisted.testFile,
+    selectorDiagnostics: result.selectorDiagnostics,
+    coverage: result.workflow.coverage,
+    workflow: result.workflow,
+  });
+  return persisted;
+}
+
+function snapshotRefsToWidgetCandidates(refs: SnapshotRefInput[]): WidgetCandidate[] {
+  return refs.map((ref) => ({
+    key: ref.key,
+    text: ref.label,
+    type: ref.type,
+    role: ref.role,
+  }));
 }
 
 export const GenerateTestParamsSchema = z.object({
+  mode: z.enum(['default', 'red-first']).optional().default('default')
+    .describe("Generation mode. Use 'red-first' with spec for TDD-oriented tests."),
+  spec: z.object({
+    app: z.any().optional(),
+    initialState: z.any().optional(),
+    elements: z.array(z.any()),
+    flows: z.array(z.any()),
+    assertions: z.array(z.any()).optional(),
+  }).passthrough().optional().describe('InteractionSpec from design/intention parsing for red-first TDD generation'),
+  flowId: z.string().optional().describe('Flow id to generate when mode is red-first and spec contains multiple flows'),
+  allFlows: z.boolean().optional().default(false)
+    .describe('Generate one red-first test for every selected flow in the InteractionSpec'),
+  flowIds: z.array(z.string()).optional()
+    .describe('Subset of flow ids to generate when allFlows is true'),
+  testNamePrefix: z.string().optional()
+    .describe('Prefix to apply to generated suite test names when allFlows is true'),
   source: z.string().optional().describe('Flutter/Dart source code of the page or widget to test'),
   snapshot: z.string().optional().describe('Agent-readable snapshot text from fliwright_snap'),
   refs: z.array(z.object({
@@ -214,18 +335,30 @@ export const GenerateTestParamsSchema = z.object({
     .describe('Whether to generate a beforeEach hook that navigates to the home route before each test'),
   homeRoute: z.string().optional().default('/')
     .describe('Route used by the generated beforeEach home reset hook'),
+  outputFile: z.string().optional().describe('Optional path to write the generated test file'),
 });
 
 export function registerGenerateTestTool(server: McpServer, _state: ServerState): void {
   server.tool(
     'fliwright_generate_test',
-    'Generate a Fliwright test script from Flutter source code or an agent snapshot',
+    'Generate a Fliwright test script from an InteractionSpec, source snippet, or agent snapshot',
     GenerateTestParamsSchema.shape,
     async (params) => {
-      const result = handleGenerateTest(params);
+      const result = await handleGenerateTest(params, _state);
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     },
   );
+}
+
+async function persistGeneratedTest(result: GenerateTestResult, outputFile: string | undefined): Promise<GenerateTestResult> {
+  if (!outputFile) return result;
+  const absolutePath = resolve(outputFile);
+  await mkdir(dirname(absolutePath), { recursive: true });
+  await writeFile(absolutePath, result.testCode, 'utf8');
+  return {
+    ...result,
+    testFile: absolutePath,
+  };
 }

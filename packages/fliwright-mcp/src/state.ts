@@ -1,4 +1,4 @@
-import type { RunResult, FailureEntry } from './types.js';
+import type { RunResult, FailureEntry, TddWorkflowContext } from './types.js';
 import { MockRuleStore, type FliwrightDriver } from '@fliwright/core';
 import type { TddRuntime } from '@fliwright/tdd';
 
@@ -16,6 +16,8 @@ export interface ServerState {
   setDriver(driver: FliwrightDriver | null): void;
   getTddRuntime(): TddRuntime | null;
   setTddRuntime(runtime: TddRuntime | null): void;
+  getTddWorkflowContext(): TddWorkflowContext | null;
+  setTddWorkflowContext(context: TddWorkflowContext | null): void;
 }
 
 export function createServerState(): ServerState {
@@ -25,6 +27,7 @@ export function createServerState(): ServerState {
   const ruleStore = new MockRuleStore();
   let driver: FliwrightDriver | null = null;
   let tddRuntime: TddRuntime | null = null;
+  let tddWorkflowContext: TddWorkflowContext | null = null;
 
   return {
     getLastRunResult() { return lastRunResult; },
@@ -42,5 +45,7 @@ export function createServerState(): ServerState {
     setDriver(d: FliwrightDriver | null) { driver = d; },
     getTddRuntime(): TddRuntime | null { return tddRuntime; },
     setTddRuntime(runtime: TddRuntime | null) { tddRuntime = runtime; },
+    getTddWorkflowContext(): TddWorkflowContext | null { return tddWorkflowContext; },
+    setTddWorkflowContext(context: TddWorkflowContext | null) { tddWorkflowContext = context; },
   };
 }

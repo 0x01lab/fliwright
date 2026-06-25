@@ -19,6 +19,7 @@ describe('handleAgentDiagnose', () => {
 
   it('diagnoses an explicit failure with configured AI', async () => {
     const state = createServerState();
+    const artifactsDir = await mkdtemp(join(tmpdir(), 'fliwright-agent-ai-'));
     const result = await handleAgentDiagnose({
       failure: {
         code: 'assertion_failed',
@@ -26,6 +27,7 @@ describe('handleAgentDiagnose', () => {
         message: 'enabled=false',
       },
     }, state, {
+      artifactsDir,
       adapter: new MockAiAdapter([{
         text: '{"summary":"disabled","rootCause":"validation","suggestedActions":["inspect form"],"confidence":0.7}',
         json: {
@@ -47,6 +49,7 @@ describe('handleAgentDiagnose', () => {
 
   it('reads the latest timeline failure from server state', async () => {
     const path = await writeTimeline();
+    const artifactsDir = await mkdtemp(join(tmpdir(), 'fliwright-agent-ai-'));
     const state = createServerState();
     state.setLastRunResult({
       passed: false,
@@ -64,6 +67,7 @@ describe('handleAgentDiagnose', () => {
     });
 
     const result = await handleAgentDiagnose({}, state, {
+      artifactsDir,
       adapter: new MockAiAdapter([{
         text: '{"summary":"missing button","rootCause":"wrong page","suggestedActions":["navigate"],"confidence":0.9}',
         json: {
