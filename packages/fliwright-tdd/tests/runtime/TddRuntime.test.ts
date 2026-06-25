@@ -604,4 +604,36 @@ describe('TddRuntime', () => {
       lastResult: undefined,
     });
   });
+
+  it('writes the RuntimeSnapshot to statusFilePath after state changes', async () => {
+    const { mkdtemp } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = await mkdtemp(join(tmpdir(), 'tdd-status-'));
+    const statusFilePath = join(dir, '.fliwright', 'tdd-status.json');
+
+    const driver = {
+      connect: vi.fn(async () => {}),
+      dispose: vi.fn(async () => {}),
+      page: { resetToHome: vi.fn(async () => {}) },
+      mock: { clear: vi.fn(async () => {}), clearCalls: vi.fn(async () => {}) },
+    };
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => ({ status: 'green' as const, testName: 'alpha passes' })),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ driverFactory: () => driver, executor });
+
+    await runtime.start({ configRoot: '/tmp/vitest.config.ts', vmServiceUrl: 'ws://vm/ws', statusFilePath });
+    await runtime.focus('/tmp/sample.test.ts', 'alpha passes');
+    await runtime.cycle();
+    await runtime.stop();
+
+    const { readFile } = await import('node:fs/promises');
+    // stop() awaits the status write chain, so the final (stopped) snapshot is flushed to disk.
+    const written = JSON.parse(await readFile(statusFilePath, 'utf8')) as { connected: boolean; baselineVersion: number };
+    expect(written.connected).toBe(false);
+    expect(typeof written.baselineVersion).toBe('number');
+  });
 });

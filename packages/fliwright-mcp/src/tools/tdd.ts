@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { analyzeInteractionSpecCoverage, TddRuntime, validateInteractionSpec } from '@fliwright/tdd';
+import { analyzeInteractionSpecCoverage, defaultStatusFilePath, TddRuntime, validateInteractionSpec } from '@fliwright/tdd';
 import type {
   InteractionSpec,
   InteractionSpecCoverageReport,
@@ -42,6 +42,8 @@ export const TddStartParamsSchema = z.object({
   flutterArgs: z.array(z.string()).optional().describe('Extra flutter run arguments for app.start'),
   mode: z.enum(['run', 'drive']).optional().describe('Flutter daemon app.start mode'),
   scenario: ScenarioSchema.optional(),
+  statusFilePath: z.string().optional()
+    .describe('Path the runtime writes its RuntimeSnapshot to for read-only monitors (VS Code TDD Loop). Defaults to <projectRoot>/.fliwright/tdd-status.json.'),
 });
 
 export const TddFocusParamsSchema = z.object({
@@ -164,6 +166,7 @@ export async function handleTddStart(
         : undefined,
       launchMode: input.vmServiceUrl ? 'attach' : 'start',
       scenario: input.scenario as Scenario | undefined,
+      statusFilePath: input.statusFilePath ?? defaultStatusFilePath(input.configRoot),
     });
     state.setTddRuntime(runtime);
     return snapshot;

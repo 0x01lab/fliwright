@@ -195,6 +195,16 @@ export function defaultArtifactsRoot(configRoot: string): string {
   return join(root, '.fliwright', 'tdd');
 }
 
+/**
+ * Default RuntimeSnapshot status-file path a read-only monitor (e.g. the VS Code TDD Loop panel)
+ * polls: `<projectRoot>/.fliwright/tdd-status.json`. The project root is derived from the same
+ * configRoot convention as {@link defaultArtifactsRoot}.
+ */
+export function defaultStatusFilePath(configRoot: string): string {
+  const root = looksLikeConfigFile(configRoot) ? resolve(configRoot, '..') : resolve(configRoot);
+  return join(root, '.fliwright', 'tdd-status.json');
+}
+
 function looksLikeConfigFile(configRoot: string): boolean {
   const name = basename(configRoot);
   return /\.[cm]?[jt]s$/.test(name);

@@ -1,4 +1,6 @@
 import { FliwrightDriver } from '@fliwright/core';
+import { dirname } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { FlutterDaemonController } from '../daemon/FlutterDaemonController.js';
 import { SubprocessDaemonTransport } from '../daemon/SubprocessDaemonTransport.js';
 import { decideSync, looksStructuralAfterReload } from '../daemon/ReloadStrategy.js';
@@ -41,6 +43,9 @@ export class TddRuntime {
   // Serializes overlapping cycle() calls (design §8: only one cycle at a time). Also awaited by
   // stop() so we never dispose the executor mid-rerun.
   private cycleChain: Promise<unknown> = Promise.resolve();
+  private statusFilePath?: string;
+  // Serializes best-effort status-file writes so concurrent snapshots never interleave bytes.
+  private statusWriteChain: Promise<void> = Promise.resolve();
 
   constructor(deps: TddRuntimeDeps = {}) {
     this.daemon = deps.daemon ?? new FlutterDaemonController(new SubprocessDaemonTransport());
@@ -65,6 +70,7 @@ export class TddRuntime {
       this.startSignature = startSignature;
       this.configRoot = opts.configRoot;
       this.startAppParams = opts.app;
+      this.statusFilePath = opts.statusFilePath;
 
       let vmServiceUrl = opts.vmServiceUrl;
       if (opts.app) {
@@ -92,6 +98,7 @@ export class TddRuntime {
       });
 
       this.started = true;
+      this.persistStatus();
       return this.snapshot();
     } catch (error) {
       await this.executor.dispose().catch(() => undefined);
@@ -102,6 +109,7 @@ export class TddRuntime {
 
   async focus(file: string, testName?: string): Promise<void> {
     this.focusedTest = { file, testName };
+    this.persistStatus();
   }
 
   async cycle(testName?: string, opts: CycleOpts = {}): Promise<TddCycleResult> {
@@ -151,6 +159,7 @@ export class TddRuntime {
     this.driver = this.driverFactory();
     await this.driver.connect(vmServiceUrl);
     this.driverConnections += 1;
+    this.persistStatus();
     return this.snapshot();
   }
 
@@ -184,12 +193,14 @@ export class TddRuntime {
     const timer = setTimeout(() => {
       const timeoutResult = this.timeoutResult(testName);
       this.lastResult = timeoutResult;
+      this.persistStatus();
       deferred.resolve(timeoutResult);
     }, timeoutMs);
     try {
       const result = await runAll();
       clearTimeout(timer);
       this.lastResult = result;
+      this.persistStatus();
       deferred.resolve(result);
       return result;
     } catch (error) {
@@ -267,6 +278,28 @@ export class TddRuntime {
     };
   }
 
+  /**
+   * Best-effort, non-blocking dump of {@link snapshot} to {@link statusFilePath}, serialized so
+   * concurrent writes never interleave. Read-only monitors (VS Code TDD Loop panel) poll this file
+   * instead of opening a second driver connection. Never throws; failures are swallowed.
+   */
+  private persistStatus(): void {
+    this.persistStatusTo(this.statusFilePath);
+  }
+
+  private persistStatusTo(statusFilePath: string | undefined): void {
+    if (!statusFilePath) return;
+    const snapshot = this.snapshot();
+    this.statusWriteChain = this.statusWriteChain.then(async () => {
+      try {
+        await mkdir(dirname(statusFilePath), { recursive: true });
+        await writeFile(statusFilePath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+      } catch {
+        /* best-effort: a missing status file just means the monitor shows "no snapshot" */
+      }
+    });
+  }
+
   snapshot(): RuntimeSnapshot {
     return {
       connected: this.started,
@@ -291,11 +324,15 @@ export class TddRuntime {
   async stop(opts: { keepAppAlive?: boolean } = {}): Promise<void> {
     // Wait for any in-flight cycle to settle before tearing the executor down.
     await this.cycleChain.catch(() => undefined);
+    const statusFilePath = this.statusFilePath;
     try {
       await this.executor.dispose();
     } finally {
       await this.cleanupStartedResources(opts);
     }
+    // Publish a final "stopped" snapshot so monitors reflect the halted runtime.
+    this.persistStatusTo(statusFilePath);
+    await this.statusWriteChain;
   }
 
   private async sync(sync: NonNullable<CycleOpts['sync']>): Promise<TddCycleResult['lastSync']> {

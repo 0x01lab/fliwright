@@ -9,10 +9,16 @@ export {
 export type { SyncDecision } from './daemon/ReloadStrategy.js';
 export type { SubprocessDaemonTransportOptions } from './daemon/SubprocessDaemonTransport.js';
 export { BaselineManager } from './baseline/BaselineManager.js';
-export type { ResetAdapter, ResetContext } from './baseline/BaselineManager.js';
+export type {
+  ResetAdapter,
+  ResetContext,
+  StorageResetOutcome,
+} from './baseline/BaselineManager.js';
+export { StorageResetAdapter } from './baseline/StorageResetAdapter.js';
 export { TddRuntime } from './runtime/TddRuntime.js';
 export { PersistentTestExecutor } from './executor/PersistentTestExecutor.js';
 export type { BootOptions, TestRunOutcome } from './executor/PersistentTestExecutor.js';
+export { defaultArtifactsRoot, defaultStatusFilePath } from './executor/PersistentTestExecutor.js';
 export { focusAndRerun } from './executor/FocusedRerunRecipe.js';
 export { ResultReporter, collectResultsFromFiles } from './executor/ResultReporter.js';
 export type { CollectedResult } from './executor/ResultReporter.js';

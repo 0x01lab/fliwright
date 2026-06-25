@@ -1,4 +1,5 @@
 import type { ResetAdapterResult, ResetCategory, ResetReport, Scenario } from '../types.js';
+import { StorageResetAdapter } from './StorageResetAdapter.js';
 
 export interface ResetContext {
   driver: {
@@ -9,10 +10,23 @@ export interface ResetContext {
       clear(): Promise<void>;
       clearCalls(): Promise<void>;
     };
+    /**
+     * Optional bridge facade for `ext.fliwright.storage.reset`. Absent when the
+     * bridge does not expose the extension; the built-in {@link StorageResetAdapter}
+     * self-degrades to `'unsupported'` in that case (design §6.5 / §11).
+     */
+    storage?: {
+      reset(seed?: Record<string, unknown>): Promise<StorageResetOutcome>;
+    };
   };
   scenario: Scenario;
   full: boolean;
 }
+
+/** Result of a `ext.fliwright.storage.reset` call surfaced through the driver. */
+export type StorageResetOutcome =
+  | { status: 'ok'; clearedKeys?: number; seededKeys?: number }
+  | { status: 'unsupported' };
 
 export interface ResetAdapter {
   category: ResetCategory;
@@ -39,6 +53,10 @@ export class BaselineManager {
         return 'ok';
       },
     });
+    // Self-degrading built-in: returns 'unsupported' (surfaced in
+    // ResetReport.unsupported) when the bridge storage.reset extension is
+    // absent. Design §6.5 / §11.
+    this.registerAdapter(StorageResetAdapter);
   }
 
   get version(): number {
