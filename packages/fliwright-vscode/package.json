@@ -97,7 +97,10 @@
     "onCommand:fliwright.showLastRun",
     "onCommand:fliwright.viewTestRun",
     "onCommand:fliwright.viewScriptRun",
-    "onCommand:fliwright.refreshTests"
+    "onCommand:fliwright.refreshTests",
+    "onCommand:fliwright.openTddLoop",
+    "onCommand:fliwright.refreshTddLoop",
+    "onCommand:fliwright.tddTakeOver"
   ],
   "contributes": {
     "viewsContainers": {
@@ -391,9 +394,39 @@
         "title": "Fliwright: View Script Run",
         "category": "Fliwright",
         "icon": "$(history)"
+      },
+      {
+        "command": "fliwright.openTddLoop",
+        "title": "Fliwright: Open TDD Loop Monitor",
+        "category": "Fliwright",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "fliwright.refreshTddLoop",
+        "title": "Fliwright: Refresh TDD Loop Monitor",
+        "category": "Fliwright",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "fliwright.tddTakeOver",
+        "title": "Fliwright: Request TDD Loop Take-Over",
+        "category": "Fliwright",
+        "icon": "$(debug-breakpoint)"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "fliwright.openTddLoop"
+        },
+        {
+          "command": "fliwright.refreshTddLoop"
+        },
+        {
+          "command": "fliwright.tddTakeOver",
+          "when": "config.fliwright.tddTakeOverEnabled"
+        }
+      ],
       "view/title": [
         {
           "command": "fliwright.connect",
@@ -718,6 +751,11 @@
           "enum": ["off", "on-failure", "full"],
           "default": "on-failure",
           "description": "Trace capture mode for test runs. 'on-failure' captures screenshots only on failed steps. 'full' captures every step."
+        },
+        "fliwright.tddTakeOverEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the opt-in 'Fliwright: Request TDD Loop Take-Over' command. Off by default to respect single-driver ownership (the MCP-owned runtime drives the loop; the VS Code monitor is read-only unless you explicitly take over)."
         }
       }
     }

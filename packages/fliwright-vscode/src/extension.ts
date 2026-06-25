@@ -45,6 +45,7 @@ import { TraceViewerPanel } from './trace/TraceViewerPanel.js';
 import { TraceService } from './trace/TraceService.js';
 import { RunViewerPanel } from './runviewer/RunViewerPanel.js';
 import { RunViewerService } from './runviewer/RunViewerService.js';
+import { FileTddLoopStatusSource, TddLoopController } from './tddloop/index.js';
 import { TraceStore } from '@fliwright/core';
 import type { TraceMode } from '@fliwright/core';
 
@@ -372,6 +373,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   scheduleAutoConnect('Extension activation', 500);
 
+  // ── TDD Loop monitor (additive, read-only; design spec §4.3 / §5.4 / §10 P1) ──────────────
+  // The monitor is invisible until the user opens it. It reads a snapshot an external party (the
+  // MCP-owned TddRuntime) writes to `<workspaceRoot>/.fliwright/tdd-status.json`; it NEVER creates
+  // a driver, connects to a VM service, or spawns a daemon — so it cannot fight the MCP-driven loop
+  // (design principle 4, single-driver by convention). See src/tddloop/TddLoopStatusSource.ts.
+  const tddLoopSource = new FileTddLoopStatusSource(getWorkspaceRoot()?.fsPath);
+  const tddLoopController = new TddLoopController(tddLoopSource, context.extensionUri);
+  context.subscriptions.push(tddLoopController);
+  for (const disposable of tddLoopController.registerCommands()) {
+    context.subscriptions.push(disposable);
+  }
+  // Auto-refresh is cheap (a file read) and keeps the panel live once opened.
+  tddLoopController.startAutoRefresh();
   context.subscriptions.push(
     vscode.commands.registerCommand('fliwright.reloadMocks', async () => {
       await runCommand('Reload Mock Configs', async () => {
