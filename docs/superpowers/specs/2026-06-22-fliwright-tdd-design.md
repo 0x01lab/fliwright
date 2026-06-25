@@ -126,13 +126,13 @@ agent ─fliwright_tdd_cycle(testName)─▶ MCP server
                          (optional) AgentRepair propose/apply minimal fix → cycle again
 ```
 
-The speed of P0 comes from two things: (1) **one** `FliwrightDriver` is shared between baseline reset
-and test execution (see §6.0), so it is never reconnected across reruns; and (2) the test is never
-re-spawned — a long-lived in-process vitest reruns the focused test via `changeNamePattern` /
-`rerunFiles` (the real Vitest 2.1.9 API; see §6.6). This collapses the **executor** rerun (reset +
-sync + run-one-test, excluding the flutter-tooling-bound restart) to sub-second. Two distinct metrics
-are tracked (§9): executor-rerun latency (target: sub-second) and total cycle latency (restart-bound,
-reported but not promised).
+The speed of P0 comes from: the test is never re-spawned — a long-lived in-process vitest reruns the
+focused test via `changeNamePattern` (the real Vitest 2.1.9 API; see §6.6). This collapses the
+**executor** rerun (reset + sync + run-one-test, excluding the flutter-tooling-bound restart) toward
+sub-second. The original §6.0 "one driver shared, never reconnected" win is **not** realized on 2.1.9
+(worker boundary; see §6.0): fixtures open their own WS via `FLIWRIGHT_VM_SERVICE_URL`. Two distinct
+metrics are tracked (§9): executor-rerun latency (target: sub-second) and total cycle latency
+(restart-bound, reported but not promised).
 
 ### 5.4 Opt-in in practice
 
@@ -146,22 +146,32 @@ reported but not promised).
 
 ### 6.0 Driver ownership model (cross-cutting)
 
-`TddRuntime` owns **exactly one** `FliwrightDriver`, connected to the daemon-managed app's `wsUri`.
-This single driver is used for **both** (a) baseline reset / app interaction outside the test scope
-(`BaselineManager`) and (b) test execution (the vitest fixtures). Without this, baseline reset would
-need its own driver and fixtures would create the module-level `sharedDriver` — two VM connections to
-the same app (the risk flagged in review).
+> **Status (revised 2026-06-25):** The single-object model below is the *goal*, not what shipped.
+> The P0.2 spike proved that Vitest 2.1.9 runs test files in **worker processes**, so a live
+> `FliwrightDriver` (holding a WebSocket) **cannot** be passed across the worker boundary — the
+> injectable provider is not reachable from the test process. Production therefore uses the
+> **`vm-service-url` fallback** (described at the end of this section) as the formal architecture.
+> See `spike/findings/2026-06-22-spike-verdict.md`. The single-driver goal stays open for a future
+> Vitest/Node version that can run the test file in the MCP server's own process.
 
-To share the one driver with fixtures without a second connection, `@fliwright/vitest` gains an
-**additive, opt-in injectable driver provider**: `createFliwrightTest(config, { driverProvider })`.
-When a provider is supplied, the `driver`/`page` fixtures call it instead of lazily creating
-`sharedDriver` (`index.ts:79` / `getSharedDriver` at `index.ts:409`). `PersistentTestExecutor` boots
-vitest with the project config and injects `driverProvider: () => runtime.driver`. The existing
-`sharedDriver` path remains the default when no provider is injected → non-TDD usage is unchanged.
+**Goal (single-object — not yet achievable on 2.1.9).** `TddRuntime` owns **exactly one**
+`FliwrightDriver`, connected to the daemon-managed app's `wsUri`, used for **both** baseline reset
+(`BaselineManager`) and test execution (the vitest fixtures). To share the one driver with fixtures
+without a second connection, `@fliwright/vitest` gained an **additive, opt-in injectable driver
+provider**: `createFliwrightTest(config, { driverProvider })`. When supplied, the `driver`/`page`
+fixtures call it instead of lazily creating `sharedDriver`. The existing `sharedDriver` path remains
+the default when no provider is injected → non-TDD usage is unchanged.
 
-Because a live driver holds a WebSocket that cannot cross a worker boundary, the TDD config forces
-`pool: 'forks'` + `singleFork: true` so the injected singleton is reachable from the test process and
-is not reconstructed per worker (§6.6).
+**What shipped (`vm-service-url` fallback — the production model).** `@fliwright/vitest` still
+implements the `driverProvider` option (additive, opt-in, default path unchanged), but
+`PersistentTestExecutor.boot()` does **not** rely on it: it injects `FLIWRIGHT_VM_SERVICE_URL`
+instead, so ordinary `@fliwright/vitest` fixtures connect to the same app VM service. Result:
+baseline reset uses the runtime-owned driver, and fixtures use their own connection to the same app
+— **two** WebSocket connections to one app. `RuntimeSnapshot.fixtureDriverSharing === 'vm-service-url'`
+and `snapshot().notes` make this explicit so the agent never mistakes it for single-object sharing.
+
+In both models the executor forces `pool: 'forks'` + `poolOptions.forks.singleFork: true` so the
+focused rerun is deterministic and does not spawn per-worker processes across reruns (§6.6).
 
 ### 6.1 Component map
 
@@ -169,7 +179,7 @@ is not reconstructed per worker (§6.6).
 |---|---|---|
 | `TddRuntime` | Orchestrator; holds all components; exposes operations called by MCP tools | all |
 | `FlutterDaemonController` | Spawn `flutter daemon`; launch/attach app; provide reload + **hot restart** (Gap B linchpin) | flutter SDK subprocess |
-| `PersistentTestExecutor` | In-process persistent vitest; rerun a single test by name; reuse driver (speed linchpin) | `@fliwright/vitest` |
+| `PersistentTestExecutor` | In-process persistent vitest; rerun a single test by name; inject `FLIWRIGHT_VM_SERVICE_URL` for fixtures (2.1.9) | `@fliwright/vitest` |
 | `BaselineManager` | Deterministic, fast baseline reset (Gap C) | driver + bridge extensions + MockService |
 | `ReloadStrategy` | Change set → reload vs restart decision (Gap B policy) | file watcher / analyzer |
 | `FocusedTestTracker` | Remember the targeted test + last result; feed the monitor | none |
@@ -211,7 +221,8 @@ export interface RuntimeSnapshot {
   supportsRestart: boolean;     // from daemon app events; gates hot restart
   launchMode: 'start' | 'attach';  // start = daemon-owned; attach = degraded
   restartCapable: boolean;      // false in degraded attach mode or when supportsRestart is false
-  driverConnections: number;    // invariant: 1 (proves single-driver ownership, §6.0)
+  driverConnections: number;    // runtime-owned driver count (baseline reset side); fixtures add their own (§6.0)
+  fixtureDriverSharing: 'vm-service-url' | 'in-process-provider';  // 2.1.9 ships 'vm-service-url' (§6.0)
   focusedTest?: { file: string; testName: string };
   lastResult?: TddCycleResult;
   baselineVersion: number;
@@ -329,30 +340,33 @@ import type { Vitest } from 'vitest/node';
 
 export class PersistentTestExecutor {
   private vitest?: Vitest;
-  async boot(opts: { configRoot: string; driverProvider: () => Promise<FliwrightDriver> }): Promise<void> {
-    // inject driverProvider (§6.0) via createFliwrightTest config; force pool:'forks' + singleFork.
+  async boot(opts: {
+    configRoot: string;
+    vmServiceUrl?: string;
+    driverProvider: () => Promise<FliwrightDriver>;   // accepted for API symmetry; NOT relied on (§6.0)
+  }): Promise<void> {
+    // Sets FLIWRIGHT_VM_SERVICE_URL so ordinary @fliwright/vitest fixtures connect to the app VM
+    // service. force pool:'forks' + singleFork. driverProvider is ignored (worker boundary — §6.0).
     this.vitest = await startVitest('test', [], { /* inherit project fliwright.config.ts + overrides */ });
   }
   async rerun(file: string, testName?: string): Promise<TestRunOutcome> {
     const v = this.vitest!;
-    if (testName) await v.changeNamePattern(testName, [file]);   // 2.1.9: filter by name within file
+    if (testName) await v.changeNamePattern(testName, [file]);   // 2.1.9: filter by name within file (reruns)
     else await v.changeFilenamePattern(file);
-    await v.rerunFiles([file]);                                  // 2.1.9: trigger rerun
     return this.collectFromReporter();   // custom reporter collects pass/fail + reads failure-context
   }
   async dispose(): Promise<void>;
 }
 ```
 
-**Exact focused-rerun recipe is itself a P0.2 spike outcome** (see §10): candidates, in priority order,
-are (1) `changeNamePattern` + `rerunFiles` as above; (2) `configOverride` on the held `Vitest` to set
-`testNamePattern` then `rerunFiles`; (3) restart the in-process server with a name pattern. If none
-proves stable on 2.1.9, the spike falls back to a controlled `vitest watch` subprocess (weaker: loses
-in-process driver sharing; reruns become process-bound and slower — see §10 fallback).
+**Exact focused-rerun recipe is a P0.2 spike outcome (PASSED):** `changeNamePattern(testName, [file])`
+reruns internally on 2.1.9 — see §10 / the spike verdict.
 
-**Speed source:** the single shared driver (§6.0, injected) is created once at boot and reused across
-reruns; `rerunFiles` reuses it → an executor rerun is only "reset baseline + reload/restart + run one
-test", with no process spawn and no WS reconnect.
+**Speed source:** the executor process is created once at boot and reused across reruns (no per-rerun
+process spawn). The driver-sharing model is `vm-service-url` (§6.0): fixtures connect to the injected
+`FLIWRIGHT_VM_SERVICE_URL`, so an executor rerun is "reset baseline + reload/restart + run one test",
+with no `vitest` process spawn and no executor restart. (The single-driver speed win the original
+§6.0 promised is *not* realized — fixtures still open their own WS — but the executor-side win is.)
 
 **Mandatory constraint:** vitest defaults to worker-thread isolation, which would reconstruct the
 injected driver per worker. The TDD config forces **`pool: 'forks'` + `poolOptions.forks.singleFork:
@@ -411,14 +425,17 @@ to the agent as structured `TddCycleResult` / error:
 - `BaselineManager`: fake driver (stubbed bridge extension calls) → verify reset sequence, `full`
   vs light, graceful degradation when `storage.reset` is absent.
 - `PersistentTestExecutor`: throwaway fixture project + a known test → assert rerun returns the
-  correct pass/fail; **assert the driver connect count is 1 across N reruns** (proves reuse).
+  correct pass/fail. (The original "assert driver connect count == 1 across N reruns" goal is
+  dropped — on 2.1.9 the executor does not own the fixture driver; §6.0. Instead assert the
+  `vitest` process is not re-spawned across reruns and that red results carry structured details.)
 - `TddRuntime.cycle`: all deps faked → assert reset→sync→rerun ordering and result propagation.
 
 **E2E smoke (real Flutter VM, reuse the existing e2e harness):** a mini demo app + a real cycle:
 reload picks up a method-body change, restart picks up a structural change. Latency is scoped to what
 P0 controls — **assert the rerun-only time (test execution, excluding the flutter-tooling-bound
-reload/restart) is sub-second, and that the driver connects exactly once across N reruns.** Total
-cycle time is not asserted, because it is dominated by `flutter` restart latency outside our control.
+reload/restart) trends sub-second.** Total cycle time is not asserted, because it is dominated by
+`flutter` restart latency outside our control. (The "driver connects exactly once" assertion from the
+original draft is dropped on 2.1.9 — see §6.0/§9 unit note.)
 
 **Contract tests:** new MCP tools follow the mcp package's existing tool-test pattern; unit-test the
 new optional bridge extension `storage.reset`.
@@ -433,14 +450,16 @@ ownership. The spike must prove all three before downstream work proceeds:
 
 - **P0.1** `FlutterDaemonController` + reload/restart, gated on `appId`/`supportsRestart`
   (initially wired to the existing one-shot vitest, to prove hot restart works).
-- **P0.2 (SPIKE — gates P0.3–P0.5):**
-  1. **Programmatic focused rerun on Vitest 2.1.9** — pick a stable recipe from §6.6
-     (`changeNamePattern`+`rerunFiles` / `configOverride` / server-restart). If none is stable,
-     adopt the fallback.
-  2. **Single driver ownership** — injectable provider in `@fliwright/vitest`; one VM connection
-     shared by reset + fixtures; assert `driverConnections === 1` and connect-count === 1 across N
-     reruns.
-  3. **Failure-result collection** — the persistent executor returns pass/fail + `FailureContext`.
+- **P0.2 (SPIKE — verdict recorded; see `spike/findings/2026-06-22-spike-verdict.md`):**
+  1. **Programmatic focused rerun on Vitest 2.1.9 — PASS.** Recipe = `changeNamePattern(testName,
+     [file])` (reruns internally); encoded in `FocusedRerunRecipe.ts`.
+  2. **Single driver ownership — REVISED.** The injectable `driverProvider` option shipped in
+     `@fliwright/vitest`, but Vitest 2.1.9 runs test files in worker processes, so a live driver
+     cannot cross the boundary. Production uses the `vm-service-url` fallback (§6.0) — the
+     runtime-owned driver + a fixture-side connection = **two** connections. The single-connection
+     goal is deferred to a future Vitest/Node that runs the test in-process.
+  3. **Failure-result collection — PASS.** `PersistentTestExecutor` returns pass/fail + structured
+     failure details (source/assertion/artifacts) via a custom reporter.
   - **Fallback if the spike fails:** controlled `vitest watch` subprocess for execution. This keeps
     P0.3–P0.5 viable but with **weaker guarantees**: reruns are process-bound (slower, no
     sub-second executor rerun) and the driver is shared via env URL only (baseline-reset driver +
@@ -474,9 +493,10 @@ ownership. The spike must prove all three before downstream work proceeds:
 
 - `vitest` receives **one additive, opt-in extension point** — the injectable driver provider
   (§6.0). Existing `sharedDriver` behavior is preserved when no provider is injected, so non-TDD
-  usage is unchanged. This is the one place the original "vitest unchanged" claim was revised
-  (review finding #6): single-driver ownership is not achievable without it, and the alternative
-  (two VM connections) was rejected.
+  usage is unchanged. **Note (revised 2026-06-25):** on Vitest 2.1.9 this provider is not relied on
+  for TDD (worker boundary; §6.0); the production path injects `FLIWRIGHT_VM_SERVICE_URL` instead,
+  so fixtures connect to the same app. The provider ships anyway (additive, default-unchanged) and
+  is the hook a future in-process-execution mode would use.
 - No changes to `core` or existing `bridge` extensions' behavior.
 - `mcp` additions are new tools only; existing tools unchanged.
 - `vscode` additions are a new panel + commands; the existing session/runner/sandbox/form/recording
@@ -486,12 +506,13 @@ ownership. The spike must prove all three before downstream work proceeds:
 
 ## 12. Open Questions / Risks
 
-- **Vitest focused-rerun API (resolved as a spike).** Verified that 2.1.9's `rerunFiles` takes
-  `(files?, trigger?, allTestsRun?)` — no options/testNamePattern — and `changeNamePattern` is the
-  name-filter entry. P0.2 must pick a stable recipe (§6.6) before P0.3–P0.5 unblock.
-- **Single-driver ownership (resolved as a spike).** Fixtures use the module-level `sharedDriver`
-  (`index.ts:79`), not `setup.ts`'s `globalSetup` driver. P0.2 proves the injectable-provider model
-  yields exactly one VM connection (§6.0). Without it, two connections are unavoidable.
+- **Vitest focused-rerun API (resolved).** `changeNamePattern(testName, [file])` reruns internally
+  on 2.1.9; encoded in `FocusedRerunRecipe.ts`.
+- **Single-driver ownership (resolved — fallback adopted).** The injectable provider ships in
+  `@fliwright/vitest`, but 2.1.9's worker-process model means a live driver cannot cross into the
+  test process, so production shares via `FLIWRIGHT_VM_SERVICE_URL` (two connections). The
+  single-connection goal re-opens only if a future Vitest/Node runs the test in the MCP server's own
+  process (§6.0).
 - **`flutter daemon` protocol drift across Flutter versions.** `app.start` `appId`, `app.restart
   {fullRestart}`, `supportsRestart`, and the `app.debugPort` wsUri must be stable; `doctor` should
   surface the running Flutter version.
