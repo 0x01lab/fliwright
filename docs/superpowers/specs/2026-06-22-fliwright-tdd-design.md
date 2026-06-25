@@ -435,7 +435,11 @@ reload picks up a method-body change, restart picks up a structural change. Late
 P0 controls — **assert the rerun-only time (test execution, excluding the flutter-tooling-bound
 reload/restart) trends sub-second.** Total cycle time is not asserted, because it is dominated by
 `flutter` restart latency outside our control. (The "driver connects exactly once" assertion from the
-original draft is dropped on 2.1.9 — see §6.0/§9 unit note.)
+original draft is dropped on 2.1.9 — see §6.0/§9 unit note.) Two manual harnesses ship under
+`packages/fliwright-tdd/spike/` (see `spike/E2E.md`): `e2e-daemon-conformance.mjs` asserts the real
+`flutter daemon` wire-format fields the controller depends on (the only place those are checked
+against a real daemon), and `e2e-tdd-cycle.mjs` drives the whole runtime start→cycle→stop against a
+real app. Both need a booted device, so they are manual (no CI gate).
 
 **Contract tests:** new MCP tools follow the mcp package's existing tool-test pattern; unit-test the
 new optional bridge extension `storage.reset`.
