@@ -6,6 +6,7 @@ export class FakeDaemonTransport implements DaemonTransport {
   private readonly handlers = new Map<string, RequestHandler>();
   private readonly listeners = new Set<(message: DaemonMessage) => void>();
   public readonly requests: Array<{ method: string; params: Record<string, unknown> }> = [];
+  public connectCount = 0;
 
   on(method: string, handler: RequestHandler): this {
     this.handlers.set(method, handler);
@@ -14,6 +15,10 @@ export class FakeDaemonTransport implements DaemonTransport {
 
   emit(message: DaemonMessage): void {
     for (const listener of this.listeners) listener(message);
+  }
+
+  async connect(): Promise<void> {
+    this.connectCount += 1;
   }
 
   async request<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {

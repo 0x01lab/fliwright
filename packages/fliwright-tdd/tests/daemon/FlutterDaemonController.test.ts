@@ -10,6 +10,7 @@ describe('FlutterDaemonController.start', () => {
     await controller.start();
     await controller.start();
 
+    expect(transport.connectCount).toBe(1);
     expect(transport.requests).toHaveLength(0);
   });
 });
@@ -40,11 +41,30 @@ describe('FlutterDaemonController.startApp', () => {
     });
   });
 
-  it('rejects when app.debugPort never arrives', async () => {
+  it('rejects when app.debugPort never arrives with a doctor hint', async () => {
     const transport = new FakeDaemonTransport().on('app.start', async () => ({ appId: 'app-2', deviceId: 'd' }));
     const controller = new FlutterDaemonController(transport);
 
-    await expect(controller.startApp({ deviceId: 'd' }, { debugPortTimeoutMs: 10 })).rejects.toThrow(/timed out/);
+    await expect(controller.startApp({ deviceId: 'd' }, { debugPortTimeoutMs: 10 }))
+      .rejects.toThrow(/timed out/i);
+    await expect(controller.startApp({ deviceId: 'd' }, { debugPortTimeoutMs: 10 }))
+      .rejects.toThrow(/doctor/i);
+  });
+
+  it('rejects with a doctor hint when app.start returns no appId', async () => {
+    const transport = new FakeDaemonTransport().on('app.start', async () => ({ deviceId: 'd' }));
+    const controller = new FlutterDaemonController(transport);
+
+    await expect(controller.startApp({ deviceId: 'd' })).rejects.toThrow(/no appId[\s\S]*doctor/i);
+  });
+
+  it('rejects with a doctor hint when app.debugPort carries no wsUri', async () => {
+    const transport = new FakeDaemonTransport().on('app.start', async () => ({ appId: 'app-3', deviceId: 'd' }));
+    const controller = new FlutterDaemonController(transport);
+    const started = controller.startApp({ deviceId: 'd' });
+    setTimeout(() => transport.emit({ event: 'app.debugPort', params: { appId: 'app-3' } }), 0);
+
+    await expect(started).rejects.toThrow(/no VM service wsUri[\s\S]*doctor/i);
   });
 });
 

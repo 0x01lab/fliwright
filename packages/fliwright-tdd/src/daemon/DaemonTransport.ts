@@ -27,6 +27,7 @@ export interface AppHandle {
  * the real subprocess implementation is SubprocessDaemonTransport.
  */
 export interface DaemonTransport {
+  connect?(): Promise<void>;
   request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
   onEvent(handler: (message: DaemonMessage) => void): () => void;
   dispose(): Promise<void>;

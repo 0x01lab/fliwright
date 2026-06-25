@@ -1,6 +1,12 @@
 export type { AppHandle, AppStartParams, DaemonMessage, DaemonTransport } from './daemon/DaemonTransport.js';
 export { FlutterDaemonController } from './daemon/FlutterDaemonController.js';
 export { SubprocessDaemonTransport, parseDaemonLines } from './daemon/SubprocessDaemonTransport.js';
+export {
+  decideSync,
+  isStructuralFileChange,
+  looksStructuralAfterReload,
+} from './daemon/ReloadStrategy.js';
+export type { SyncDecision } from './daemon/ReloadStrategy.js';
 export type { SubprocessDaemonTransportOptions } from './daemon/SubprocessDaemonTransport.js';
 export { BaselineManager } from './baseline/BaselineManager.js';
 export type { ResetAdapter, ResetContext } from './baseline/BaselineManager.js';
@@ -10,6 +16,64 @@ export type { BootOptions, TestRunOutcome } from './executor/PersistentTestExecu
 export { focusAndRerun } from './executor/FocusedRerunRecipe.js';
 export { ResultReporter, collectResultsFromFiles } from './executor/ResultReporter.js';
 export type { CollectedResult } from './executor/ResultReporter.js';
+export { buildTddFailureContext, classifyFailure } from './diagnostics/TddFailureContext.js';
+export type {
+  BuildTddFailureContextInput,
+  TddFailureArtifacts,
+  TddFailureAssertion,
+  TddFailureContext,
+  TddFailureKind,
+  TddFailureSource,
+} from './diagnostics/TddFailureContext.js';
+export { generateRedFirstTest, generateRedFirstTestSuite } from './generator/RedFirstTestGenerator.js';
+export type {
+  GenerateRedFirstTestResult,
+  GenerateRedFirstTestSuiteResult,
+  RedFirstTestGeneratorOptions,
+  RedFirstTestSuiteGeneratorOptions,
+} from './generator/RedFirstTestGenerator.js';
+export { prepareRedFirstWorkflow } from './workflow/RedFirstWorkflow.js';
+export type {
+  PrepareRedFirstWorkflowResult,
+  RedFirstWorkflowContext,
+  RedFirstWorkflowOptions,
+  RedFirstWorkflowPlan,
+  RedFirstWorkflowStatus,
+} from './workflow/RedFirstWorkflow.js';
+export {
+  bestLocatorHint,
+  synthesizeSelector,
+  synthesizeSelectorsForElements,
+} from './selectors/SelectorSynthesizer.js';
+export type {
+  SelectorCandidate,
+  SelectorSynthesisResult,
+  SelectorSynthesisStatus,
+  SelectorTraceStep,
+  WidgetCandidate,
+} from './selectors/SelectorSynthesizer.js';
+export type {
+  InteractionSpec,
+  InteractionSpecValidationIssue,
+  InteractionSpecValidationResult,
+  LocatorHint,
+  SpecAssertion,
+  SpecElement,
+  SpecElementRole,
+  SpecFlow,
+  SpecStep,
+} from './spec/InteractionSpec.js';
+export {
+  InteractionSpecValidationError,
+  parseInteractionSpec,
+  validateInteractionSpec,
+} from './spec/InteractionSpec.js';
+export { analyzeInteractionSpecCoverage } from './spec/InteractionSpecCoverage.js';
+export type {
+  InteractionSpecCoverageGap,
+  InteractionSpecCoverageGapKind,
+  InteractionSpecCoverageReport,
+} from './spec/InteractionSpecCoverage.js';
 export type {
   CycleOpts,
   ResetAdapterResult,

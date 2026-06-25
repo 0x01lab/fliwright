@@ -14,6 +14,8 @@ export class FlutterDaemonController {
   constructor(private readonly transport: DaemonTransport) {}
 
   async start(): Promise<void> {
+    if (this.started) return;
+    await this.transport.connect?.();
     // `flutter daemon` emits daemon.connected unsolicited on stdout; no request needed here.
     this.started = true;
   }
@@ -31,7 +33,13 @@ export class FlutterDaemonController {
 
     const result = await this.transport.request<StartAppResult>('app.start', requestParams);
     const appId = result.appId;
-    if (!appId) throw new Error('app.start response carried no appId');
+    if (!appId) {
+      throw new Error(
+        `flutter daemon app.start returned no appId. Doctor: confirm the device is online `
+          + `(\`flutter devices\`), the target "${requestParams.target}" exists, and the project compiles.`
+          + ` Raw response: ${JSON.stringify(result)}.`,
+      );
+    }
 
     const debugPort = await this.waitForEvent(
       'app.debugPort',
@@ -40,7 +48,11 @@ export class FlutterDaemonController {
     );
     const wsUri = debugPort.params?.wsUri;
     if (typeof wsUri !== 'string' || wsUri.length === 0) {
-      throw new Error(`app.debugPort for ${appId} carried no wsUri`);
+      throw new Error(
+        `flutter daemon app.debugPort for ${appId} carried no VM service wsUri. The app likely failed `
+          + `to start. Doctor: run \`flutter run\` on the same target/device and read the console for `
+          + `compile or runtime errors, then retry fliwright_tdd_start.`,
+      );
     }
 
     const handle: AppHandle = {
@@ -85,7 +97,15 @@ export class FlutterDaemonController {
       let off: (() => void) | undefined;
       const timer = setTimeout(() => {
         off?.();
-        reject(new Error(`waitForEvent('${event}') timed out after ${timeoutMs}ms`));
+        reject(
+          event === 'app.debugPort'
+            ? new Error(
+              `Timed out after ${timeoutMs}ms waiting for the app's VM service (app.debugPort). `
+                + `The app may still be building or may have crashed at startup. Doctor: check `
+                + `\`flutter run\` console output on this target, then retry fliwright_tdd_start.`,
+            )
+            : new Error(`waitForEvent('${event}') timed out after ${timeoutMs}ms`),
+        );
       }, timeoutMs);
 
       off = this.transport.onEvent((message) => {

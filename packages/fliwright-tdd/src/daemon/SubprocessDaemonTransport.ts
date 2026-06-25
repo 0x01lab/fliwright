@@ -34,13 +34,36 @@ export class SubprocessDaemonTransport implements DaemonTransport {
   async connect(): Promise<void> {
     if (this.child) return;
 
-    this.child = spawn(this.opts.flutterBin ?? 'flutter', ['daemon', ...(this.opts.extraArgs ?? [])], {
+    const bin = this.opts.flutterBin ?? 'flutter';
+    const child = spawn(bin, ['daemon', ...(this.opts.extraArgs ?? [])], {
       cwd: this.opts.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    this.child = child;
 
-    this.child.stdout.setEncoding('utf8');
-    this.child.stdout.on('data', (chunk: string) => {
+    // Await successful spawn so a missing Flutter SDK (ENOENT) fails fast at connect time with a
+    // doctor-style hint, instead of surfacing later on the first request.
+    await new Promise<void>((resolve, reject) => {
+      const onSpawn = (): void => {
+        child.off('error', onError);
+        resolve();
+      };
+      const onError = (error: Error): void => {
+        child.off('spawn', onSpawn);
+        this.child = undefined;
+        reject(
+          new Error(
+            `Failed to start \`${bin} daemon\` (${error.message}). Doctor: ensure Flutter is installed `
+              + `and on PATH (\`flutter --version\`), or pass flutterBin in SubprocessDaemonTransportOptions.`,
+          ),
+        );
+      };
+      child.once('spawn', onSpawn);
+      child.once('error', onError);
+    });
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
       this.buffer += chunk;
       let nl: number;
       while ((nl = this.buffer.indexOf('\n')) >= 0) {
@@ -50,8 +73,8 @@ export class SubprocessDaemonTransport implements DaemonTransport {
       }
     });
 
-    this.child.on('error', (error) => this.rejectAll(error));
-    this.child.on('exit', (code, signal) => {
+    child.on('error', (error) => this.rejectAll(error));
+    child.on('exit', (code, signal) => {
       this.rejectAll(new Error(`flutter daemon exited with code ${code ?? 'null'} signal ${signal ?? 'null'}`));
     });
   }

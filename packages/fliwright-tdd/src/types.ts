@@ -1,4 +1,5 @@
 import type { AppHandle, AppStartParams } from './daemon/DaemonTransport.js';
+import type { TddFailureContext } from './diagnostics/TddFailureContext.js';
 
 export type ResetCategory =
   | 'navigation'
@@ -59,9 +60,30 @@ export interface StartOpts {
 }
 
 export interface CycleOpts {
-  sync?: 'none' | 'reload' | 'restart';
+  /** How to sync the app before this cycle. `'auto'` decides from {@link changes} (design §6.4). */
+  sync?: 'none' | 'reload' | 'restart' | 'auto';
   fullReset?: boolean;
+  /**
+   * File paths changed since the last sync. Used only when {@link sync} is `'auto'` to choose
+   * reload vs restart via `decideSync`. Ignored for explicit sync levels.
+   */
+  changes?: string[];
+  /**
+   * When true (default), a `reload` cycle that fails with a structural-looking error is retried
+   * once with a hot restart + full reset, if the runtime can restart. Set false to keep the raw
+   * reload result. Design §6.4 fallback-escalation rule.
+   */
+  autoEscalate?: boolean;
+  /**
+   * Per-cycle wall-clock budget (ms) covering sync + reset + rerun. On expiry the caller receives a
+   * red `timeout` result immediately, but the in-flight body is allowed to finish so the next cycle
+   * never overlaps the single-threaded executor. Design §8 Timeout. Default {@link DEFAULT_CYCLE_TIMEOUT_MS}.
+   */
+  timeoutMs?: number;
 }
+
+/** Default per-cycle timeout (design §8). Generous: real reruns are sub-second; restarts are seconds. */
+export const DEFAULT_CYCLE_TIMEOUT_MS = 60_000;
 
 export interface TddCycleResult {
   status: 'red' | 'green';
@@ -71,6 +93,7 @@ export interface TddCycleResult {
   lastSync: 'reload' | 'restart' | 'none';
   baselineVersion: number;
   failure?: { message?: string };
+  failureContext?: TddFailureContext;
   unsupportedState?: ResetCategory[];
 }
 
@@ -85,7 +108,32 @@ export interface TddRuntimeDeps {
   };
   executor?: {
     boot(opts: { configRoot: string; vmServiceUrl?: string; driverProvider: () => Promise<unknown> }): Promise<void>;
-    rerun(file: string, testName?: string): Promise<{ status: 'red' | 'green'; testName?: string; failure?: { message?: string } }>;
+    rerun(file: string, testName?: string): Promise<{
+      status: 'red' | 'green';
+      testName?: string;
+      failure?: { message?: string };
+      failureDetails?: {
+        source?: {
+          file: string;
+          line: number;
+          snippet: string;
+        };
+        assertion?: {
+          matcher: string;
+          expected: string;
+          actual: string;
+          timeout: number;
+        };
+        artifacts?: {
+          failureContextPath?: string;
+          screenshotPath?: string;
+          screenshotBase64?: string;
+          widgetTree?: unknown;
+          timelinePath?: string;
+          timelineNodeId?: string;
+        };
+      };
+    }>;
     dispose(): Promise<void>;
   };
   driverFactory?: () => {
