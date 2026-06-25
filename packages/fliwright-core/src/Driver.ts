@@ -1,5 +1,6 @@
 import { Page } from './Page.js';
 import { AppInstance } from './AppInstance.js';
+import { StorageManager } from './StorageManager.js';
 import { PluginRegistry } from './PluginRegistry.js';
 import { VMServiceConnector } from './VMServiceConnector.js';
 import type { MockWebSocket } from './VMServiceConnector.js';
@@ -23,6 +24,7 @@ export class FliwrightDriver {
   private _page: Page | null = null;
   private _app: AppInstance | null = null;
   private _mock: MockManager | null = null;
+  private _storage: StorageManager | null = null;
   private _healing: SelfHealingEngine | null = null;
   private _recorder: RecorderController | null = null;
   private _sdkVersion: string | null = null;
@@ -77,6 +79,18 @@ export class FliwrightDriver {
       this._app = new AppInstance((method, params) => this.connector.sendRequest(method, params));
     }
     return this._app;
+  }
+
+  /**
+   * Storage controller for the optional `ext.fliwright.storage.reset` bridge
+   * extension (determinism Gap C). Degrades to `status: 'unsupported'` when the
+   * extension is absent.
+   */
+  get storage(): StorageManager {
+    if (!this._storage) {
+      this._storage = new StorageManager((method, params) => this.connector.sendRequest(method, params));
+    }
+    return this._storage;
   }
 
   async connect(vmServiceUrl: string): Promise<void> {

@@ -23,6 +23,7 @@ import 'extensions/snap.dart';
 import 'extensions/scroll_extension.dart';
 import 'extensions/settle_extension.dart';
 import 'extensions/snapshot.dart';
+import 'extensions/storage_reset.dart';
 import 'extensions/type_extension.dart';
 import 'ref_registry.dart';
 
@@ -48,6 +49,7 @@ class FliwrightBridge {
     RiverpodExtension.reset();
     DioMockExtension.reset();
     FliwrightAppInstance.reset();
+    StorageResetExtension.reset();
     RefRegistry.disposeAll();
     FliwrightHttpOverrides.uninstall();
   }
@@ -87,6 +89,7 @@ class FliwrightBridge {
 
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
+    StorageResetExtension.register(_registry);
 
     final mockRuleStore = MockRuleStore(
       storage: await _resolveMockStorage(mockStorage),
@@ -140,6 +143,7 @@ class FliwrightBridge {
 
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
+    StorageResetExtension.register(_registry);
 
     final mockRuleStore = MockRuleStore(
       storage: await _resolveMockStorage(mockStorage),
@@ -179,6 +183,7 @@ class FliwrightBridge {
           'normalizedProviderState': true,
           'appInstance': true,
           'appCapabilities': true,
+          'storageReset': true,
         },
       };
     });
