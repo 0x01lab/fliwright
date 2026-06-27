@@ -51,6 +51,8 @@ describe('TestsTreeProvider', () => {
     const itemA = provider.getTreeItem(cases[0]!);
     expect(itemA.iconPath).toBeTruthy(); // ThemeIcon('pass')
     expect((itemA.iconPath as any).id).toBe('pass');
+    expect(itemA.collapsibleState).toBe(vscode.TreeItemCollapsibleState.None);
+    await expect(provider.getChildren(cases[0]!)).resolves.toEqual([]);
   });
 
   it('empty workspace shows empty node', async () => {
@@ -60,6 +62,64 @@ describe('TestsTreeProvider', () => {
     const provider = new TestsTreeProvider(discovery as any, store);
     const roots = await provider.getChildren();
     expect(roots[0]!.kind).toBe('empty');
+  });
+
+  it('marks a running test file and its cases with spinning status', async () => {
+    const ws = await createWorkspace();
+    const relPath = 'tests/running.test.ts';
+    await writeText(ws, relPath, `
+      import { test } from 'vitest';
+      test('case A', () => {});
+    `);
+    const fileUri = vscode.Uri.file(path.join(ws, relPath));
+
+    const discovery = {
+      discover: vi.fn().mockResolvedValue([{ kind: 'testFile', uri: fileUri, label: 'running.test.ts' }]),
+    } as any;
+    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()) } as unknown as TestStatusStore;
+    const provider = new TestsTreeProvider(discovery as any, store);
+
+    const files = await provider.getChildren();
+    provider.setRunning({ relPath });
+
+    const fileItem = provider.getTreeItem(files[0]!);
+    expect((fileItem.iconPath as any).id).toBe('loading~spin');
+    expect(fileItem.description).toBe('running');
+    expect(fileItem.contextValue).toBe('testFileRunning');
+
+    const cases = await provider.getChildren(files[0]!);
+    const caseItem = provider.getTreeItem(cases[0]!);
+    expect((caseItem.iconPath as any).id).toBe('loading~spin');
+    expect(caseItem.description).toBe('running');
+    expect(caseItem.contextValue).toBe('testCaseRunning');
+  });
+
+  it('marks only the selected test case as running when a case is launched', async () => {
+    const ws = await createWorkspace();
+    const relPath = 'tests/single.test.ts';
+    await writeText(ws, relPath, `
+      import { test } from 'vitest';
+      test('case A', () => {});
+      test('case B', () => {});
+    `);
+    const fileUri = vscode.Uri.file(path.join(ws, relPath));
+
+    const discovery = {
+      discover: vi.fn().mockResolvedValue([{ kind: 'testFile', uri: fileUri, label: 'single.test.ts' }]),
+    } as any;
+    const store = {
+      loadIndex: vi.fn().mockResolvedValue(new Map([
+        ['tests/single.test.ts::case B', { runId: 'r1', status: 'passed' as const, ranAt: 1, durationMs: 9 }],
+      ])),
+    } as unknown as TestStatusStore;
+    const provider = new TestsTreeProvider(discovery as any, store);
+
+    const files = await provider.getChildren();
+    provider.setRunning({ relPath, testId: 'tests/single.test.ts::case A' });
+
+    const cases = await provider.getChildren(files[0]!);
+    expect((cases[0] as any).status).toBe('running');
+    expect((cases[1] as any).status).toBe('passed');
   });
 
   it('does NOT parse any file source until a file row is expanded (lazy, with per-file cache)', async () => {

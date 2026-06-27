@@ -49,9 +49,9 @@ await driver.connect(toWsUrl(process.env.FLIWRIGHT_VM_SERVICE_URL!));
 当没有 URL 时，干净地跳过整组用例：
 
 ```typescript
-const vmServiceUrl = process.env.EXIO_VM_SERVICE_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL;
+const vmServiceUrl = process.env.APP_VM_SERVICE_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL;
 
-describe.skipIf(!vmServiceUrl)('Exio app live E2E', () => {
+describe.skipIf(!vmServiceUrl)('App live E2E', () => {
   beforeAll(async () => { /* connect */ });
   // …
 });

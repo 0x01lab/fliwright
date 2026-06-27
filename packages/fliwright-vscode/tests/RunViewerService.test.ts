@@ -57,6 +57,56 @@ describe('RunViewerService.findLatestRunForTest', () => {
     expect(run?.timeline.runId).toBe('run-2');
   });
 
+  it('loads trace data stored inside the run directory', async () => {
+    mkdirSync(join(runsDir, 'run-2', 'trace'), { recursive: true });
+    writeFileSync(
+      join(runsDir, 'run-2', 'trace', 'trace.json'),
+      JSON.stringify({
+        meta: {
+          testName: 'wanted',
+          runId: 'run-2',
+          startedAt: '2026-06-21T00:00:00Z',
+          status: 'passed',
+          totalSteps: 1,
+          traceVersion: 1,
+        },
+        steps: [
+          {
+            index: 0,
+            action: 'tap',
+            selector: 'text=Submit',
+            status: 'pass',
+            durationMs: 5,
+            timestamp: '2026-06-21T00:00:00Z',
+          },
+        ],
+      }),
+    );
+
+    const svc = new RunViewerService();
+    const loaded = await svc.loadRun(vscode.Uri.file(join(runsDir, 'run-2')));
+    expect(loaded?.trace?.steps[0]?.selector).toBe('text=Submit');
+  });
+
+  it('finds a run by timeline testName when result.json has no entry', async () => {
+    mkdirSync(join(runsDir, 'run-3'), { recursive: true });
+    writeFileSync(
+      join(runsDir, 'run-3', 'timeline.json'),
+      JSON.stringify({
+        runId: 'run-3',
+        testName: 'timeline only',
+        mode: 'test',
+        status: 'passed',
+        startedAt: '2026-06-22T00:00:00Z',
+        nodes: [],
+      }),
+    );
+
+    const svc = new RunViewerService();
+    const run = await svc.findLatestRunForTest(runsDirUri, 'tests/a.test.ts::timeline only');
+    expect(run?.timeline.runId).toBe('run-3');
+  });
+
   it('returns undefined when no run matches', async () => {
     const svc = new RunViewerService();
     const run = await svc.findLatestRunForTest(runsDirUri, 'tests/a.test.ts::none/here');
@@ -165,13 +215,14 @@ describe('RunViewerService.findLatestRunForTestIndexed', () => {
   it('derives the timeline run id from resultRunId for current VS Code records', async () => {
     const svc = new RunViewerService();
     const baseRunId = '2026-06-22T10-00-00';
-    const timelineRunId = `${baseRunId}-suite-wanted`;
+    const indexedNodeId = 'tests/a.test.ts::suite/indexed wanted';
+    const timelineRunId = `${baseRunId}-suite-indexed-wanted`;
     mkdirSync(join(runsDir, timelineRunId), { recursive: true });
     writeFileSync(
       join(runsDir, timelineRunId, 'timeline.json'),
       JSON.stringify({
         runId: timelineRunId,
-        testName: 'suite > wanted',
+        testName: 'suite > indexed wanted',
         mode: 'test',
         status: 'passed',
         startedAt: '2026-06-22T10:00:00Z',
@@ -179,10 +230,35 @@ describe('RunViewerService.findLatestRunForTestIndexed', () => {
       }),
     );
     const index = new Map<string, { runId: string; resultRunId: string }>([
-      [nodeId, { runId: 'stale-result-dir', resultRunId: baseRunId }],
+      [indexedNodeId, { runId: 'stale-result-dir', resultRunId: baseRunId }],
     ]);
 
-    const run = await svc.findLatestRunForTestIndexed(runsDirUri, nodeId, index);
+    const run = await svc.findLatestRunForTestIndexed(runsDirUri, indexedNodeId, index);
+    expect(run?.timeline.runId).toBe(timelineRunId);
+  });
+
+  it('derives the leaf timeline run id for nested suites', async () => {
+    const svc = new RunViewerService();
+    const baseRunId = '2026-06-22T10-00-01';
+    const nestedNodeId = 'tests/a.test.ts::suite/nested leaf';
+    const timelineRunId = `${baseRunId}-nested-leaf`;
+    mkdirSync(join(runsDir, timelineRunId), { recursive: true });
+    writeFileSync(
+      join(runsDir, timelineRunId, 'timeline.json'),
+      JSON.stringify({
+        runId: timelineRunId,
+        testName: 'nested leaf',
+        mode: 'test',
+        status: 'passed',
+        startedAt: '2026-06-22T10:00:01Z',
+        nodes: [],
+      }),
+    );
+    const index = new Map<string, { runId: string; resultRunId: string }>([
+      [nestedNodeId, { runId: 'stale-result-dir', resultRunId: baseRunId }],
+    ]);
+
+    const run = await svc.findLatestRunForTestIndexed(runsDirUri, nestedNodeId, index);
     expect(run?.timeline.runId).toBe(timelineRunId);
   });
 

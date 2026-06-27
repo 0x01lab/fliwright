@@ -38,6 +38,46 @@ describe('TestStatusStore', () => {
     expect(existsSync(join(runsDir, 'run-1', 'result.json'))).toBe(true);
   });
 
+  it('uses per-test file paths when a workspace run reports multiple files', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fliwright-runs-workspace-'));
+    const store = new TestStatusStore(dir);
+    await store.recordRun('run-2', 1000, fakeRoot('/repo'), {
+      passed: true,
+      totalTests: 2,
+      passedTests: 2,
+      failedTests: 0,
+      duration: 10,
+      results: [
+        { filePath: '/repo/tests/a.test.ts', name: 'suite > case A', passed: true, duration: 3 },
+        { filePath: 'tests/b.test.ts', name: 'case B', passed: true, duration: 4 },
+      ],
+    }, 'tests');
+
+    const idx = JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8'));
+    expect(idx['tests/a.test.ts::suite/case A']).toMatchObject({ status: 'passed' });
+    expect(idx['tests/b.test.ts::case B']).toMatchObject({ status: 'passed' });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('keeps the known file relPath when vitest reports only a basename', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fliwright-runs-basename-'));
+    const store = new TestStatusStore(dir);
+    await store.recordRun('run-3', 1000, fakeRoot('/repo'), {
+      passed: true,
+      totalTests: 1,
+      passedTests: 1,
+      failedTests: 0,
+      duration: 10,
+      results: [
+        { filePath: 'a.test.ts', name: 'case A', passed: true, duration: 3 },
+      ],
+    }, 'tests/a.test.ts');
+
+    const idx = JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8'));
+    expect(idx['tests/a.test.ts::case A']).toMatchObject({ status: 'passed' });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('loadIndex returns the map', async () => {
     const store = new TestStatusStore(runsDir);
     const map = await store.loadIndex();

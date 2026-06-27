@@ -81,22 +81,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const mockTree = new MockApiTreeProvider(mockService);
   const formTree = new FormDataTreeProvider(formService);
   const runArtifactStore = new RunArtifactStore();
-  // Resolve the migrated per-project runs root (~/​.fliwright/​projects/​<hash>/​runs).
+  // Resolve the per-project runs root (~/​.fliwright/​projects/​<project>/​runs).
   // Best-effort: if the workspace root is unavailable or mkdir fails, fall back to
   // undefined so run recording is skipped (the tests tree still works against an
   // empty in-memory store). The store is always constructed so TestsTreeProvider
   // gets its second arg (loadIndex tolerates a missing index.json).
   let runsRoot: string | undefined;
-  let traceRoot: string | undefined;
   const wsRootForRuns = getWorkspaceRoot();
   if (wsRootForRuns) {
     try {
       runsRoot = await runArtifactStore.ensureRunsDir(wsRootForRuns);
-      traceRoot = runArtifactStore.traceDir(wsRootForRuns);
     } catch (err) {
       output.appendLine(`[Fliwright] Failed to ensure runs root: ${err instanceof Error ? err.message : String(err)}`);
       runsRoot = undefined;
-      traceRoot = undefined;
     }
   }
   const statusStore = new TestStatusStore(runsRoot ?? '');
@@ -688,6 +685,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.runWorkspaceTests', async () => {
       await runTests(undefined, { workspace: true });
     }),
+    vscode.commands.registerCommand('fliwright.stopTests', async () => {
+      if (!runningAbortController || runningAbortController.signal.aborted) {
+        void vscode.window.showInformationMessage('No Fliwright test run is in progress.');
+        return;
+      }
+      runningAbortController.abort();
+      output.appendLine('Stopping Fliwright test run...');
+    }),
     vscode.commands.registerCommand('fliwright.runScript', async (node?: ScriptFileEntry) => {
       await runScript(node);
     }),
@@ -1209,6 +1214,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // racing the runner. Lives in activate() scope: shared across all runTests
   // invocations during the extension's activation lifetime.
   let runningPromise: Promise<void> | undefined;
+  let runningAbortController: AbortController | undefined;
 
   /**
    * Run tests for a node (file/case), the active editor, or the whole workspace.
@@ -1227,40 +1233,60 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return;
     }
     runningPromise = (async () => {
-      await runCommand(opts.workspace ? 'Run Workspace Tests' : 'Run Test', async () => {
+      const commandLabel = opts.workspace ? 'Run Workspace Tests' : 'Run Test';
+      await runCommand(commandLabel, async () => {
         const root = requireWorkspaceRoot();
         const file = opts.workspace
           ? undefined
           : node?.uri ?? node?.fileUri ?? vscode.window.activeTextEditor?.document.uri;
+        const relPath = file ? relPathOf(root, file) : undefined;
+        const testId = (node as { kind?: string; id?: string } | undefined)?.kind === 'testCase'
+          ? (node as { id?: string }).id
+          : undefined;
         const failureContextDir = resolveWorkspacePath(root, loadConfig().failureContextDir);
 
         // Trace configuration. Prefer the per-project runs root when available
         // (migrated layout) so artifacts land alongside the run result.json.
         const traceMode = getTraceMode();
-        const traceDir = traceRoot ? vscode.Uri.file(traceRoot) : vscode.Uri.joinPath(root, '.fliwright', 'traces');
+        const traceDir = runsRoot ? vscode.Uri.file(runsRoot) : undefined;
         const runId = runArtifactStore.generateBaseRunId();
+        const abortController = new AbortController();
+        runningAbortController = abortController;
 
-        session.setRunning(opts.workspace ? 'workspace tests' : file?.fsPath ?? 'tests');
-        const result = await runner.run({
-          workspaceRoot: root,
-          testFile: file,
-          testNamePattern: opts.testNamePattern,
-          runsRoot,
-          runId,
-          vmServiceUrl: session.currentUrl,
-          failureContextDir,
-          traceMode,
-          traceDir: traceMode !== 'off' ? traceDir : undefined,
-        });
+        const previousSessionState = session.setRunning(opts.workspace ? 'workspace tests' : file?.fsPath ?? 'tests');
+        let result: RunResult;
+        testsTree.setRunning(opts.workspace ? { workspace: true } : relPath ? { relPath, testId } : {});
+        try {
+          result = await withWindowProgress(`Fliwright: ${opts.workspace ? 'running workspace tests' : 'running tests'}...`, () => (
+            runner.run({
+              workspaceRoot: root,
+              testFile: file,
+              testNamePattern: opts.testNamePattern,
+              runsRoot,
+              runId,
+              vmServiceUrl: session.currentUrl,
+              failureContextDir,
+              traceMode,
+              traceDir: traceMode !== 'off' ? traceDir : undefined,
+              signal: abortController.signal,
+            })
+          ));
+        } finally {
+          if (runningAbortController === abortController) {
+            runningAbortController = undefined;
+          }
+          testsTree.setRunning(undefined);
+          session.finishRunning(previousSessionState);
+        }
         const failures = await failureStore.loadLatest(failureContextDir, result);
 
         // Record the run into the per-project status store so the Tests panel
-        // can join statuses onto tree nodes by id. Only when we have a store
-        // with a real runsDir AND a target file (relPath is undefined for
-        // workspace runs — recordRun keys by node id which needs relPath).
-        if (runsRoot && file) {
+        // can join statuses onto tree nodes by id. Workspace runs use each
+        // Vitest assertion's filePath; the fallback relPath is only for older
+        // reporter payloads that do not include per-file metadata.
+        if (runsRoot) {
           try {
-            await runArtifactStore.recordTestRun(root, result, relPathOf(root, file), {
+            await runArtifactStore.recordTestRun(root, result, relPath ?? 'tests', {
               baseRunId: runId,
               ranAt: Date.now(),
             });
@@ -1270,17 +1296,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
 
         statusBar.setRunResult(result);
-        session.setConnectedIdle();
         testsTree.refresh();
         output.appendLine(`Run complete: ${result.passedTests}/${result.totalTests} passed, ${result.failedTests} failed.`);
 
-        // Cleanup old trace runs (keep last 10)
-        if (traceMode !== 'off') {
-          try {
-            const deleted = await traceService.cleanupOldRuns(traceDir);
-            if (deleted > 0) output.appendLine(`Cleaned up ${deleted} old trace run(s).`);
-          } catch { /* non-critical */ }
-        }
+        // Trace artifacts are now stored inside each run directory. Retention
+        // should prune whole runs, not trace data independently.
 
         if (result.failedTests > 0) {
           const actions = traceMode !== 'off' ? ['View Trace', 'Open Failure'] : ['Open Failure'];
@@ -1328,7 +1348,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const command = await terminalScriptCommand(root, script);
       const runId = runArtifactStore.generateBaseRunId();
       const traceMode = getTraceMode();
-      const scriptTraceDir = traceRoot ? traceRoot : vscode.Uri.joinPath(root, '.fliwright', 'traces').fsPath;
+      const scriptTraceDir = runsRoot;
       const terminal = vscode.window.createTerminal({
         name: `Fliwright: ${script.label}`,
         cwd: root.fsPath,
@@ -1341,9 +1361,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             FLIWRIGHT_RUNS_ROOT: runsRoot,
             FLIWRIGHT_RUN_ID: runId,
           } : {}),
-          ...(traceMode !== 'off' ? {
+          ...(traceMode !== 'off' && scriptTraceDir ? {
             FLIWRIGHT_TRACE: traceMode,
             FLIWRIGHT_TRACE_DIR: scriptTraceDir,
+            FLIWRIGHT_TRACE_LAYOUT: 'run',
           } : {}),
         },
       });

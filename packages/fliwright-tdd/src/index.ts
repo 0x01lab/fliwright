@@ -14,7 +14,20 @@ export type {
   ResetContext,
   StorageResetOutcome,
 } from './baseline/BaselineManager.js';
-export { StorageResetAdapter } from './baseline/StorageResetAdapter.js';
+export {
+  AuthTokensResetAdapter,
+  LocalDbResetAdapter,
+  SecureStorageResetAdapter,
+  StorageBackedResetAdapters,
+  StorageResetAdapter,
+} from './baseline/StorageResetAdapter.js';
+export {
+  AppCapabilityResetAdapters,
+  IsolatesResetAdapter,
+  PermissionsResetAdapter,
+  TimersResetAdapter,
+  WebviewResetAdapter,
+} from './baseline/AppCapabilityResetAdapter.js';
 export { TddRepairPlanner } from './repair/TddRepairPlanner.js';
 export type { TddRepairPlannerOptions } from './repair/TddRepairPlanner.js';
 export { TddRuntime } from './runtime/TddRuntime.js';
@@ -31,6 +44,8 @@ export type {
   TddFailureAssertion,
   TddFailureContext,
   TddFailureKind,
+  TddRecoveryHint,
+  TddRecoveryHintKind,
   TddFailureSource,
 } from './diagnostics/TddFailureContext.js';
 export { generateRedFirstTest, generateRedFirstTestSuite } from './generator/RedFirstTestGenerator.js';
@@ -91,6 +106,7 @@ export type {
   Scenario,
   StartOpts,
   TddCycleResult,
+  TddSyncResult,
   TddRepairCycleResult,
   TddRepairOpts,
   TddRepairPlan,

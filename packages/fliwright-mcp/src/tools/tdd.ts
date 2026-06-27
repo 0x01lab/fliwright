@@ -30,6 +30,7 @@ const ScenarioSchema = z.object({
   ])).default(['navigation', 'mock']),
   riverpodOverrides: z.array(z.any()).optional(),
   mockProfile: z.string().optional(),
+  mockDir: z.string().optional(),
   storageSeed: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -94,6 +95,18 @@ export const TddRepairParamsSchema = z.object({
 export const TddStopParamsSchema = z.object({
   keepAppAlive: z.boolean().optional().default(false),
 });
+
+export const TddSetScenarioParamsSchema = ScenarioSchema;
+
+export interface TddSyncToolResult {
+  lastSync: 'reload' | 'restart' | 'none';
+  snapshot: RuntimeSnapshot;
+}
+
+interface TddRuntimeScenarioControl {
+  setScenario(scenario: Scenario): Promise<RuntimeSnapshot>;
+  syncApp(sync: 'reload' | 'restart' | 'none'): Promise<TddSyncToolResult>;
+}
 
 export const TddPrepareParamsSchema = z.object({
   spec: z.object({
@@ -280,6 +293,25 @@ export async function handleTddReconnect(state: ServerState): Promise<RuntimeSna
   return await runtime.reconnect();
 }
 
+export async function handleTddSetScenario(
+  params: z.infer<typeof TddSetScenarioParamsSchema>,
+  state: ServerState,
+): Promise<RuntimeSnapshot> {
+  const runtime = requireTddRuntime(state) as TddRuntime & TddRuntimeScenarioControl;
+  const input = TddSetScenarioParamsSchema.parse(params);
+  return await runtime.setScenario(input as Scenario);
+}
+
+export async function handleTddReload(state: ServerState): Promise<TddSyncToolResult> {
+  const runtime = requireTddRuntime(state) as TddRuntime & TddRuntimeScenarioControl;
+  return await runtime.syncApp('reload');
+}
+
+export async function handleTddRestart(state: ServerState): Promise<TddSyncToolResult> {
+  const runtime = requireTddRuntime(state) as TddRuntime & TddRuntimeScenarioControl;
+  return await runtime.syncApp('restart');
+}
+
 export async function handleTddStop(
   params: z.infer<typeof TddStopParamsSchema>,
   state: ServerState,
@@ -401,6 +433,33 @@ export function registerTddTools(server: McpServer, state: ServerState): void {
     {},
     async () => ({
       content: [{ type: 'text', text: JSON.stringify(await handleTddReconnect(state), null, 2) }],
+    }),
+  );
+
+  server.tool(
+    'fliwright_tdd_set_scenario',
+    'Update the persistent TDD runtime baseline scenario (home route, reset categories, Riverpod overrides, mock profile, storage seed).',
+    TddSetScenarioParamsSchema.shape,
+    async (params) => ({
+      content: [{ type: 'text', text: JSON.stringify(await handleTddSetScenario(params, state), null, 2) }],
+    }),
+  );
+
+  server.tool(
+    'fliwright_tdd_reload',
+    'Manually hot reload the app owned or attached by the persistent TDD runtime.',
+    {},
+    async () => ({
+      content: [{ type: 'text', text: JSON.stringify(await handleTddReload(state), null, 2) }],
+    }),
+  );
+
+  server.tool(
+    'fliwright_tdd_restart',
+    'Manually hot restart the daemon-started app owned by the persistent TDD runtime.',
+    {},
+    async () => ({
+      content: [{ type: 'text', text: JSON.stringify(await handleTddRestart(state), null, 2) }],
     }),
   );
 

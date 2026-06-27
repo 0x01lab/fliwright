@@ -155,7 +155,7 @@ export default defineConfig({
     "test:form-mock": "fliwright run --test e2e/form-mock-e2e.test.ts",
     "test:mock-e2e": "fliwright run --test e2e/mock-api-e2e.test.ts",
     "test:go-router": "fliwright run --test e2e/go-router-navigation-e2e.test.ts",
-    "test:exio": "fliwright run --test e2e/exio-app-e2e.test.ts",
+    "test:e2e": "fliwright run --test e2e/app-e2e.test.ts",
     "test:all": "fliwright run --test \"e2e/**/*.test.ts\""
   }
 }

@@ -32,8 +32,22 @@ export class FliwrightSession implements vscode.Disposable {
     return 'url' in this.stateValue ? this.stateValue.url : undefined;
   }
 
-  setRunning(label: string): void {
+  setRunning(label: string): DeviceConnectionState {
+    const previous = this.stateValue;
     this.setState({ status: 'running', url: this.currentUrl, startedAt: Date.now(), label });
+    return previous;
+  }
+
+  finishRunning(previous: DeviceConnectionState): void {
+    if (this.stateValue.status !== 'running') return;
+
+    const url = this.currentUrl;
+    if (this.driver && url) {
+      this.setState({ status: 'connected', url, connectedAt: Date.now() });
+      return;
+    }
+
+    this.setState(previous.status === 'running' ? { status: 'disconnected' } : previous);
   }
 
   setRecording(): void {

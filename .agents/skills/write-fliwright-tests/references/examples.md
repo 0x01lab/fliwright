@@ -240,16 +240,16 @@ describe('Mock API E2E', () => {
 
 ## 9. 旧版 / 原始 driver（较老的 bridge）
 
-改编自 `e2e/exio-app-e2e.test.ts`。仅适用于暂时无法升级 bridge 的目标。注意其中的
+适用于暂时无法升级 bridge 的目标。注意其中的
 `skipIf`、WS URL 转换、原始的 `sendRequest` 扩展调用，以及可由环境变量覆盖的坐标。
 
 ```typescript
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FliwrightDriver, type FormFieldMeta } from '@fliwright/core';
 
-const vmServiceUrl = process.env.EXIO_VM_SERVICE_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL;
+const vmServiceUrl = process.env.APP_VM_SERVICE_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL;
 
-describe.skipIf(!vmServiceUrl)('Exio app live E2E (legacy bridge)', () => {
+describe.skipIf(!vmServiceUrl)('App live E2E (legacy bridge)', () => {
   let driver: FliwrightDriver;
 
   beforeAll(async () => {
@@ -260,9 +260,9 @@ describe.skipIf(!vmServiceUrl)('Exio app live E2E (legacy bridge)', () => {
 
   it('opens login and fills credentials', async () => {
     const { fields = [] } = await driver.sendRequest('ext.fliwright.extractForm') as { fields?: FormFieldMeta[] };
-    const username = fields.find(f => f.semanticsId === 'login.username')!;
+    const email = fields.find(f => f.semanticsId === 'login.email')!;
     await driver.sendRequest('ext.fliwright.type',
-      { selector: username.selector, text: 'test@example.com', replaceAll: 'true' });
+      { selector: email.selector, text: 'test@example.com', replaceAll: 'true' });
     // … click submit via coordinates (legacy) …
   });
 });
@@ -275,6 +275,61 @@ function toWsUrl(url: string): string {
 
 > 待应用升级后，请尽快把旧版脚本迁到当前 bridge（`ext.fliwright.snap` / `ext.fliwright.action` /
 > `ext.fliwright.extractForm`）。详见 [driver-lifecycle.md](./driver-lifecycle.md)。
+
+## 10. 人机校验（captcha / 滑块）+ 2FA 在主流程里的接入位置
+
+滑块这类人机校验无法被自动化稳定驱动，正确做法是**交由真人在运行中的 app 完成，脚本靠
+“校验之后的 app 状态”判定通过并续跑**。完整原理、决策树（人工拖 / 坐标 / 拆用例）、
+`solveCaptcha` / `captchaResolved` 的完整实现、抗抖动 helper（`isVisible` / `settleQuietly`）、
+设计要点和症状表，全部见 **[captcha.md](./captcha.md)**——那是这一主题的唯一权威版本，本节不再重复。
+
+这里只给最顶层的骨架，展示人机校验在主流程里的**接入位置**（在 `flow.optional` 里、紧跟在提交之后、
+2FA 之前）。生产级的一次性脚本推荐用 `createFliwrightScript(defineConfig(...))` 的配置形式：从 env 里
+解析 VM URL（`FLIWRIGHT_VM_URL` → `FLIWRIGHT_VM_SERVICE_URL` → workspace config）、配置 AI provider 与
+截图模式——这些都是真人介入脚本在 CI/本地都跑得稳的前提：
+
+```typescript
+import { createFliwrightScript, defineConfig, expect } from '@fliwright/vitest';
+import { readWorkspaceConfigSync } from '@fliwright/core';
+
+const config = {
+  // 人机校验天然依赖真人，CI 跑不动时设 SOLVE_CAPTCHA=false 跳过
+  handleCaptcha: process.env.SOLVE_CAPTCHA !== 'false',
+  vmServiceUrl: resolveVmServiceUrl(), // 见下方定义
+};
+
+const script = createFliwrightScript(defineConfig({
+  vmServiceUrl: config.vmServiceUrl,
+  timeout: 10_000,
+  screenshot: 'file',
+  ai: { provider: process.env.FLIWRIGHT_AI_PROVIDER ?? 'mock' },
+}));
+
+script('register with captcha', async ({ page, flow }) => {
+  // …打开注册表单、填好字段、点 Next 之后……
+
+  await flow.optional('Handle captcha', { when: config.handleCaptcha }, async () => {
+    await solveCaptcha(page, flow);   // 完整实现见 captcha.md「生产级封装」一节
+  });
+  // 校验通过后立刻续跑下一步（填 SMS / OTP），写在一起最稳
+});
+
+// VM URL 解析顺序与 Fliwright runtime 一致：显式 env 优先，回退到 VS Code 插件 / flutter run
+// 写入的 workspace config（.fliwright/config.json）。没有这个回退，不带 --vm-url / env 直接跑会报
+// "No VM Service URL provided"。
+function resolveVmServiceUrl() {
+  return process.env.FLIWRIGHT_VM_URL?.trim()
+    || process.env.FLIWRIGHT_VM_SERVICE_URL?.trim()
+    || readWorkspaceConfigSync().vmServiceUrl
+    || '';
+}
+```
+
+> 若只是想本地快速验证人机校验这一段、不需要 env/CI 脚手架，也可以用默认的 `script(...)` fixture
+> （见本文件 §2）。但生产用的一次性注册脚本推荐走 `createFliwrightScript(defineConfig(...))`，
+> 把 VM URL 解析、AI provider、截图模式交给配置而非写死。
+
+要点（详见 [captcha.md](./captcha.md)）：用 `flow.optional` 让“跳过”也是一条 timeline 记录；`flow.manual` 的 `resumeWhen` 检查**校验之后的目的地**（如进入验证码步的 SMS 字段、成功后的标题）而非滑块弹层消失；poller 里用 try/catch `isVisible` + 短 `settleQuietly` 抗抖动。
 
 ## 如何运行上述任一脚本
 

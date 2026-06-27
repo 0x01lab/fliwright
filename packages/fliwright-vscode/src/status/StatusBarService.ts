@@ -39,6 +39,11 @@ export class StatusBarService implements vscode.Disposable {
       this.item.command = 'fliwright.stopRecording';
       return;
     }
+    if (this.state.status === 'running') {
+      this.item.text = `$(loading~spin) Fliwright: Running ${this.state.label}`;
+      this.item.command = 'fliwright.runWorkspaceTests';
+      return;
+    }
     if (this.lastRun) {
       this.item.text = this.lastRun.passed
         ? `$(pass) Fliwright: ${this.lastRun.passedTests}/${this.lastRun.totalTests} passed`

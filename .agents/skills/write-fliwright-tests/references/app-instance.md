@@ -50,8 +50,8 @@ import 'package:fliwright_bridge/fliwright_bridge.dart';
 void main() {
   // 1. 声明 app 身份 + 自定义 snapshot
   FliwrightAppInstance.configure(
-    id: 'exio',
-    name: 'Exio',
+    id: 'my-app',
+    name: 'MyApp',
     environment: const String.fromEnvironment('ENV', defaultValue: 'dev'),
     snapshot: () async => {'buildNumber': buildNumber, 'features': enabledFeatures},
   );
@@ -88,9 +88,9 @@ void main() {
 ```ts
 import { expect as viExpect } from 'vitest';
 
-test('connected to staging exio', async ({ driver }) => {
+test('connected to staging app', async ({ driver }) => {
   const info = await driver.app.info();
-  viExpect(info.id).toBe('exio');
+  viExpect(info.id).toBe('my-app');
   viExpect(info.environment).toBe('staging');
 });
 ```

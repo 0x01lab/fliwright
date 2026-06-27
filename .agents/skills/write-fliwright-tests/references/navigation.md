@@ -154,4 +154,4 @@ beforeEach(async ({ page }) => {
 | 等待后台拉取完成 | `waitForNetworkIdle()` |
 | 读取当前路由 | `currentRoute()` |
 
-请避免使用 `setTimeout`/`sleep`。唯一合理的例外是在 `clickAt` 这类遗留流程内部——那里没有任何控件事件可用作就绪信号（见 `e2e/exio-app-e2e.test.ts`）。
+请避免使用 `setTimeout`/`sleep`。唯一合理的例外是在 `clickAt` 这类遗留流程内部——那里没有任何控件事件可用作就绪信号。

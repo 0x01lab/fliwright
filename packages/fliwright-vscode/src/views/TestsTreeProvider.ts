@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { AnnotationParser } from '../editor/AnnotationParser.js';
 import type { TestDiscoveryService } from '../runner/TestDiscoveryService.js';
 import type { TestStatusStore } from '../testing/TestStatusStore.js';
 import { relPathOf } from '../testing/relPath.js';
@@ -14,7 +13,6 @@ import {
   type TestFileNode,
   type TestGroupNode,
   type TestNodeStatus,
-  type TestStepNode,
   type TestTreeNode,
 } from '../testing/types.js';
 
@@ -43,6 +41,9 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
 
   private roots: TestFileNode[] | undefined;
   private statusMap: Map<string, StatusEntry> = new Map();
+  private runningWorkspace = false;
+  private runningFile: string | undefined;
+  private runningTestId: string | undefined;
   /** Per-file parse cache: key = fileUri.toString(). */
   private readonly parseCache: Map<string, ParsedFile> = new Map();
 
@@ -68,6 +69,14 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
     this.parseCache.delete(uri.toString());
     const fileNode = this.roots?.find((f) => f.uri.toString() === uri.toString());
     this.emitter.fire(fileNode);
+  }
+
+  setRunning(target?: { workspace?: boolean; relPath?: string; testId?: string }): void {
+    this.runningWorkspace = target?.workspace ?? false;
+    this.runningFile = target?.relPath;
+    this.runningTestId = target?.testId;
+    this.updateRootStatuses();
+    this.emitter.fire(undefined);
   }
 
   async getChildren(element?: TestTreeNode): Promise<TestTreeNode[]> {
@@ -100,7 +109,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
         // expanded (see toNode). getChildren(group) just hands it back.
         return element.children ?? [];
       case 'testCase':
-        return this.stepsFor(element);
+        return [];
       default:
         return [];
     }
@@ -120,7 +129,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
           element.label,
           statusIcon(element.status),
           vscode.TreeItemCollapsibleState.Collapsed,
-          'testFile',
+          element.status === 'running' ? 'testFileRunning' : 'testFile',
         );
         item.resourceUri = element.uri;
         item.description = element.status === 'unknown' ? undefined : element.status;
@@ -142,11 +151,13 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
         const item = iconItem(
           element.label,
           statusIcon(element.status),
-          vscode.TreeItemCollapsibleState.Collapsed,
-          'testCase',
+          vscode.TreeItemCollapsibleState.None,
+          element.status === 'running' ? 'testCaseRunning' : 'testCase',
         );
         item.description =
-          element.durationMs != null ? `${element.durationMs}ms` : undefined;
+          element.status === 'running'
+            ? 'running'
+            : element.durationMs != null ? `${element.durationMs}ms` : undefined;
         item.command = {
           command: 'fliwright.runCurrentTest',
           title: 'Run',
@@ -193,7 +204,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
       uri: e.uri,
       relPath: relPathOf(root, e.uri),
       label: e.label,
-      status: 'unknown' as TestNodeStatus,
+      status: this.statusForFile(relPathOf(root, e.uri), 'unknown'),
     }));
   }
 
@@ -242,27 +253,30 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
       kind: 'testCase',
       id,
       label: parsed.title,
-      status: entry?.status ?? 'unknown',
+      status: this.statusForCase(relPath, id, entry?.status ?? 'unknown'),
       durationMs: entry?.durationMs,
       fileUri,
     };
   }
 
-  private async stepsFor(tc: TestCaseNode): Promise<TestStepNode[]> {
-    try {
-      const bytes = await vscode.workspace.fs.readFile(tc.fileUri);
-      const code = new TextDecoder().decode(bytes);
-      const steps = new AnnotationParser().parse(code).steps;
-      return steps.map((s, i) => ({
-        kind: 'testStep' as const,
-        label: s.annotation.name,
-        status: (s.annotation.status ?? 'pending') as 'passed' | 'failed' | 'pending',
-        stepIndex: i,
-        fileUri: tc.fileUri,
-      }));
-    } catch {
-      return [];
+  private updateRootStatuses(): void {
+    if (!this.roots) return;
+    for (const root of this.roots) {
+      root.status = this.statusForFile(root.relPath, root.status === 'running' ? 'unknown' : root.status);
     }
+  }
+
+  private statusForFile(relPath: string, fallback: TestNodeStatus): TestNodeStatus {
+    if (this.runningWorkspace) return 'running';
+    if (this.runningFile === relPath) return 'running';
+    return fallback;
+  }
+
+  private statusForCase(relPath: string, id: string, fallback: TestNodeStatus): TestNodeStatus {
+    if (this.runningWorkspace) return 'running';
+    if (this.runningTestId) return this.runningTestId === id ? 'running' : fallback;
+    if (this.runningFile === relPath) return 'running';
+    return fallback;
   }
 }
 
@@ -280,7 +294,10 @@ function iconItem(
 }
 
 function statusIcon(s: TestNodeStatus): string {
-  return s === 'passed' ? 'pass' : s === 'failed' ? 'error' : 'circle-outline';
+  if (s === 'passed') return 'pass';
+  if (s === 'failed') return 'error';
+  if (s === 'running') return 'loading~spin';
+  return 'circle-outline';
 }
 
 function stepIcon(s: string): string {

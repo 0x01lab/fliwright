@@ -16,8 +16,6 @@
 // Run: node packages/fliwright-tdd/spike/e2e-daemon-conformance.mjs
 // Exits 0 on PASS, non-zero on any field mismatch, 0 with a SKIP notice when no project is set.
 
-import { FlutterDaemonController, SubprocessDaemonTransport } from '../dist/index.js';
-
 const PROJECT = process.env.FLIWRIGHT_E2E_PROJECT;
 const TARGET = process.env.FLIWRIGHT_E2E_TARGET ?? 'lib/main.dart';
 const DEVICE_ID = process.env.FLIWRIGHT_E2E_DEVICE_ID;
@@ -26,6 +24,9 @@ if (!PROJECT) {
   console.log('SKIP: set FLIWR_E2E_PROJECT (absolute path to a Flutter app) to run this harness.');
   process.exit(0);
 }
+
+let FlutterDaemonController;
+let SubprocessDaemonTransport;
 
 const failures = [];
 function check(label, condition, detail = '') {
@@ -45,6 +46,7 @@ async function pickDevice(transport) {
 }
 
 async function main() {
+  ({ FlutterDaemonController, SubprocessDaemonTransport } = await import('../dist/index.js'));
   const transport = new SubprocessDaemonTransport({ cwd: PROJECT });
   await transport.connect();
   const deviceId = await pickDevice(transport);

@@ -203,7 +203,7 @@ liveTest('fills the form', async ({ page }) => { /* … */ });
 或者包一层 `describe`：
 
 ```typescript
-describe.skipIf(!vmServiceUrl)('Exio app live E2E', () => { /* … */ });
+describe.skipIf(!vmServiceUrl)('App live E2E', () => { /* … */ });
 ```
 
 ## 何时绕过 fixture

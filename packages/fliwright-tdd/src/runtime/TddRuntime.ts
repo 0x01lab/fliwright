@@ -19,6 +19,7 @@ import type {
   TddRepairPlannerLike,
   TddRepairStep,
   TddRepairTrace,
+  TddSyncResult,
   TddRuntimeDeps,
 } from '../types.js';
 import { DEFAULT_CYCLE_TIMEOUT_MS } from '../types.js';
@@ -51,9 +52,11 @@ export class TddRuntime {
   private launchMode: 'start' | 'attach' = 'attach';
   private driverConnections = 0;
   private startSignature?: string;
-  // Serializes overlapping cycle() calls (design §8: only one cycle at a time). Also awaited by
-  // stop() so we never dispose the executor mid-rerun.
-  private cycleChain: Promise<unknown> = Promise.resolve();
+  private updatedAtMs = Date.now();
+  // Serializes runtime/app state mutations (design §8: only one operation at a time). This covers
+  // cycle(), manual sync, scenario updates, reconnect, and stop so an agent cannot reload/restart or
+  // swap baselines mid-rerun.
+  private operationChain: Promise<unknown> = Promise.resolve();
   private statusFilePath?: string;
   // Serializes best-effort status-file writes so concurrent snapshots never interleave bytes.
   private statusWriteChain: Promise<void> = Promise.resolve();
@@ -117,6 +120,7 @@ export class TddRuntime {
       });
 
       this.started = true;
+      this.markUpdated();
       this.persistStatus();
       return this.snapshot();
     } catch (error) {
@@ -128,7 +132,30 @@ export class TddRuntime {
 
   async focus(file: string, testName?: string): Promise<void> {
     this.focusedTest = { file, testName };
+    this.markUpdated();
     this.persistStatus();
+  }
+
+  async setScenario(scenario: Scenario): Promise<RuntimeSnapshot> {
+    return await this.enqueueOperation(async () => {
+      this.scenario = scenario;
+      this.markUpdated();
+      this.persistStatus();
+      return this.snapshot();
+    });
+  }
+
+  async syncApp(sync: Exclude<NonNullable<CycleOpts['sync']>, 'auto'>): Promise<TddSyncResult> {
+    return await this.enqueueOperation(async () => {
+      if (!this.started) throw new Error('TddRuntime is not started.');
+      const lastSync = await this.sync(sync);
+      this.markUpdated();
+      this.persistStatus();
+      return {
+        lastSync,
+        snapshot: this.snapshot(),
+      };
+    });
   }
 
   async cycle(testName?: string, opts: CycleOpts = {}): Promise<TddCycleResult> {
@@ -142,7 +169,8 @@ export class TddRuntime {
     // lives inside this serialized task, so it can never overlap another cycle or be reentered.
     const deferred = makeDeferred<TddCycleResult>();
     const task = () => this.runCycleWithEscalation(testName, opts, deferred);
-    this.cycleChain = this.cycleChain.then(task, task).then(noop, noop);
+    const run = this.operationChain.then(task, task);
+    this.operationChain = run.then(noop, noop);
     return deferred.promise;
   }
 
@@ -153,8 +181,11 @@ export class TddRuntime {
    * structured error. Awaited on the cycle chain so it never races an in-flight rerun.
    */
   async reconnect(): Promise<RuntimeSnapshot> {
+    return await this.enqueueOperation(async () => this.reconnectNow());
+  }
+
+  private async reconnectNow(): Promise<RuntimeSnapshot> {
     if (!this.started) throw new Error('TddRuntime is not started; nothing to reconnect.');
-    await this.cycleChain.catch(() => undefined);
     await this.driver?.dispose().catch(() => undefined);
     this.driver = undefined;
 
@@ -182,6 +213,7 @@ export class TddRuntime {
     this.driver = this.driverFactory();
     await this.driver.connect(vmServiceUrl);
     this.driverConnections += 1;
+    this.markUpdated();
     this.persistStatus();
     return this.snapshot();
   }
@@ -214,8 +246,9 @@ export class TddRuntime {
     // Resolve the caller early on timeout, but keep awaiting `runAll` so the chain (and thus the
     // next cycle) cannot advance past a still-running executor body.
     const timer = setTimeout(() => {
-      const timeoutResult = this.timeoutResult(testName);
+      const timeoutResult = this.timeoutResult(testName, timeoutMs);
       this.lastResult = timeoutResult;
+      this.markUpdated();
       this.persistStatus();
       deferred.resolve(timeoutResult);
     }, timeoutMs);
@@ -230,6 +263,7 @@ export class TddRuntime {
         ? await this.runRepairLoop(testName, opts, result)
         : result;
       this.lastResult = finalResult;
+      this.markUpdated();
       this.persistStatus();
       deferred.resolve(finalResult);
       return finalResult;
@@ -294,17 +328,17 @@ export class TddRuntime {
     return { ...current, repair: trace };
   }
 
-  private timeoutResult(testName: string | undefined): TddCycleResult {
+  private timeoutResult(testName: string | undefined, timeoutMs: number): TddCycleResult {
     const focused = this.focusedTest;
     const file = focused?.file ?? '<unknown>';
     const actualName = testName ?? focused?.testName;
     const baselineVersion = this.baseline?.version ?? 0;
-    const message = `TDD cycle exceeded the ${DEFAULT_CYCLE_TIMEOUT_MS}ms budget and was returned as a timeout.`;
+    const message = `TDD cycle exceeded the ${timeoutMs}ms budget and was returned as a timeout.`;
     return {
       status: 'red',
       testName: actualName,
       file,
-      durationMs: DEFAULT_CYCLE_TIMEOUT_MS,
+      durationMs: timeoutMs,
       lastSync: 'none',
       baselineVersion,
       failure: { message },
@@ -328,7 +362,30 @@ export class TddRuntime {
 
     const requestedSync = opts.sync ?? 'none';
     const resolvedSync = requestedSync === 'auto' ? decideSync(opts.changes) : requestedSync;
-    const lastSync = await this.sync(resolvedSync);
+    let lastSync: TddCycleResult['lastSync'] = 'none';
+    try {
+      lastSync = await this.sync(resolvedSync);
+    } catch (error) {
+      const baselineVersion = this.baseline?.version ?? 0;
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: 'red',
+        testName: actualTestName,
+        file: focused.file,
+        durationMs: Date.now() - startedAt,
+        lastSync,
+        baselineVersion,
+        failure: { message },
+        failureContext: buildTddFailureContext({
+          file: focused.file,
+          testName: actualTestName,
+          message,
+          kind: 'test-error',
+          lastSync,
+          baselineVersion,
+        }),
+      };
+    }
     const resetReport = await this.requireBaseline().reset(this.scenario, {
       full: opts.fullReset ?? lastSync === 'restart',
     });
@@ -389,7 +446,7 @@ export class TddRuntime {
       connected: this.started,
       daemonStatus: this.started ? 'running' : 'stopped',
       appId: this.app?.appId,
-      supportsRestart: this.started ? (this.app?.supportsRestart ?? this.launchMode === 'attach') : false,
+      supportsRestart: this.started ? (this.app?.supportsRestart ?? false) : false,
       launchMode: this.launchMode,
       restartCapable: this.launchMode === 'start' && (this.app?.supportsRestart ?? false),
       driverConnections: this.driverConnections,
@@ -402,21 +459,33 @@ export class TddRuntime {
       lastResult: this.lastResult,
       baselineVersion: this.baseline?.version ?? 0,
       unsupportedState: this.lastResult?.unsupportedState,
+      updatedAtMs: this.updatedAtMs,
     };
   }
 
   async stop(opts: { keepAppAlive?: boolean } = {}): Promise<void> {
-    // Wait for any in-flight cycle to settle before tearing the executor down.
-    await this.cycleChain.catch(() => undefined);
-    const statusFilePath = this.statusFilePath;
-    try {
-      await this.executor.dispose();
-    } finally {
-      await this.cleanupStartedResources(opts);
-    }
-    // Publish a final "stopped" snapshot so monitors reflect the halted runtime.
-    this.persistStatusTo(statusFilePath);
-    await this.statusWriteChain;
+    await this.enqueueOperation(async () => {
+      const statusFilePath = this.statusFilePath;
+      try {
+        await this.executor.dispose();
+      } finally {
+        await this.cleanupStartedResources(opts);
+      }
+      // Publish a final "stopped" snapshot so monitors reflect the halted runtime.
+      this.markUpdated();
+      this.persistStatusTo(statusFilePath);
+      await this.statusWriteChain;
+    });
+  }
+
+  private markUpdated(): void {
+    this.updatedAtMs = Date.now();
+  }
+
+  private enqueueOperation<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.operationChain.then(task, task);
+    this.operationChain = run.then(noop, noop);
+    return run;
   }
 
   private async sync(sync: NonNullable<CycleOpts['sync']>): Promise<TddCycleResult['lastSync']> {

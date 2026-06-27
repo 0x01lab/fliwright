@@ -4,9 +4,8 @@
  *
  * Single-driver ownership (design principle 4): the controller is READ-ONLY. It never creates a
  * `FliwrightDriver`, never connects to a VM service, never spawns a flutter daemon. The take-over
- * command is opt-in and disabled by default — it only fires a user-confirmation prompt and (on
- * approval) emits a request that the agent/MCP runtime cede the loop. It does NOT start a second
- * driver here.
+ * command is opt-in and disabled by default — it only records a user-confirmed request that the
+ * agent/MCP runtime cede the loop. It does NOT start a second driver here.
  */
 import * as vscode from 'vscode';
 import { TddLoopPanel } from './TddLoopPanel.js';
@@ -70,16 +69,16 @@ export class TddLoopController implements vscode.Disposable {
       vscode.commands.registerCommand(TDD_LOOP_TAKE_OVER_COMMAND, async () => {
         if (!this.isTakeOverEnabled()) {
           await vscode.window.showInformationMessage(
-            'TDD take-over is off by default to respect single-driver ownership. Enable "Fliwright › Tdd Take Over Enabled" in settings, then run this command again.',
+            'TDD take-over requests are off by default to respect single-driver ownership. Enable "Fliwright › Tdd Take Over Enabled" in settings, then run this command again.',
           );
           return;
         }
         const choice = await vscode.window.showWarningMessage(
-          'Take over the TDD loop?',
-          { modal: true, detail: 'This signals the running MCP-owned TDD runtime to cede the loop so VS Code can drive it. Only one driver may run the loop at a time. Continue?' },
-          'Take over',
+          'Request TDD loop take-over?',
+          { modal: true, detail: 'This records a take-over request for the running MCP-owned TDD runtime. VS Code remains read-only until the agent/MCP side explicitly stops or hands off the loop.' },
+          'Request take-over',
         );
-        if (choice !== 'Take over') return;
+        if (choice !== 'Request take-over') return;
         this.takeOverArmed = true;
         // No local driver is created here. The actual hand-off is owned by the MCP runtime side.
         await vscode.commands.executeCommand('fliwright.refreshTddLoop');
@@ -108,7 +107,7 @@ export class TddLoopController implements vscode.Disposable {
     return Boolean(cfg.get<boolean>(TDD_LOOP_TAKE_OVER_ENABLED_CONFIG));
   }
 
-  /** Whether take-over has been armed (for tests / status). Resets only on dispose. */
+  /** Whether a take-over request has been armed (for tests / status). Resets only on dispose. */
   isTakeOverArmed(): boolean {
     return this.takeOverArmed;
   }

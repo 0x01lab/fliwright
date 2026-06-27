@@ -77,6 +77,7 @@
     "onCommand:fliwright.fillFormWithRules",
     "onCommand:fliwright.runCurrentTest",
     "onCommand:fliwright.runWorkspaceTests",
+    "onCommand:fliwright.stopTests",
     "onCommand:fliwright.runScript",
     "onCommand:fliwright.openFailure",
     "onCommand:fliwright.startRecording",
@@ -284,6 +285,11 @@
         "command": "fliwright.runWorkspaceTests",
         "title": "Fliwright: Run Workspace Tests",
         "icon": "$(run-all)"
+      },
+      {
+        "command": "fliwright.stopTests",
+        "title": "Fliwright: Stop Tests",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "fliwright.runScript",
@@ -597,7 +603,12 @@
         },
         {
           "command": "fliwright.runCurrentTest",
-          "when": "view == fliwright.tests && viewItem =~ /testFile|testCase/",
+          "when": "view == fliwright.tests && viewItem =~ /^testFile$|^testCase$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.stopTests",
+          "when": "view == fliwright.tests && viewItem =~ /^testFileRunning$|^testCaseRunning$/",
           "group": "inline@1"
         },
         {
@@ -697,11 +708,6 @@
           "default": ".fliwright/failures",
           "description": "Directory where Fliwright failure context JSON files are read from."
         },
-        "fliwright.traceDir": {
-          "type": "string",
-          "default": ".fliwright/traces",
-          "description": "Directory reserved for Fliwright trace artifacts."
-        },
         "fliwright.formRulesDir": {
           "type": "string",
           "default": ".fliwright/forms",
@@ -755,7 +761,7 @@
         "fliwright.tddTakeOverEnabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable the opt-in 'Fliwright: Request TDD Loop Take-Over' command. Off by default to respect single-driver ownership (the MCP-owned runtime drives the loop; the VS Code monitor is read-only unless you explicitly take over)."
+          "description": "Enable the opt-in 'Fliwright: Request TDD Loop Take-Over' command. Off by default to respect single-driver ownership. VS Code remains read-only until the agent/MCP side explicitly stops or hands off the loop."
         }
       }
     }
@@ -769,14 +775,14 @@
     "@fliwright/cli": "workspace:*",
     "@fliwright/core": "workspace:*",
     "@fliwright/plugin-riverpod": "workspace:*",
-    "@types/node": "^20.14.0",
+    "@types/node": "^26.0.1",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.6.3",
     "@vscode/test-electron": "^2.4.1",
-    "esbuild": "^0.21.5",
+    "esbuild": "^0.28.1",
     "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "vitest": "5.0.0-beta.5"
   }
 }

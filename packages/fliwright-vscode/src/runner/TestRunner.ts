@@ -12,6 +12,7 @@ export interface RunParams {
   testNamePattern?: string;
   runsRoot?: string;
   runId?: string;
+  signal?: AbortSignal;
 }
 
 export interface TestRunner {

@@ -209,7 +209,7 @@ await page.formHelper.fill({ skipObscureFields: false });
 | 自定义 bottom sheet / dialog select | 写组件专用 helper：打开字段、等待 option、点击 option、必要时点确认 |
 | 国家/地区 picker 这类 searchable + 虚拟列表 | 写国家选择 helper：打开字段、输入国家名触发 `TextField.onChanged`、等待/滚动到 option、点击 option |
 
-不要把某个组件的流程直接套到所有 select 上。例如 KYC 国家/地区 picker 需要搜索框和
+不要把某个组件的流程直接套到所有 select 上。例如国家/地区 picker 需要搜索框和
 `*.option.HK` semantics；普通 employment status select 可能只需要打开后点击
 `FULL_TIME` option。
 
@@ -218,17 +218,17 @@ await page.formHelper.fill({ skipObscureFields: false });
 
 ```json
 {
-  "match": { "name": "resAddrCountry" },
-  "find": { "match": { "semanticIdentifier": "kyc.personalInfo.resAddrCountry.select" } },
+  "match": { "name": "countryField" },
+  "find": { "match": { "semanticIdentifier": "myForm.countryField.select" } },
   "type": "PRESET_SKILL",
   "data": ["HK"],
   "action": {
     "script": "select.recipe",
     "args": {
       "recipe": "countryPicker",
-      "search": { "match": { "key": "kyc.countrySelect.searchField", "type": "EditableText" } },
+      "search": { "match": { "key": "myForm.countrySelect.searchField", "type": "EditableText" } },
       "searchText": "Hong Kong",
-      "optionSemanticsId": "kyc.personalInfo.resAddrCountry.option.${value}"
+      "optionSemanticsId": "myForm.countryField.option.${value}"
     }
   }
 }

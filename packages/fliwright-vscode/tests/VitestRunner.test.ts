@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'node:path';
-import { parseVitestJson, buildVitestArgs, buildRunEnv } from '../src/runner/VitestRunner.js';
+import { parseVitestJson, buildVitestArgs, buildRunEnv, resolveVitestCli } from '../src/runner/VitestRunner.js';
 import type { RunParams } from '../src/runner/TestRunner.js';
 
 describe('VitestRunner', () => {
@@ -11,7 +11,7 @@ describe('VitestRunner', () => {
       numFailedTests: 1,
       testResults: [
         {
-          name: 'sample.test.ts',
+          name: '/repo/tests/sample.test.ts',
           assertionResults: [
             { ancestorTitles: ['suite'], title: 'passes', status: 'passed', duration: 3 },
             { ancestorTitles: ['suite'], title: 'fails', status: 'failed', duration: 4, failureMessages: ['boom'] },
@@ -23,7 +23,20 @@ describe('VitestRunner', () => {
     expect(result.passed).toBe(false);
     expect(result.totalTests).toBe(2);
     expect(result.failedTests).toBe(1);
-    expect(result.results[1]).toMatchObject({ name: 'suite > fails', error: 'boom' });
+    expect(result.results[0]).toMatchObject({ name: 'suite > passes', filePath: '/repo/tests/sample.test.ts' });
+    expect(result.results[1]).toMatchObject({ name: 'suite > fails', filePath: '/repo/tests/sample.test.ts', error: 'boom' });
+  });
+
+  it('reports a stopped run when the Vitest process exits from cancellation', () => {
+    const result = parseVitestJson('', 'Fliwright test run stopped by user.', 130);
+
+    expect(result.passed).toBe(false);
+    expect(result.failedTests).toBe(1);
+    expect(result.results[0]).toMatchObject({
+      name: 'Vitest run',
+      passed: false,
+      error: 'Fliwright test run stopped by user.',
+    });
   });
 });
 
@@ -41,7 +54,7 @@ describe('buildVitestArgs', () => {
     });
 
     expect(args).toEqual([
-      'vitest', 'run',
+      'run',
       path.relative('/repo', '/repo/tests/a.test.ts'),
       '-t', 'case A',
       '--reporter=json',
@@ -58,7 +71,7 @@ describe('buildVitestArgs', () => {
 
     expect(args).not.toContain('-t');
     expect(args).toEqual([
-      'vitest', 'run',
+      'run',
       path.relative('/repo', '/repo/tests/a.test.ts'),
       '--reporter=json',
     ]);
@@ -84,8 +97,28 @@ describe('buildRunEnv', () => {
     expect(env.FLIWRIGHT_RUN_ID).toBe('2026-06-22T10-00-00');
   });
 
+  it('uses run-integrated trace layout when trace is enabled', () => {
+    const env = buildRunEnv({
+      ...baseParams,
+      traceMode: 'full',
+      traceDir: { fsPath: '/home/.fliwright/projects/app/runs', scheme: 'file' } as any,
+    });
+
+    expect(env.FLIWRIGHT_TRACE).toBe('full');
+    expect(env.FLIWRIGHT_TRACE_DIR).toBe('/home/.fliwright/projects/app/runs');
+    expect(env.FLIWRIGHT_TRACE_LAYOUT).toBe('run');
+  });
+
   it('does not set FLIWRIGHT_RUNS_ROOT when runsRoot is unset', () => {
     const env = buildRunEnv({ ...baseParams });
     expect(env.FLIWRIGHT_RUNS_ROOT).toBeUndefined();
+  });
+});
+
+describe('resolveVitestCli', () => {
+  it('resolves the workspace-installed vitest cli', () => {
+    const cli = resolveVitestCli(path.resolve(__dirname, '..', '..', '..'));
+
+    expect(cli).toMatch(/vitest[\\/]vitest\.mjs$/);
   });
 });

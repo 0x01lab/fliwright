@@ -11,7 +11,7 @@ They close the two gaps the unit suite (fake transport, in-memory executor) cann
 ## Prerequisites (both harnesses)
 
 ```bash
-# 1. Build the package (the harnesses import the compiled dist).
+# 1. Build the package when running a configured harness (it imports compiled dist).
 pnpm --filter @fliwright/tdd build
 
 # 2. Boot a device or emulator and confirm it.
@@ -26,7 +26,7 @@ Verifies the `flutter daemon` field names the controller depends on (`appId`, `w
 
 ```bash
 FLIWR_E2E_PROJECT=/path/to/flutter_app \
-  node packages/fliwright-tdd/spike/e2e-daemon-conformance.mjs
+  pnpm --filter @fliwright/tdd test:e2e:daemon
 ```
 
 | Env var | Required | Meaning |
@@ -42,14 +42,15 @@ step. Exits non-zero with a field-level report on any mismatch.
 
 Drives the real `TddRuntime` end to end: daemon-start → focus → `cycle(none|reload|restart)` →
 stop, against a Flutter app that already has a fliwright test suite (e.g. **exio**). Asserts the
-loop completes without crashing and reports the right `lastSync`; prints each `TddCycleResult`.
+loop completes without crashing, reports the right `lastSync`, and updates the RuntimeSnapshot
+status file used by read-only monitors; prints each `TddCycleResult`.
 
 ```bash
 FLIWR_E2E_PROJECT=/path/to/exio_app \
 FLIWR_E2E_CONFIG=/path/to/exio_app/.fliwright/vitest.config.ts \
 FLIWR_E2E_TEST_FILE=/path/to/exio_app/.fliwright/tests/some.test.ts \
 FLIWR_E2E_TEST_NAME="shows the home screen" \
-  node packages/fliwright-tdd/spike/e2e-tdd-cycle.mjs
+  pnpm --filter @fliwright/tdd test:e2e:cycle
 ```
 
 | Env var | Required | Meaning |

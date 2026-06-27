@@ -203,7 +203,22 @@ export function createFliwrightTest(config: FliwrightConfig, options?: CreateFli
 
       if (traceMode !== 'off' && traceDir) {
         try {
-          collector = await TraceCollector.create(traceDir, testName, runId, driver.sendRequest.bind(driver), traceMode);
+          const traceLayout = process.env.FLIWRIGHT_TRACE_LAYOUT === 'run' ? 'run' : 'legacy';
+          collector = await (TraceCollector.create as unknown as (
+            traceRoot: string,
+            testName: string,
+            runId: string,
+            sendRequest: typeof driver.sendRequest,
+            mode: TraceMode,
+            options?: { layout?: 'legacy' | 'run' },
+          ) => Promise<TraceCollector>)(
+            traceLayout === 'run' ? timeline.artifactStore.runDir : traceDir,
+            testName,
+            timeline.runId,
+            driver.sendRequest.bind(driver),
+            traceMode,
+            { layout: traceLayout },
+          );
           // Shadow driver.sendRequest with traced version
           origSendRequest = driver.sendRequest.bind(driver);
           const capturedCollector = collector;
@@ -248,8 +263,10 @@ export function createFliwrightTest(config: FliwrightConfig, options?: CreateFli
           await use(page);
         });
         await collector?.complete('passed');
+        attachTraceArtifact(timeline, collector);
       } catch (error) {
         await collector?.complete('failed');
+        attachTraceArtifact(timeline, collector);
         await writeMcpFailureContext(error, driver, testName, config.timeout ?? 5000, config.screenshot ?? 'file');
         throw error;
       } finally {
@@ -285,6 +302,17 @@ export function createFliwrightTest(config: FliwrightConfig, options?: CreateFli
   });
 
   return fliwrightTest;
+}
+
+function attachTraceArtifact(timeline: FliwrightTimelineContext, collector: TraceCollector | undefined): void {
+  if (!collector) return;
+  const firstNode = timeline.recorder.toJSON().nodes[0];
+  if (!firstNode) return;
+  const artifactRef = (collector as TraceCollector & {
+    artifactRef?: (baseDir?: string) => { kind: string; path: string; mimeType?: string; metadata?: Record<string, unknown> };
+  }).artifactRef;
+  if (!artifactRef) return;
+  timeline.recorder.addArtifacts(firstNode.id, [artifactRef.call(collector, timeline.artifactStore.runDir)]);
 }
 
 export function createFliwrightScript(config: FliwrightConfig) {

@@ -41,6 +41,53 @@ describe('TddRuntime', () => {
     expect(result.baselineVersion).toBe(1);
   });
 
+  it('updates the scenario used by later cycles', async () => {
+    const driver = {
+      connect: vi.fn(async () => {}),
+      dispose: vi.fn(async () => {}),
+      page: { resetToHome: vi.fn(async () => {}) },
+      mock: { clear: vi.fn(async () => {}), clearCalls: vi.fn(async () => {}) },
+    };
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => ({ status: 'green' as const, testName: 'alpha passes' })),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ driverFactory: () => driver, executor });
+    await runtime.start({ configRoot: '/tmp/vitest.config.ts', vmServiceUrl: 'ws://vm/ws' });
+    await runtime.setScenario({ homeRoute: '/dashboard', resetCategories: ['navigation'] });
+    await runtime.focus('/tmp/sample.test.ts', 'alpha passes');
+
+    const result = await runtime.cycle();
+
+    expect(result.status).toBe('green');
+    expect(driver.page.resetToHome).toHaveBeenCalledWith({ homeRoute: '/dashboard' });
+    expect(driver.mock.clear).not.toHaveBeenCalled();
+  });
+
+  it('reports attach mode as not supporting hot restart', async () => {
+    const driver = {
+      connect: vi.fn(async () => {}),
+      dispose: vi.fn(async () => {}),
+      page: { resetToHome: vi.fn(async () => {}) },
+      mock: { clear: vi.fn(async () => {}), clearCalls: vi.fn(async () => {}) },
+    };
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => ({ status: 'green' as const })),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ driverFactory: () => driver, executor });
+
+    const snapshot = await runtime.start({
+      configRoot: '/tmp/vitest.config.ts',
+      vmServiceUrl: 'ws://vm/ws',
+    });
+
+    expect(snapshot.supportsRestart).toBe(false);
+    expect(snapshot.restartCapable).toBe(false);
+  });
+
   it('adds structured failure context when the focused test is red', async () => {
     const driver = {
       connect: vi.fn(async () => {}),
@@ -120,6 +167,45 @@ describe('TddRuntime', () => {
     expect(second).toEqual(first);
     expect(driver.connect).toHaveBeenCalledTimes(1);
     expect(executor.boot).toHaveBeenCalledTimes(1);
+  });
+
+  it('timestamps snapshots only when runtime state changes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_000_000);
+    try {
+      const driver = {
+        connect: vi.fn(async () => {}),
+        dispose: vi.fn(async () => {}),
+        page: { resetToHome: vi.fn(async () => {}) },
+        mock: { clear: vi.fn(async () => {}), clearCalls: vi.fn(async () => {}) },
+      };
+      const executor = {
+        boot: vi.fn(async () => {}),
+        rerun: vi.fn(async () => ({ status: 'green' as const })),
+        dispose: vi.fn(async () => {}),
+      };
+      const runtime = new TddRuntime({
+        driverFactory: () => driver,
+        executor,
+      });
+      const opts = {
+        configRoot: '/tmp/vitest.config.ts',
+        vmServiceUrl: 'ws://vm/ws',
+      };
+
+      const started = await runtime.start(opts);
+      vi.setSystemTime(1_800_000_001_000);
+      const repeatedStart = await runtime.start(opts);
+      vi.setSystemTime(1_800_000_002_000);
+      await runtime.focus('/tmp/sample.test.ts', 'alpha passes');
+      const focused = runtime.snapshot();
+
+      expect(started.updatedAtMs).toBe(1_800_000_000_000);
+      expect(repeatedStart.updatedAtMs).toBe(started.updatedAtMs);
+      expect(focused.updatedAtMs).toBe(1_800_000_002_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rejects start reconfiguration while the runtime is already connected', async () => {
@@ -314,6 +400,81 @@ describe('TddRuntime', () => {
     expect([a.status, b.status, c.status]).toEqual(['green', 'green', 'green']);
   });
 
+  it('serializes manual sync behind an in-flight cycle', async () => {
+    const driver = daemonDriver();
+    const daemon = makeDaemon();
+    const events: string[] = [];
+    let releaseRerun!: () => void;
+    const rerunCanFinish = new Promise<void>((resolve) => {
+      releaseRerun = resolve;
+    });
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => {
+        events.push('rerun:start');
+        await rerunCanFinish;
+        events.push('rerun:end');
+        return { status: 'green' as const, testName: 'alpha passes' };
+      }),
+      dispose: vi.fn(async () => {}),
+    };
+    daemon.reload.mockImplementation(async () => {
+      events.push('reload');
+    });
+    const runtime = new TddRuntime({ daemon, driverFactory: () => driver, executor });
+    await runtime.start({ configRoot: '/tmp/vitest.config.ts', app: { deviceId: 'device-1' } });
+    await runtime.focus('/tmp/sample.test.ts', 'alpha passes');
+
+    const cyclePromise = runtime.cycle(undefined, { sync: 'none' });
+    await waitUntil(() => events.includes('rerun:start'));
+    const syncPromise = runtime.syncApp('reload');
+    await Promise.resolve();
+
+    expect(events).toEqual(['rerun:start']);
+    releaseRerun();
+    await cyclePromise;
+    await syncPromise;
+
+    expect(events).toEqual(['rerun:start', 'rerun:end', 'reload']);
+  });
+
+  it('serializes scenario updates behind an in-flight cycle', async () => {
+    const driver = {
+      connect: vi.fn(async () => {}),
+      dispose: vi.fn(async () => {}),
+      page: { resetToHome: vi.fn(async () => {}) },
+      mock: { clear: vi.fn(async () => {}), clearCalls: vi.fn(async () => {}) },
+    };
+    let releaseRerun!: () => void;
+    const rerunCanFinish = new Promise<void>((resolve) => {
+      releaseRerun = resolve;
+    });
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => {
+        await rerunCanFinish;
+        return { status: 'green' as const, testName: 'alpha passes' };
+      }),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ driverFactory: () => driver, executor });
+    await runtime.start({ configRoot: '/tmp/vitest.config.ts', vmServiceUrl: 'ws://vm/ws' });
+    await runtime.focus('/tmp/sample.test.ts', 'alpha passes');
+
+    const cyclePromise = runtime.cycle();
+    await waitUntil(() => executor.rerun.mock.calls.length === 1);
+    const scenarioPromise = runtime.setScenario({ homeRoute: '/dashboard', resetCategories: ['navigation'] });
+    await Promise.resolve();
+
+    expect(driver.page.resetToHome).toHaveBeenCalledWith({ homeRoute: '/' });
+    releaseRerun();
+    await cyclePromise;
+    await scenarioPromise;
+
+    await runtime.cycle();
+    expect(driver.page.resetToHome).toHaveBeenLastCalledWith({ homeRoute: '/dashboard' });
+  });
+
   it('propagates a failing cycle to its caller without wedging the mutex', async () => {
     const driver = {
       connect: vi.fn(async () => {}),
@@ -442,6 +603,33 @@ describe('TddRuntime', () => {
     expect(result.status).toBe('red');
   });
 
+  it('returns a structured red result when app sync fails', async () => {
+    const driver = daemonDriver();
+    const daemon = makeDaemon();
+    daemon.reload.mockRejectedValueOnce(new Error('Dart compile failed: missing semicolon'));
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => ({ status: 'green' as const })),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ daemon, driverFactory: () => driver, executor });
+    await runtime.start({ configRoot: '/tmp/vitest.config.ts', app: { deviceId: 'device-1' } });
+    await runtime.focus('/tmp/sample.test.ts', 'compile failure');
+
+    const result = await runtime.cycle(undefined, { sync: 'reload' });
+
+    expect(result.status).toBe('red');
+    expect(result.lastSync).toBe('none');
+    expect(result.failure?.message).toContain('Dart compile failed');
+    expect(result.failureContext).toMatchObject({
+      kind: 'test-error',
+      message: 'Dart compile failed: missing semicolon',
+      testFile: '/tmp/sample.test.ts',
+      testName: 'compile failure',
+    });
+    expect(executor.rerun).not.toHaveBeenCalled();
+  });
+
   it('auto sync resolves restart from generated-code changes', async () => {
     const driver = daemonDriver();
     const daemon = makeDaemon();
@@ -478,6 +666,26 @@ describe('TddRuntime', () => {
     expect(daemon.reload).toHaveBeenCalledTimes(1);
     expect(daemon.restart).not.toHaveBeenCalled();
     expect(result.lastSync).toBe('reload');
+  });
+
+  it('manual syncApp performs daemon reload and restart', async () => {
+    const driver = daemonDriver();
+    const daemon = makeDaemon();
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => ({ status: 'green' as const })),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ daemon, driverFactory: () => driver, executor });
+    await runtime.start({ configRoot: '/tmp/vitest.config.ts', app: { deviceId: 'device-1' } });
+
+    const reload = await runtime.syncApp('reload');
+    const restart = await runtime.syncApp('restart');
+
+    expect(reload.lastSync).toBe('reload');
+    expect(restart.lastSync).toBe('restart');
+    expect(daemon.reload).toHaveBeenCalledWith('app-1');
+    expect(daemon.restart).toHaveBeenCalledWith('app-1');
   });
 
   it('reconnects in attach mode by retrying the same VM service URL', async () => {
@@ -565,7 +773,10 @@ describe('TddRuntime', () => {
     const result = await runtime.cycle(undefined, { sync: 'none', timeoutMs: 20 });
 
     expect(result.status).toBe('red');
+    expect(result.durationMs).toBe(20);
+    expect(result.failure?.message).toContain('20ms');
     expect(result.failureContext?.kind).toBe('timeout');
+    expect(result.failureContext?.message).toContain('20ms');
     // The runtime is still usable afterwards (snapshot reports lastResult, not wedged).
     expect(runtime.snapshot().lastResult?.status).toBe('red');
   });
@@ -637,3 +848,11 @@ describe('TddRuntime', () => {
     expect(typeof written.baselineVersion).toBe('number');
   });
 });
+
+async function waitUntil(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await Promise.resolve();
+  }
+  throw new Error('Timed out waiting for condition.');
+}

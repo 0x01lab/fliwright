@@ -121,7 +121,7 @@ MCP 工具 `fliwright_snap` / `fliwright_observe` 走的就是这条同样的快
 
 ## 遗留快照（更旧的桥接）
 
-更旧的桥接暴露的是 `ext.fliwright.snapshot`（注意是 **snapshot**，不是 **snap**），返回一个扁平的 `{ widgets: [...] }` 列表，元素形如 `{ id, type, key, rect, parentType, adjacentText, description }`。`exio-app-e2e.test.ts` 演示了这条遗留兜底路径：
+更旧的桥接暴露的是 `ext.fliwright.snapshot`（注意是 **snapshot**，不是 **snap**），返回一个扁平的 `{ widgets: [...] }` 列表，元素形如 `{ id, type, key, rect, parentType, adjacentText, description }`。一条遗留兜底路径：
 
 ```typescript
 const resp = await driver.sendRequest('ext.fliwright.snapshot') as { widgets?: LegacyWidget[] };

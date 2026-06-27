@@ -7,12 +7,14 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:e2e:daemon": "node spike/e2e-daemon-conformance.mjs",
+    "test:e2e:cycle": "node spike/e2e-tdd-cycle.mjs"
   },
   "dependencies": {
     "@fliwright/core": "workspace:*",
     "@fliwright/vitest": "workspace:*",
-    "vitest": "^2.0.0"
+    "vitest": "5.0.0-beta.5"
   },
   "devDependencies": {
     "typescript": "^5.5.0"

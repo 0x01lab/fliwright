@@ -18,7 +18,6 @@ export function loadConfig(): ExtensionConfig {
     runner: config.get<'vitest' | 'cli'>('runner', 'vitest'),
     screenshotMode: config.get<'file' | 'base64' | 'off'>('screenshotMode', 'file'),
     failureContextDir: config.get<string>('failureContextDir', '.fliwright/failures'),
-    traceDir: config.get<string>('traceDir', '.fliwright/traces'),
     formRulesDir: config.get<string>('formRulesDir', '.fliwright/forms'),
     formRulesFile: config.get<string | null>('formRulesFile', null),
     formLocale: config.get<string>('formLocale', 'zh_CN'),

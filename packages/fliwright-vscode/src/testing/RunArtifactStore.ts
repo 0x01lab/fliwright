@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { isAbsolute, join, relative } from 'node:path';
 import type * as vscode from 'vscode';
 import { TraceStore } from '@fliwright/core';
 import type { RunResult, TestCaseResult } from '../types.js';
@@ -43,9 +43,7 @@ export class RunArtifactStore {
   }
 
   async ensureRunsDir(workspaceRoot: vscode.Uri): Promise<string> {
-    const runsDir = await ensureProjectRunsRoot(workspaceRoot, this.options);
-    await mkdir(this.traceDir(workspaceRoot), { recursive: true });
-    return runsDir;
+    return ensureProjectRunsRoot(workspaceRoot, this.options);
   }
 
   legacyRunsDir(workspaceRoot: vscode.Uri): string {
@@ -103,10 +101,12 @@ export class RunArtifactStore {
     const map = await this.loadIndex(workspaceRoot);
     for (const tc of result.results) {
       const { ancestors, title } = splitName(tc.name);
-      const id = testNodeId(relPath, ancestors, title);
+      const tcRelPath = relPathForTestCase(workspaceRoot, relPath, tc);
+      const id = testNodeId(tcRelPath, ancestors, title);
       map.set(id, toEntry(options.baseRunId, options.ranAt, tc));
     }
     await this.writeIndex(workspaceRoot, map);
+    await this.pruneUnreferencedTestRunDirs(workspaceRoot, map);
   }
 
   async pruneDangling(workspaceRoot: vscode.Uri, keepRunIds: Set<string>): Promise<void> {
@@ -119,6 +119,37 @@ export class RunArtifactStore {
       }
     }
     if (changed) await this.writeIndex(workspaceRoot, map);
+  }
+
+  async pruneUnreferencedTestRunDirs(
+    workspaceRoot: vscode.Uri,
+    index?: Map<string, RunArtifactIndexEntry>,
+  ): Promise<number> {
+    const runsDir = this.runsDir(workspaceRoot);
+    const keepRunIds = runIdsReferencedByIndex(index ?? await this.loadIndex(workspaceRoot));
+    let deleted = 0;
+    let entries: string[];
+    try {
+      entries = await readdir(runsDir);
+    } catch {
+      return 0;
+    }
+
+    for (const entry of entries) {
+      if (keepRunIds.has(entry)) continue;
+      const runDir = join(runsDir, entry);
+      let dirStat;
+      try {
+        dirStat = await stat(runDir);
+      } catch {
+        continue;
+      }
+      if (!dirStat.isDirectory()) continue;
+      if (!await isPrunableTestRunDir(runDir)) continue;
+      await rm(runDir, { recursive: true, force: true });
+      deleted += 1;
+    }
+    return deleted;
   }
 }
 
@@ -140,10 +171,53 @@ function toEntry(
   };
 }
 
+function runIdsReferencedByIndex(index: Map<string, RunArtifactIndexEntry>): Set<string> {
+  const out = new Set<string>();
+  for (const entry of index.values()) {
+    out.add(entry.runId);
+    out.add(entry.resultRunId);
+  }
+  return out;
+}
+
+async function isPrunableTestRunDir(runDir: string): Promise<boolean> {
+  const timeline = await readJson(join(runDir, 'timeline.json'));
+  if (timeline) return timeline.mode !== 'script';
+  return Boolean(await readJson(join(runDir, 'result.json')));
+}
+
+async function readJson(filePath: string): Promise<any | undefined> {
+  try {
+    return JSON.parse(await readFile(filePath, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
 function splitName(name: string): { ancestors: string[]; title: string } {
   const parts = name.split(' > ').map((s) => s.trim()).filter(Boolean);
   if (parts.length === 0) return { ancestors: [], title: name };
   return { ancestors: parts.slice(0, -1), title: parts[parts.length - 1] };
+}
+
+function relPathForTestCase(
+  workspaceRoot: vscode.Uri,
+  fallbackRelPath: string,
+  tc: TestCaseResult,
+): string {
+  if (!tc.filePath) return fallbackRelPath;
+  if (!isAbsolute(tc.filePath) && !tc.filePath.includes('/') && fallbackRelPath.endsWith(`/${tc.filePath}`)) {
+    return fallbackRelPath;
+  }
+  return normalizeRelPath(
+    isAbsolute(tc.filePath)
+      ? relative(workspaceRoot.fsPath, tc.filePath)
+      : tc.filePath,
+  );
+}
+
+function normalizeRelPath(value: string): string {
+  return value.replace(/\\/g, '/');
 }
 
 function safeName(value: string): string {

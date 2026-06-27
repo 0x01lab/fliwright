@@ -5,6 +5,7 @@
 
 > 如果你是初次接触本框架，先看 **[getting-started.md](./getting-started.md)**。
 > 想要一份把所有签名汇成一页的速查表，跳到 **[api-quick-reference.md](./api-quick-reference.md)**。
+> 被测流程只要**触发人机校验 / 阿里云滑块 / 行为验证 / WebView 覆盖层**，先读 **[captcha.md](./captcha.md)** —— 这类组件不在 Flutter 控件树里，`getByKey`/`getByText`/`snapshot` 都看不到它。
 
 ## 主题地图
 
@@ -22,6 +23,7 @@
 | [ai.md](./ai.md) | AI runtime（`aiRuntime` fixture / `ai` 命名空间：`ask`/`generate`/`classify`/`visible`/`inspect`）、自愈 self-healing、provider 配置、`FakerGenerator`/`SemanticInferrer`/`AssertionSuggester` | 你要用 AI 造数/视觉断言，或想知道选择器自愈怎么工作 |
 | [mocks.md](./mocks.md) | timeline-aware `mock.*`、`driver.mock.*`（route / getCalls / loadRules / switchRule / …）、JSON mock 文件、`fliwright mock:start` | 你要 stub HTTP / 对请求做断言 |
 | [screenshots-snapshots.md](./screenshots-snapshots.md) | `screenshot` / `screenshotFullPage` / `snapshot` / `findRef` / `ref`、桥接能力表 | 你在探查控件树、抓图、或处理 refs |
+| [captcha.md](./captcha.md) | 阿里云人机校验 / 滑块 / WebView 覆盖层的识别、决策树、`flow.manual({ resumeWhen })`、`slideTo`/坐标拖动、mock 边界 | 被测流程**触发人机校验、滑块、行为验证**或任何**不在 Flutter 控件树里**的覆盖层——**必读** |
 | [driver-lifecycle.md](./driver-lifecycle.md) | 手动 `FliwrightDriver`、`connect`/`dispose`、`sendRequest`、诊断信息、原始扩展 | 你需要自定义插件、原始扩展、或旧桥接兼容 |
 | [state.md](./state.md) | `driver.state`（StateAdapter / Riverpod）：`read` / `write` / `override` / `watch` / `listProviders`，跳过 UI 直接进入业务态 | 你要跳过登录、覆盖 provider、或断言 UI 没展示的状态 |
 | [app-instance.md](./app-instance.md) | `driver.app`（AppInstance）：`info` / `getSnapshot` / `listCapabilities` / `getCapability` / `invoke`，越过 widget 树询问 app 身份与能力 | 你要断言 app 身份/环境，或调 app 暴露的测试专用能力（如 `auth.signIn`） |

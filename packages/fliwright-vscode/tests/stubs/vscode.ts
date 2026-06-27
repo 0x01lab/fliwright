@@ -202,7 +202,9 @@ export const window = {
     return { appendLine() {}, show() {}, dispose() {} };
   },
   createStatusBarItem() {
-    return { text: '', command: undefined as string | undefined, show() {}, dispose() {} };
+    const item = { text: '', command: undefined as string | undefined, show() {}, dispose() {} };
+    (this as any)._lastStatusBarItem = item;
+    return item;
   },
   createWebviewPanel() {
     const panel = {

@@ -1,6 +1,6 @@
 // packages/fliwright-vscode/src/runviewer/RunViewerService.ts
 import * as vscode from 'vscode';
-import type { TimelineData, FliwrightLogEvent } from '@fliwright/core';
+import type { TimelineData, FliwrightLogEvent, TraceData } from '@fliwright/core';
 import { projectRunsRootCandidates } from '../testing/ProjectRunsRoot.js';
 import { RunArtifactStore, type RunArtifactIndexEntry } from '../testing/RunArtifactStore.js';
 
@@ -18,13 +18,14 @@ export interface RunSummary {
 export interface LoadedRun {
   timeline: TimelineData;
   logs: FliwrightLogEvent[];
+  trace?: TraceData;
   runDir: vscode.Uri;
 }
 
 /**
  * Reads timeline run data from run directories.
  *
- * The runs root resolves migrated-first (`~/.fliwright/projects/<hash>/runs`,
+ * The runs root resolves per-project-first (`~/.fliwright/projects/<project>/runs`,
  * from projectRunsRoot) with a legacy fallback to the project-local
  * `<workspaceRoot>/.fliwright/runs`. Within that root each run directory holds:
  *   - timeline.json           (TimelineData — the source of truth)
@@ -32,7 +33,9 @@ export interface LoadedRun {
  *   - artifacts/screenshots/* (PNGs referenced by node artifacts[])
  *
  * Unlike traces, core does not export a reader store for timeline runs, so this
- * service reads the files directly via vscode.workspace.fs.
+ * service reads the files directly via vscode.workspace.fs. New runs live under
+ * `~/.fliwright/projects/<project>/runs`; project-local `.fliwright/runs` is
+ * read only as a legacy fallback.
  */
 export class RunViewerService {
   private readonly artifacts = new RunArtifactStore();
@@ -44,8 +47,8 @@ export class RunViewerService {
   /**
    * Resolve the runs directory for a workspace root.
    *
-   * Prefers the migrated per-project root under the user home
-   * (`~/.fliwright/projects/<hash>/runs`, from projectRunsRoot); falls back to
+   * Prefers the per-project root under the user home
+   * (`~/.fliwright/projects/<project>/runs`, from projectRunsRoot); falls back to
    * the legacy project-local `<root>/.fliwright/runs` for back-compat. Returns
    * undefined when neither exists.
    */
@@ -110,18 +113,19 @@ export class RunViewerService {
     const timeline = await this.loadTimeline(runDir);
     if (!timeline) return undefined;
     const logs = await this.loadLogs(runDir);
-    return { timeline, logs, runDir };
+    const trace = await this.loadRunTrace(runDir);
+    return { timeline, logs, ...(trace ? { trace } : {}), runDir };
   }
 
   /**
-   * Scan runs newest-first and return the first run whose result.json contains
-   * a test result matching `testNodeId`. Pure find — no UI.
+   * Scan runs newest-first and return the first run whose timeline or result
+   * matches `testNodeId`. Pure find — no UI.
    *
    * The test node id has the form `<relPath>::<anc1>/<anc2>/.../<title>`. The
-   * run's result.json `results[].name` is vitest's full-name form
-   * `<anc1> > <anc2> > ... > <title>` (` > `-joined). Matching therefore takes
-   * the chain after `::` and joins it with ` > `. This is the inverse of the
-   * pattern built in `runCurrentTest` (`id.split('::')[1]?.split('/').join(' > ')`).
+   * Timeline directories are written per test by `@fliwright/vitest` under the
+   * project runs root and often do not have a sibling result.json. Therefore
+   * timeline.json's `testName` is the primary lookup; result.json remains a
+   * legacy fallback for older run layouts.
    */
   async findLatestRunForTest(
     runsDir: vscode.Uri,
@@ -129,6 +133,9 @@ export class RunViewerService {
   ): Promise<LoadedRun | undefined> {
     const summaries = await this.listRuns(runsDir); // newest-first
     for (const s of summaries) {
+      if (timelineSummaryMatchesNode(s, testNodeId)) {
+        return this.loadRun(s.runDir);
+      }
       const resultJson = await this.readResultJson(s.runDir);
       if (!resultJson) continue;
       if (runResultContainsNode(resultJson, testNodeId)) {
@@ -165,6 +172,11 @@ export class RunViewerService {
       if (derivedRunId && derivedRunId !== entry.runId) {
         const derived = await this.loadRun(vscode.Uri.joinPath(runsDir, derivedRunId));
         if (derived) return derived;
+      }
+      const leafRunId = deriveLeafTimelineRunId(entry, testNodeId, this.artifacts);
+      if (leafRunId && leafRunId !== entry.runId && leafRunId !== derivedRunId) {
+        const leaf = await this.loadRun(vscode.Uri.joinPath(runsDir, leafRunId));
+        if (leaf) return leaf;
       }
       // Indexed run dir is gone (pruned) — fall through to the scan.
     }
@@ -245,6 +257,18 @@ export class RunViewerService {
     }
     return logs;
   }
+
+  private async loadRunTrace(runDir: vscode.Uri): Promise<TraceData | undefined> {
+    const uri = vscode.Uri.joinPath(runDir, 'trace', 'trace.json');
+    try {
+      const buf = await vscode.workspace.fs.readFile(uri);
+      const parsed = JSON.parse(Buffer.from(buf).toString('utf8')) as TraceData;
+      if (!parsed || !Array.isArray(parsed.steps)) return undefined;
+      return parsed;
+    } catch {
+      return undefined;
+    }
+  }
 }
 
 function deriveTimelineRunId(
@@ -257,6 +281,27 @@ function deriveTimelineRunId(
   if (!chain) return undefined;
   const testName = chain.split('/').join(' > ');
   return artifacts.timelineRunId(resultRunId, testName);
+}
+
+function deriveLeafTimelineRunId(
+  entry: Pick<RunArtifactIndexEntry, 'runId'> & Partial<Pick<RunArtifactIndexEntry, 'resultRunId'>>,
+  testNodeId: string,
+  artifacts: RunArtifactStore,
+): string | undefined {
+  const resultRunId = entry.resultRunId ?? entry.runId;
+  const chain = testNodeId.split('::')[1];
+  const title = chain?.split('/').filter(Boolean).at(-1);
+  if (!title) return undefined;
+  return artifacts.timelineRunId(resultRunId, title);
+}
+
+function timelineSummaryMatchesNode(summary: Pick<RunSummary, 'testName'>, testNodeId: string): boolean {
+  const chain = testNodeId.split('::')[1];
+  if (!chain) return false;
+  const parts = chain.split('/').filter(Boolean);
+  const fullName = parts.join(' > ');
+  const leafName = parts.at(-1);
+  return summary.testName === fullName || summary.testName === leafName;
 }
 
 /**

@@ -32,6 +32,7 @@ export class ScriptRunner {
     if (params.traceMode && params.traceMode !== 'off' && params.traceDir) {
       env.FLIWRIGHT_TRACE = params.traceMode;
       env.FLIWRIGHT_TRACE_DIR = params.traceDir.fsPath;
+      env.FLIWRIGHT_TRACE_LAYOUT = 'run';
     }
 
     const command = await resolveScriptCommand(params.script.uri.fsPath, relativeScript, params.workspaceRoot.fsPath);

@@ -30,5 +30,58 @@ describe('TDD failure context diagnostics', () => {
     expect(context.source).toBeUndefined();
     expect(context.assertion).toBeUndefined();
     expect(context.artifacts).toBeUndefined();
+    expect(context.recoveryHints?.map((hint) => hint.kind)).toEqual(
+      expect.arrayContaining(['refine-selector', 'sync-app']),
+    );
+    expect(context.recoveryHints?.find((hint) => hint.kind === 'refine-selector')).toMatchObject({
+      priority: 'high',
+    });
+  });
+
+  it('adds agent-actionable hints for unsupported reset state and artifacts', () => {
+    const context = buildTddFailureContext({
+      file: '/tmp/checkout.test.ts',
+      testName: 'checkout flow',
+      message: 'Timed out waiting for POST /orders; Recorded calls: (none)',
+      unsupportedState: ['storage', 'permissions'],
+      source: {
+        file: '/tmp/checkout.test.ts',
+        line: 42,
+        snippet: 'await mock.waitForCall("/orders")',
+      },
+      artifacts: {
+        screenshotPath: '/tmp/failure.png',
+        timelinePath: '/tmp/timeline.json',
+      },
+    });
+
+    expect(context.kind).toBe('mock-not-called');
+    expect(context.recoveryHints?.map((hint) => hint.kind)).toEqual(expect.arrayContaining([
+      'configure-reset-adapter',
+      'inspect-source',
+      'inspect-snapshot',
+      'configure-mock',
+    ]));
+    expect(context.recoveryHints?.[0]).toMatchObject({
+      kind: 'configure-reset-adapter',
+      priority: 'high',
+    });
+  });
+
+  it('suggests reconnect for disconnected failures and no stale sync after restart', () => {
+    const disconnected = buildTddFailureContext({
+      file: '/tmp/app.test.ts',
+      message: 'VM service closed',
+      kind: 'disconnected',
+    });
+    expect(disconnected.recoveryHints?.map((hint) => hint.kind)).toContain('reconnect');
+
+    const restartedMissing = buildTddFailureContext({
+      file: '/tmp/app.test.ts',
+      message: 'No widget found',
+      lastSync: 'restart',
+    });
+    expect(restartedMissing.recoveryHints?.map((hint) => hint.kind)).toContain('refine-selector');
+    expect(restartedMissing.recoveryHints?.map((hint) => hint.kind)).not.toContain('sync-app');
   });
 });

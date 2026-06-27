@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import type { RunResult, TestCaseResult } from '../types.js';
 import { testNodeId } from './types.js';
 import type { RunArtifactIndexEntry } from './RunArtifactStore.js';
@@ -44,7 +44,7 @@ export class TestStatusStore {
   async recordRun(
     runId: string,
     ranAt: number,
-    _workspaceRoot: { fsPath: string },
+    workspaceRoot: { fsPath: string },
     result: RunResult,
     relPath: string,
   ): Promise<void> {
@@ -55,7 +55,8 @@ export class TestStatusStore {
     const map = await this.loadIndex();
     for (const tc of result.results) {
       const { ancestors, title } = splitName(tc.name);
-      const id = testNodeId(relPath, ancestors, title);
+      const tcRelPath = relPathForTestCase(workspaceRoot, relPath, tc);
+      const id = testNodeId(tcRelPath, ancestors, title);
       map.set(id, toEntry(runId, ranAt, tc));
     }
     await this.writeIndex(map);
@@ -93,6 +94,26 @@ function splitName(name: string): { ancestors: string[]; title: string } {
   const parts = name.split(' > ').map((s) => s.trim()).filter(Boolean);
   if (parts.length === 0) return { ancestors: [], title: name };
   return { ancestors: parts.slice(0, -1), title: parts[parts.length - 1] };
+}
+
+function relPathForTestCase(
+  workspaceRoot: { fsPath: string },
+  fallbackRelPath: string,
+  tc: TestCaseResult,
+): string {
+  if (!tc.filePath) return fallbackRelPath;
+  if (!isAbsolute(tc.filePath) && !tc.filePath.includes('/') && fallbackRelPath.endsWith(`/${tc.filePath}`)) {
+    return fallbackRelPath;
+  }
+  return normalizeRelPath(
+    isAbsolute(tc.filePath)
+      ? relative(workspaceRoot.fsPath, tc.filePath)
+      : tc.filePath,
+  );
+}
+
+function normalizeRelPath(value: string): string {
+  return value.replace(/\\/g, '/');
 }
 
 function safeName(value: string): string {

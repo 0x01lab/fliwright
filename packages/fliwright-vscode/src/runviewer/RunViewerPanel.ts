@@ -1,6 +1,6 @@
 // packages/fliwright-vscode/src/runviewer/RunViewerPanel.ts
 import * as vscode from 'vscode';
-import type { TimelineData, FliwrightLogEvent } from '@fliwright/core';
+import type { TimelineData, FliwrightLogEvent, TraceData } from '@fliwright/core';
 import { RunViewerService } from './RunViewerService.js';
 import { getRunViewerHtml } from './getRunViewerHtml.js';
 
@@ -18,7 +18,7 @@ export class RunViewerPanel {
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
-  /** Prompt the user to pick a run from .fliwright/runs, then open it. */
+  /** Prompt the user to pick a run from the per-project runs root, then open it. */
   async openWithPicker(): Promise<void> {
     const root = this.service.getWorkspaceRoot();
     if (!root) {
@@ -27,12 +27,12 @@ export class RunViewerPanel {
     }
     const runsDir = await this.service.getRunsDir(root);
     if (!runsDir) {
-      vscode.window.showWarningMessage('No run data found. Expected .fliwright/runs to exist.');
+      vscode.window.showWarningMessage('No run data found under ~/.fliwright/projects for this workspace.');
       return;
     }
     const runs = await this.service.listRuns(runsDir);
     if (runs.length === 0) {
-      vscode.window.showWarningMessage('No runs with timeline.json found under .fliwright/runs.');
+      vscode.window.showWarningMessage('No runs with timeline.json found under ~/.fliwright/projects for this workspace.');
       return;
     }
 
@@ -60,12 +60,12 @@ export class RunViewerPanel {
     }
     const runsDir = await this.service.getRunsDir(root);
     if (!runsDir) {
-      vscode.window.showWarningMessage('No run data found. Expected .fliwright/runs to exist.');
+      vscode.window.showWarningMessage('No run data found under ~/.fliwright/projects for this workspace.');
       return;
     }
     const runs = await this.service.listRuns(runsDir);
     if (runs.length === 0) {
-      vscode.window.showWarningMessage('No runs with timeline.json found under .fliwright/runs.');
+      vscode.window.showWarningMessage('No runs with timeline.json found under ~/.fliwright/projects for this workspace.');
       return;
     }
     await this.openForRun(runs[0].runDir);
@@ -78,7 +78,7 @@ export class RunViewerPanel {
       vscode.window.showWarningMessage('Could not read timeline.json for this run.');
       return;
     }
-    await this.show(loaded.runDir, loaded.timeline, loaded.logs);
+    await this.show(loaded.runDir, loaded.timeline, loaded.logs, loaded.trace);
   }
 
   /**
@@ -95,6 +95,7 @@ export class RunViewerPanel {
     runDir: vscode.Uri,
     timeline: TimelineData,
     logs: FliwrightLogEvent[],
+    trace: TraceData | undefined,
   ): Promise<void> {
     // Create or reveal the panel.
     if (this.panel) {
@@ -122,7 +123,7 @@ export class RunViewerPanel {
     const screenshotBaseUrl = this.panel.webview.asWebviewUri(runDir).toString();
     const nonce = getNonce();
     this.panel.title = `Fliwright Run Viewer: ${timeline.testName}`;
-    this.panel.webview.html = getRunViewerHtml(timeline, logs, {
+    this.panel.webview.html = getRunViewerHtml(timeline, logs, trace, {
       cspSource: this.panel.webview.cspSource,
       nonce,
       screenshotBaseUrl,

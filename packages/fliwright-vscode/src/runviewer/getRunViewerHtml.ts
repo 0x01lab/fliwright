@@ -1,5 +1,5 @@
 // packages/fliwright-vscode/src/runviewer/getRunViewerHtml.ts
-import type { TimelineData, FliwrightLogEvent } from '@fliwright/core';
+import type { TimelineData, FliwrightLogEvent, TraceData } from '@fliwright/core';
 
 export interface RunViewerHtmlOptions {
   cspSource: string;
@@ -20,11 +20,13 @@ export interface RunViewerHtmlOptions {
 export function getRunViewerHtml(
   timeline: TimelineData,
   logs: FliwrightLogEvent[],
+  trace: TraceData | undefined,
   options: RunViewerHtmlOptions,
 ): string {
   const { cspSource, nonce, screenshotBaseUrl } = options;
   const timelineJson = JSON.stringify(timeline).replace(/</g, '\\u003c');
   const logsJson = JSON.stringify(logs).replace(/</g, '\\u003c');
+  const traceJson = JSON.stringify(trace ?? null).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -116,6 +118,16 @@ export function getRunViewerHtml(
     .meta-row { display: flex; gap: 8px; font-size: 11px; padding: 1px 0; }
     .meta-k { color: var(--vscode-descriptionForeground); min-width: 84px; }
     .meta-v { font-family: var(--vscode-editor-font-family, monospace); word-break: break-word; }
+    .trace-list { display: flex; flex-direction: column; gap: 5px; }
+    .trace-row { border-left: 3px solid var(--vscode-descriptionForeground); padding: 5px 8px; background: var(--vscode-textBlockQuote-background); border-radius: 0 4px 4px 0; }
+    .trace-row.fail { border-left-color: var(--fail); }
+    .trace-row.pass { border-left-color: var(--pass); }
+    .trace-top { display: flex; gap: 6px; align-items: center; font-size: 11px; }
+    .trace-action { font-weight: 700; }
+    .trace-status { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 0 4px; border-radius: 3px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+    .trace-selector, .trace-arg, .trace-error { margin-top: 3px; font-family: var(--vscode-editor-font-family, monospace); font-size: 10px; word-break: break-word; color: var(--vscode-descriptionForeground); }
+    .trace-error { color: var(--fail); }
+    .trace-shot { display: inline-block; margin-top: 4px; font-size: 10px; color: var(--vscode-textLink-foreground); text-decoration: none; }
 
     .logs-pane { width: 340px; min-width: 220px; border-left: 1px solid var(--vscode-panel-border); display: flex; flex-direction: column; overflow: hidden; }
     .logs-list { flex: 1; overflow-y: auto; padding: 4px 6px; display: flex; flex-direction: column; gap: 4px; }
@@ -145,6 +157,7 @@ export function getRunViewerHtml(
   <script nonce="${nonce}">
     const TL = ${timelineJson};
     const LOGS = ${logsJson};
+    const TRACE = ${traceJson};
     const BASE = ${JSON.stringify(screenshotBaseUrl)};
     const vscode = acquireVsCodeApi();
 
@@ -293,7 +306,31 @@ export function getRunViewerHtml(
           h += '</div>';
         }
       }
+      h += renderTrace(n);
       h += '</div>';
+      return h;
+    }
+
+    function renderTrace(n) {
+      if (!TRACE || !TRACE.steps || !TRACE.steps.length) return '';
+      let h = '<div class="meta"><div class="meta-title">Trace</div>';
+      h += '<div class="trace-list">';
+      const failed = TRACE.steps.filter(function (s) { return s.status === 'fail'; });
+      const selected = n.status === 'failed' && failed.length ? failed : TRACE.steps.slice(0, 8);
+      for (const s of selected) {
+        h += '<div class="trace-row ' + esc(s.status) + '">';
+        h += '<div class="trace-top"><span class="trace-status">' + esc(s.status) + '</span><span class="trace-action">' + esc(s.action) + '</span>';
+        h += '<span class="log-dur">' + esc(s.durationMs) + 'ms</span></div>';
+        if (s.selector) h += '<div class="trace-selector">' + esc(s.selector) + '</div>';
+        if (s.argument) h += '<div class="trace-arg">' + esc(s.argument) + '</div>';
+        if (s.error) h += '<div class="trace-error">' + esc(s.error) + '</div>';
+        if (s.screenshotFile) h += '<a class="trace-shot" href="' + BASE + '/trace/' + esc(s.screenshotFile) + '">Open trace screenshot</a>';
+        h += '</div>';
+      }
+      if (TRACE.steps.length > selected.length) {
+        h += '<div class="meta-row"><span class="meta-k">Total</span><span class="meta-v">' + TRACE.steps.length + ' action(s)</span></div>';
+      }
+      h += '</div></div>';
       return h;
     }
 

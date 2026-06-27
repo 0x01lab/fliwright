@@ -113,7 +113,7 @@ Guidance:
 - Use `flow.page` when entering or validating a screen/route.
 - Use `flow.optional` for genuinely optional UI, such as dismissing a popup only when it exists.
 - Use `flow.frame` to leave artifacts in automation scripts even when there is no assertion.
-- Use `flow.manual` when the script must pause for human work such as a captcha drag, QR-code login, SMS code, or external approval.
+- Use `flow.manual` when the script must pause for human work such as a captcha drag, QR-code login, SMS code, or external approval. **If the manual work is an Aliyun/人机校验 slider or any non-Flutter overlay, read [captcha.md](./captcha.md) first** — those components are invisible to `getByKey`/`getByText`/`snapshot` and the only reliable way through is `flow.manual({ resumeWhen })` (do not try to bypass via `state.override`).
 - For manual work performed inside the running app, prefer `resumeWhen` and make the runtime observe the post-manual app state. Do not depend on terminal stdin, VS Code buttons, or external `continue` files for this path.
 - Prefer `expect(locator, title?).to*` for locator assertions; reserve `flow.assertion` for custom non-locator checks that need a timeline node.
 

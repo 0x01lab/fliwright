@@ -3,7 +3,8 @@
 // Drives the REAL TddRuntime in daemon-start mode end to end: start (launch app via flutter
 // daemon) -> focus -> cycle(none / reload / restart) -> stop, against a Flutter app that already
 // has a fliwright test suite configured (e.g. exio). It asserts the loop completes without crashing
-// and reports the correct lastSync, printing each TddCycleResult for human inspection.
+// and reports the correct lastSync, printing each TddCycleResult for human inspection. It also
+// verifies the RuntimeSnapshot status file used by read-only monitors (VS Code TDD Loop).
 //
 // Unlike e2e-daemon-conformance.mjs (protocol fields), this exercises the WHOLE runtime:
 // driver connect, baseline reset, persistent vitest rerun, and daemon reload/restart.
@@ -21,7 +22,9 @@
 //
 // Run: node packages/fliwright-tdd/spike/e2e-tdd-cycle.mjs
 
-import { TddRuntime, SubprocessDaemonTransport, FlutterDaemonController } from '../dist/index.js';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const PROJECT = process.env.FLIWRIGHT_E2E_PROJECT;
 const CONFIG = process.env.FLIWRIGHT_E2E_CONFIG;
@@ -35,6 +38,10 @@ if (missing.length > 0) {
   process.exit(0);
 }
 
+let TddRuntime;
+let SubprocessDaemonTransport;
+let FlutterDaemonController;
+
 const failures = [];
 function check(label, condition, detail = '') {
   const ok = Boolean(condition);
@@ -47,6 +54,22 @@ function printResult(label, result) {
       + `baselineVersion=${result.baselineVersion} durationMs=${result.durationMs}`
       + `${result.failureContext ? ` kind=${result.failureContext.kind}` : ''}`,
   );
+}
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function waitForStatus(statusFilePath, predicate, label) {
+  let last;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      last = JSON.parse(await readFile(statusFilePath, 'utf8'));
+      if (predicate(last)) return last;
+    } catch {
+      // Status writes are best-effort and async; keep polling for a short window.
+    }
+    await sleep(100);
+  }
+  throw new Error(`Timed out waiting for status file: ${label}${last ? `; last=${JSON.stringify(last)}` : ''}`);
 }
 
 async function pickDevice() {
@@ -62,35 +85,49 @@ async function pickDevice() {
 }
 
 async function main() {
+  ({ TddRuntime, SubprocessDaemonTransport, FlutterDaemonController } = await import('../dist/index.js'));
   const deviceId = await pickDevice();
   const runtime = new TddRuntime({
     daemon: new FlutterDaemonController(new SubprocessDaemonTransport({ cwd: PROJECT })),
   });
+  const statusDir = await mkdtemp(join(tmpdir(), 'fliwright-tdd-e2e-'));
+  const statusFilePath = join(statusDir, 'tdd-status.json');
 
   console.log('[1/4] start (daemon-start mode)');
   const startSnap = await runtime.start({
     configRoot: CONFIG,
     app: { deviceId, projectId: PROJECT, target: 'lib/main.dart', mode: 'run' },
+    statusFilePath,
   });
   check('runtime reports connected', startSnap.connected === true);
   check('runtime is in start mode (restart-capable)', startSnap.launchMode === 'start', `launchMode=${startSnap.launchMode}`);
+  const startStatus = await waitForStatus(statusFilePath, (status) => status.connected === true, 'connected after start');
+  check('status file reports connected after start', startStatus.connected === true);
 
   console.log('\n[2/4] focus');
   await runtime.focus(TEST_FILE, TEST_NAME);
+  const focusStatus = await waitForStatus(statusFilePath, (status) => status.focusedTest?.file === TEST_FILE, 'focused test');
+  check('status file reports focused test', focusStatus.focusedTest?.file === TEST_FILE);
 
   console.log('\n[3/4] cycle x3 (none, reload, restart)');
   const none = await runtime.cycle(TEST_NAME, { sync: 'none' });
   printResult('sync=none', none);
   check('cycle(none) returned red|green with lastSync none', (none.status === 'red' || none.status === 'green') && none.lastSync === 'none');
+  const noneStatus = await waitForStatus(statusFilePath, (status) => status.lastResult?.lastSync === 'none', 'cycle none result');
+  check('status file reports cycle(none)', noneStatus.lastResult?.lastSync === 'none');
 
   const reload = await runtime.cycle(TEST_NAME, { sync: 'reload' });
   printResult('sync=reload', reload);
   check('cycle(reload) returned red|green with lastSync reload', (reload.status === 'red' || reload.status === 'green') && reload.lastSync === 'reload');
+  const reloadStatus = await waitForStatus(statusFilePath, (status) => status.lastResult?.lastSync === 'reload', 'cycle reload result');
+  check('status file reports cycle(reload)', reloadStatus.lastResult?.lastSync === 'reload');
 
   if (startSnap.restartCapable) {
     const restart = await runtime.cycle(TEST_NAME, { sync: 'restart' });
     printResult('sync=restart', restart);
     check('cycle(restart) returned red|green with lastSync restart', (restart.status === 'red' || restart.status === 'green') && restart.lastSync === 'restart');
+    const restartStatus = await waitForStatus(statusFilePath, (status) => status.lastResult?.lastSync === 'restart', 'cycle restart result');
+    check('status file reports cycle(restart)', restartStatus.lastResult?.lastSync === 'restart');
   } else {
     console.log('\n  (skip restart cycle: app not restart-capable)');
   }
@@ -99,6 +136,8 @@ async function main() {
   await runtime.stop({ keepAppAlive: false });
   const stopSnap = runtime.snapshot();
   check('runtime is disconnected after stop', stopSnap.connected === false);
+  const stopStatus = await waitForStatus(statusFilePath, (status) => status.connected === false, 'stopped runtime');
+  check('status file reports disconnected after stop', stopStatus.connected === false);
 
   console.log(`\n${failures.length === 0 ? 'SMOKE PASS — the TDD loop ran end to end.' : `SMOKE FAIL — ${failures.length} check(s) failed: ${failures.join('; ')}`}`);
   console.log('Inspect each TddCycleResult above to confirm the app actually reflected your edits (manual verification).');

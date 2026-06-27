@@ -140,8 +140,8 @@ await page.select.use('standardDropdown', {
 });
 
 await page.select.use('bottomSheetOption', {
-  open: { semantics: { identifier: 'kyc.personalInfo.jobNature.select' } },
-  option: { semantics: { identifier: 'kyc.personalInfo.jobNature.option.FIN_INSURANCE' } },
+  open: { semantics: { identifier: 'myForm.jobNature.select' } },
+  option: { semantics: { identifier: 'myForm.jobNature.option.FIN_INSURANCE' } },
 });
 ```
 
@@ -149,7 +149,7 @@ await page.select.use('bottomSheetOption', {
 `searchablePicker`、`countryPicker`。项目也可以注册自己的组件动作：
 
 ```typescript
-page.select.register('exio.quickSelect', async ({ page }, options) => {
+page.select.register('myProject.quickSelect', async ({ page }, options) => {
   await page.locator(options.open!).click({ waitForAnimations: true });
   await page.locator({ text: String(options.value) }).click({ waitForAnimations: true });
 });
@@ -157,22 +157,22 @@ page.select.register('exio.quickSelect', async ({ page }, options) => {
 
 #### 国家/地区 picker 示例
 
-KYC 国家/地区选择器是一个特殊的 searchable picker：点击字段后打开 bottom sheet，
+国家/地区选择器是一个特殊的 searchable picker：点击字段后打开 bottom sheet，
 搜索框会过滤国家列表，option 通常有稳定 semantics identifier。这个组件的推荐流程：
 
 1. 点击国家字段本身，优先用字段 semantics identifier。
-2. 等待 `kyc.countrySelect.searchField` 或首批国家 option 出现。
+2. 等待搜索框（如 `countrySelect.searchField`）或首批国家 option 出现。
 3. 用 `fill()` 设置完整国家名，或用 `type()` 逐字输入；两者都会通过 bridge 触发 `TextField.onChanged`。判断成功时看目标 option 是否出现，不只看搜索框文字。
 4. 点击目标 option 的 semantics identifier，例如 `*.option.HK`。
 5. 如果目标 option 没出现，说明搜索未命中或列表未渲染；在该 bottom sheet 的列表区域滚动，直到目标 option 可见再点击。
 
 ```typescript
 await page.select.use('countryPicker', {
-  open: { semantics: { identifier: 'kyc.personalInfo.resAddrCountry.select' } },
-  search: { match: { key: 'kyc.countrySelect.searchField', type: 'EditableText' } },
+  open: { semantics: { identifier: 'myForm.countryField.select' } },
+  search: { match: { key: 'myForm.countrySelect.searchField', type: 'EditableText' } },
   searchText: 'Hong Kong',
   value: 'HK',
-  optionSemanticsId: 'kyc.personalInfo.resAddrCountry.option.${value}',
+  optionSemanticsId: 'myForm.countryField.option.${value}',
 });
 ```
 

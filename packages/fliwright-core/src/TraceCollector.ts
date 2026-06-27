@@ -1,6 +1,7 @@
 // packages/fliwright-core/src/TraceCollector.ts
 import { mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
+import type { TimelineArtifactRef } from './timeline/types.js';
 import type { SendRequest } from './types.js';
 
 // ── Types ─────────────────────────────────────────────────────
@@ -34,6 +35,11 @@ export interface TraceData {
 }
 
 export type TraceMode = 'off' | 'on-failure' | 'full';
+export type TraceLayout = 'legacy' | 'run';
+
+export interface TraceCollectorOptions {
+  layout?: TraceLayout;
+}
 
 // ── TraceCollector ────────────────────────────────────────────
 
@@ -44,6 +50,8 @@ export type TraceMode = 'off' | 'on-failure' | 'full';
 export class TraceCollector {
   private steps: TraceStep[] = [];
   private completed = false;
+  private readonly layout: TraceLayout;
+  private readonly traceFilePath: string;
 
   /** Absolute path to the test-specific trace directory */
   readonly traceDir: string;
@@ -54,10 +62,13 @@ export class TraceCollector {
     private readonly runId: string,
     private readonly sendRequest: SendRequest,
     private readonly mode: TraceMode,
+    options: TraceCollectorOptions = {},
   ) {
-    // Sanitize testName for use as directory name
-    const safeName = testName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
-    this.traceDir = resolve(traceRoot, runId, safeName);
+    this.layout = options.layout ?? 'legacy';
+    this.traceDir = this.layout === 'run'
+      ? resolve(traceRoot, 'trace')
+      : resolve(traceRoot, runId, sanitizeTraceSegment(testName));
+    this.traceFilePath = join(this.traceDir, 'trace.json');
   }
 
   /**
@@ -70,8 +81,9 @@ export class TraceCollector {
     runId: string,
     sendRequest: SendRequest,
     mode: TraceMode,
+    options: TraceCollectorOptions = {},
   ): Promise<TraceCollector> {
-    const collector = new TraceCollector(traceRoot, testName, runId, sendRequest, mode);
+    const collector = new TraceCollector(traceRoot, testName, runId, sendRequest, mode, options);
     await mkdir(collector.traceDir, { recursive: true });
     await collector.writeTraceFile();
     return collector;
@@ -150,6 +162,19 @@ export class TraceCollector {
     await this.writeTraceFile();
   }
 
+  artifactRef(baseDir = this.traceRoot): TimelineArtifactRef {
+    return {
+      kind: 'trace',
+      path: relative(baseDir, this.traceFilePath).replace(/\\/g, '/'),
+      mimeType: 'application/json',
+      metadata: {
+        layout: this.layout,
+        mode: this.mode,
+        totalSteps: this.steps.length,
+      },
+    };
+  }
+
   // ── Private helpers ───────────────────────────────────────
 
   private get meta(): TraceMeta {
@@ -181,7 +206,7 @@ export class TraceCollector {
   private async writeTraceFile(): Promise<void> {
     const data = this.buildData();
     await writeFile(
-      join(this.traceDir, 'trace.json'),
+      this.traceFilePath,
       JSON.stringify(data, null, 2),
     );
   }
@@ -210,6 +235,10 @@ export class TraceCollector {
     } catch { /* fall through */ }
     return null;
   }
+}
+
+function sanitizeTraceSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
 }
 
 // ── Parsing helpers ───────────────────────────────────────────

@@ -3,7 +3,19 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { createServerState } from '../src/state.js';
-import { handleTddCycle, handleTddFocus, handleTddPrepare, handleTddRepair, handleTddStart, handleTddStatus, handleTddStop, handleTddValidateSpec } from '../src/tools/tdd.js';
+import {
+  handleTddCycle,
+  handleTddFocus,
+  handleTddPrepare,
+  handleTddReload,
+  handleTddRepair,
+  handleTddRestart,
+  handleTddSetScenario,
+  handleTddStart,
+  handleTddStatus,
+  handleTddStop,
+  handleTddValidateSpec,
+} from '../src/tools/tdd.js';
 
 describe('TDD MCP handlers', () => {
   it('starts, focuses, cycles, and stops a lazy runtime', async () => {
@@ -73,6 +85,7 @@ describe('TDD MCP handlers', () => {
         resetCategories: ['navigation', 'riverpod', 'mock', 'storage'],
         riverpodOverrides: [{ provider: 'cartProvider', value: [] }],
         mockProfile: 'checkout-empty',
+        mockDir: '/repo/.fliwright/mocks',
         storageSeed: { draftOrderId: 'order-1' },
       },
     }, state, () => runtime);
@@ -83,6 +96,7 @@ describe('TDD MCP handlers', () => {
         resetCategories: ['navigation', 'riverpod', 'mock', 'storage'],
         riverpodOverrides: [{ provider: 'cartProvider', value: [] }],
         mockProfile: 'checkout-empty',
+        mockDir: '/repo/.fliwright/mocks',
         storageSeed: { draftOrderId: 'order-1' },
       },
     }));
@@ -396,5 +410,68 @@ describe('fliwright_tdd_cycle inline repair option', () => {
     expect(runtime.cycle).toHaveBeenCalledWith(undefined, expect.objectContaining({
       repair: { mode: 'suggest' },
     }));
+  });
+});
+
+describe('TDD MCP scenario and manual sync handlers', () => {
+  it('updates the persistent runtime scenario', async () => {
+    const state = createServerState();
+    const snapshot = {
+      connected: true,
+      daemonStatus: 'running' as const,
+      supportsRestart: false,
+      launchMode: 'attach' as const,
+      restartCapable: false,
+      driverConnections: 1,
+      fixtureDriverSharing: 'vm-service-url' as const,
+      baselineVersion: 0,
+    };
+    const runtime = {
+      setScenario: vi.fn(async () => snapshot),
+    } as any;
+    state.setTddRuntime(runtime);
+
+    const result = await handleTddSetScenario({
+      homeRoute: '/checkout',
+      resetCategories: ['navigation', 'mock'],
+      mockProfile: 'empty',
+      mockDir: '/repo/.fliwright/mocks',
+    }, state);
+
+    expect(result).toBe(snapshot);
+    expect(runtime.setScenario).toHaveBeenCalledWith({
+      homeRoute: '/checkout',
+      resetCategories: ['navigation', 'mock'],
+      mockProfile: 'empty',
+      mockDir: '/repo/.fliwright/mocks',
+    });
+  });
+
+  it('runs manual reload and restart through the runtime', async () => {
+    const state = createServerState();
+    const runtime = {
+      syncApp: vi.fn(async (sync: 'reload' | 'restart') => ({
+        lastSync: sync,
+        snapshot: {
+          connected: true,
+          daemonStatus: 'running' as const,
+          supportsRestart: true,
+          launchMode: 'start' as const,
+          restartCapable: true,
+          driverConnections: 1,
+          fixtureDriverSharing: 'vm-service-url' as const,
+          baselineVersion: 0,
+        },
+      })),
+    } as any;
+    state.setTddRuntime(runtime);
+
+    const reload = await handleTddReload(state);
+    const restart = await handleTddRestart(state);
+
+    expect(reload.lastSync).toBe('reload');
+    expect(restart.lastSync).toBe('restart');
+    expect(runtime.syncApp).toHaveBeenNthCalledWith(1, 'reload');
+    expect(runtime.syncApp).toHaveBeenNthCalledWith(2, 'restart');
   });
 });

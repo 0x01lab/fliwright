@@ -199,33 +199,32 @@ switchRule(endpoint: string, ruleName: string, method?: string): Promise<void>
   "version": 1,
   "name": "User Info API",
   "method": "POST",
-  "endpoint": "/api/v1/user/info",
+  "endpoint": "/api/user",
   "baseRule": {
     "status": 200,
     "delay": 0,
     "headers": { "Content-Type": "application/json" },
     "body": {
-      "username": "qa-user",
-      "email": "qa@example.com",
-      "phone": "+85268****85",
-      "otpConfigured": true
+      "username": "test-user",
+      "email": "test@example.com",
+      "mfaEnabled": true
     }
   },
   "rules": [
     {
-      "name": "security-real-data"
+      "name": "full-profile"
     },
     {
-      "name": "security-mobile-add",
-      "removeBodyFields": ["phone"],
+      "name": "mfa-disabled",
+      "removeBodyFields": ["email"],
       "body": {
-        "otpConfigured": false
+        "mfaEnabled": false
       }
     },
     {
       "name": "error",
       "status": 500,
-      "removeBodyFields": ["username", "email", "phone", "otpConfigured"],
+      "removeBodyFields": ["username", "email", "mfaEnabled"],
       "body": {
         "error": "service unavailable"
       }

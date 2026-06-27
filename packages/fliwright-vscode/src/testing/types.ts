@@ -1,6 +1,6 @@
 import type * as vscode from 'vscode';
 
-export type TestNodeStatus = 'passed' | 'failed' | 'unknown';
+export type TestNodeStatus = 'passed' | 'failed' | 'running' | 'unknown';
 
 export interface TestFileNode {
   kind: 'testFile';
@@ -54,6 +54,7 @@ export function testNodeId(relPath: string, ancestorTitles: string[], title: str
 
 /** Status used as the aggregate of children. */
 export function aggregateStatus(statuses: TestNodeStatus[]): TestNodeStatus {
+  if (statuses.includes('running')) return 'running';
   if (statuses.includes('failed')) return 'failed';
   if (statuses.includes('passed')) return 'passed';
   return 'unknown';

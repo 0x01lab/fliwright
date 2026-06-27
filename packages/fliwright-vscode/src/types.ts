@@ -13,7 +13,6 @@ export interface ExtensionConfig {
   runner: 'vitest' | 'cli';
   screenshotMode: 'file' | 'base64' | 'off';
   failureContextDir: string;
-  traceDir: string;
   formRulesDir: string;
   formRulesFile: string | null;
   formLocale: string;
@@ -195,6 +194,7 @@ export interface ScriptFileEntry {
 
 export interface TestCaseResult {
   name: string;
+  filePath?: string;
   passed: boolean;
   duration: number;
   error?: string;

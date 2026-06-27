@@ -20,6 +20,7 @@ export interface Scenario {
   resetCategories: ResetCategory[];
   riverpodOverrides?: unknown[];
   mockProfile?: string;
+  mockDir?: string;
   storageSeed?: Record<string, unknown>;
 }
 
@@ -50,6 +51,7 @@ export interface RuntimeSnapshot {
   lastResult?: TddCycleResult;
   baselineVersion: number;
   unsupportedState?: ResetCategory[];
+  updatedAtMs?: number;
 }
 
 export interface StartOpts {
@@ -181,6 +183,11 @@ export interface TddCycleResult {
   unsupportedState?: ResetCategory[];
 }
 
+export interface TddSyncResult {
+  lastSync: TddCycleResult['lastSync'];
+  snapshot: RuntimeSnapshot;
+}
+
 export interface TddRuntimeDeps {
   daemon?: {
     start(): Promise<void>;
@@ -229,6 +236,30 @@ export interface TddRuntimeDeps {
     mock: {
       clear(): Promise<void>;
       clearCalls(): Promise<void>;
+      loadRules?(mockDir?: string): Promise<void>;
+      listRules?(): Array<{
+        endpoint: string;
+        method: string;
+        rules: string[];
+        activeRule: string;
+      }>;
+      switchRule?(endpoint: string, ruleName: string, method?: string): Promise<void>;
+    };
+    state?: {
+      override(key: string, value: unknown): Promise<void>;
+    };
+    storage?: {
+      reset(seed?: Record<string, unknown>): Promise<{
+        status: 'ok' | 'unsupported';
+        clearedKeys?: number;
+        seededKeys?: number;
+        message?: string;
+      }>;
+    };
+    app?: {
+      hasCapability?(name: string): Promise<boolean>;
+      listCapabilities?(): Promise<Array<{ name: string; methods: string[] }>>;
+      invoke(capability: string, method: string, input?: unknown): Promise<unknown>;
     };
     reloadSources?(): Promise<unknown>;
   };

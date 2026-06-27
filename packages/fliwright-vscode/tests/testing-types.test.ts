@@ -14,4 +14,7 @@ describe('testing node utils', () => {
   it('aggregates: all unknown -> unknown', () => {
     expect(aggregateStatus(['unknown'])).toBe('unknown');
   });
+  it('aggregates: running overrides stored results', () => {
+    expect(aggregateStatus(['passed', 'running', 'failed'])).toBe('running');
+  });
 });
