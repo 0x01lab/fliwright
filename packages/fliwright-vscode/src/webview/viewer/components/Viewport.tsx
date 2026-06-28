@@ -62,6 +62,7 @@ export function Viewport(props: ViewportProps): JSX.Element {
   const position = idx >= 0 ? `${idx + 1} / ${orderedKeys.length}` : '';
 
   const route = selection?.mode === 'timeline' ? selection.node?.route : undefined;
+  const emptyHint = viewportEmptyHint(selection?.mode);
 
   return (
     <div className="viewport">
@@ -86,7 +87,7 @@ export function Viewport(props: ViewportProps): JSX.Element {
           <div className="viewport-empty">
             <div className="viewport-empty-icon">📱</div>
             <div>No screenshot captured for this step</div>
-            <div className="viewport-hint">Use trace mode "full" to capture every step.</div>
+            <div className="viewport-hint">{emptyHint}</div>
           </div>
         )}
       </div>
@@ -106,4 +107,14 @@ export function Viewport(props: ViewportProps): JSX.Element {
       </div>
     </div>
   );
+}
+
+export function viewportEmptyHint(mode: Selection['mode'] | undefined): string {
+  if (mode === 'actions') {
+    return 'Use trace mode "full" to capture every action, or "on-failure" for failed actions.';
+  }
+  if (mode === 'timeline') {
+    return 'Timeline screenshots come from flow.frame({ screenshot: true }) or failed locator assertions.';
+  }
+  return 'Open a run with timeline or action trace data.';
 }
