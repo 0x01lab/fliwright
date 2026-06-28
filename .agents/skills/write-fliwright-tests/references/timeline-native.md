@@ -13,7 +13,7 @@ import { test, script, expect } from '@fliwright/vitest';
 | `test` | E2E verification that should pass/fail in CI | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
 | `script` | Automation tasks, account setup, data entry, cleanup flows | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
 
-Both write `<runsRoot>/<runId>/timeline.json` and `<runsRoot>/<runId>/logs/events.jsonl`. `<runsRoot>` 默认是项目内 `.fliwright/runs`；经 VS Code 运行时扩展会注入 `FLIWRIGHT_RUNS_ROOT`，把产物改到 `~/.fliwright/projects/<project-slug>/runs`（见 SKILL「运行产物与 runs 根目录」）。`test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions.
+Both write `<runsRoot>/<runId>/timeline.json` and `<runsRoot>/<runId>/logs/events.jsonl`. `<runsRoot>` 默认是 `~/.fliwright/projects/<project-slug>/runs`，也可通过 `FLIWRIGHT_RUNS_ROOT` 或 `defineConfig({ runsRoot })` 覆盖。`test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions.
 
 ## Standard Test Shape
 
@@ -227,7 +227,7 @@ fliwright_timeline_get({ path?, runId?, nodeId?, includeArtifacts? })
 fliwright_agent_diagnose({ path?, runId?, failureIndex?, failure? })
 ```
 
-For local debugging, open `<runsRoot>/<runId>/timeline.json`（经 VS Code 运行在 `~/.fliwright/projects/<project-slug>/runs/`，否则在项目内 `.fliwright/runs/`） and inspect `agentVisibleFailures`, failed nodes, and artifact paths.
+For local debugging, open `<runsRoot>/<runId>/timeline.json`（默认在 `~/.fliwright/projects/<project-slug>/runs/`） and inspect `agentVisibleFailures`, failed nodes, and artifact paths.
 
 For chronological log events, read `<runsRoot>/<runId>/logs/events.jsonl`（路径同上） or enable live output with:
 

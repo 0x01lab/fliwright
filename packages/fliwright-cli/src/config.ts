@@ -8,6 +8,7 @@ export interface FliwrightCliConfig {
   screenshot: 'file' | 'base64' | 'off';
   testDir: string;
   reporter: 'pretty' | 'json' | 'junit' | 'ai-json';
+  runsRoot?: string;
 }
 
 const DEFAULTS: FliwrightCliConfig = {

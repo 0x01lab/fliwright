@@ -114,8 +114,8 @@ const test = createFliwrightTest(defineConfig({
 | `mode` | `'test' \| 'script'` | `'test'` | 写入 timeline 的运行模式 |
 | `requireAssertions` | `boolean` | `false` | 为 `true` 时，测试结束前必须至少有一个 locator `expect(...).to*` timeline assertion node |
 | `agentPolicy` | `AgentPolicy` | *(未设)* | 主动/被动 agent 策略 |
-| `timelineDir` | `string` | `process.cwd()` | 兜底根目录的 base；仅当未设 `runsRoot`/`FLIWRIGHT_RUNS_ROOT` 时，产物落 `<timelineDir>/.fliwright/runs/<runId>/` |
-| `runsRoot` | `string` | *(未设)* | 显式产物根目录，优先级高于 `FLIWRIGHT_RUNS_ROOT` 与 `timelineDir`。经 VS Code 运行时扩展自动注入 `FLIWRIGHT_RUNS_ROOT` 指向 `~/.fliwright/projects/<project-slug>/runs` |
+| `timelineDir` | `string` | `process.cwd()` | 用作默认项目目录解析的 project root；未设 `runsRoot`/`FLIWRIGHT_RUNS_ROOT` 时，产物落到 `~/.fliwright/projects/<project-slug>/runs/<runId>/` |
+| `runsRoot` | `string` | *(未设)* | 显式产物根目录，优先级高于 `FLIWRIGHT_RUNS_ROOT` 与默认 per-project home root |
 | `log` | `FliwrightLogConfig` | `{ outputs: ['jsonl-file'] }` | 结构化日志 level、format、outputs 和路径。见 [logging.md](./logging.md)。 |
 
 ```typescript

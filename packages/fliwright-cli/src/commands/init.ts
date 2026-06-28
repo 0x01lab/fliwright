@@ -54,7 +54,6 @@ const TSCONFIG_TEMPLATE = `{
 `;
 
 const GITIGNORE_LINES = [
-  '.fliwright/runs/',
   '.fliwright/ai/',
   '.fliwright/failures/',
 ];

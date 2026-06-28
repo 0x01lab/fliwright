@@ -1,6 +1,6 @@
 import type * as vscode from 'vscode';
 
-export type TestNodeStatus = 'passed' | 'failed' | 'running' | 'unknown';
+export type TestNodeStatus = 'passed' | 'failed' | 'running' | 'skipped' | 'unknown';
 
 export interface TestFileNode {
   kind: 'testFile';
@@ -30,12 +30,15 @@ export interface TestCaseNode {
   fileUri: vscode.Uri;
 }
 
-export interface TestStepNode {
-  kind: 'testStep';
+export interface TestAssertionNode {
+  kind: 'testAssertion';
+  id: string;
   label: string;
-  status: 'passed' | 'failed' | 'pending';
+  status: Exclude<TestNodeStatus, 'unknown'>;
   fileUri: vscode.Uri;
-  stepIndex: number;
+  assertionIndex: number;
+  durationMs?: number;
+  error?: string;
 }
 
 export interface EmptyNode {
@@ -44,7 +47,7 @@ export interface EmptyNode {
 }
 
 export type TestTreeNode =
-  | TestFileNode | TestGroupNode | TestCaseNode | TestStepNode | EmptyNode;
+  | TestFileNode | TestGroupNode | TestCaseNode | TestAssertionNode | EmptyNode;
 
 /** Build the stable id for a test/group from its ancestor chain. */
 export function testNodeId(relPath: string, ancestorTitles: string[], title: string): string {
@@ -57,5 +60,6 @@ export function aggregateStatus(statuses: TestNodeStatus[]): TestNodeStatus {
   if (statuses.includes('running')) return 'running';
   if (statuses.includes('failed')) return 'failed';
   if (statuses.includes('passed')) return 'passed';
+  if (statuses.includes('skipped')) return 'skipped';
   return 'unknown';
 }

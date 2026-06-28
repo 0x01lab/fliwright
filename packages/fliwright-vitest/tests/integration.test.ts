@@ -1,4 +1,5 @@
 import { describe, it, expect, test as vitestTest, vi } from 'vitest';
+import { mkdtempSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -66,6 +67,8 @@ vi.mock(import('@fliwright/core'), async () => {
     FliwrightDriver: MockDriver,
   };
 });
+
+const testRunsRoot = mkdtempSync(join(tmpdir(), 'fliwright-vitest-runs-'));
 
 describe('createFliwrightTest', () => {
   it('creates a test function with page fixture', () => {
@@ -153,6 +156,7 @@ describe('createFliwrightTest', () => {
 
 const testWithAi = createFliwrightTest({
   vmServiceUrl: 'ws://localhost:12345/ws',
+  runsRoot: testRunsRoot,
   ai: { provider: 'mock' },
 });
 
@@ -162,6 +166,7 @@ testWithAi('provides an aiRuntime fixture to generated tests', async ({ aiRuntim
 
 const testWithTimeline = createFliwrightTest({
   vmServiceUrl: 'ws://localhost:12345/ws',
+  runsRoot: testRunsRoot,
   ai: { provider: 'mock' },
 });
 
@@ -195,6 +200,7 @@ testWithTimeline('records locator expect assertions in the timeline', async ({ p
 const testWithLogger = createFliwrightTest({
   vmServiceUrl: 'ws://localhost:12345/ws',
   timelineDir: await mkdtemp(join(tmpdir(), 'fliwright-vitest-logs-')),
+  runsRoot: testRunsRoot,
   log: {
     level: 'debug',
     format: 'jsonl',

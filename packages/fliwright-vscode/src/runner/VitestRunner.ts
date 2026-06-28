@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createRequire as createNodeRequire } from 'node:module';
 import * as path from 'node:path';
+import { FLIWRIGHT_RUNS_ROOT_ENV } from '@fliwright/core';
 import type { RunResult, TestCaseResult } from '../types.js';
 import type { RunParams, TestRunner } from './TestRunner.js';
 
@@ -28,7 +29,7 @@ export function buildRunEnv(params: RunParams): NodeJS.ProcessEnv {
     ...process.env,
     FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: params.failureContextDir.fsPath,
   };
-  if (params.runsRoot) env.FLIWRIGHT_RUNS_ROOT = params.runsRoot;
+  if (params.runsRoot) env[FLIWRIGHT_RUNS_ROOT_ENV] = params.runsRoot;
   if (params.runId) env.FLIWRIGHT_RUN_ID = params.runId;
   if (params.vmServiceUrl) env.FLIWRIGHT_VM_URL = params.vmServiceUrl;
   if (params.traceMode && params.traceMode !== 'off' && params.traceDir) {

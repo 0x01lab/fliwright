@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { FLIWRIGHT_RUNS_ROOT_ENV } from '@fliwright/core';
 import { startVitest, type Vitest } from 'vitest/node';
 import { focusAndRerun } from './FocusedRerunRecipe.js';
 import { ResultReporter, type CollectedResult } from './ResultReporter.js';
@@ -108,7 +109,7 @@ export class PersistentTestExecutor {
     restoreEnv('FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH', this.previousFailureContextPath);
     restoreEnv('FLIWRIGHT_SCREENSHOT_MODE', this.previousScreenshotMode);
     restoreEnv('FLIWRIGHT_FAILURE_TIMEOUT_MS', this.previousFailureTimeoutMs);
-    restoreEnv('FLIWRIGHT_RUNS_ROOT', this.previousRunsRoot);
+    restoreEnv(FLIWRIGHT_RUNS_ROOT_ENV, this.previousRunsRoot);
     this.envApplied = false;
   }
 
@@ -127,7 +128,7 @@ export class PersistentTestExecutor {
       this.runsRoot = join(artifactsRoot, 'runs');
       await writeFile(this.failureContextPath, '[]', 'utf8');
       process.env.FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH = this.failureContextPath;
-      process.env.FLIWRIGHT_RUNS_ROOT = this.runsRoot;
+      process.env[FLIWRIGHT_RUNS_ROOT_ENV] = this.runsRoot;
       process.env.FLIWRIGHT_SCREENSHOT_MODE = process.env.FLIWRIGHT_SCREENSHOT_MODE ?? 'base64';
       process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS = process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS ?? '5000';
       this.envApplied = true;
@@ -145,7 +146,7 @@ export class PersistentTestExecutor {
     this.previousFailureContextPath = process.env.FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH;
     this.previousScreenshotMode = process.env.FLIWRIGHT_SCREENSHOT_MODE;
     this.previousFailureTimeoutMs = process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS;
-    this.previousRunsRoot = process.env.FLIWRIGHT_RUNS_ROOT;
+    this.previousRunsRoot = process.env[FLIWRIGHT_RUNS_ROOT_ENV];
   }
 
   private async readFailureDetails(testName: string): Promise<TddFailureDetails | undefined> {

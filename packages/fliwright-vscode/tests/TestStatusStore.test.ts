@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { TestStatusStore } from '../src/testing/TestStatusStore.js';
@@ -75,6 +75,59 @@ describe('TestStatusStore', () => {
 
     const idx = JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8'));
     expect(idx['tests/a.test.ts::case A']).toMatchObject({ status: 'passed' });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+
+
+  it('loads assertion statuses from the latest per-test timeline', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fliwright-runs-assertions-'));
+    const store = new TestStatusStore(dir);
+    await store.recordRun('run-assertions', 1000, fakeRoot('/repo'), {
+      passed: false,
+      totalTests: 1,
+      passedTests: 0,
+      failedTests: 1,
+      duration: 10,
+      results: [
+        { name: 'suite > case A', passed: false, duration: 10, error: 'boom' },
+      ],
+    }, 'tests/a.test.ts');
+    mkdirSync(join(dir, 'run-assertions-suite-case-A'), { recursive: true });
+    writeFileSync(join(dir, 'run-assertions-suite-case-A', 'timeline.json'), JSON.stringify({
+      version: 1,
+      runId: 'run-assertions-suite-case-A',
+      testName: 'suite > case A',
+      mode: 'test',
+      status: 'failed',
+      startedAt: '2026-06-28T00:00:00.000Z',
+      nodes: [
+        {
+          id: 'a1',
+          kind: 'assertion',
+          title: '首页头像按钮可见',
+          status: 'passed',
+          startedAt: '2026-06-28T00:00:00.000Z',
+          endedAt: '2026-06-28T00:00:00.012Z',
+        },
+        {
+          id: 'a2',
+          kind: 'assertion',
+          title: '年度审核提醒操作按钮可见',
+          status: 'failed',
+          startedAt: '2026-06-28T00:00:00.020Z',
+          endedAt: '2026-06-28T00:00:00.030Z',
+          error: { message: 'not visible' },
+        },
+      ],
+    }));
+
+    const assertions = await store.loadAssertions('tests/a.test.ts::suite/case A');
+
+    expect(assertions).toEqual([
+      expect.objectContaining({ label: '首页头像按钮可见', status: 'passed', durationMs: 12 }),
+      expect.objectContaining({ label: '年度审核提醒操作按钮可见', status: 'failed', durationMs: 10, error: 'not visible' }),
+    ]);
     rmSync(dir, { recursive: true, force: true });
   });
 

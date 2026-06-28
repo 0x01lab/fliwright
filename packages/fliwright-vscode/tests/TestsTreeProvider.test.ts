@@ -25,6 +25,7 @@ describe('TestsTreeProvider', () => {
       loadIndex: vi.fn().mockResolvedValue(new Map([
         ['tests/a.test.ts::suite/case A', { runId: 'r1', status: 'passed' as const, ranAt: 1, durationMs: 12 }],
       ])),
+      loadAssertions: vi.fn().mockResolvedValue([]),
     } as unknown as TestStatusStore;
 
     const provider = new TestsTreeProvider(discovery as any, store);
@@ -51,14 +52,19 @@ describe('TestsTreeProvider', () => {
     const itemA = provider.getTreeItem(cases[0]!);
     expect(itemA.iconPath).toBeTruthy(); // ThemeIcon('pass')
     expect((itemA.iconPath as any).id).toBe('pass');
-    expect(itemA.collapsibleState).toBe(vscode.TreeItemCollapsibleState.None);
+    expect(itemA.collapsibleState).toBe(vscode.TreeItemCollapsibleState.Collapsed);
+    expect(itemA.command).toMatchObject({
+      command: 'vscode.open',
+      title: 'Open Test File',
+      arguments: [fileUri],
+    });
     await expect(provider.getChildren(cases[0]!)).resolves.toEqual([]);
   });
 
   it('empty workspace shows empty node', async () => {
     await createWorkspace(); // no test files
     const discovery = { discover: vi.fn().mockResolvedValue([]) } as any;
-    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()) } as unknown as TestStatusStore;
+    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()), loadAssertions: vi.fn().mockResolvedValue([]) } as unknown as TestStatusStore;
     const provider = new TestsTreeProvider(discovery as any, store);
     const roots = await provider.getChildren();
     expect(roots[0]!.kind).toBe('empty');
@@ -76,7 +82,7 @@ describe('TestsTreeProvider', () => {
     const discovery = {
       discover: vi.fn().mockResolvedValue([{ kind: 'testFile', uri: fileUri, label: 'running.test.ts' }]),
     } as any;
-    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()) } as unknown as TestStatusStore;
+    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()), loadAssertions: vi.fn().mockResolvedValue([]) } as unknown as TestStatusStore;
     const provider = new TestsTreeProvider(discovery as any, store);
 
     const files = await provider.getChildren();
@@ -111,6 +117,7 @@ describe('TestsTreeProvider', () => {
       loadIndex: vi.fn().mockResolvedValue(new Map([
         ['tests/single.test.ts::case B', { runId: 'r1', status: 'passed' as const, ranAt: 1, durationMs: 9 }],
       ])),
+      loadAssertions: vi.fn().mockResolvedValue([]),
     } as unknown as TestStatusStore;
     const provider = new TestsTreeProvider(discovery as any, store);
 
@@ -120,6 +127,49 @@ describe('TestsTreeProvider', () => {
     const cases = await provider.getChildren(files[0]!);
     expect((cases[0] as any).status).toBe('running');
     expect((cases[1] as any).status).toBe('passed');
+  });
+
+
+
+  it('expands a completed test case into assertion status nodes from the run timeline', async () => {
+    const ws = await createWorkspace();
+    const relPath = 'tests/assertions.test.ts';
+    await writeText(ws, relPath, `
+      import { test } from 'vitest';
+      test('case A', () => {});
+    `);
+    const fileUri = vscode.Uri.file(path.join(ws, relPath));
+
+    const discovery = {
+      discover: vi.fn().mockResolvedValue([{ kind: 'testFile', uri: fileUri, label: 'assertions.test.ts' }]),
+    } as any;
+    const store = {
+      loadIndex: vi.fn().mockResolvedValue(new Map([
+        ['tests/assertions.test.ts::case A', { runId: 'r1', status: 'failed' as const, ranAt: 1, durationMs: 22 }],
+      ])),
+      loadAssertions: vi.fn().mockResolvedValue([
+        { id: 'a1', label: '首页头像按钮可见', status: 'passed' as const, assertionIndex: 0, durationMs: 12 },
+        { id: 'a2', label: '年度审核提醒操作按钮可见', status: 'failed' as const, assertionIndex: 1, error: 'not visible' },
+      ]),
+    } as unknown as TestStatusStore;
+    const provider = new TestsTreeProvider(discovery as any, store);
+
+    const files = await provider.getChildren();
+    const cases = await provider.getChildren(files[0]!);
+    const caseItem = provider.getTreeItem(cases[0]!);
+    expect(caseItem.collapsibleState).toBe(vscode.TreeItemCollapsibleState.Collapsed);
+
+    const assertions = await provider.getChildren(cases[0]!);
+    expect(assertions.map((node) => node.kind === 'testAssertion' ? node.label : '')).toEqual([
+      '首页头像按钮可见',
+      '年度审核提醒操作按钮可见',
+    ]);
+
+    const firstItem = provider.getTreeItem(assertions[0]!);
+    const secondItem = provider.getTreeItem(assertions[1]!);
+    expect((firstItem.iconPath as any).id).toBe('pass');
+    expect((secondItem.iconPath as any).id).toBe('error');
+    expect(secondItem.tooltip).toBe('not visible');
   });
 
   it('does NOT parse any file source until a file row is expanded (lazy, with per-file cache)', async () => {
@@ -134,7 +184,7 @@ describe('TestsTreeProvider', () => {
     const discovery = {
       discover: vi.fn().mockResolvedValue([{ kind: 'testFile', uri: fileUri, label: 'lazy.test.ts' }]),
     } as any;
-    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()) } as unknown as TestStatusStore;
+    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()), loadAssertions: vi.fn().mockResolvedValue([]) } as unknown as TestStatusStore;
     const provider = new TestsTreeProvider(discovery as any, store);
 
     const files = await provider.getChildren();        // root expansion
@@ -161,7 +211,7 @@ describe('TestsTreeProvider', () => {
     const discovery = {
       discover: vi.fn().mockResolvedValue([{ kind: 'testFile', uri: fileUri, label: 'inv.test.ts' }]),
     } as any;
-    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()) } as unknown as TestStatusStore;
+    const store = { loadIndex: vi.fn().mockResolvedValue(new Map()), loadAssertions: vi.fn().mockResolvedValue([]) } as unknown as TestStatusStore;
     const provider = new TestsTreeProvider(discovery as any, store);
 
     const files = await provider.getChildren();

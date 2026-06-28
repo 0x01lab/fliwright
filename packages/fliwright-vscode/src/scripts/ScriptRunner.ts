@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { FLIWRIGHT_RUNS_ROOT_ENV } from '@fliwright/core';
 import type * as vscode from 'vscode';
 import type { RunResult, ScriptFileEntry } from '../types.js';
 
@@ -27,7 +28,7 @@ export class ScriptRunner {
       env.FLIWRIGHT_VM_SERVICE_URL = params.vmServiceUrl;
       env.FLIWRIGHT_VM_URL = params.vmServiceUrl;
     }
-    if (params.runsRoot) env.FLIWRIGHT_RUNS_ROOT = params.runsRoot;
+    if (params.runsRoot) env[FLIWRIGHT_RUNS_ROOT_ENV] = params.runsRoot;
     if (params.runId) env.FLIWRIGHT_RUN_ID = params.runId;
     if (params.traceMode && params.traceMode !== 'off' && params.traceDir) {
       env.FLIWRIGHT_TRACE = params.traceMode;

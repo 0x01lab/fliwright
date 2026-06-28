@@ -6,6 +6,17 @@ import type { RunArtifactIndexEntry } from './RunArtifactStore.js';
 
 export type TestStatusEntry = RunArtifactIndexEntry;
 
+export type AssertionStatus = 'passed' | 'failed' | 'running' | 'skipped';
+
+export interface AssertionStatusEntry {
+  id: string;
+  label: string;
+  status: AssertionStatus;
+  assertionIndex: number;
+  durationMs?: number;
+  error?: string;
+}
+
 interface IndexMap {
   [nodeId: string]: TestStatusEntry;
 }
@@ -60,6 +71,28 @@ export class TestStatusStore {
       map.set(id, toEntry(runId, ranAt, tc));
     }
     await this.writeIndex(map);
+  }
+
+
+  async loadAssertions(testId: string): Promise<AssertionStatusEntry[]> {
+    const index = await this.loadIndex();
+    const entry = index.get(testId);
+    if (!entry) return [];
+
+    const timeline = await readJson(join(this.runsDir, entry.runId, 'timeline.json'))
+      ?? await readJson(join(this.runsDir, entry.resultRunId, 'timeline.json'));
+    const nodes: unknown[] = Array.isArray(timeline?.nodes) ? timeline.nodes : [];
+
+    return nodes
+      .filter(isTimelineAssertionNode)
+      .map((node: TimelineAssertionNode, index: number) => ({
+        id: typeof node.id === 'string' ? node.id : `${testId}::assertion-${index + 1}`,
+        label: node.title,
+        status: node.status,
+        assertionIndex: index,
+        durationMs: durationMs(node.startedAt, node.endedAt),
+        error: typeof node.error?.message === 'string' ? node.error.message : undefined,
+      }));
   }
 
   async pruneDangling(keepRunIds: Set<string>): Promise<void> {
@@ -118,4 +151,44 @@ function normalizeRelPath(value: string): string {
 
 function safeName(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'test';
+}
+
+
+interface TimelineAssertionNode {
+  id?: unknown;
+  kind: 'assertion';
+  title: string;
+  status: AssertionStatus;
+  startedAt?: unknown;
+  endedAt?: unknown;
+  error?: { message?: unknown };
+}
+
+
+function isTimelineAssertionNode(node: unknown): node is TimelineAssertionNode {
+  if (typeof node !== 'object' || node === null) return false;
+  const candidate = node as Record<string, unknown>;
+  return candidate.kind === 'assertion'
+    && typeof candidate.title === 'string'
+    && isAssertionStatus(candidate.status);
+}
+
+async function readJson(filePath: string): Promise<any | undefined> {
+  try {
+    return JSON.parse(await readFile(filePath, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+function isAssertionStatus(value: unknown): value is AssertionStatus {
+  return value === 'passed' || value === 'failed' || value === 'running' || value === 'skipped';
+}
+
+function durationMs(startedAt: unknown, endedAt: unknown): number | undefined {
+  if (typeof startedAt !== 'string' || typeof endedAt !== 'string') return undefined;
+  const start = Date.parse(startedAt);
+  const end = Date.parse(endedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return undefined;
+  return end - start;
 }

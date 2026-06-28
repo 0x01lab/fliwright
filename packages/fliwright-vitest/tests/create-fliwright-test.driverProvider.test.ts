@@ -1,4 +1,7 @@
 import { describe, expect, vi } from 'vitest';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createFliwrightTest } from '../src/index.js';
 
 function makeStubDriver() {
@@ -21,7 +24,12 @@ function makeStubDriver() {
 describe('createFliwrightTest driverProvider', () => {
   const provider = vi.fn(async () => makeStubDriver());
   const test = createFliwrightTest(
-    { vmServiceUrl: 'ws://placeholder/ws', requireAssertions: false, mode: 'script' },
+    {
+      vmServiceUrl: 'ws://placeholder/ws',
+      requireAssertions: false,
+      mode: 'script',
+      runsRoot: mkdtempSync(join(tmpdir(), 'fliwright-vitest-driver-')),
+    },
     { driverProvider: provider },
   );
 

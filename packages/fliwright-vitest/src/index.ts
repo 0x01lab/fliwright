@@ -24,6 +24,7 @@ import {
   Page as FliwrightPage,
   PrettyLogFormatter,
   readWorkspaceConfigSync,
+  resolveFliwrightRunsRoot,
   TraceCollector,
   TraceStore,
   StructuredLogger,
@@ -69,11 +70,14 @@ export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUr
 
 /**
  * Decide where run artifacts go for a fliwright test run.
- * Precedence: explicit config.runsRoot > FLIWRIGHT_RUNS_ROOT env > undefined
- * (the caller — createFliwrightTest — falls back to legacy cwd/.fliwright when undefined).
+ * Precedence is implemented by @fliwright/core:
+ * explicit config.runsRoot > FLIWRIGHT_RUNS_ROOT env > per-project home root.
  */
-export function resolveRunsRoot(config: { runsRoot?: string }): string | undefined {
-  return config.runsRoot ?? process.env.FLIWRIGHT_RUNS_ROOT;
+export function resolveRunsRoot(config: { runsRoot?: string; projectRoot?: string }): string {
+  return resolveFliwrightRunsRoot({
+    runsRoot: config.runsRoot,
+    projectRoot: config.projectRoot,
+  });
 }
 
 let sharedDriver: FliwrightDriver | null = null;
@@ -130,10 +134,11 @@ export function createFliwrightTest(config: FliwrightConfig, options?: CreateFli
     timeline: async ({ task }, use) => {
       const testName = getTestName(task);
       const testRunId = `${process.env.FLIWRIGHT_RUN_ID ?? runId}-${safeName(testName)}`;
-      const runsRoot = resolveRunsRoot(config);
+      const cwd = config.timelineDir ?? process.cwd();
+      const runsRoot = resolveRunsRoot({ runsRoot: config.runsRoot, projectRoot: cwd });
       const artifactStore = new TimelineArtifactStore({
-        cwd: config.timelineDir ?? process.cwd(),
-        ...(runsRoot ? { runsRoot } : {}),
+        cwd,
+        runsRoot,
         runId: testRunId,
       });
       const logger = createRunLogger(config, {

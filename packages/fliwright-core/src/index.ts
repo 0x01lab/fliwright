@@ -104,6 +104,20 @@ export type { AssertionOptions, AssertionTimelineOptions } from './Assertion.js'
 export { FailureCollector } from './FailureCollector.js';
 export { TraceCollector, isActionMethod, TraceStore } from './TraceCollector.js';
 export type { TraceStep, TraceMeta, TraceData, TraceMode } from './TraceCollector.js';
+export {
+  FLIWRIGHT_RUNS_ROOT_ENV,
+  ensureFliwrightRunsRoot,
+  legacyProjectRunsRoot,
+  projectRunsRoot,
+  projectRunsRootCandidates,
+  resolveFliwrightRunsRoot,
+  sanitizeProjectPathName,
+} from './runArtifacts.js';
+export type {
+  EnsureFliwrightRunsRootOptions,
+  ProjectRunsRootResult,
+  ResolveFliwrightRunsRootOptions,
+} from './runArtifacts.js';
 export { EventAggregator } from './EventAggregator.js';
 export {
   CompactLogFormatter,

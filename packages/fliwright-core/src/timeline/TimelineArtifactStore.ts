@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { resolveFliwrightRunsRoot } from '../runArtifacts.js';
 import type { TimelineArtifactRef, TimelineData } from './types.js';
 
 export interface TimelineArtifactStoreOptions {
@@ -13,9 +14,10 @@ export class TimelineArtifactStore {
   readonly runDir: string;
 
   constructor(options: TimelineArtifactStoreOptions) {
-    const root = options.runsRoot
-      ?? process.env.FLIWRIGHT_RUNS_ROOT
-      ?? join(options.cwd ?? process.cwd(), '.fliwright', 'runs');
+    const root = resolveFliwrightRunsRoot({
+      runsRoot: options.runsRoot,
+      projectRoot: options.cwd,
+    });
     this.runDir = join(root, options.runId);
   }
 

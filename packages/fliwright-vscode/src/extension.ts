@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import type { FormAnalyzeResult, FormFillResult } from '@fliwright/core';
 import {
   clearWorkspaceVmServiceUrl,
+  FLIWRIGHT_RUNS_ROOT_ENV,
   mockRuleController,
   readWorkspaceConfigSync,
   setConnectorDebugLog,
@@ -1358,7 +1359,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             FLIWRIGHT_VM_URL: session.currentUrl,
           } : {}),
           ...(runsRoot ? {
-            FLIWRIGHT_RUNS_ROOT: runsRoot,
+            [FLIWRIGHT_RUNS_ROOT_ENV]: runsRoot,
             FLIWRIGHT_RUN_ID: runId,
           } : {}),
           ...(traceMode !== 'off' && scriptTraceDir ? {

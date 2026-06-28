@@ -29,8 +29,8 @@ fliwright run \
 1. 通过 jiti 加载 `fliwright.config.ts` 取默认值——`testDir`、`vmServiceUrl`、`timeout`、`reporter`。
 2. 解析 VM URL：优先级 `--vm-url` ▸ `config.vmServiceUrl` ▸ 自动发现（`vm-discovery.ts` 会扫描正在运行的 Flutter VM Service）。
 3. 用 `--reporter=json` 启动 Vitest，注入 `FLIWRIGHT_VM_URL`、`FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`、`FLIWRIGHT_SCREENSHOT_MODE`、`FLIWRIGHT_FAILURE_TIMEOUT_MS`。
-4. 读取失败上下文 JSON 和测试产出的 timeline，把截图/快照持久化到 `.fliwright/runs/<runId>/`。
-5. 把完整报告写到 `.fliwright/runs/<runId>/report.json`（或 `--output` 指定的路径），并在 artifacts 中列出 timeline path。
+4. 读取失败上下文 JSON 和测试产出的 timeline，把截图/快照持久化到 `~/.fliwright/projects/<project-slug>/runs/<runId>/`（或 `FLIWRIGHT_RUNS_ROOT` 覆盖的根目录）。
+5. 把完整报告写到 `<runsRoot>/<runId>/report.json`（或 `--output` 指定的路径），并在 artifacts 中列出 timeline path。
 6. 每次运行都打印 `reproduceCommand`（`fliwright run --test … --test-name …`）。
 
 ### 报告器

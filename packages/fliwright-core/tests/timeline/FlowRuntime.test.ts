@@ -13,7 +13,8 @@ import {
 
 function createFlow(page?: Page) {
   const recorder = new TimelineRecorder({ runId: 'run-1', testName: 'flow test', mode: 'script' });
-  const store = new TimelineArtifactStore({ cwd: join(tmpdir(), `fliwright-flow-${Date.now()}`), runId: 'run-1' });
+    const cwd = join(tmpdir(), `fliwright-flow-${Date.now()}`);
+    const store = new TimelineArtifactStore({ cwd, runsRoot: join(cwd, 'runs'), runId: 'run-1' });
   return { recorder, store, flow: new FlowRuntime({ recorder, artifactStore: store, page }) };
 }
 
@@ -204,7 +205,7 @@ describe('FlowRuntime', () => {
       } satisfies AgentSnapshotResult),
     } as unknown as Page;
     const recorder = new TimelineRecorder({ runId: 'run-frame', testName: 'frame test' });
-    const store = new TimelineArtifactStore({ cwd, runId: 'run-frame' });
+    const store = new TimelineArtifactStore({ cwd, runsRoot: join(cwd, 'runs'), runId: 'run-frame' });
     const flow = new FlowRuntime({ recorder, artifactStore: store, page });
 
     const artifacts = await flow.frame('Register form visible', { screenshot: true, snapshot: true });
@@ -227,7 +228,7 @@ describe('FlowRuntime', () => {
       } satisfies AgentSnapshotResult),
     } as unknown as Page;
     const recorder = new TimelineRecorder({ runId: 'run-frame', testName: 'frame test' });
-    const store = new TimelineArtifactStore({ cwd, runId: 'run-frame' });
+    const store = new TimelineArtifactStore({ cwd, runsRoot: join(cwd, 'runs'), runId: 'run-frame' });
     const flow = new FlowRuntime({ recorder, artifactStore: store, page });
 
     const artifacts = await flow.frame('Register form filled', { screenshot: true, snapshot: true });

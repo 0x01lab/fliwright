@@ -1,3 +1,4 @@
+import { ensureFliwrightRunsRoot, FLIWRIGHT_RUNS_ROOT_ENV } from '@fliwright/core';
 import { resolveVmUrl } from '../vm-discovery.js';
 import { loadConfig } from '../config.js';
 import { formatPretty, formatJson, formatJunit, type CliFailureEntry, type CliRunResult } from '../reporter.js';
@@ -18,6 +19,7 @@ export interface RunOptions {
   output?: string;
   cwd?: string;
   print?: boolean;
+  runsRoot?: string;
 }
 
 export interface RunDeps {
@@ -34,8 +36,6 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
   const timeout = options.timeout ?? config.timeout ?? 30000;
   const screenshot = options.screenshot ?? 'file';
   const runId = createRunId();
-  const outputDir = join(cwd, '.fliwright', 'runs', runId);
-  const reportPath = options.output ? resolve(cwd, options.output) : join(outputDir, 'report.json');
 
   const resolver = deps.resolveVmUrl ?? resolveVmUrl;
   const vmUrl = await resolver({
@@ -55,6 +55,13 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
 
   deps.onVmResolved?.(vmUrl);
 
+  const runsRoot = await ensureFliwrightRunsRoot({
+    projectRoot: cwd,
+    runsRoot: options.runsRoot ?? config.runsRoot,
+  });
+  const outputDir = join(runsRoot, runId);
+  const reportPath = options.output ? resolve(cwd, options.output) : join(outputDir, 'report.json');
+
   const vitestResult = await runVitest({
     testPattern,
     testName: options.testName,
@@ -64,12 +71,14 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
     timeout,
     screenshot,
     runId,
+    runsRoot,
   });
   const withArtifacts = await attachArtifacts(vitestResult, {
     cwd,
     outputDir,
     reportPath,
     runId,
+    runsRoot,
     screenshot,
     testPattern,
     testName: options.testName,
@@ -91,10 +100,12 @@ interface RunVitestOptions {
   timeout: number;
   screenshot: 'file' | 'base64' | 'off';
   runId?: string;
+  runsRoot?: string;
 }
 
 export async function runVitest(options: RunVitestOptions): Promise<CliRunResult> {
-  const vitestCli = require.resolve('vitest/vitest.mjs');
+  const packageJson = require.resolve('vitest/package.json');
+  const vitestCli = join(dirname(packageJson), 'vitest.mjs');
   const args = [vitestCli, 'run', options.testPattern, '--reporter=json', '--testTimeout', String(options.timeout)];
   if (options.testName) {
     args.push('--testNamePattern', options.testName);
@@ -110,6 +121,7 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
       FLIWRIGHT_SCREENSHOT_MODE: options.screenshot,
       FLIWRIGHT_FAILURE_TIMEOUT_MS: String(options.timeout),
       ...(options.runId ? { FLIWRIGHT_RUN_ID: options.runId } : {}),
+      ...(options.runsRoot ? { [FLIWRIGHT_RUNS_ROOT_ENV]: options.runsRoot } : {}),
     },
     options.cwd,
   );
@@ -209,6 +221,7 @@ async function attachArtifacts(
     outputDir: string;
     reportPath: string;
     runId: string;
+    runsRoot: string;
     screenshot: 'file' | 'base64' | 'off';
     testPattern: string;
     testName?: string;
@@ -217,7 +230,7 @@ async function attachArtifacts(
   await mkdir(options.outputDir, { recursive: true });
   const screenshots: string[] = [];
   const failures = await persistScreenshots(result.failures ?? [], options.outputDir, options.screenshot, screenshots);
-  const timelines = await readTimelineSummaries(options.outputDir);
+  const timelines = await readTimelineSummaries(options.runsRoot, options.runId);
   const report: CliRunResult = {
     ...result,
     ...(failures.length > 0 ? { failures } : {}),
@@ -238,8 +251,8 @@ async function attachArtifacts(
   return report;
 }
 
-async function readTimelineSummaries(outputDir: string): Promise<NonNullable<CliRunResult['timelines']>> {
-  const entries = await findTimelineFiles(outputDir);
+async function readTimelineSummaries(runsRoot: string, runId: string): Promise<NonNullable<CliRunResult['timelines']>> {
+  const entries = await findTimelineFiles(runsRoot, runId);
   const summaries: NonNullable<CliRunResult['timelines']> = [];
   for (const path of entries) {
     try {
@@ -269,19 +282,35 @@ async function readTimelineSummaries(outputDir: string): Promise<NonNullable<Cli
   return summaries;
 }
 
-async function findTimelineFiles(outputDir: string): Promise<string[]> {
+async function findTimelineFiles(runsRoot: string, runId: string): Promise<string[]> {
   const found: string[] = [];
   try {
-    const entries = await readdir(outputDir, { withFileTypes: true });
+    const entries = await readdir(runsRoot, { withFileTypes: true });
     for (const entry of entries) {
-      const path = join(outputDir, entry.name);
+      if (!entry.isDirectory()) continue;
+      if (entry.name !== runId && !entry.name.startsWith(`${runId}-`)) continue;
+      const path = join(runsRoot, entry.name);
+      found.push(...await findTimelineFilesInRunDir(path));
+    }
+  } catch {
+    return [];
+  }
+  return found;
+}
+
+async function findTimelineFilesInRunDir(runDir: string): Promise<string[]> {
+  const found: string[] = [];
+  try {
+    const entries = await readdir(runDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const path = join(runDir, entry.name);
       if (entry.isDirectory()) {
         const candidate = join(path, 'timeline.json');
         try {
           await readFile(candidate, 'utf8');
           found.push(candidate);
         } catch {
-          found.push(...await findTimelineFiles(path));
+          found.push(...await findTimelineFilesInRunDir(path));
         }
       } else if (entry.isFile() && entry.name === 'timeline.json') {
         found.push(path);

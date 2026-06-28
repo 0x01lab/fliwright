@@ -89,6 +89,9 @@ export function getTraceHtml(
     let selectedStepIdx = -1;
 
     function init() {
+      // Single delegated click listener on the persistent #viewer container.
+      // Inline onclick handlers are blocked by the nonce-only CSP.
+      document.getElementById('viewer').addEventListener('click', onClick);
       const dirs = Object.keys(tracesData);
       if (!dirs.length) {
         document.getElementById('viewer').innerHTML = '<div class="empty-traces"><div class="icon">\\u{1F9EA}</div><h3>No trace data</h3><div>Run tests with trace enabled to see results here.</div></div>';
@@ -98,6 +101,17 @@ export function getTraceHtml(
       selectedTestDir = dirs.find(d => tracesData[d].meta.status === 'failed') || dirs[0];
       selectedStepIdx = 0;
       render();
+    }
+
+    function onClick(e) {
+      const el = e.target.closest('[data-action]');
+      if (!el) return;
+      const action = el.getAttribute('data-action');
+      if (action === 'select-test') {
+        selectTest(el.getAttribute('data-dir'));
+      } else if (action === 'select-step') {
+        selectStep(Number(el.getAttribute('data-idx')));
+      }
     }
 
     function render() {
@@ -116,7 +130,7 @@ export function getTraceHtml(
         const cls = 'test-tab' + (isActive ? ' active' : '') + (t.meta.status === 'failed' ? ' failed' : '');
         const label = esc(t.meta.testName.length > 20 ? t.meta.testName.substring(0, 20) + '...' : t.meta.testName);
         const icon = t.meta.status === 'passed' ? '\\u2713' : t.meta.status === 'failed' ? '\\u2717' : '\\u25CB';
-        html += '<button class="' + cls + '" onclick="selectTest(\\'' + dir + '\\')">' + icon + ' ' + label + '</button>';
+        html += '<button class="' + cls + '" data-action="select-test" data-dir="' + esc(dir) + '">' + icon + ' ' + label + '</button>';
       }
       html += '</div>';
       // Step list
@@ -135,7 +149,7 @@ export function getTraceHtml(
           if (s.screenshotFile) {
             thumb = '<img class="step-thumb" src="' + base + '/' + s.screenshotFile + '" alt="step">';
           }
-          html += '<div class="' + cls + '" onclick="selectStep(' + i + ')">';
+          html += '<div class="' + cls + '" data-action="select-step" data-idx="' + i + '">';
           html += '<div class="' + iconCls + '">' + icon + '</div>';
           html += '<div class="step-info"><div class="step-action">' + esc(s.action) + '</div><div class="step-selector">' + esc(s.selector || '\\u2014') + '</div></div>';
           html += '<div class="step-duration">' + s.durationMs + 'ms</div>';

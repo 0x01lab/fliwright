@@ -2,12 +2,13 @@ import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { TimelineArtifactStore, TimelineRecorder } from '../../src/index.js';
+import { projectRunsRoot, TimelineArtifactStore, TimelineRecorder } from '../../src/index.js';
 
 describe('TimelineArtifactStore', () => {
   it('writes timeline and deterministic artifact refs', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'fliwright-timeline-'));
-    const store = new TimelineArtifactStore({ cwd, runId: 'run-1' });
+    const runsRoot = join(cwd, 'runs-root');
+    const store = new TimelineArtifactStore({ cwd, runsRoot, runId: 'run-1' });
     const recorder = new TimelineRecorder({ runId: 'run-1', testName: 'artifact test' });
     const frame = recorder.startNode('frame', 'Visible form');
 
@@ -18,7 +19,7 @@ describe('TimelineArtifactStore', () => {
     recorder.passNode(frame.id);
     const timelinePath = await store.writeTimeline(recorder.complete('passed'));
 
-    expect(timelinePath).toBe(join(cwd, '.fliwright', 'runs', 'run-1', 'timeline.json'));
+    expect(timelinePath).toBe(join(runsRoot, 'run-1', 'timeline.json'));
     expect(await readFile(join(store.runDir, screenshot.path), 'utf8')).toBe('png');
     expect(JSON.parse(await readFile(join(store.runDir, snapshot.path), 'utf8'))).toEqual({
       snapshot: '- text "Hello"',
@@ -41,9 +42,9 @@ describe('TimelineArtifactStore runsRoot', () => {
     await rm(sandbox, { recursive: true, force: true });
   });
 
-  it('uses legacy project .fliwright/runs when no runsRoot and no env', () => {
+  it('uses the per-project home runs root when no runsRoot and no env', () => {
     const store = new TimelineArtifactStore({ cwd: sandbox, runId: 'r1' });
-    expect(store.runDir).toBe(join(sandbox, '.fliwright', 'runs', 'r1'));
+    expect(store.runDir).toBe(join(projectRunsRoot(sandbox).runsDir, 'r1'));
   });
 
   it('uses options.runsRoot when provided', () => {

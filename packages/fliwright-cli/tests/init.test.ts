@@ -40,7 +40,8 @@ describe('initCommand', () => {
     expect(pkg.scripts['test:fliwright']).toBe('fliwright run');
     expect(pkg.devDependencies['@fliwright/cli']).toBeDefined();
     expect(pkg.devDependencies['@fliwright/vitest']).toBeDefined();
-    expect(gitignore).toContain('.fliwright/runs/');
+    expect(gitignore).not.toContain('.fliwright/runs/');
+    expect(gitignore).toContain('.fliwright/failures/');
   });
 
   it('does not overwrite existing fliwright.config.ts or package scripts', async () => {

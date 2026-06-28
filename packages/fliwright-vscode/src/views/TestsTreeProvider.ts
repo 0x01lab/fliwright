@@ -9,6 +9,7 @@ import type { ParsedFile, ParsedNode } from '../testing/TestTreeBuilder.js';
 import {
   aggregateStatus,
   testNodeId,
+  type TestAssertionNode,
   type TestCaseNode,
   type TestFileNode,
   type TestGroupNode,
@@ -109,7 +110,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
         // expanded (see toNode). getChildren(group) just hands it back.
         return element.children ?? [];
       case 'testCase':
-        return [];
+        return this.assertionsForCase(element);
       default:
         return [];
     }
@@ -151,7 +152,9 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
         const item = iconItem(
           element.label,
           statusIcon(element.status),
-          vscode.TreeItemCollapsibleState.None,
+          hasRunnableStatus(element.status)
+            ? vscode.TreeItemCollapsibleState.Collapsed
+            : vscode.TreeItemCollapsibleState.None,
           element.status === 'running' ? 'testCaseRunning' : 'testCase',
         );
         item.description =
@@ -159,22 +162,26 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
             ? 'running'
             : element.durationMs != null ? `${element.durationMs}ms` : undefined;
         item.command = {
-          command: 'fliwright.runCurrentTest',
-          title: 'Run',
-          arguments: [element],
+          command: 'vscode.open',
+          title: 'Open Test File',
+          arguments: [element.fileUri],
         };
         return item;
       }
-      case 'testStep': {
+      case 'testAssertion': {
         const item = iconItem(
           element.label,
-          stepIcon(element.status),
+          statusIcon(element.status),
           vscode.TreeItemCollapsibleState.None,
-          'testStep',
+          element.status === 'running' ? 'testAssertionRunning' : 'testAssertion',
         );
+        item.description = element.status === 'running'
+          ? 'running'
+          : element.durationMs != null ? `${element.durationMs}ms` : element.status;
+        item.tooltip = element.error ?? element.label;
         item.command = {
-          command: 'fliwright.openVisualEditor',
-          title: 'Open',
+          command: 'vscode.open',
+          title: 'Open Test File',
           arguments: [element.fileUri],
         };
         return item;
@@ -278,6 +285,20 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
     if (this.runningFile === relPath) return 'running';
     return fallback;
   }
+
+  private async assertionsForCase(testCase: TestCaseNode): Promise<TestAssertionNode[]> {
+    const entries = await this.statusStore.loadAssertions(testCase.id);
+    return entries.map((entry) => ({
+      kind: 'testAssertion' as const,
+      id: `${testCase.id}::assertion/${entry.id}`,
+      label: entry.label,
+      status: testCase.status === 'running' ? 'running' : entry.status,
+      assertionIndex: entry.assertionIndex,
+      durationMs: entry.durationMs,
+      error: entry.error,
+      fileUri: testCase.fileUri,
+    }));
+  }
 }
 
 // ── helpers ────────────────────────────────────────────────────────────
@@ -297,9 +318,10 @@ function statusIcon(s: TestNodeStatus): string {
   if (s === 'passed') return 'pass';
   if (s === 'failed') return 'error';
   if (s === 'running') return 'loading~spin';
+  if (s === 'skipped') return 'debug-step-over';
   return 'circle-outline';
 }
 
-function stepIcon(s: string): string {
-  return s === 'passed' ? 'check' : s === 'failed' ? 'error' : 'circle-outline';
+function hasRunnableStatus(s: TestNodeStatus): boolean {
+  return s === 'passed' || s === 'failed' || s === 'running' || s === 'skipped';
 }

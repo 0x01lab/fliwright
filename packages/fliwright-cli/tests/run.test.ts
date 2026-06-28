@@ -4,6 +4,29 @@ import { mkdtemp, readFile, writeFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+function isolatedEnv(home: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+  };
+}
+
+async function withIsolatedHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
+  const home = await mkdtemp(join(tmpdir(), 'fliwright-cli-home-'));
+  const prevEnv = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+  Object.assign(process.env, isolatedEnv(home));
+  try {
+    return await fn(home);
+  } finally {
+    if (prevEnv.HOME === undefined) delete process.env.HOME;
+    else process.env.HOME = prevEnv.HOME;
+    if (prevEnv.USERPROFILE === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = prevEnv.USERPROFILE;
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
 describe('runCommand', () => {
   it('throws with friendly message when VM URL cannot be resolved', async () => {
     const options: RunOptions = {
@@ -11,9 +34,11 @@ describe('runCommand', () => {
       reporter: 'pretty',
     };
 
-    await expect(runCommand(options, {
-      resolveVmUrl: async () => null,
-    })).rejects.toThrow('Could not find a running Flutter VM Service');
+    await withIsolatedHome(async () => {
+      await expect(runCommand(options, {
+        resolveVmUrl: async () => null,
+      })).rejects.toThrow('Could not find a running Flutter VM Service');
+    });
   });
 
   it('passes vmServiceUrl through deps and runs vitest', async () => {
@@ -26,20 +51,89 @@ describe('runCommand', () => {
     ].join('\n'));
 
     let capturedUrl: string | undefined;
-    const result = await runCommand({
-      testPattern: 'pass.test.ts',
-      reporter: 'json',
-      cwd: tmpDir,
-    }, {
-      resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
-      onVmResolved: (url) => { capturedUrl = url; },
+    const result = await withIsolatedHome(async (home) => {
+      const runResult = await runCommand({
+        testPattern: 'pass.test.ts',
+        reporter: 'json',
+        cwd: tmpDir,
+      }, {
+        resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
+        onVmResolved: (url) => { capturedUrl = url; },
+      });
+      expect(runResult.artifacts!.outputDir).toContain(join(home, '.fliwright', 'projects'));
+      await expect(stat(runResult.artifacts!.reportPath!)).resolves.toBeDefined();
+      return runResult;
     });
 
     expect(capturedUrl).toBe('ws://mock-vm:8181/ws');
     expect(result.passed).toBe(true);
     expect(result.totalTests).toBe(1);
     expect(result.artifacts?.reportPath).toBeDefined();
-    await expect(stat(result.artifacts!.reportPath!)).resolves.toBeDefined();
+    expect(result.artifacts!.outputDir).not.toContain(join(tmpDir, '.fliwright', 'runs'));
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('uses runsRoot from fliwright.config.ts', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'fliwright-cli-config-runs-'));
+    const configuredRunsRoot = join(tmpDir, 'configured-runs');
+    await writeFile(join(tmpDir, 'fliwright.config.ts'), [
+      'export default {',
+      `  runsRoot: ${JSON.stringify(configuredRunsRoot)},`,
+      '};',
+    ].join('\n'));
+    await writeFile(join(tmpDir, 'pass.test.ts'), [
+      "import { describe, expect, it } from 'vitest';",
+      "describe('cli fixture', () => {",
+      "  it('passes', () => { expect(process.env.FLIWRIGHT_RUNS_ROOT).toBe(" + JSON.stringify(configuredRunsRoot) + "); });",
+      "});",
+    ].join('\n'));
+
+    const result = await withIsolatedHome(async () => runCommand({
+      testPattern: 'pass.test.ts',
+      reporter: 'ai-json',
+      cwd: tmpDir,
+      print: false,
+    }, {
+      resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
+    }));
+
+    expect(result.passed).toBe(true);
+    expect(result.artifacts!.outputDir).toContain(configuredRunsRoot);
+    expect(result.artifacts!.outputDir).not.toContain(join(tmpDir, '.fliwright', 'runs'));
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('lets RunOptions.runsRoot override config runsRoot', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'fliwright-cli-option-runs-'));
+    const configuredRunsRoot = join(tmpDir, 'configured-runs');
+    const explicitRunsRoot = join(tmpDir, 'explicit-runs');
+    await writeFile(join(tmpDir, 'fliwright.config.ts'), [
+      'export default {',
+      `  runsRoot: ${JSON.stringify(configuredRunsRoot)},`,
+      '};',
+    ].join('\n'));
+    await writeFile(join(tmpDir, 'pass.test.ts'), [
+      "import { describe, expect, it } from 'vitest';",
+      "describe('cli fixture', () => {",
+      "  it('passes', () => { expect(process.env.FLIWRIGHT_RUNS_ROOT).toBe(" + JSON.stringify(explicitRunsRoot) + "); });",
+      "});",
+    ].join('\n'));
+
+    const result = await withIsolatedHome(async () => runCommand({
+      testPattern: 'pass.test.ts',
+      reporter: 'ai-json',
+      cwd: tmpDir,
+      print: false,
+      runsRoot: explicitRunsRoot,
+    }, {
+      resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
+    }));
+
+    expect(result.passed).toBe(true);
+    expect(result.artifacts!.outputDir).toContain(explicitRunsRoot);
+    expect(result.artifacts!.outputDir).not.toContain(configuredRunsRoot);
 
     await rm(tmpDir, { recursive: true, force: true });
   });
@@ -65,13 +159,19 @@ describe('runCommand', () => {
       '});',
     ].join('\n'));
 
-    const result = await runCommand({
-      testPattern: 'sidecar.test.ts',
-      reporter: 'ai-json',
-      cwd: tmpDir,
-      print: false,
-    }, {
-      resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
+    let report;
+    const result = await withIsolatedHome(async () => {
+      const runResult = await runCommand({
+        testPattern: 'sidecar.test.ts',
+        reporter: 'ai-json',
+        cwd: tmpDir,
+        print: false,
+      }, {
+        resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
+      });
+      report = JSON.parse(await readFile(runResult.artifacts!.reportPath!, 'utf8')) as typeof runResult;
+      await expect(stat(runResult.artifacts!.screenshots[0])).resolves.toBeDefined();
+      return runResult;
     });
 
     expect(result.passed).toBe(false);
@@ -79,7 +179,6 @@ describe('runCommand', () => {
     expect(result.failures![0].screenshot?.path).toBeDefined();
     expect(result.failures![0].screenshot?.base64).toBeUndefined();
     expect(result.artifacts?.screenshots).toHaveLength(1);
-    const report = JSON.parse(await readFile(result.artifacts!.reportPath!, 'utf8')) as typeof result;
     expect(report.failures![0].widgetTree).toEqual({ widgets: [{ type: 'Text' }] });
     expect(report.failures![0].diagnostics).toEqual([{
       kind: 'Flutter.Error',
@@ -87,7 +186,6 @@ describe('runCommand', () => {
       streamId: 'Logging',
       data: { message: 'build failed' },
     }]);
-    await expect(stat(result.artifacts!.screenshots[0])).resolves.toBeDefined();
 
     await rm(tmpDir, { recursive: true, force: true });
   });
@@ -100,7 +198,7 @@ describe('runCommand', () => {
       "import { describe, expect, it } from 'vitest';",
       "describe('timeline fixture', () => {",
       "  it('writes timeline sidecar', () => {",
-      "    const dir = join(process.cwd(), '.fliwright', 'runs', process.env.FLIWRIGHT_RUN_ID!, 'timeline-fixture');",
+      "    const dir = join(process.env.FLIWRIGHT_RUNS_ROOT!, process.env.FLIWRIGHT_RUN_ID!, 'timeline-fixture');",
       "    mkdirSync(dir, { recursive: true });",
       "    writeFileSync(join(dir, 'timeline.json'), JSON.stringify({",
       "      version: 1, runId: process.env.FLIWRIGHT_RUN_ID, testName: 'timeline fixture', mode: 'test', status: 'failed', startedAt: '2026-06-18T00:00:00.000Z',",
@@ -116,13 +214,17 @@ describe('runCommand', () => {
       "});",
     ].join('\n'));
 
-    const result = await runCommand({
-      testPattern: 'timeline.test.ts',
-      reporter: 'ai-json',
-      cwd: tmpDir,
-      print: false,
-    }, {
-      resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
+    let expectedHomeRoot = '';
+    const result = await withIsolatedHome(async (home) => {
+      expectedHomeRoot = join(home, '.fliwright', 'projects');
+      return runCommand({
+        testPattern: 'timeline.test.ts',
+        reporter: 'ai-json',
+        cwd: tmpDir,
+        print: false,
+      }, {
+        resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
+      });
     });
 
     expect(result.timelines).toHaveLength(1);
@@ -137,6 +239,7 @@ describe('runCommand', () => {
       { code: 'assertion_failed', title: 'Submit', message: 'button disabled', timelineNodeId: 'step-3' },
     ]);
     expect(result.artifacts?.timelines?.[0]).toContain('timeline.json');
+    expect(result.artifacts?.timelines?.[0]).toContain(expectedHomeRoot);
 
     await rm(tmpDir, { recursive: true, force: true });
   });
