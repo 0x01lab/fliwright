@@ -42,9 +42,7 @@ import { EditorBridge } from './editor/EditorBridge.js';
 import { TestEditorProvider } from './editor/TestEditorProvider.js';
 import { setEditorOutput } from './editor/TestEditorPanel.js';
 import { RecordingPanel } from './webview/RecordingPanel.js';
-import { TraceViewerPanel } from './trace/TraceViewerPanel.js';
-import { TraceService } from './trace/TraceService.js';
-import { RunViewerPanel } from './runviewer/RunViewerPanel.js';
+import { ViewerPanel } from './viewer/ViewerPanel.js';
 import { RunViewerService } from './runviewer/RunViewerService.js';
 import { FileTddLoopStatusSource, TddLoopController } from './tddloop/index.js';
 import { TraceStore } from '@fliwright/core';
@@ -115,9 +113,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     },
   });
-  const traceService = new TraceService();
-  const traceViewerPanel = new TraceViewerPanel(context.extensionUri);
-  const runViewerPanel = new RunViewerPanel(context.extensionUri);
+  const viewerPanel = new ViewerPanel(context.extensionUri);
   const runViewerService = new RunViewerService();
   void updateRecordingContext(recorderService.getSession());
 
@@ -723,16 +719,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
     vscode.commands.registerCommand('fliwright.openTraceViewer', async () => {
-      await traceViewerPanel.openWithPicker();
+      await viewerPanel.openWithPicker();
     }),
     vscode.commands.registerCommand('fliwright.showLastTrace', async () => {
-      await traceViewerPanel.openLatest();
+      await viewerPanel.openLatest();
     }),
     vscode.commands.registerCommand('fliwright.openRunViewer', async () => {
-      await runViewerPanel.openWithPicker();
+      await viewerPanel.openWithPicker();
     }),
     vscode.commands.registerCommand('fliwright.showLastRun', async () => {
-      await runViewerPanel.openLatest();
+      await viewerPanel.openLatest();
     }),
     vscode.commands.registerCommand('fliwright.viewTestRun', async (node?: any) => {
       const root = requireWorkspaceRoot();
@@ -744,7 +740,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const index = await statusStore.loadIndex();
       const loaded = await runViewerService.findLatestRunForTestIndexed(runsDir, node.id, index);
       if (!loaded) { vscode.window.showInformationMessage('No run recorded for this test yet.'); return; }
-      await runViewerPanel.openRun(loaded.runDir);
+      await viewerPanel.openRun(loaded.runDir);
     }),
     vscode.commands.registerCommand('fliwright.viewScriptRun', async (node?: any) => {
       const root = requireWorkspaceRoot();
@@ -752,7 +748,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (!runsDir || !node?.uri) { vscode.window.showInformationMessage('No run recorded for this script yet.'); return; }
       const loaded = await runViewerService.findLatestRunForScript(runsDir, relPathOf(root, node.uri));
       if (!loaded) { vscode.window.showInformationMessage('No run recorded for this script yet.'); return; }
-      await runViewerPanel.openRun(loaded.runDir);
+      await viewerPanel.openRun(loaded.runDir);
     }),
     vscode.commands.registerCommand('fliwright.refreshTests', () => {
       // Drop roots, the status map, and ALL per-file parse caches, then re-fire
@@ -1307,7 +1303,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           const actions = traceMode !== 'off' ? ['View Trace', 'Open Failure'] : ['Open Failure'];
           vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, ...actions).then(async (selection) => {
             if (selection === 'View Trace') {
-              await traceViewerPanel.openLatest();
+              await viewerPanel.openLatest();
             } else if (selection === 'Open Failure' && failures[0]) {
               const failure = failures[0];
               if (failure.source?.file) {
@@ -1322,7 +1318,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           const actions = traceMode !== 'off' ? ['View Trace'] : [];
           vscode.window.showInformationMessage(`Fliwright tests passed: ${result.passedTests}/${result.totalTests}`, ...actions).then(async (selection) => {
             if (selection === 'View Trace') {
-              await traceViewerPanel.openLatest();
+              await viewerPanel.openLatest();
             }
           });
         }

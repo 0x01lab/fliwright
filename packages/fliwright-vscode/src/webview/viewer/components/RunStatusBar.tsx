@@ -1,0 +1,55 @@
+// packages/fliwright-vscode/src/webview/viewer/components/RunStatusBar.tsx
+import type { SerializableRun } from '../types.js';
+
+function statusGlyph(status: string): string {
+  if (status === 'passed') return '✓';
+  if (status === 'failed') return '✗';
+  if (status === 'running') return '◐';
+  return '○';
+}
+
+function durationOf(startedAt?: string, endedAt?: string): string {
+  if (!startedAt) return '';
+  const start = Date.parse(startedAt);
+  if (!start) return '';
+  const end = endedAt ? Date.parse(endedAt) : NaN;
+  if (!end) return '';
+  const ms = end - start;
+  if (!isFinite(ms) || ms < 0) return '';
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function stampLabel(startedAt?: string): string {
+  return startedAt ? String(startedAt).replace('T', ' ').replace(/\..*/, '') : '';
+}
+
+export function RunStatusBar({ run }: { run: SerializableRun }): JSX.Element {
+  const tl = run.timeline;
+  let passed = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const n of tl.nodes) {
+    if (n.status === 'passed') passed++;
+    else if (n.status === 'failed') failed++;
+    else if (n.status === 'skipped') skipped++;
+  }
+  const dur = durationOf(tl.startedAt, tl.endedAt);
+
+  return (
+    <div className={`run-status-bar status-${tl.status}`}>
+      <span className={`status-pill ${tl.status}`}>{statusGlyph(tl.status)} {tl.status}</span>
+      <span className="run-name">{tl.testName}</span>
+      <span className="run-meta">
+        {tl.mode}
+        {tl.startedAt ? ` · ${stampLabel(tl.startedAt)}` : ''}
+        {dur ? ` · ${dur}` : ''}
+      </span>
+      <span className="run-counts">
+        <span className="cnt pass">{passed} passed</span>
+        <span className="cnt fail">{failed} failed</span>
+        <span className="cnt skip">{skipped} skipped</span>
+      </span>
+    </div>
+  );
+}
