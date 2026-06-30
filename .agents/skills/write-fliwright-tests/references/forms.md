@@ -233,3 +233,16 @@ await page.formHelper.fill({ skipObscureFields: false });
   }
 }
 ```
+
+## 自定义 checkbox / radio / switch 的组件要求
+
+如果业务组件不是 Flutter 原生 `Checkbox` / `Radio` / `Switch`，组件本身需要暴露 Flutter semantics。Fliwright 不通过颜色、图标或像素判断选中状态。
+
+| 控件 | 推荐 semantics |
+| --- | --- |
+| checkbox | `Semantics(checked: isChecked, label: label, identifier: stableId, onTap: onTap)` |
+| radio option | `Semantics(checked: isSelected, label: optionLabel, identifier: optionId, onTap: onTap)` |
+| switch | `Semantics(toggled: value, label: label, identifier: stableId, onTap: onTap)` |
+| segmented/tab option | `Semantics(selected: isSelected, label: label, identifier: stableId, onTap: onTap)` |
+
+测试脚本里用 `check()` / `setCheckbox(true)` 和 `toBeChecked()`；只有当 snapshot 中能看到 `checked` / `toggled` / `selected` 状态时，表单自动化和断言才是稳定的。

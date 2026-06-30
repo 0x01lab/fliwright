@@ -212,7 +212,7 @@ export class ViewerPanel {
   private renderHtml(webview: vscode.Webview): string {
     const nonce = getNonce();
     const scriptUri = resourceUri(webview, this.extensionUri, 'dist/webview/viewerApp.js');
-    const styleUri = resourceUri(webview, this.extensionUri, 'dist/webview/viewerApp.css');
+    const styleUri = resourceUri(webview, this.extensionUri, 'dist/webview/tailwind.css');
     const cspSource = webview.cspSource ?? 'vscode-resource:';
 
     return `<!doctype html>

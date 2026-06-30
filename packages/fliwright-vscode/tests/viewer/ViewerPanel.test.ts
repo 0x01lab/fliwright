@@ -108,7 +108,7 @@ describe('ViewerPanel', () => {
     expect(html).toContain("style-src vscode-resource: 'unsafe-inline'");
     expect(html).toContain('nonce-');
     expect(html).toContain('dist/webview/viewerApp.js');
-    expect(html).toContain('dist/webview/viewerApp.css');
+    expect(html).toContain('dist/webview/tailwind.css');
     expect(html).toContain('<div id="root"></div>');
 
     restore();

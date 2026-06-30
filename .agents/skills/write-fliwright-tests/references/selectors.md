@@ -124,6 +124,9 @@ filter(criteria: FilterCriteria): Locator
 // only enabled buttons
 page.getByType('ElevatedButton').filter({ enabled: true });
 
+// only selected checkbox/radio-like controls
+page.getBySemantics({ role: 'checkbox' }).filter({ checked: true });
+
 // only widgets containing specific text
 page.getByType('ListTile').filter({ text: 'In stock' });
 ```
@@ -156,6 +159,30 @@ page.getByTooltip('Save');           // resolves to .locator({ tooltip })
 // the enabled submit among several submit-like buttons
 page.getBySemantics({ role: 'button' }).filter({ enabled: true, text: 'Submit' });
 ```
+
+## 自定义 checkbox / radio / switch
+
+Fliwright 会从 Flutter semantics 读取选择状态。原生 `Checkbox` / `Switch` / `Radio` 直接可用；自定义控件需要业务组件暴露语义：
+
+```dart
+Semantics(
+  identifier: 'kyc.gender.male',
+  label: 'Male',
+  checked: selected, // checkbox/radio
+  onTap: onTap,
+  child: CustomRadio(...),
+)
+```
+
+`Switch` 风格控件也可以用 `toggled: value`；分段控件/选项卡可用 `selected: isSelected`。测试里优先选择稳定 identifier，其次 label + role：
+
+```typescript
+const male = page.getBySemantics({ identifier: 'kyc.gender.male', role: 'checkbox' });
+await male.check();
+await expect(male, 'Male option selected').toBeChecked();
+```
+
+如果 snapshot 里看不到 `checked=true/false`、`toggled=true` 或 `selected=true`，说明组件语义还没暴露出来；先改组件语义，不要退回坐标点击或图像判断。
 
 ## Ref（快照）
 

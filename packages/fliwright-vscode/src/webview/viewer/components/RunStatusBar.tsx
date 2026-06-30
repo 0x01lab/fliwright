@@ -1,5 +1,6 @@
 // packages/fliwright-vscode/src/webview/viewer/components/RunStatusBar.tsx
 import type { SerializableRun } from '../types.js';
+import { Badge } from '../../components/ui/badge.js';
 
 function statusGlyph(status: string): string {
   if (status === 'passed') return '✓';
@@ -24,6 +25,12 @@ function stampLabel(startedAt?: string): string {
   return startedAt ? String(startedAt).replace('T', ' ').replace(/\..*/, '') : '';
 }
 
+const STATUS_VARIANT: Record<string, 'pass' | 'fail' | 'info'> = {
+  passed: 'pass',
+  failed: 'fail',
+  running: 'info',
+};
+
 export function RunStatusBar({ run }: { run: SerializableRun }): JSX.Element {
   const tl = run.timeline;
   let passed = 0;
@@ -37,18 +44,20 @@ export function RunStatusBar({ run }: { run: SerializableRun }): JSX.Element {
   const dur = durationOf(tl.startedAt, tl.endedAt);
 
   return (
-    <div className={`run-status-bar status-${tl.status}`}>
-      <span className={`status-pill ${tl.status}`}>{statusGlyph(tl.status)} {tl.status}</span>
-      <span className="run-name">{tl.testName}</span>
-      <span className="run-meta">
+    <div className="flex flex shrink-0 items-center gap-2.5 border-b border-border bg-card px-3 py-1.5">
+      <Badge variant={STATUS_VARIANT[tl.status] ?? 'secondary'} className="normal-case">
+        {statusGlyph(tl.status)} {tl.status}
+      </Badge>
+      <span className="min-w-0 truncate text-[13px] font-semibold">{tl.testName}</span>
+      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
         {tl.mode}
         {tl.startedAt ? ` · ${stampLabel(tl.startedAt)}` : ''}
         {dur ? ` · ${dur}` : ''}
       </span>
-      <span className="run-counts">
-        <span className="cnt pass">{passed} passed</span>
-        <span className="cnt fail">{failed} failed</span>
-        <span className="cnt skip">{skipped} skipped</span>
+      <span className="ml-auto flex shrink-0 gap-2.5 text-[11px]">
+        <span className="text-pass">{passed} passed</span>
+        <span className="text-fail">{failed} failed</span>
+        <span className="text-muted-foreground">{skipped} skipped</span>
       </span>
     </div>
   );

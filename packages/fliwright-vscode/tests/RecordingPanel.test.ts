@@ -79,6 +79,7 @@ describe('RecordingPanel', () => {
     expect(html).toContain("img-src vscode-resource: data:");
     expect(html).toContain('dist/webview/recordingCanvas.js');
     expect(html).toContain('dist/webview/recordingCanvas.css');
+    expect(html).toContain('dist/webview/tailwind.css');
     expect(html).toContain('<div id="root"></div>');
 
     restore();

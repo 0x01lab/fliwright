@@ -1,4 +1,4 @@
-import type { Locator } from './Locator.js';
+import { widgetCheckedState, type Locator } from './Locator.js';
 import type { Page } from './Page.js';
 import type { WidgetSnapshot } from './types.js';
 import type { FailureCollector } from './FailureCollector.js';
@@ -322,6 +322,40 @@ export class Assertion {
         }
       }
     });
+  }
+
+  /** Asserts that the element is checked, toggled, or selected. */
+  async toBeChecked(options?: AssertionOptions): Promise<void> {
+    return this.runWithTimeline('toBeChecked', this.negated ? 'unchecked' : 'checked', options, async () => {
+      await this.checkChecked(options);
+    });
+  }
+
+  private async checkChecked(options?: AssertionOptions): Promise<void> {
+    const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
+    const selector = this.locator.selectorString;
+
+    const getChecked = async (): Promise<boolean | undefined> => {
+      return widgetCheckedState(await this.locator.resolve());
+    };
+
+    const passed = await pollUntil(
+      () => getChecked(),
+      (checked) => {
+        const match = checked === true;
+        return this.negated ? !match : match;
+      },
+      timeout,
+    );
+
+    if (!passed) {
+      const actual = await getChecked();
+      if (this.negated) {
+        throw new AssertionError('toBeChecked', 'unchecked', `checked=${actual}`, selector);
+      } else {
+        throw new AssertionError('toBeChecked', 'checked', `checked=${actual}`, selector);
+      }
+    }
   }
 
   private async runWithTimeline(

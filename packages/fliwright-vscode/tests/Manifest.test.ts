@@ -15,6 +15,7 @@ describe('VS Code manifest', () => {
       'fliwright.discoverVmService',
       'fliwright.runCurrentTest',
       'fliwright.runWorkspaceTests',
+      'fliwright.refreshTestFile',
       'fliwright.openFailure',
       'fliwright.startRecording',
       'fliwright.stopRecording',

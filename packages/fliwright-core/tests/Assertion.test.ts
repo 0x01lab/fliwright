@@ -24,11 +24,12 @@ function createMockLocator(
   visible: boolean,
   text?: string,
   enabled?: boolean,
+  properties?: Record<string, unknown>,
 ): Locator {
   const widget: WidgetInfo = {
     ...testWidget,
     text: text ?? testWidget.text,
-    properties: { enabled: enabled ?? true },
+    properties: { enabled: enabled ?? true, ...properties },
   };
   // If not visible, resolve no widget.
   const widgets = visible ? [widget] : [];
@@ -322,6 +323,28 @@ describe('toBeDisabled', () => {
   it('fails when enabled', async () => {
     const locator = createMockLocator(true, 'Btn', true);
     await expect(createExpect(locator).toBeDisabled({ timeout: 200 })).rejects.toThrow(AssertionError);
+  });
+});
+
+describe('toBeChecked', () => {
+  it('passes when checked', async () => {
+    const locator = createMockLocator(true, 'Accept', true, { checked: true });
+    await expect(createExpect(locator).toBeChecked()).resolves.toBeUndefined();
+  });
+
+  it('passes for selected semantic state', async () => {
+    const locator = createMockLocator(true, 'Male', true, { selected: true });
+    await expect(createExpect(locator).toBeChecked()).resolves.toBeUndefined();
+  });
+
+  it('fails when unchecked', async () => {
+    const locator = createMockLocator(true, 'Accept', true, { checked: false });
+    await expect(createExpect(locator).toBeChecked({ timeout: 200 })).rejects.toThrow(AssertionError);
+  });
+
+  it('supports negation', async () => {
+    const locator = createMockLocator(true, 'Accept', true, { checked: false });
+    await expect(createExpect(locator).not.toBeChecked()).resolves.toBeUndefined();
   });
 });
 

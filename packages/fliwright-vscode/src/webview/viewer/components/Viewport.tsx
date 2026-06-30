@@ -1,10 +1,23 @@
 // packages/fliwright-vscode/src/webview/viewer/components/Viewport.tsx
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { SerializableRun } from '../types.js';
 import type { Selection } from '../artifacts.js';
 import { fallbackScreenshot, neighborKeys } from '../artifacts.js';
 import { computeFitScale } from '../fitScale.js';
 import type { FlatNode } from '../treeFlatten.js';
+import { Button } from '../../components/ui/button.js';
+
+const CHECKERBOARD: CSSProperties = {
+  backgroundColor: 'var(--color-background)',
+  backgroundImage:
+    'linear-gradient(45deg, rgba(128,128,128,0.15) 25%, transparent 25%),' +
+    'linear-gradient(-45deg, rgba(128,128,128,0.15) 25%, transparent 25%),' +
+    'linear-gradient(45deg, transparent 75%, rgba(128,128,128,0.15) 75%),' +
+    'linear-gradient(-45deg, transparent 75%, rgba(128,128,128,0.15) 75%)',
+  backgroundSize: '20px 20px',
+  backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0',
+};
 
 interface ViewportProps {
   run: SerializableRun;
@@ -22,8 +35,6 @@ export function Viewport(props: ViewportProps): JSX.Element {
   const [imgSrc, setImgSrc] = useState<string | undefined>(undefined);
   const [fallbackTitle, setFallbackTitle] = useState<string | undefined>(undefined);
 
-  // Resolve the screenshot to show: the selection's own screenshot, or a
-  // backward fallback (timeline mode only — no real before/after pairing).
   useEffect(() => {
     if (selection?.screenshotUri) {
       setImgSrc(selection.screenshotUri);
@@ -43,7 +54,6 @@ export function Viewport(props: ViewportProps): JSX.Element {
     setFallbackTitle(undefined);
   }, [selection, orderedKeys, flatNodes, run.screenshotBaseUrl]);
 
-  // Track container size for fit-scaling.
   useLayoutEffect(() => {
     const el = stageRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -65,12 +75,12 @@ export function Viewport(props: ViewportProps): JSX.Element {
   const emptyHint = viewportEmptyHint(selection?.mode);
 
   return (
-    <div className="viewport">
-      {route ? <div className="route-bar">{route}</div> : null}
-      <div className="viewport-stage" ref={stageRef}>
+    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
+      {route ? <div className="shrink-0 border-b border-border bg-card px-3 py-1 font-mono text-[11px] text-muted-foreground">{route}</div> : null}
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden p-4" ref={stageRef} style={CHECKERBOARD}>
         {imgSrc ? (
           <div
-            className="device-frame"
+            className="overflow-hidden rounded-[10px] border border-border bg-background shadow-xl"
             style={{ width: natural.w * scale || 'auto', height: natural.h * scale || 'auto' }}
           >
             <img
@@ -81,29 +91,26 @@ export function Viewport(props: ViewportProps): JSX.Element {
                 setNatural({ w: t.naturalWidth, h: t.naturalHeight });
               }}
               draggable={false}
+              className="block h-full w-full"
             />
           </div>
         ) : (
-          <div className="viewport-empty">
-            <div className="viewport-empty-icon">📱</div>
+          <div className="flex flex-col items-center gap-1.5 text-center text-muted-foreground">
+            <div className="text-4xl">📱</div>
             <div>No screenshot captured for this step</div>
-            <div className="viewport-hint">{emptyHint}</div>
+            <div className="text-[11px]">{emptyHint}</div>
           </div>
         )}
       </div>
-      {fallbackTitle ? <div className="fallback-banner">Showing screenshot from “{fallbackTitle}”</div> : null}
-      <div className="viewport-nav">
-        <button
-          className="nav-btn"
-          disabled={!neighbors.prev}
-          onClick={() => neighbors.prev && props.onSelect(neighbors.prev)}
-        >◀ prev</button>
-        <span className="nav-position">{position}</span>
-        <button
-          className="nav-btn"
-          disabled={!neighbors.next}
-          onClick={() => neighbors.next && props.onSelect(neighbors.next)}
-        >next ▶</button>
+      {fallbackTitle ? <div className="shrink-0 border-t border-border bg-warn/10 px-3 py-1 text-[11px] text-muted-foreground">Showing screenshot from “{fallbackTitle}”</div> : null}
+      <div className="flex shrink-0 items-center justify-center gap-3 border-t border-border bg-card px-3 py-1.5">
+        <Button variant="ghost" size="sm" disabled={!neighbors.prev} onClick={() => neighbors.prev && props.onSelect(neighbors.prev)}>
+          <ChevronLeft /> prev
+        </Button>
+        <span className="min-w-[60px] text-center text-[11px] text-muted-foreground">{position}</span>
+        <Button variant="ghost" size="sm" disabled={!neighbors.next} onClick={() => neighbors.next && props.onSelect(neighbors.next)}>
+          next <ChevronRight />
+        </Button>
       </div>
     </div>
   );

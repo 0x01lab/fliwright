@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'inspect.dart';
 import '../bridge.dart';
+import '../form_control.dart';
 import '../ref_registry.dart';
 
 class FormExtractExtension {
@@ -31,6 +32,17 @@ class FormExtractExtension {
     // per-element O(depth) ancestor walks.
     _walkTreeInScope(root, scope, (Element element) {
       final widget = element.widget;
+
+      if (widget is FliwrightFormControl) {
+        if (seenNamedFields.contains(widget.name)) return;
+        final field = _extractFliwrightFormControl(element, widget);
+        if (field != null) {
+          fields.add(field);
+          seenNamedFields.add(widget.name);
+          _markEditableSeen(element, seenEditableKeys);
+        }
+        return;
+      }
 
       // Extract from Material TextField widgets.
       // This also catches TextFields rendered inside TextFormField,
@@ -86,9 +98,8 @@ class FormExtractExtension {
         return;
       }
 
-      final name = _shouldProbeNamedField(widget)
-          ? _readString(widget, 'name')
-          : null;
+      final name =
+          _shouldProbeNamedField(widget) ? _readString(widget, 'name') : null;
       if (name != null) {
         if (seenNamedFields.contains(name)) return;
         if (_hasEditableDescendant(element)) return;
@@ -205,6 +216,76 @@ class FormExtractExtension {
       'enabled': enabled ?? true,
       'selector': selector,
     });
+  }
+
+  static Map<String, dynamic>? _extractFliwrightFormControl(
+    Element element,
+    FliwrightFormControl widget,
+  ) {
+    final info = InspectExtension.extractWidgetInfo(element);
+    if (info == null) return null;
+
+    final semanticsId = widget.semanticIdentifier;
+    final selector = _selectorFor(
+      {
+        ...info,
+        if (semanticsId != null && semanticsId.isNotEmpty)
+          'semanticsId': semanticsId,
+        'name': widget.name,
+      },
+      label: widget.label,
+      fallbackType: info['type']?.toString(),
+    );
+
+    return {
+      'id': info['id'],
+      'type': info['type'],
+      'controlType': _controlTypeName(widget.controlType),
+      if (info['rect'] != null) 'rect': info['rect'],
+      ..._stableMetadata(info),
+      if (semanticsId != null && semanticsId.isNotEmpty)
+        'semanticsId': semanticsId,
+      if (widget.label != null && widget.label!.isNotEmpty)
+        'label': widget.label,
+      'name': widget.name,
+      'obscureText': false,
+      'enabled': widget.enabled,
+      if (widget.value != null) 'value': _jsonValue(widget.value),
+      if (widget.options.isNotEmpty)
+        'options': widget.options
+            .map((option) => _formOptionMetadata(option, widget.value))
+            .toList(),
+      'selector': selector,
+    };
+  }
+
+  static String _controlTypeName(FliwrightFormControlType type) {
+    switch (type) {
+      case FliwrightFormControlType.textInput:
+        return 'textInput';
+      case FliwrightFormControlType.checkbox:
+        return 'checkbox';
+      case FliwrightFormControlType.radio:
+        return 'radio';
+      case FliwrightFormControlType.select:
+        return 'select';
+    }
+  }
+
+  static Map<String, dynamic> _formOptionMetadata(
+    FliwrightFormOption option,
+    Object? currentValue,
+  ) {
+    return {
+      'label': option.label,
+      if (option.value != null) 'value': _jsonValue(option.value).toString(),
+      if (option.semanticIdentifier != null &&
+          option.semanticIdentifier!.isNotEmpty)
+        'semanticsId': option.semanticIdentifier,
+      'selected': option.selected ??
+          _optionSelected(option.value, option.label, currentValue),
+      'enabled': option.enabled,
+    };
   }
 
   static Map<String, dynamic> _stableMetadata(Map<String, dynamic> info) {

@@ -155,9 +155,9 @@ class InspectExtension {
     final target = targetId == null
         ? matches.first as Map<String, dynamic>
         : matches.cast<Map<String, dynamic>>().firstWhere(
-            (candidate) => candidate['id'].toString() == targetId,
-            orElse: () => matches.first as Map<String, dynamic>,
-          );
+              (candidate) => candidate['id'].toString() == targetId,
+              orElse: () => matches.first as Map<String, dynamic>,
+            );
     final rect = target['rect'];
     if (rect is! Map<String, dynamic>) {
       return {
@@ -233,8 +233,7 @@ class InspectExtension {
           'selector': params['selector'] ?? '',
           'targetId': targetId,
           'targetRect': jsonEncode(rect),
-          'replaceAll':
-              params['replaceAll'] ??
+          'replaceAll': params['replaceAll'] ??
               (action == 'fill' || action == 'clear' ? 'true' : 'false'),
           if (action == 'clear') 'text': '',
         });
@@ -431,10 +430,11 @@ class InspectExtension {
     if (element == null) {
       return {'error': 'Target element not found: $targetId', 'success': false};
     }
-    final current = _checkedValueOf(element.widget);
+    final current = _checkedValueOfElement(element);
     if (current == null) {
       return {
-        'error': 'Target is not a Checkbox, Switch, or Radio: $targetId',
+        'error':
+            'Target is not a Checkbox, Switch, Radio, or checked Semantics node: $targetId',
         'success': false,
       };
     }
@@ -938,7 +938,8 @@ class InspectExtension {
         final expected = selector.boolValue('value');
         if (property == 'enabled')
           return _enabledForElement(element) == expected;
-        if (property == 'checked') return _checkedValueOf(widget) == expected;
+        if (property == 'checked')
+          return _checkedValueOfElement(element) == expected;
         return false;
       case 'semantics':
         final semantics = extractOwnSemantics(element);
@@ -1065,12 +1066,17 @@ class InspectExtension {
 
     // Expensive fields: only compute when requested.
     final ancestorKey = includeAncestorKey ? findAncestorKey(element) : null;
-    final name = includeName
-        ? (extractName(widget) ?? findAncestorName(element))
-        : null;
+    final name =
+        includeName ? (extractName(widget) ?? findAncestorName(element)) : null;
     final semantics = includeSemantics
         ? extractSemantics(element)
         : const ExtractedSemantics();
+    final enabled = _enabledForElement(element) ?? semantics.enabled;
+    final nativeChecked = _checkedValueOf(widget);
+    final checked = nativeChecked ??
+        (includeSemantics
+            ? semantics.checked ?? semantics.toggled ?? semantics.selected
+            : null);
 
     Map<String, dynamic>? rect;
     if (renderObject is RenderBox && renderObject.hasSize) {
@@ -1084,12 +1090,10 @@ class InspectExtension {
       };
     }
 
-    final descendantText = includeDescendantText
-        ? findDescendantText(element)
-        : null;
-    final descendantIcon = includeDescendantIcon
-        ? findDescendantIcon(element)
-        : null;
+    final descendantText =
+        includeDescendantText ? findDescendantText(element) : null;
+    final descendantIcon =
+        includeDescendantIcon ? findDescendantIcon(element) : null;
     final tooltip = includeTooltip ? extractTooltip(element) : null;
     final keyedAncestors = includeKeyedAncestors
         ? findKeyedAncestors(element)
@@ -1111,7 +1115,13 @@ class InspectExtension {
       if (descendantIcon != null) 'descendantIcon': descendantIcon,
       if (tooltip != null) 'tooltip': tooltip,
       if (keyedAncestors.isNotEmpty) 'keyedAncestors': keyedAncestors,
-      'properties': <String, dynamic>{},
+      'properties': <String, dynamic>{
+        if (enabled != null) 'enabled': enabled,
+        if (checked != null) 'checked': checked,
+        if (semantics.selected != null) 'selected': semantics.selected,
+        if (semantics.toggled != null) 'toggled': semantics.toggled,
+        if (semantics.value != null) 'value': semantics.value,
+      },
     };
   }
 
@@ -1327,11 +1337,22 @@ class InspectExtension {
     final renderObject = element.renderObject;
     final SemanticsNode? node = renderObject.debugSemantics;
     if (node == null) return const ExtractedSemantics();
+    final data = node.getSemanticsData();
     return ExtractedSemantics(
       identifier: node.identifier?.isEmpty == true ? null : node.identifier,
       label: node.label?.isEmpty == true ? null : node.label,
       hint: node.hint?.isEmpty == true ? null : node.hint,
       role: _roleFromSemanticsNode(node),
+      checked: SemanticsCompat.hasFlag(data, SemanticsFlag.hasCheckedState)
+          ? SemanticsCompat.hasFlag(data, SemanticsFlag.isChecked)
+          : null,
+      selected:
+          SemanticsCompat.hasFlag(data, SemanticsFlag.isSelected) ? true : null,
+      toggled:
+          SemanticsCompat.hasFlag(data, SemanticsFlag.isToggled) ? true : null,
+      enabled:
+          SemanticsCompat.hasFlag(data, SemanticsFlag.isEnabled) ? true : null,
+      value: data.value.isEmpty ? null : data.value,
     );
   }
 
@@ -1349,6 +1370,11 @@ class InspectExtension {
       label: _readString(properties, 'label'),
       hint: _readString(properties, 'hint'),
       role: _roleFromProperties(properties),
+      checked: _readBool(properties, 'checked'),
+      selected: _readBool(properties, 'selected'),
+      toggled: _readBool(properties, 'toggled'),
+      enabled: _readBool(properties, 'enabled'),
+      value: _readString(properties, 'value'),
     );
   }
 
@@ -1464,6 +1490,12 @@ class InspectExtension {
           return value.checked;
         case 'selected':
           return value.selected;
+        case 'toggled':
+          return value.toggled;
+        case 'enabled':
+          return value.enabled;
+        case 'value':
+          return value.value;
       }
     } catch (_) {
       return null;
@@ -1519,8 +1551,7 @@ class InspectExtension {
           element,
           includeAncestorKey: selector.field == 'ancestorKey',
           includeName: selector.field == 'name',
-          includeSemantics:
-              selector.field == 'semanticsId' ||
+          includeSemantics: selector.field == 'semanticsId' ||
               selector.field == 'semanticsLabel' ||
               selector.field == 'role',
         );
@@ -1726,10 +1757,11 @@ class InspectExtension {
       return false;
     }
     final widget = element.widget;
-    if (filter['checked'] == true && _checkedValueOf(widget) != true) {
+    if (filter['checked'] == true && _checkedValueOfElement(element) != true) {
       return false;
     }
-    if (filter['checked'] == false && _checkedValueOf(widget) != false) {
+    if (filter['checked'] == false &&
+        _checkedValueOfElement(element) != false) {
       return false;
     }
     if (filter['visible'] == true &&
@@ -1832,9 +1864,8 @@ class InspectExtension {
   }
 
   static bool _isRenderDescendant(RenderObject child, RenderObject ancestor) {
-    RenderObject? current = child.parent is RenderObject
-        ? child.parent as RenderObject
-        : null;
+    RenderObject? current =
+        child.parent is RenderObject ? child.parent as RenderObject : null;
     while (current != null) {
       if (current == ancestor) return true;
       current = current.parent is RenderObject
@@ -1914,6 +1945,14 @@ class InspectExtension {
     return null;
   }
 
+  static bool? _checkedValueOfElement(Element element) {
+    final widgetValue = _checkedValueOf(element.widget);
+    if (widgetValue != null) return widgetValue;
+
+    final semantics = extractSemantics(element);
+    return semantics.checked ?? semantics.toggled ?? semantics.selected;
+  }
+
   static String? _dropdownItemLabel(dynamic item) {
     try {
       final dynamic child = item.child;
@@ -1941,6 +1980,7 @@ class InspectExtension {
     if (semanticsRole == 'header') return 'heading';
     if (semanticsRole == 'textField') return 'textbox';
     if (semanticsRole == 'checkbox') return 'checkbox';
+    if (semanticsRole == 'selected') return 'checkbox';
 
     final widget = element.widget;
     if (widget is TextField ||
@@ -1983,11 +2023,34 @@ class ExtractedSemantics {
   final String? label;
   final String? hint;
   final String? role;
+  final bool? checked;
+  final bool? selected;
+  final bool? toggled;
+  final bool? enabled;
+  final String? value;
 
-  const ExtractedSemantics({this.identifier, this.label, this.hint, this.role});
+  const ExtractedSemantics({
+    this.identifier,
+    this.label,
+    this.hint,
+    this.role,
+    this.checked,
+    this.selected,
+    this.toggled,
+    this.enabled,
+    this.value,
+  });
 
   bool get hasAnyValue =>
-      identifier != null || label != null || hint != null || role != null;
+      identifier != null ||
+      label != null ||
+      hint != null ||
+      role != null ||
+      checked != null ||
+      selected != null ||
+      toggled != null ||
+      enabled != null ||
+      value != null;
 }
 
 class ParsedSelector {

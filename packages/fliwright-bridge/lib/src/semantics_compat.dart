@@ -58,7 +58,10 @@ class SemanticsCompat {
       SemanticsFlag.isTextField,
       SemanticsFlag.isFocused,
       SemanticsFlag.hasCheckedState,
+      SemanticsFlag.isChecked,
       SemanticsFlag.isSelected,
+      SemanticsFlag.isToggled,
+      SemanticsFlag.isEnabled,
     ];
     for (final flag in commonFlags) {
       if (hasFlag(data, flag)) return true;
@@ -99,6 +102,8 @@ class SemanticsCompat {
         return flags.isFocused.value != 0;
       case 'hasCheckedState':
         return flags.isChecked.value != 0;
+      case 'isChecked':
+        return flags.isChecked.value == 1;
       case 'isSelected':
         return flags.isSelected.value != 0;
       case 'isEnabled':

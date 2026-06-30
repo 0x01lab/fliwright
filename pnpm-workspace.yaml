@@ -2,6 +2,7 @@ packages:
   - 'packages/*'
   - 'e2e'
 allowBuilds:
+  '@parcel/watcher': true
   '@vscode/vsce-sign': false
-  esbuild: true
+  esbuild: false
   keytar: false

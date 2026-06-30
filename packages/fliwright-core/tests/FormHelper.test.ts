@@ -540,6 +540,57 @@ describe('FormHelper', () => {
       }
     });
 
+    it('uses setCheckbox when a single checkbox rule requests false', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          rules: [{
+            match: { name: 'marketingOptIn' },
+            type: 'PRESET_SKILL',
+            data: ['false'],
+          }],
+        }));
+        const field = {
+          id: 'checkbox1',
+          type: 'FliwrightFormControl',
+          controlType: 'checkbox',
+          rect: { x: 20, y: 100, width: 360, height: 48 },
+          name: 'marketingOptIn',
+          semanticsId: 'settings.marketingOptIn',
+          value: true,
+          label: 'Marketing opt-in',
+          obscureText: false,
+          enabled: true,
+          selector: 'semanticsId=settings.marketingOptIn',
+        };
+        const send = vi.fn().mockImplementation((method: string) => {
+          if (method === 'ext.fliwright.extractForm') {
+            return Promise.resolve({ fields: [field], count: 1 });
+          }
+          if (method === 'ext.fliwright.action') {
+            return Promise.resolve({ success: true });
+          }
+          return Promise.resolve({});
+        });
+
+        const result = await new FormHelper(send).fill({ rulesFile, requireRuleMatch: true });
+
+        expect(result.filled, JSON.stringify(result.errors)).toBe(1);
+        const checkboxCalls = send.mock.calls
+          .filter((call) => call[0] === 'ext.fliwright.action' && (call[1] as any).action === 'setCheckbox')
+          .map((call) => call[1] as Record<string, unknown>);
+        expect(checkboxCalls).toHaveLength(1);
+        expect(checkboxCalls[0]).toMatchObject({ checked: 'false' });
+        expect(selectorAst(checkboxCalls[0])).toEqual({
+          match: { semanticIdentifier: 'settings.marketingOptIn' },
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it('scopes text tap action scripts to a specific form field', async () => {
       const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
       const rulesFile = join(dir, 'rules.json');

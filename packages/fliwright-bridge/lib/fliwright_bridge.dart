@@ -17,5 +17,6 @@ export 'src/extensions/screenshot.dart';
 export 'src/extensions/snap.dart';
 export 'src/extensions/snapshot.dart';
 export 'src/extensions/storage_reset.dart';
+export 'src/form_control.dart';
 export 'src/ref_registry.dart';
 export 'src/semantics_compat.dart';

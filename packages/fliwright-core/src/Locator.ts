@@ -332,6 +332,19 @@ export class Locator {
     this.assertSuccessResponse(response, 'setCheckbox');
   }
 
+  async check(options?: { timeout?: number }): Promise<void> {
+    await this.setCheckbox(true, options);
+  }
+
+  async uncheck(options?: { timeout?: number }): Promise<void> {
+    await this.setCheckbox(false, options);
+  }
+
+  async isChecked(): Promise<boolean> {
+    const widget = await this.resolve();
+    return widgetCheckedState(widget) === true;
+  }
+
   async selectOption(
     value: string | number,
     options?: { timeout?: number },
@@ -511,4 +524,14 @@ function isRefTarget(input: unknown): input is RefTarget {
 function normalizeRef(ref: string): string {
   if (ref.length === 0) throw new Error('Ref must not be empty');
   return ref;
+}
+
+export function widgetCheckedState(widget: WidgetInfo | undefined): boolean | undefined {
+  const checked = widget?.properties?.checked;
+  if (typeof checked === 'boolean') return checked;
+  const toggled = widget?.properties?.toggled;
+  if (typeof toggled === 'boolean') return toggled;
+  const selected = widget?.properties?.selected;
+  if (typeof selected === 'boolean') return selected;
+  return undefined;
 }

@@ -72,6 +72,21 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
     this.emitter.fire(fileNode);
   }
 
+  /**
+   * Refresh ONE test file from the Tests panel inline action. This keeps the
+   * root file list and every other file's parse cache intact; source parsing
+   * remains lazy and happens only if this file row is expanded again.
+   */
+  async refreshFile(uri: vscode.Uri): Promise<void> {
+    this.parseCache.delete(uri.toString());
+    this.statusMap = await this.loadStatusMap();
+    const fileNode = this.roots?.find((f) => f.uri.toString() === uri.toString());
+    if (fileNode) {
+      fileNode.status = this.statusForFile(fileNode.relPath, 'unknown');
+    }
+    this.emitter.fire(fileNode);
+  }
+
   setRunning(target?: { workspace?: boolean; relPath?: string; testId?: string }): void {
     this.runningWorkspace = target?.workspace ?? false;
     this.runningFile = target?.relPath;

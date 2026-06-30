@@ -682,6 +682,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.runWorkspaceTests', async () => {
       await runTests(undefined, { workspace: true });
     }),
+    vscode.commands.registerCommand('fliwright.refreshTestFile', async (node?: unknown) => {
+      const n = node as { kind?: string; uri?: vscode.Uri; fileUri?: vscode.Uri } | undefined;
+      const uri = n?.uri ?? n?.fileUri;
+      if (!uri) {
+        void vscode.window.showInformationMessage('Select a test file to refresh.');
+        return;
+      }
+      await testsTree.refreshFile(uri);
+    }),
     vscode.commands.registerCommand('fliwright.stopTests', async () => {
       if (!runningAbortController || runningAbortController.signal.aborted) {
         void vscode.window.showInformationMessage('No Fliwright test run is in progress.');

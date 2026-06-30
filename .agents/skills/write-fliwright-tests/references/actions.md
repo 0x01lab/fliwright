@@ -114,14 +114,19 @@ await page.getByKey('email').clear();
 ```typescript
 pressKey(key: string, options?: { timeout?: number }): Promise<void>          // e.g. 'Enter', 'Backspace'
 setCheckbox(checked: boolean, options?: { timeout?: number }): Promise<void>
+check(options?: { timeout?: number }): Promise<void>
+uncheck(options?: { timeout?: number }): Promise<void>
 selectOption(value: string | number, options?: { timeout?: number }): Promise<void>  // dropdown / picker
 ```
 
 ```typescript
 await page.getByKey('agree').setCheckbox(true);
+await page.getBySemantics({ identifier: 'terms.accept' }).check();
 await page.getByKey('country').selectOption('CN');
 await page.getByKey('search').pressKey('Enter');
 ```
+
+`check()` / `uncheck()` 是 `setCheckbox(true/false)` 的语义化别名。它们先读取当前选中状态，只有目标状态不同才点击。当前状态来自原生 `Checkbox` / `Switch` / `Radio`，或自定义控件暴露的 `Semantics(checked: ...)`、`Semantics(toggled: ...)`、`Semantics(selected: ...)`。Radio 通常只使用 `check()` 选择目标项，不要试图用 `uncheck()` 取消单个 radio。
 
 ### Select 操作策略
 

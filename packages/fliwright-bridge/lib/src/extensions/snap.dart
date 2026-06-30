@@ -54,8 +54,12 @@ class SnapExtension {
 
       buffer
         ..write('${'  ' * depth}- ${candidate.role}')
-        ..write(' "${_escape(candidate.label)}"')
-        ..writeln(' [ref=$ref]');
+        ..write(' "${_escape(candidate.label)}"');
+      final state = _stateSummary(candidate.properties);
+      if (state != null) {
+        buffer.write(' $state');
+      }
+      buffer..writeln(' [ref=$ref]');
 
       refs.add({
         'ref': ref,
@@ -195,6 +199,17 @@ class SnapExtension {
 
   static String _escape(String input) {
     return input.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+  }
+
+  static String? _stateSummary(Map<String, dynamic> properties) {
+    final states = <String>[];
+    final checked = properties['checked'];
+    final selected = properties['selected'];
+    final toggled = properties['toggled'];
+    if (checked is bool) states.add('checked=$checked');
+    if (selected is bool) states.add('selected=$selected');
+    if (toggled is bool) states.add('toggled=$toggled');
+    return states.isEmpty ? null : '(${states.join(', ')})';
   }
 }
 

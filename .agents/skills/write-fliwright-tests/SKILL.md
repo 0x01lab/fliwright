@@ -59,6 +59,7 @@ If unsure which reference applies, open [references/index.md](references/index.m
 - Scope ambiguous UI with descendant/ancestor locators, `.and(...)`, `.nth(...)`, route context, or form context. Do not rely on whichever element happens to be first.
 - Use locator actions (`click`, `longPress`, `drag`, `pinch`, `fill`, `type`, `clear`, `selectOption`) instead of coordinates unless the behavior itself is coordinate-based or outside the Flutter widget tree.
 - Use `fill()` to replace field values and `type()` when testing incremental typing or append behavior.
+- For custom selection controls, prefer semantics-aware APIs: `check()` / `uncheck()` / `setCheckbox()` and `toBeChecked()` work for native `Checkbox`/`Switch`/`Radio` and custom widgets that expose Flutter `Semantics(checked: ...)`, `Semantics(toggled: ...)`, or `Semantics(selected: ...)`.
 - Choose select strategies based on the widget: `selectOption()` for standard dropdowns, real user clicks for custom sheets/dialogs, and search-field-plus-option-click flows for virtualized country/region pickers.
 - Assert visible outcomes with `await expect(locator, 'clear title').toBeVisible()`, `toHaveText()`, `toContainText()`, `toBeEnabled()`, or `.not`. The title becomes timeline metadata.
 - Use Vitest `expect` only for non-locator values such as captured HTTP calls from `mock.findCalls(...)` or `mock.getCalls(...)`.

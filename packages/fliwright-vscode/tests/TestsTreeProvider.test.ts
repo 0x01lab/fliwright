@@ -225,4 +225,52 @@ describe('TestsTreeProvider', () => {
     expect(spy).toHaveBeenCalledTimes(2);
     spy.mockRestore();
   });
+
+  it('refreshFile refreshes one file without rediscovering or clearing other file caches', async () => {
+    const ws = await createWorkspace();
+    const firstRelPath = 'tests/first.test.ts';
+    const secondRelPath = 'tests/second.test.ts';
+    await writeText(ws, firstRelPath, `test('first', () => {})`);
+    await writeText(ws, secondRelPath, `test('second', () => {})`);
+    const firstUri = vscode.Uri.file(path.join(ws, firstRelPath));
+    const secondUri = vscode.Uri.file(path.join(ws, secondRelPath));
+
+    const builder = await import('../src/testing/TestTreeBuilder.js');
+    const spy = vi.spyOn(builder, 'buildTestTree');
+
+    const discovery = {
+      discover: vi.fn().mockResolvedValue([
+        { kind: 'testFile', uri: firstUri, label: 'first.test.ts' },
+        { kind: 'testFile', uri: secondUri, label: 'second.test.ts' },
+      ]),
+    } as any;
+    const store = {
+      loadIndex: vi.fn()
+        .mockResolvedValueOnce(new Map())
+        .mockResolvedValueOnce(new Map([
+          ['tests/first.test.ts::first', { runId: 'r1', status: 'passed' as const, ranAt: 1, durationMs: 10 }],
+        ])),
+      loadAssertions: vi.fn().mockResolvedValue([]),
+    } as unknown as TestStatusStore;
+    const provider = new TestsTreeProvider(discovery as any, store);
+
+    const files = await provider.getChildren();
+    const first = files[0]!;
+    const second = files[1]!;
+    await provider.getChildren(first);
+    await provider.getChildren(second);
+    expect(spy).toHaveBeenCalledTimes(2);
+
+    await provider.refreshFile(firstUri);
+    expect(discovery.discover).toHaveBeenCalledTimes(1);
+    expect((store.loadIndex as any)).toHaveBeenCalledTimes(2);
+
+    const refreshedFirstCases = await provider.getChildren(first);
+    expect(spy).toHaveBeenCalledTimes(3);
+    expect((refreshedFirstCases[0] as any).status).toBe('passed');
+
+    await provider.getChildren(second);
+    expect(spy).toHaveBeenCalledTimes(3);
+    spy.mockRestore();
+  });
 });

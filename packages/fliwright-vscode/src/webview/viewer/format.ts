@@ -28,11 +28,11 @@ export function formatScalar(v: unknown): string {
   return String(v);
 }
 
-/** CSS class suffix for type-coloring a scalar value (Playwright-style). */
+/** Tailwind text-color class for type-coloring a scalar value (Playwright-style). */
 export function valueClass(v: unknown): string {
-  if (v === null) return 'v-null';
-  if (typeof v === 'boolean') return 'v-bool';
-  if (typeof v === 'number') return 'v-number';
-  if (typeof v === 'string') return 'v-string';
-  return 'v-other';
+  if (v === null) return 'text-muted-foreground';
+  if (typeof v === 'boolean') return 'text-value-number';
+  if (typeof v === 'number') return 'text-value-number';
+  if (typeof v === 'string') return 'text-value-string';
+  return 'text-foreground';
 }

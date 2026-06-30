@@ -1,7 +1,11 @@
 // packages/fliwright-vscode/src/webview/viewer/components/ErrorTab.tsx
+import type { ReactNode } from 'react';
+import { Copy } from 'lucide-react';
 import type { AgentVisibleFailure } from '@fliwright/core';
 import type { Selection } from '../artifacts.js';
 import { formatScalar } from '../format.js';
+import { Badge } from '../../components/ui/badge.js';
+import { Button } from '../../components/ui/button.js';
 
 interface ErrorTabProps {
   selection: Selection;
@@ -34,59 +38,74 @@ export function formatFailurePrompt(f: AgentVisibleFailure, title: string): stri
   return lines.join('\n');
 }
 
+function Block({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+  return (
+    <div className="flex flex-col gap-[3px]">
+      <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function Kv({ k, v }: { k: string; v: string }): JSX.Element {
+  return (
+    <div className="flex items-baseline gap-2 text-[11px]">
+      <span className="min-w-[64px] text-muted-foreground">{k}</span>
+      <code className="break-all font-mono">{v}</code>
+    </div>
+  );
+}
+
 export function ErrorTab({ selection, onCopy, onOpenSource }: ErrorTabProps): JSX.Element {
   const failure = selection.failure;
   if (!failure) {
-    return <div className="tab-empty">No failure recorded for this step.</div>;
+    return <div className="text-muted-foreground">No failure recorded for this step.</div>;
   }
   const title = selection.node?.title ?? selection.step?.action ?? selection.key;
   const loc = failure.scriptLocation;
 
   return (
-    <div className="error-tab">
-      <div className="error-head">
-        <span className="err-code">{failure.code}</span>
-        <div className="error-actions">
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <Badge variant="destructive">{failure.code}</Badge>
+        <div className="ml-auto flex gap-2">
           {loc?.file ? (
-            <button className="link-btn" onClick={() => onOpenSource(loc.file, loc.line, loc.column)}>
+            <Button variant="link" size="sm" className="h-auto gap-1 px-0 font-mono text-[11px]" onClick={() => onOpenSource(loc.file, loc.line, loc.column)}>
               {loc.file}:{loc.line} ↗
-            </button>
+            </Button>
           ) : null}
-          <button className="ghost-btn" onClick={() => onCopy(formatFailurePrompt(failure, title))}>
-            Copy prompt
-          </button>
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => onCopy(formatFailurePrompt(failure, title))}>
+            <Copy /> Copy prompt
+          </Button>
         </div>
       </div>
-      <div className="error-title">{failure.title}</div>
-      <pre className="error-msg">{failure.message}</pre>
+      <div className="text-[13px] font-semibold text-fail">{failure.title}</div>
+      <pre className="whitespace-pre-wrap break-words rounded border border-fail/20 bg-fail/[0.06] p-2 font-mono text-[11px] text-fail">{failure.message}</pre>
 
       {failure.actionContext ? (
-        <div className="meta-block">
-          <div className="meta-title">Action context</div>
-          {failure.actionContext.action ? <div className="kv"><span>action</span><code>{failure.actionContext.action}</code></div> : null}
-          {failure.actionContext.target !== undefined ? <div className="kv"><span>target</span><code>{formatScalar(failure.actionContext.target)}</code></div> : null}
-          {failure.actionContext.valueMasked ? <div className="kv"><span>value</span><code>&lt;masked&gt;</code></div> : null}
-        </div>
+        <Block title="Action context">
+          {failure.actionContext.action ? <Kv k="action" v={failure.actionContext.action} /> : null}
+          {failure.actionContext.target !== undefined ? <Kv k="target" v={formatScalar(failure.actionContext.target)} /> : null}
+          {failure.actionContext.valueMasked ? <Kv k="value" v="<masked>" /> : null}
+        </Block>
       ) : null}
 
       {failure.appState && (failure.appState.route || failure.appState.screenshotPath) ? (
-        <div className="meta-block">
-          <div className="meta-title">App state</div>
-          {failure.appState.route ? <div className="kv"><span>route</span><code>{failure.appState.route}</code></div> : null}
-          {failure.appState.screenshotPath ? <div className="kv"><span>screenshot</span><code>{failure.appState.screenshotPath}</code></div> : null}
-        </div>
+        <Block title="App state">
+          {failure.appState.route ? <Kv k="route" v={failure.appState.route} /> : null}
+          {failure.appState.screenshotPath ? <Kv k="screenshot" v={failure.appState.screenshotPath} /> : null}
+        </Block>
       ) : null}
 
       {failure.recoveryHints.length ? (
-        <div className="meta-block">
-          <div className="meta-title">Recovery hints</div>
+        <Block title="Recovery hints">
           {failure.recoveryHints.map((h, i) => (
-            <div className="hint" key={i}>
-              <span className="hint-kind">{h.kind}</span>
+            <div key={i} className="flex items-baseline gap-1.5 py-0.5 text-[11px]">
+              <Badge variant="secondary" className="shrink-0">{h.kind}</Badge>
               <span>{h.description}</span>
             </div>
           ))}
-        </div>
+        </Block>
       ) : null}
     </div>
   );

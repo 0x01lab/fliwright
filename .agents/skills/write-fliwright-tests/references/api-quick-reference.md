@@ -141,12 +141,15 @@ loc.fill(text, opts?)             // { delay?|charDelay?, timeout? }  replace
 loc.clear(opts?)                  // { timeout? }
 loc.pressKey(key, opts?)          // { timeout? }
 loc.setCheckbox(checked, opts?)   // { timeout? }
+loc.check(opts?)                  // { timeout? } alias for setCheckbox(true)
+loc.uncheck(opts?)                // { timeout? } alias for setCheckbox(false)
 loc.selectOption(value, opts?)    // string|number
 loc.scrollIntoView(opts?)         // { alignment?=0.5, duration?=300, timeout? }
 
 // Read (no side effect)
 loc.count(): Promise<number>
 loc.isVisible(): Promise<boolean>
+loc.isChecked(): Promise<boolean>             // checked/toggled/selected semantic state
 loc.resolve(): Promise<WidgetInfo | undefined>
 loc.resolveAll(opts?): Promise<WidgetInfo[]>    // { visible?: 'any'|'hitTestable', strict?, limit? }
 
@@ -165,6 +168,7 @@ expect(locator, title?): Assertion
 .toContainText(text, options?)
 .toBeEnabled(options?)
 .toBeDisabled(options?)
+.toBeChecked(options?)
 .not          // negation (disables healing)
 // raw Vitest for non-locator checks:
 import { expect as viExpect } from 'vitest'

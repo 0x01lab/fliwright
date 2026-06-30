@@ -72,6 +72,7 @@ function renderRecordingHtml(webview: vscode.Webview, extensionUri?: vscode.Uri)
   const nonce = getNonce();
   const scriptUri = resourceUri(webview, extensionUri, 'dist/webview/recordingCanvas.js');
   const styleUri = resourceUri(webview, extensionUri, 'dist/webview/recordingCanvas.css');
+  const tailwindUri = resourceUri(webview, extensionUri, 'dist/webview/tailwind.css');
   const cspSource = webview.cspSource ?? 'vscode-resource:';
 
   return `<!doctype html>
@@ -80,6 +81,7 @@ function renderRecordingHtml(webview: vscode.Webview, extensionUri?: vscode.Uri)
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} data:; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link nonce="${nonce}" rel="stylesheet" href="${tailwindUri}">
   <link nonce="${nonce}" rel="stylesheet" href="${styleUri}">
   <title>Fliwright Recording</title>
 </head>

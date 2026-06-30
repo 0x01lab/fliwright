@@ -42,7 +42,5 @@ export interface ViewerState {
   selectedKey: string | null;
   listMode: 'timeline' | 'actions';
   activeTab: 'details' | 'error' | 'logs' | 'widgetTree';
-  stepsWidth: number;
-  detailWidth: number;
   filter: string;
 }

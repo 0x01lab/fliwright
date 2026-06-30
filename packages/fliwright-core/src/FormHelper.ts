@@ -400,13 +400,17 @@ export class FormHelper {
     }
 
     const desired = this.parseBooleanValue(generatedValue);
-    if (desired === false) {
+    const targetState = desired ?? true;
+    if (this.parseBooleanValue(field.value) === targetState) {
       return;
     }
-    if (field.value === true) {
-      return;
+    const locator = new Locator(fieldSelector, this.sendRequest);
+    try {
+      await locator.setCheckbox(targetState);
+    } catch (error) {
+      if (targetState === false) throw error;
+      await locator.click();
     }
-    await new Locator(fieldSelector, this.sendRequest).click();
   }
 
   private async clickOption(
@@ -478,8 +482,9 @@ export class FormHelper {
       ?? field.options?.find((option) => option.enabled !== false);
   }
 
-  private parseBooleanValue(value: string): boolean | undefined {
-    const normalized = value.trim().toLowerCase();
+  private parseBooleanValue(value: unknown): boolean | undefined {
+    if (typeof value === 'boolean') return value;
+    const normalized = String(value ?? '').trim().toLowerCase();
     if (['true', '1', 'yes', 'y', '是'].includes(normalized)) return true;
     if (['false', '0', 'no', 'n', '否'].includes(normalized)) return false;
     return undefined;

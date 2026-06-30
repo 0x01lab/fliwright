@@ -1,7 +1,6 @@
 // packages/fliwright-vscode/src/webview/viewer/app.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import './styles.css';
 import type { SerializableRun, ViewerInbound, ViewerState } from './types.js';
 import { vscode } from './host.js';
 import { defaultSelectionKey, deriveSelection } from './artifacts.js';
@@ -10,13 +9,12 @@ import { RunStatusBar } from './components/RunStatusBar.js';
 import { StepsPane } from './components/StepsPane.js';
 import { Viewport } from './components/Viewport.js';
 import { DetailTabs } from './components/DetailTabs.js';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../components/ui/resizable.js';
 
 const DEFAULT_STATE: ViewerState = {
   selectedKey: null,
   listMode: 'timeline',
   activeTab: 'details',
-  stepsWidth: 280,
-  detailWidth: 360,
   filter: '',
 };
 
@@ -70,87 +68,65 @@ function ViewerApp(): JSX.Element {
 
   if (!run) {
     return (
-      <div className="viewer-shell">
-        <div className="viewer-empty">
-          <div className="viewer-empty-icon">🧪</div>
-          <h3>Loading run…</h3>
-          <div>If this persists, run tests with trace enabled and reopen the viewer.</div>
-        </div>
+      <div className="flex h-screen flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+        <div className="text-4xl">🧪</div>
+        <h3 className="text-base font-semibold text-foreground">Loading run…</h3>
+        <div className="text-[11px]">If this persists, run tests with trace enabled and reopen the viewer.</div>
       </div>
     );
   }
 
   return (
-    <div className="viewer-shell">
+    <div className="flex h-screen flex-col">
       <RunStatusBar run={run} />
-      <div
-        className="viewer-body"
-        style={{ gridTemplateColumns: `${viewerState.stepsWidth}px 6px 1fr 6px ${viewerState.detailWidth}px` }}
+      <ResizablePanelGroup
+        direction="horizontal"
+        autoSaveId="fliwright-viewer-panels"
+        className="min-h-0 flex-1"
       >
-        <StepsPane
-          run={run}
-          mode={viewerState.listMode}
-          flatNodes={flatNodes}
-          orderedKeys={orderedKeys}
-          selectedKey={selectedKey}
-          collapsed={collapsed}
-          filter={viewerState.filter}
-          onSelect={key => update({ selectedKey: key })}
-          onToggle={id => setCollapsed(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id); else next.add(id);
-            return next;
-          })}
-          onFilter={text => update({ filter: text })}
-          onModeChange={mode => update({ listMode: mode })}
-        />
-        <Divider orientation="h" onDelta={delta => update({ stepsWidth: clamp(viewerState.stepsWidth + delta, 180, 520) })} />
-        <Viewport
-          run={run}
-          selection={selection}
-          orderedKeys={orderedKeys}
-          flatNodes={flatNodes}
-          onSelect={key => update({ selectedKey: key })}
-        />
-        <Divider orientation="h" onDelta={delta => update({ detailWidth: clamp(viewerState.detailWidth - delta, 260, 640) })} />
-        <DetailTabs
-          run={run}
-          selection={selection}
-          activeTab={viewerState.activeTab}
-          onTabChange={tab => update({ activeTab: tab })}
-          onOpenSource={(file, line, column) => vscode.postMessage({ type: 'openSource', file, line, column })}
-          onCopy={text => vscode.postMessage({ type: 'copy', text })}
-        />
-      </div>
+        <ResizablePanel defaultSize={20} minSize={12} maxSize={36}>
+          <StepsPane
+            run={run}
+            mode={viewerState.listMode}
+            flatNodes={flatNodes}
+            orderedKeys={orderedKeys}
+            selectedKey={selectedKey}
+            collapsed={collapsed}
+            filter={viewerState.filter}
+            onSelect={key => update({ selectedKey: key })}
+            onToggle={id => setCollapsed(prev => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id); else next.add(id);
+              return next;
+            })}
+            onFilter={text => update({ filter: text })}
+            onModeChange={mode => update({ listMode: mode })}
+          />
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel defaultSize={55} minSize={28}>
+          <Viewport
+            run={run}
+            selection={selection}
+            orderedKeys={orderedKeys}
+            flatNodes={flatNodes}
+            onSelect={key => update({ selectedKey: key })}
+          />
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel defaultSize={25} minSize={16} maxSize={44}>
+          <DetailTabs
+            run={run}
+            selection={selection}
+            activeTab={viewerState.activeTab}
+            onTabChange={tab => update({ activeTab: tab })}
+            onOpenSource={(file, line, column) => vscode.postMessage({ type: 'openSource', file, line, column })}
+            onCopy={text => vscode.postMessage({ type: 'copy', text })}
+          />
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function Divider(props: { orientation: 'h'; onDelta: (delta: number) => void }): JSX.Element {
-  const startX = useRef<number | null>(null);
-  const onDown = (e: React.MouseEvent): void => {
-    e.preventDefault();
-    startX.current = e.clientX;
-    const onMove = (ev: MouseEvent): void => {
-      if (startX.current == null) return;
-      props.onDelta(ev.clientX - startX.current);
-      startX.current = ev.clientX;
-    };
-    const onUp = (): void => {
-      startX.current = null;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      document.body.classList.remove('resizing');
-    };
-    document.body.classList.add('resizing');
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-  return <div className={`divider ${props.orientation}`} onMouseDown={onDown} />;
 }
 
 const root = document.getElementById('root');

@@ -163,6 +163,18 @@ class SnapshotExtension {
     if (widget is TextField) {
       props['enabled'] = widget.enabled;
     }
+    if (widget is Checkbox) {
+      props['enabled'] = widget.onChanged != null;
+      props['checked'] = widget.value;
+    }
+    if (widget is Switch) {
+      props['enabled'] = widget.onChanged != null;
+      props['checked'] = widget.value;
+    }
+    if (widget is Radio) {
+      final dynamic radio = widget;
+      props['checked'] = radio.value == radio.groupValue;
+    }
     return props;
   }
 }

@@ -236,4 +236,54 @@ describe('Locator', () => {
     expect(sendRequest.mock.calls[8][1]).toMatchObject({ checked: 'true' });
     expect(sendRequest.mock.calls[9][1]).toMatchObject({ value: 'US' });
   });
+
+  it('check(), uncheck(), and isChecked() use semantic checked state', async () => {
+    const sendRequest = createMockSendRequest({
+      resolve: {
+        matches: [{
+          ...testWidget,
+          type: 'Semantics',
+          properties: { checked: true },
+        }],
+        count: 1,
+      },
+      action: { success: true },
+    });
+    const locator = new Locator({ semantics: { identifier: 'terms.accept' } }, sendRequest);
+
+    await locator.check();
+    await locator.uncheck();
+
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.action', {
+      action: 'setCheckbox',
+      selector: JSON.stringify({ match: { semanticIdentifier: 'terms.accept' } }),
+      strict: 'true',
+      visible: 'hitTestable',
+      checked: 'true',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.action', {
+      action: 'setCheckbox',
+      selector: JSON.stringify({ match: { semanticIdentifier: 'terms.accept' } }),
+      strict: 'true',
+      visible: 'hitTestable',
+      checked: 'false',
+    });
+    await expect(locator.isChecked()).resolves.toBe(true);
+  });
+
+  it('isChecked() falls back to toggled and selected semantic states', async () => {
+    const sendRequest = createMockSendRequest({
+      resolve: {
+        matches: [{ ...testWidget, properties: { toggled: true } }],
+        count: 1,
+      },
+    });
+    await expect(new Locator({ key: 'toggle' }, sendRequest).isChecked()).resolves.toBe(true);
+
+    sendRequest.mockResolvedValueOnce({
+      matches: [{ ...testWidget, properties: { selected: true } }],
+      count: 1,
+    });
+    await expect(new Locator({ key: 'radio' }, sendRequest).isChecked()).resolves.toBe(true);
+  });
 });

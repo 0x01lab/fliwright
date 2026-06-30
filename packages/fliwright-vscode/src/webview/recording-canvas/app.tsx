@@ -15,7 +15,6 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import './styles.css';
 import type { RecordingFrame } from '@fliwright/core';
 import type { CanvasToExtensionMessage, ExtensionToCanvasMessage, RecordingCanvasSession } from './types.js';
 import {
@@ -25,6 +24,10 @@ import {
   markerEndPercent,
   markerPercent,
 } from './marker-utils.js';
+import { Button } from '../components/ui/button.js';
+import { ScrollArea } from '../components/ui/scroll-area.js';
+import { Square, Plus, FolderOpen } from 'lucide-react';
+import { cn } from '../lib/utils.js';
 
 declare const acquireVsCodeApi: () => {
   postMessage(message: CanvasToExtensionMessage): void;
@@ -88,7 +91,7 @@ function RecordingCanvasApp(): JSX.Element {
       type: 'smoothstep',
       animated: session.status === 'recording',
       label: `${index + 1} -> ${index + 2}`,
-      style: { stroke: 'var(--flow-edge)', strokeWidth: 2 },
+      style: { stroke: 'var(--color-flow-edge)', strokeWidth: 2 },
       labelStyle: { fill: 'var(--vscode-descriptionForeground)', fontSize: 10 },
     }))
   ), [session.frames, session.status]);
@@ -99,15 +102,17 @@ function RecordingCanvasApp(): JSX.Element {
 
   return (
     <ReactFlowProvider>
-      <div className="canvas-shell">
+      <div className="relative h-screen w-full overflow-hidden bg-background">
         <Toolbar
           session={session}
           onStop={stopRecording}
           onInsertTest={insertTest}
           onOpenSavedRecording={openSavedRecording}
         />
-        <div className="canvas-body">
-          <FlowViewport session={session} nodes={nodes} edges={edges} selectedId={selectedId} onSelect={setSelectedId} />
+        <div className="absolute bottom-3 left-3 right-3 top-16 flex gap-2.5">
+          <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-border">
+            <FlowViewport session={session} nodes={nodes} edges={edges} selectedId={selectedId} onSelect={setSelectedId} />
+          </div>
           <OperationsSidebar frames={session.frames} selectedId={selectedId} onSelect={setSelectedId} />
         </div>
       </div>
@@ -145,10 +150,10 @@ function FlowViewport({
 
   if (nodes.length === 0) {
     return (
-      <div className="empty-canvas">
-        <div className="empty-kicker">Recording canvas</div>
-        <h1>{session.status === 'recording' ? 'Waiting for the first interaction' : 'Ready to capture app frames'}</h1>
-        <p>Tap, swipe, long-press and text input will appear as frames as the session records.</p>
+      <div className="flex h-full flex-col justify-center pl-[clamp(24px,8vw,96px)]">
+        <div className="text-xs font-semibold uppercase text-muted-foreground">Recording canvas</div>
+        <h1 className="my-2.5 max-w-[560px] text-[clamp(28px,5vw,54px)] leading-[1.02]">{session.status === 'recording' ? 'Waiting for the first interaction' : 'Ready to capture app frames'}</h1>
+        <p className="m-0 max-w-[440px] text-[13px] text-muted-foreground">Tap, swipe, long-press and text input will appear as frames as the session records.</p>
       </div>
     );
   }
@@ -164,7 +169,7 @@ function FlowViewport({
       maxZoom={1.8}
       proOptions={{ hideAttribution: true }}
     >
-      <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="var(--flow-grid)" />
+      <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="var(--color-flow-grid)" />
       <MiniMap
         pannable
         zoomable
@@ -195,24 +200,24 @@ function Toolbar({
   const canOpenSavedRecording = isPreview && Boolean(session.recordingDir);
 
   return (
-    <header className="toolbar">
+    <header className="absolute left-3 right-3 top-3 z-10 flex items-center justify-between gap-4 rounded-lg border border-border bg-background/85 px-3 py-2 shadow-xl backdrop-blur-md">
       <div>
-        <div className="eyebrow">{title(session.status)}</div>
-        <div className="stats">
+        <div className="text-xs font-semibold text-foreground">{title(session.status)}</div>
+        <div className="mt-0.5 flex flex-wrap gap-2.5 text-[11px] text-muted-foreground">
           <span>{session.rawEventCount} raw events</span>
           <span>{session.operationCount} operations</span>
           <span>{session.frames.length} frames</span>
         </div>
       </div>
-      <div className="actions">
+      <div className="flex shrink-0 gap-2">
         {session.status === 'recording' ? (
-          <button className="danger" type="button" onClick={onStop}>Stop Recording</button>
+          <Button variant="destructive" size="sm" onClick={onStop}><Square /> Stop Recording</Button>
         ) : null}
         {isPreview ? (
-          <button type="button" onClick={onInsertTest}>Insert Test</button>
+          <Button size="sm" onClick={onInsertTest}><Plus /> Insert Test</Button>
         ) : null}
         {canOpenSavedRecording ? (
-          <button type="button" onClick={onOpenSavedRecording}>Open Saved Recording</button>
+          <Button variant="outline" size="sm" onClick={onOpenSavedRecording}><FolderOpen /> Open Saved Recording</Button>
         ) : null}
       </div>
     </header>
@@ -229,32 +234,36 @@ function OperationsSidebar({
   onSelect(id: string): void;
 }): JSX.Element {
   return (
-    <aside className="ops-sidebar">
-      <div className="ops-sidebar__head">操作列表 · {frames.length}</div>
-      <div className="ops-sidebar__list">
-        {frames.length === 0 ? (
-          <div className="ops-empty">还没有录制的操作</div>
-        ) : (
-          frames.map((frame) => {
-            const color = kindColor(frame.kind);
-            const isIgnored = frame.operationStatus === 'ignored';
-            return (
-              <div
-                key={frame.id}
-                className={`ops-row${frame.id === selectedId ? ' ops-row--selected' : ''}${isIgnored ? ' ops-row--ignored' : ''}`}
-                onClick={() => onSelect(frame.id)}
-              >
-                <span className="ops-row__idx">{frame.index + 1}</span>
-                <span className="ops-row__tag" style={{ background: `color-mix(in srgb, ${color} 22%, transparent)`, color }}>
-                  {frame.kind}
-                </span>
-                <span className="ops-row__meta">{rowMeta(frame)}</span>
-                <span className="ops-row__status">{isIgnored ? '忽略' : '✓'}</span>
-              </div>
-            );
-          })
-        )}
-      </div>
+    <aside className="flex w-[300px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-background">
+      <div className="border-b border-border px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">操作列表 · {frames.length}</div>
+      <ScrollArea className="flex-1">
+        <div className="p-1">
+          {frames.length === 0 ? (
+            <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">还没有录制的操作</div>
+          ) : (
+            frames.map((frame) => {
+              const color = kindColor(frame.kind);
+              const isIgnored = frame.operationStatus === 'ignored';
+              return (
+                <div
+                  key={frame.id}
+                  onClick={() => onSelect(frame.id)}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-1.5 border-b border-border/50 px-2.5 py-1.5 font-mono text-[11px] hover:bg-accent',
+                    frame.id === selectedId && 'bg-primary/15 ring-2 ring-ring ring-inset',
+                    isIgnored && 'opacity-50',
+                  )}
+                >
+                  <span className="w-3.5 text-muted-foreground">{frame.index + 1}</span>
+                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: `color-mix(in srgb, ${color} 22%, transparent)`, color }}>{frame.kind}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">{rowMeta(frame)}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{isIgnored ? '忽略' : '✓'}</span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </ScrollArea>
     </aside>
   );
 }
@@ -335,9 +344,9 @@ function RecordingFrameNode({ data }: NodeProps<Node<RecordingNodeData>>): JSX.E
       {canToggle ? (
         <div className="frame-actions" onPointerDown={(event) => event.stopPropagation()}>
           {isIgnored ? (
-            <button type="button" onClick={(event) => { event.stopPropagation(); setIncluded(true); }}>Include</button>
+            <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={(event) => { event.stopPropagation(); setIncluded(true); }}>Include</Button>
           ) : (
-            <button type="button" onClick={(event) => { event.stopPropagation(); setIncluded(false); }}>Ignore</button>
+            <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={(event) => { event.stopPropagation(); setIncluded(false); }}>Ignore</Button>
           )}
         </div>
       ) : null}

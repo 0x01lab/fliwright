@@ -35,8 +35,8 @@ void main() {
 
     final refs = result['refs'] as List<dynamic>;
     final submit = refs.cast<Map<String, dynamic>>().firstWhere(
-      (entry) => entry['label'] == 'Submit' && entry['role'] == 'button',
-    );
+          (entry) => entry['label'] == 'Submit' && entry['role'] == 'button',
+        );
 
     expect(submit['ref'], startsWith('e'));
     expect(submit['rect'], isA<Map>());
@@ -95,7 +95,8 @@ void main() {
     expect(double.parse(clicks.first['y']!), closeTo(expectedY, 0.1));
   });
 
-  testWidgets('action uses precomputed target rect without resolving selector', (
+  testWidgets('action uses precomputed target rect without resolving selector',
+      (
     tester,
   ) async {
     final types = <Map<String, String>>[];
@@ -121,7 +122,8 @@ void main() {
     expect(result['success'], isTrue);
     expect(types, hasLength(1));
     expect(types.single['targetId'], 'precomputed-email');
-    expect(types.single['targetRect'], '{"x":20,"y":40,"width":300,"height":48}');
+    expect(
+        types.single['targetRect'], '{"x":20,"y":40,"width":300,"height":48}');
     expect(types.single['replaceAll'], 'true');
   });
 
@@ -155,9 +157,8 @@ void main() {
       'ext.fliwright.snap',
       {},
     );
-    final ref =
-        ((snap['refs'] as List<dynamic>).first as Map<String, dynamic>)['ref']
-            as String;
+    final ref = ((snap['refs'] as List<dynamic>).first
+        as Map<String, dynamic>)['ref'] as String;
 
     await FliwrightBridge.registry.invoke('ext.fliwright.action', {
       'action': 'doubleClick',
@@ -245,13 +246,9 @@ void main() {
       'ext.fliwright.snap',
       {},
     );
-    final ref =
-        ((snap['refs'] as List<dynamic>).firstWhere(
-                  (entry) =>
-                      (entry as Map<String, dynamic>)['role'] == 'textbox',
-                )
-                as Map<String, dynamic>)['ref']
-            as String;
+    final ref = ((snap['refs'] as List<dynamic>).firstWhere(
+      (entry) => (entry as Map<String, dynamic>)['role'] == 'textbox',
+    ) as Map<String, dynamic>)['ref'] as String;
 
     final result = await FliwrightBridge.registry.invoke(
       'ext.fliwright.action',
@@ -293,9 +290,71 @@ void main() {
       'ext.fliwright.snap',
       {},
     );
-    final ref =
-        ((snap['refs'] as List<dynamic>).first as Map<String, dynamic>)['ref']
-            as String;
+    final ref = ((snap['refs'] as List<dynamic>).first
+        as Map<String, dynamic>)['ref'] as String;
+
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'setCheckbox',
+      'ref': ref,
+      'checked': 'false',
+      'checkStable': 'false',
+    });
+    await FliwrightBridge.registry.invoke('ext.fliwright.action', {
+      'action': 'setCheckbox',
+      'ref': ref,
+      'checked': 'true',
+      'checkStable': 'false',
+    });
+
+    expect(clicks, hasLength(1));
+  });
+
+  testWidgets('setCheckbox supports custom controls with checked semantics', (
+    tester,
+  ) async {
+    final clicks = <Map<String, String>>[];
+    FliwrightBridge.registry.reset();
+    SnapExtension.register(FliwrightBridge.registry);
+    InspectExtension.register(FliwrightBridge.registry);
+    FliwrightBridge.registry.register('ext.fliwright.click', (params) async {
+      clicks.add(params);
+      return {'success': true};
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: Semantics(
+            identifier: 'terms.accept',
+            label: 'Accept terms',
+            checked: false,
+            onTap: () {},
+            child: const SizedBox(width: 120, height: 48),
+          ),
+        ),
+      ),
+    );
+
+    final snap = await FliwrightBridge.registry.invoke(
+      'ext.fliwright.snap',
+      {'includeProperties': 'true'},
+    );
+    expect(snap['snapshot'], contains('checked=false'));
+    final ref = ((snap['refs'] as List<dynamic>).firstWhere(
+      (entry) => (entry as Map<String, dynamic>)['label'] == 'Accept terms',
+    ) as Map<String, dynamic>)['ref'] as String;
+
+    final resolveUnchecked = await FliwrightBridge.registry.invoke(
+      'ext.fliwright.resolve',
+      {
+        'selector': '{"match":{"role":"checkbox","checked":false}}',
+        'strict': 'true',
+      },
+    );
+    expect(resolveUnchecked['success'], isTrue);
+    expect(resolveUnchecked['count'], 1);
+    final match = ((resolveUnchecked['matches'] as List<dynamic>).single
+        as Map<String, dynamic>);
+    expect(match['properties'], containsPair('checked', false));
 
     await FliwrightBridge.registry.invoke('ext.fliwright.action', {
       'action': 'setCheckbox',

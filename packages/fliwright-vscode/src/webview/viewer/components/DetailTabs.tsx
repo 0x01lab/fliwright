@@ -1,6 +1,8 @@
 // packages/fliwright-vscode/src/webview/viewer/components/DetailTabs.tsx
 import type { SerializableRun, ViewerState } from '../types.js';
 import type { Selection } from '../artifacts.js';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs.js';
+import { Badge } from '../../components/ui/badge.js';
 import { DetailsTab } from './DetailsTab.js';
 import { ErrorTab } from './ErrorTab.js';
 import { LogsTab } from './LogsTab.js';
@@ -15,7 +17,8 @@ interface DetailTabsProps {
   onCopy: (text: string) => void;
 }
 
-const TABS: Array<{ id: ViewerState['activeTab']; label: string }> = [
+type TabId = ViewerState['activeTab'];
+const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'details', label: 'Details' },
   { id: 'error', label: 'Error' },
   { id: 'logs', label: 'Logs' },
@@ -24,49 +27,48 @@ const TABS: Array<{ id: ViewerState['activeTab']; label: string }> = [
 
 export function DetailTabs(props: DetailTabsProps): JSX.Element {
   const { selection, activeTab, onTabChange } = props;
-
   const errorCount = selection?.failure ? 1 : 0;
   const logCount = selection?.logs.length ?? 0;
   const hasSnapshot = !!selection?.snapshotPath || selection?.step?.widgetTree !== undefined;
-  const badges: Partial<Record<ViewerState['activeTab'], number>> = {
-    error: errorCount,
-    logs: logCount,
-  };
 
   return (
-    <div className="detail-tabs">
-      <div className="tab-bar">
-        {TABS.map(tab => {
-          const disabled = tab.id === 'widgetTree' && !hasSnapshot;
-          const badge = badges[tab.id];
-          const cls = `tab${activeTab === tab.id ? ' active' : ''}${tab.id === 'error' && errorCount > 0 ? ' has-error' : ''}`;
-          return (
-            <button
-              key={tab.id}
-              className={cls}
-              disabled={disabled}
-              title={disabled ? 'No widget snapshot for this step' : undefined}
-              onClick={() => onTabChange(tab.id)}
-            >
-              {tab.label}
-              {badge ? <span className={`tab-badge${tab.id === 'error' ? ' err' : ''}`}>{badge}</span> : null}
-            </button>
-          );
-        })}
-      </div>
-      <div className="tab-body">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden border-l border-border bg-background">
+      <Tabs
+        value={activeTab}
+        onValueChange={v => onTabChange(v as TabId)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <TabsList>
+          {TABS.map(tab => {
+            const disabled = tab.id === 'widgetTree' && !hasSnapshot;
+            const badge = tab.id === 'error' ? errorCount : tab.id === 'logs' ? logCount : 0;
+            return (
+              <TabsTrigger key={tab.id} value={tab.id} disabled={disabled} title={disabled ? 'No widget snapshot for this step' : undefined}>
+                {tab.label}
+                {badge ? <Badge variant={tab.id === 'error' ? 'destructive' : 'muted'} className="ml-1 px-1.5 py-0 normal-case">{badge}</Badge> : null}
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
         {!selection ? (
-          <div className="tab-empty">Select a step to view details.</div>
-        ) : activeTab === 'details' ? (
-          <DetailsTab selection={selection} onOpenSource={props.onOpenSource} />
-        ) : activeTab === 'error' ? (
-          <ErrorTab selection={selection} onCopy={props.onCopy} onOpenSource={props.onOpenSource} />
-        ) : activeTab === 'logs' ? (
-          <LogsTab run={props.run} selection={selection} />
+          <div className="px-3 py-2 text-muted-foreground">Select a step to view details.</div>
         ) : (
-          <WidgetTreeTab selection={selection} />
+          <>
+            <TabsContent value="details" className="px-3 py-2.5">
+              <DetailsTab selection={selection} onOpenSource={props.onOpenSource} />
+            </TabsContent>
+            <TabsContent value="error" className="px-3 py-2.5">
+              <ErrorTab selection={selection} onCopy={props.onCopy} onOpenSource={props.onOpenSource} />
+            </TabsContent>
+            <TabsContent value="logs" className="px-3 py-2.5">
+              <LogsTab run={props.run} selection={selection} />
+            </TabsContent>
+            <TabsContent value="widgetTree" className="p-0">
+              <WidgetTreeTab selection={selection} />
+            </TabsContent>
+          </>
         )}
-      </div>
+      </Tabs>
     </div>
   );
 }

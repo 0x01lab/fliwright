@@ -139,6 +139,65 @@ void main() {
       expect(fields.first, containsPair('controlType', 'radio'));
       expect(fields.first['options'], hasLength(2));
     });
+
+    testWidgets('extracts generic Fliwright form control metadata',
+        (tester) async {
+      await FliwrightBridge.initForDioMock();
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FliwrightFormControl(
+              name: 'notificationChannel',
+              controlType: FliwrightFormControlType.radio,
+              value: 'sms',
+              label: 'Notification channel',
+              semanticIdentifier: 'settings.notificationChannel',
+              options: [
+                FliwrightFormOption(
+                  label: 'Email',
+                  value: 'email',
+                  semanticIdentifier: 'settings.notificationChannel.email',
+                ),
+                FliwrightFormOption(
+                  label: 'SMS',
+                  value: 'sms',
+                  semanticIdentifier: 'settings.notificationChannel.sms',
+                ),
+              ],
+              child: Column(children: [Text('Email'), Text('SMS')]),
+            ),
+          ),
+        ),
+      );
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.extractForm',
+        {},
+      );
+      final fields = result['fields'] as List;
+      expect(fields, hasLength(1));
+      expect(fields.first, containsPair('name', 'notificationChannel'));
+      expect(fields.first, containsPair('controlType', 'radio'));
+      expect(fields.first, containsPair('value', 'sms'));
+      expect(fields.first,
+          containsPair('semanticsId', 'settings.notificationChannel'));
+      expect(
+        fields.first,
+        containsPair(
+          'selector',
+          '{"match":{"semanticIdentifier":"settings.notificationChannel"}}',
+        ),
+      );
+      final options = fields.first['options'] as List;
+      expect(options, hasLength(2));
+      expect(options.first, containsPair('value', 'email'));
+      expect(options.first, containsPair('selected', false));
+      expect(
+        options.first,
+        containsPair('semanticsId', 'settings.notificationChannel.email'),
+      );
+      expect(options.last, containsPair('selected', true));
+    });
   });
 }
 

@@ -1,0 +1,283 @@
+/* packages/fliwright-vscode/src/webview/styles/tailwind.css
+ *
+ * Shared Tailwind v4 entry for BOTH webviews (viewer + recording-canvas).
+ *
+ * The @theme block remaps shadcn/ui semantic color tokens onto VS Code theme
+ * variables (--vscode-*). VS Code injects those vars for whatever theme the
+ * user has (light/dark/high-contrast), so every utility and shadcn component
+ * auto-follows the host theme with NO runtime theme switching and NO .dark class.
+ */
+
+@import "tailwindcss";
+
+/* Explicitly include both webview apps' source for class scanning. */
+@source "../viewer";
+@source "../recording-canvas";
+
+@theme {
+  /* shadcn semantic colors -> VS Code tokens */
+  --color-background: var(--vscode-editor-background);
+  --color-foreground: var(--vscode-foreground);
+  --color-card: var(--vscode-sideBar-background);
+  --color-card-foreground: var(--vscode-foreground);
+  --color-popover: var(--vscode-sideBar-background);
+  --color-popover-foreground: var(--vscode-foreground);
+  --color-primary: var(--vscode-button-background);
+  --color-primary-foreground: var(--vscode-button-foreground);
+  --color-secondary: var(--vscode-list-hoverBackground);
+  --color-secondary-foreground: var(--vscode-foreground);
+  --color-muted: var(--vscode-editorWidget-background);
+  --color-muted-foreground: var(--vscode-descriptionForeground);
+  --color-accent: var(--vscode-list-hoverBackground);
+  --color-accent-foreground: var(--vscode-foreground);
+  --color-destructive: var(--vscode-errorForeground);
+  --color-destructive-foreground: var(--vscode-button-foreground);
+  --color-border: var(--vscode-panel-border);
+  --color-input: var(--vscode-input-background);
+  --color-input-border: var(--vscode-input-border, var(--vscode-panel-border));
+  --color-ring: var(--vscode-focusBorder);
+
+  /* domain semantics (testing status / log levels) */
+  --color-pass: var(--vscode-testing-iconPassed, #4caf50);
+  --color-fail: var(--vscode-testing-iconFailed, #f44336);
+  --color-warn: var(--vscode-editorWarning-foreground, #ff9800);
+  --color-info: var(--vscode-editorInfo-foreground, #2196f3);
+
+  /* type-coloring (Playwright-style value coloring) */
+  --color-value-string: var(--vscode-charts-orange, #d18616);
+  --color-value-number: var(--vscode-charts-blue, #1a85ff);
+  --color-value-key: var(--vscode-symbolIcon-propertyForeground, var(--vscode-foreground));
+  --color-link: var(--vscode-textLink-foreground);
+  --color-match: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 179, 8, 0.4));
+
+  /* React Flow accents */
+  --color-flow-grid: var(--vscode-editorGutter-commentRangeForeground, rgba(128, 128, 128, 0.25));
+  --color-flow-edge: var(--vscode-charts-blue, #1a85ff);
+
+  /* radii (shadcn convention, derived from --radius) */
+  --radius: 0.375rem;
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--vscode-font-family);
+    font-size: 12px;
+  }
+  /* VS Code webview root resets */
+  * {
+    border-color: var(--color-border);
+  }
+}
+
+/*
+ * Recording-canvas domain visuals (frame cards, interaction markers).
+ * These can't be expressed as Tailwind utilities (pseudo-elements, keyframes,
+ * dynamic --marker-color/--chip-color custom props set inline per frame), so
+ * they live here as plain CSS, themed on VS Code tokens.
+ */
+
+.react-flow {
+  background: transparent;
+}
+.react-flow__minimap {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
+}
+.react-flow__controls {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--vscode-editor-background);
+}
+.react-flow__controls-button {
+  background: var(--vscode-editor-background);
+  border-bottom-color: var(--vscode-panel-border);
+  color: var(--vscode-foreground);
+}
+
+.frame-node {
+  width: 248px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  background: var(--vscode-sideBar-background);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
+  overflow: hidden;
+}
+.frame-node--error {
+  border-color: var(--vscode-errorForeground);
+}
+.frame-node--ignored {
+  opacity: 0.58;
+  border-style: dashed;
+  filter: saturate(0.45);
+}
+.frame-node--ignored .tap-marker {
+  background: rgba(138, 143, 152, 0.28);
+  box-shadow: 0 0 0 6px rgba(138, 143, 152, 0.14), 0 0 16px rgba(138, 143, 152, 0.42);
+}
+
+.frame-meta {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  padding: 8px;
+}
+.frame-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--vscode-charts-blue, #1a85ff);
+  color: #071512;
+  font-weight: 750;
+  font-size: 12px;
+}
+.frame-kind {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-foreground);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.frame-coord {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.screen-wrap {
+  position: relative;
+  margin: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: #050807;
+  overflow: hidden;
+}
+.screen-wrap img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+.screen-placeholder {
+  height: 100%;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 11px),
+    #050807;
+}
+
+.tap-marker {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  --marker-color: var(--vscode-charts-blue, #1a85ff);
+  background: color-mix(in srgb, var(--marker-color) 30%, transparent);
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--marker-color) 18%, transparent),
+    0 0 22px color-mix(in srgb, var(--marker-color) 74%, transparent);
+  pointer-events: none;
+}
+.tap-marker span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 750;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.selector,
+.ignore-text,
+.error-text {
+  margin: 0 10px 10px;
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.selector {
+  color: var(--vscode-descriptionForeground);
+  background: color-mix(in srgb, var(--vscode-textCodeBlock-background, var(--vscode-sideBar-background)) 74%, transparent);
+  word-break: break-word;
+}
+.ignore-text {
+  color: var(--vscode-descriptionForeground);
+  background: color-mix(in srgb, var(--vscode-descriptionForeground) 10%, transparent);
+}
+.error-text {
+  color: var(--vscode-errorForeground);
+  background: color-mix(in srgb, var(--vscode-errorForeground) 12%, transparent);
+}
+
+.frame-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 10px 10px;
+}
+
+.swipe-arrow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.marker-ring {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--marker-color, var(--vscode-charts-blue, #1a85ff));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--marker-color, var(--vscode-charts-blue, #1a85ff)) 16%, transparent);
+  pointer-events: none;
+  animation: marker-pulse 1.4s ease-in-out infinite;
+}
+@keyframes marker-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--marker-color, var(--vscode-charts-blue, #1a85ff)) 40%, transparent); }
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--marker-color, var(--vscode-charts-blue, #1a85ff)) 0%, transparent); }
+}
+
+.marker-chip {
+  position: absolute;
+  transform: translate(-50%, 0);
+  margin-top: 14px;
+  padding: 2px 6px;
+  border: 1px solid var(--chip-color, var(--vscode-charts-purple, #a371f7));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vscode-editor-background) 78%, transparent);
+  color: var(--chip-color, var(--vscode-charts-purple, #a371f7));
+  font-family: var(--vscode-editor-font-family);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+

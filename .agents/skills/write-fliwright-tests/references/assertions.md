@@ -33,19 +33,24 @@ test('saves profile', async ({ page, flow, mock }) => {
 | `toContainText(text, options?)` | 第一个匹配项的文本包含该子串 |
 | `toBeEnabled(options?)` | 第一个匹配项处于启用状态（`properties.enabled !== false`） |
 | `toBeDisabled(options?)` | 第一个匹配项处于禁用状态 |
+| `toBeChecked(options?)` | 第一个匹配项处于 checked / toggled / selected 状态 |
 
 ```typescript
 await expect(page.getByText('Welcome'), 'Welcome is shown').toBeVisible();
 await expect(page.getByKey('submit'), 'Submit is enabled').toBeEnabled({ timeout: 10_000 });
 await expect(page.getByText('Saved'), 'Saved text is rendered').toContainText('Saved');
 await expect(page.getByText('Count: 1')).toHaveText('Count: 1', { title: 'Counter incremented' });
+await expect(page.getBySemantics({ identifier: 'terms.accept' }), 'Terms accepted').toBeChecked();
 ```
+
+`toBeChecked()` 读取 `properties.checked`，并兼容 `properties.toggled` / `properties.selected`。这覆盖原生 `Checkbox` / `Switch` / `Radio`，也覆盖加了 Flutter `Semantics` 的自定义表单控件。
 
 ## 否定：`.not`
 
 ```typescript
 await expect(page.getByKey('passwordError'), 'Password error is hidden').not.toBeVisible();
 await expect(page.getByText('Loading'), 'Loading indicator disappears').not.toBeVisible();
+await expect(page.getBySemantics({ identifier: 'terms.accept' }), 'Terms not accepted').not.toBeChecked();
 ```
 
 `.not` 返回一个新的否定 `Assertion`。它会关闭自愈（自愈只对正向断言生效）。
