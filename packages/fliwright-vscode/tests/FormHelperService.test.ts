@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Uri, __setConfiguration } from 'vscode';
-import { FormHelperService, formRuleSnippetForField, formatFormFillDebug } from '../src/form/FormHelperService.js';
+import { FormHelperService, dataSetLabels, formRuleSnippetForField, formatFormFillDebug } from '../src/form/FormHelperService.js';
 
 describe('FormHelperService', () => {
   it('masks sensitive preview values', () => {
@@ -162,6 +162,34 @@ describe('FormHelperService', () => {
     })).toMatchObject({
       find: { match: { id: 'fallback' } },
     });
+  });
+
+  it('builds data set labels from named form data scenarios', () => {
+    expect(dataSetLabels({
+      version: 1,
+      formData: [
+        {
+          name: 'Default QA account',
+          note: 'happy path',
+          values: {
+            'login.username': 'qa@example.com',
+            'login.password': 'Password123!',
+          },
+        },
+        {
+          name: 'KYC pending account',
+          description: 'requires manual review',
+          values: {
+            'login.username': 'pending@example.com',
+            'login.password': 'Password123!',
+          },
+        },
+      ],
+      rules: [],
+    })).toEqual([
+      { index: 0, label: 'Default QA account', description: 'happy path' },
+      { index: 1, label: 'KYC pending account', description: 'requires manual review' },
+    ]);
   });
 
   it('formats fill debug lines with field errors', () => {

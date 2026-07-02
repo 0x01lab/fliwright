@@ -7,7 +7,7 @@ import {
   fillFormFieldsCapability,
 } from '@fliwright/cli/capabilities/form';
 import { loadConfig, resolveWorkspacePath } from '../config.js';
-import type { FormRuleDataEntry, FormRulesEntry, FormRule, FormRunSummary } from '../types.js';
+import type { FormRuleDataEntry, FormRulesEntry, FormRule, FormRulesFile, FormRunSummary } from '../types.js';
 import { formRuleFromAnalyzeField } from './FormRuleService.js';
 
 export interface PreviewField {
@@ -240,11 +240,12 @@ export function formRulesFileName(entry?: FormRulesEntry): string {
 }
 
 /**
- * Returns the maximum data-set count across all PRESET_SKILL/LLM_GENERATE rules in a file.
- * Each rule's `data` array represents multiple data sets at the same index.
- * Returns 0 if no rules have a `data` array with more than one entry.
+ * Returns the number of selectable form data scenarios.
+ * Prefer top-level `formData`; rule-level arrays are only used for files that have not migrated yet.
  */
-export function dataSetCount(rules: FormRule[]): number {
+export function dataSetCount(source: FormRule[] | FormRulesFile): number {
+  if (!Array.isArray(source) && source.formData) return source.formData.length;
+  const rules = Array.isArray(source) ? source : source.rules;
   let max = 0;
   for (const rule of rules) {
     if ((rule.type === 'PRESET_SKILL' || rule.type === 'LLM_GENERATE') && rule.data && rule.data.length > 1) {
@@ -255,8 +256,8 @@ export function dataSetCount(rules: FormRule[]): number {
 }
 
 /**
- * Builds QuickPick labels for each data set index.
- * Shows one line per rule that has multiple data entries, combining them into a single label.
+ * Builds QuickPick labels for each form data scenario.
+ * Top-level `formData` entries can provide human-readable names and notes.
  */
 export interface DataSetLabel {
   index: number;
@@ -264,7 +265,17 @@ export interface DataSetLabel {
   description: string;
 }
 
-export function dataSetLabels(rules: FormRule[]): DataSetLabel[] {
+export function dataSetLabels(source: FormRule[] | FormRulesFile): DataSetLabel[] {
+  if (!Array.isArray(source) && source.formData) {
+    if (source.formData.length <= 1) return [];
+    return source.formData.map((scenario, index) => ({
+      index,
+      label: scenario.name?.trim() || `Data Set ${index + 1}`,
+      description: scenario.note?.trim() || scenario.description?.trim() || formDataPreview(scenario.values),
+    }));
+  }
+
+  const rules = Array.isArray(source) ? source : source.rules;
   const count = dataSetCount(rules);
   if (count <= 1) return [];
 
@@ -282,6 +293,12 @@ export function dataSetLabels(rules: FormRule[]): DataSetLabel[] {
     });
   }
   return results;
+}
+
+function formDataPreview(values: Record<string, unknown>): string {
+  return Object.entries(values)
+    .map(([key, value]) => `${key}: ${formatGeneratedValue(value)}`)
+    .join(' / ');
 }
 
 export function formRuleSnippetForField(field: FormAnalyzeResult['fields'][number]): FormRuleSnippet {

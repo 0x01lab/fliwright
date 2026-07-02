@@ -44,6 +44,8 @@ export type {
   FormActionScriptContext,
   FormActionScript,
   FormRuleDataEntry,
+  FormDataScenarioValue,
+  FormDataScenario,
   FormSkill,
   FormRule,
   FormRulesFile,
@@ -55,11 +57,86 @@ export type {
   MockIndex,
   MockRuleEntry,
   BridgeContext,
+  SourceLocation,
+  SourceMapNode,
+  SourceMapOptions,
+  SourceMapResult,
   BridgeQuery,
   BridgeQueryMatch,
   BridgeQueryResult,
   FrameCaptureResult,
 } from './types.js';
+export type {
+  FliwrightFigmaBinding,
+  FliwrightFlowDecisionRule,
+  FliwrightFlowDocument,
+  FliwrightFlowEdge,
+  FliwrightFlowNode,
+  FliwrightFlowNodeType,
+  FliwrightFlowPosition,
+  FliwrightFlowScreenshotRef,
+  FliwrightFlowSource,
+  FliwrightFlowSourceKind,
+  FliwrightFlowViewport,
+  RecordingToFlowInput,
+  RecordingToFlowOptions,
+  TimelineToFlowInput,
+  TimelineToFlowOptions,
+} from './flow/types.js';
+export { buildFlowFromRecording } from './flow/RecordingFlowBuilder.js';
+export { buildFlowFromTimeline } from './flow/TimelineFlowBuilder.js';
+export {
+  FLIWRIGHT_FLOWS_DIR,
+  flowFileName,
+  flowFilePath,
+  sanitizeFlowFileId,
+} from './flow/FlowFile.js';
+export { figmaBindingFromUrl, parseFigmaUrl } from './flow/FigmaBinding.js';
+export type { ParsedFigmaUrl } from './flow/FigmaBinding.js';
+export { buildFlowAgentSpec } from './flow/FlowAgentSpec.js';
+export type { FlowAgentImplementationPlan, FlowAgentSpec, FlowAgentSpecNode } from './flow/FlowAgentSpec.js';
+export { buildFlowReviewPlan } from './flow/FlowReviewPlan.js';
+export type { FlowReviewPlan, FlowReviewPlanOptions, FlowReviewTarget } from './flow/FlowReviewPlan.js';
+export { buildFlowReviewBundle } from './flow/FlowReviewBundle.js';
+export type { FlowReviewBundle, FlowReviewBundleOptions, FlowReviewFigmaCaptureTask } from './flow/FlowReviewBundle.js';
+export { captureFigmaReviewScreenshots, FigmaRestScreenshotProvider } from './flow/FigmaRestScreenshotProvider.js';
+export type { FigmaRestScreenshotProviderOptions, FigmaScreenshotProvider } from './flow/FigmaRestScreenshotProvider.js';
+export { buildFlowReviewReport } from './flow/FlowReviewReport.js';
+export type {
+  FlowReviewArtifactInput,
+  FlowReviewComparisonInput,
+  FlowReviewItemStatus,
+  FlowReviewReport,
+  FlowReviewReportInput,
+  FlowReviewReportItem,
+} from './flow/FlowReviewReport.js';
+export {
+  buildFlowVisualComparisons,
+  compareDecodedPngs,
+  compareFlowScreenshots,
+} from './flow/FlowVisualDiff.js';
+export type {
+  DecodedPng,
+  FlowVisualDiffInput,
+  FlowVisualDiffOptions,
+} from './flow/FlowVisualDiff.js';
+export { generateFlowTestSkeleton } from './flow/FlowTestGenerator.js';
+export type { FlowTestGeneratorOptions } from './flow/FlowTestGenerator.js';
+export { applyFlowCleanPlan, buildFlowCleanPrompt, cleanFlowWithAi } from './flow/FlowCleaner.js';
+export type {
+  FlowCleanOptions,
+  FlowCleanPlan,
+  FlowCleanReason,
+  FlowCleanResult,
+  RawFlowCleanPlan,
+} from './flow/FlowCleaner.js';
+export { validateFlow } from './flow/FlowValidator.js';
+export type {
+  FlowValidationIssue,
+  FlowValidationOptions,
+  FlowValidationResult,
+  FlowValidationSeverity,
+} from './flow/FlowValidator.js';
 
 export type { FliwrightPlugin, PluginContext } from './interfaces/Plugin.js';
 export type { StateAdapter } from './interfaces/StateAdapter.js';
@@ -94,7 +171,14 @@ export {
 export type { FliwrightWorkspaceConfig } from './WorkspaceConfig.js';
 
 export { Page } from './Page.js';
-export type { NavigationWaitUntil, PageNavigationOptions, ResetToHomeOptions } from './Page.js';
+export type {
+  NavigationWaitUntil,
+  PageNavigationOptions,
+  PageViewport,
+  PullToRefreshOptions,
+  PullToRefreshResult,
+  ResetToHomeOptions,
+} from './Page.js';
 export { SelectController, builtInSelectRecipes } from './SelectRecipes.js';
 export type { SelectRecipe, SelectRecipeContext, SelectRecipeUseOptions } from './SelectRecipes.js';
 export { Locator } from './Locator.js';
@@ -262,6 +346,8 @@ export type {
 } from './mocks/MockRuleController.js';
 export type { FliwrightMockServiceOptions } from './mocks/MockService.js';
 export type {
+  ActivateMockRule,
+  ActivateMockRulesOptions,
   MockBackend,
   MockTimelineMetadata,
   NormalizedMockCall,

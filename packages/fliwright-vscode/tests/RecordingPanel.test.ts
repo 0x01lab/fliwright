@@ -166,6 +166,21 @@ describe('RecordingPanel', () => {
     restore();
   });
 
+  it('sends startRecording command from webview messages', () => {
+    const { panel, sendMessage, restore } = createPanel();
+    panel.open({ status: 'preview', rawEventCount: 0, operationCount: 0, frames: [] });
+
+    const executeSpy = vi.fn();
+    const originalExecute = commands.executeCommand;
+    (commands as any).executeCommand = executeSpy;
+
+    sendMessage({ type: 'startRecording' });
+    expect(executeSpy).toHaveBeenCalledWith('fliwright.startRecording');
+
+    (commands as any).executeCommand = originalExecute;
+    restore();
+  });
+
   it('sends stopRecording command from webview messages', () => {
     const { panel, sendMessage, restore } = createPanel();
     panel.open({ status: 'recording', rawEventCount: 0, operationCount: 0 });
@@ -189,6 +204,65 @@ describe('RecordingPanel', () => {
     sendMessage({ type: 'setFrameIncluded', frameId: 'frame-1', included: false });
 
     expect(onSetFrameIncluded).toHaveBeenCalledWith('frame-1', false);
+    restore();
+  });
+
+  it('runs flow clean requests and posts the result back to the webview', async () => {
+    const onCleanFlow = vi.fn(async () => ({
+      flow: {
+        version: 1,
+        id: 'checkout',
+        createdAt: '2026-06-30T00:00:00.000Z',
+        updatedAt: '2026-06-30T00:00:00.000Z',
+        nodes: [{ id: 'screen-1', type: 'screen', title: 'Checkout' }],
+        edges: [],
+      },
+      plan: {
+        version: 1,
+        keptNodeIds: ['screen-1'],
+        removedNodeIds: ['tap-noise'],
+        reasons: [],
+      },
+      applied: false,
+    }));
+    const { panel, getPostedMessages, sendMessage, restore } = createPanel({ onCleanFlow });
+    panel.open({ status: 'preview', rawEventCount: 0, operationCount: 2, frames: [] });
+
+    sendMessage({ type: 'cleanFlow', requestId: 'clean-1', apply: false, instructions: 'keep checkout only' });
+    await Promise.resolve();
+
+    expect(onCleanFlow).toHaveBeenCalledWith({
+      apply: false,
+      instructions: 'keep checkout only',
+    });
+    expect(getPostedMessages().at(-1)).toEqual({
+      type: 'flowCleanResult',
+      requestId: 'clean-1',
+      result: expect.objectContaining({
+        applied: false,
+        plan: expect.objectContaining({
+          removedNodeIds: ['tap-noise'],
+        }),
+      }),
+    });
+    restore();
+  });
+
+  it('posts flow clean errors back to the webview', async () => {
+    const onCleanFlow = vi.fn(async () => {
+      throw new Error('AI disabled');
+    });
+    const { panel, getPostedMessages, sendMessage, restore } = createPanel({ onCleanFlow });
+    panel.open({ status: 'preview', rawEventCount: 0, operationCount: 2, frames: [] });
+
+    sendMessage({ type: 'cleanFlow', requestId: 'clean-1', apply: true });
+    await Promise.resolve();
+
+    expect(getPostedMessages().at(-1)).toEqual({
+      type: 'flowCleanResult',
+      requestId: 'clean-1',
+      error: 'AI disabled',
+    });
     restore();
   });
 });

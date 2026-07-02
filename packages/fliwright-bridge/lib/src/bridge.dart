@@ -22,6 +22,7 @@ import 'extensions/screenshot.dart';
 import 'extensions/snap.dart';
 import 'extensions/scroll_extension.dart';
 import 'extensions/settle_extension.dart';
+import 'extensions/source_map.dart';
 import 'extensions/snapshot.dart';
 import 'extensions/storage_reset.dart';
 import 'extensions/type_extension.dart';
@@ -83,6 +84,7 @@ class FliwrightBridge {
     ContextExtension.register(_registry);
     CaptureFrameExtension.register(_registry);
     QueryExtension.register(_registry);
+    SourceMapExtension.register(_registry);
     RecordingExtension.register(_registry);
     FormExtractExtension.register(_registry);
     FliwrightAppInstance.register(_registry);
@@ -137,6 +139,7 @@ class FliwrightBridge {
     ContextExtension.register(_registry);
     CaptureFrameExtension.register(_registry);
     QueryExtension.register(_registry);
+    SourceMapExtension.register(_registry);
     RecordingExtension.register(_registry);
     FormExtractExtension.register(_registry);
     FliwrightAppInstance.register(_registry);
@@ -177,6 +180,7 @@ class FliwrightBridge {
           'timelineContext': true,
           'captureFrame': true,
           'query': true,
+          'sourceMap': true,
           'assertionDiagnostics': true,
           'normalizedActionErrors': true,
           'normalizedMockCalls': true,

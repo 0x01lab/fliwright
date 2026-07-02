@@ -10,6 +10,7 @@ import { registerTestReportResource } from './resources/testReport.js';
 import { registerConnectTool } from './tools/connect.js';
 import { registerScreenshotTool } from './tools/screenshot.js';
 import { registerSnapTool } from './tools/snap.js';
+import { registerSourceMapTool } from './tools/sourceMap.js';
 import { registerFindTool } from './tools/find.js';
 import { registerObserveTool } from './tools/observe.js';
 import { registerHotReloadAndSnapTool } from './tools/hotReloadAndSnap.js';
@@ -21,6 +22,7 @@ import { registerWaitTool } from './tools/wait.js';
 import { registerActionTool } from './tools/action.js';
 import { registerDiagnosticsTool } from './tools/diagnostics.js';
 import { registerTimelineTool } from './tools/timeline.js';
+import { registerFlowTools } from './tools/flow.js';
 import { registerAgentDiagnoseTool } from './tools/agentDiagnose.js';
 import { registerTddTools } from './tools/tdd.js';
 
@@ -45,6 +47,7 @@ export function createFliwrightServer() {
   registerConnectTool(server, state);
   registerScreenshotTool(server, state);
   registerSnapTool(server, state);
+  registerSourceMapTool(server, state);
   registerFindTool(server, state);
   registerObserveTool(server, state);
   registerHotReloadAndSnapTool(server, state);
@@ -56,6 +59,7 @@ export function createFliwrightServer() {
   registerActionTool(server, state);
   registerDiagnosticsTool(server, state);
   registerTimelineTool(server, state);
+  registerFlowTools(server, state);
   registerAgentDiagnoseTool(server, state);
   registerTddTools(server, state);
 

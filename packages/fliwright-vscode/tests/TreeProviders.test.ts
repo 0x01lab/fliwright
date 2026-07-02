@@ -4,6 +4,7 @@ import { MockApiTreeProvider } from '../src/views/MockApiTreeProvider.js';
 import { FormDataTreeProvider } from '../src/views/FormDataTreeProvider.js';
 import { StateTreeProvider } from '../src/views/StateTreeProvider.js';
 import { DevicesTreeProvider } from '../src/views/DevicesTreeProvider.js';
+import { FlowsTreeProvider } from '../src/views/FlowsTreeProvider.js';
 import { ScriptDiscoveryService } from '../src/scripts/ScriptDiscoveryService.js';
 import { ScriptsTreeProvider } from '../src/views/ScriptsTreeProvider.js';
 import type { FormRuleService } from '../src/form/FormRuleService.js';
@@ -270,6 +271,70 @@ describe('tree providers', () => {
     const item = provider.getTreeItem(script!);
     expect(item.contextValue).toBe('scriptFile');
     expect(item.command).toMatchObject({ command: 'fliwright.openScript' });
+  });
+
+  it('discovers flows sorted by most recently updated and ignores malformed files', async () => {
+    const root = await createWorkspace();
+    await writeText(root, '.fliwright/flows/broken.flow.json', '{bad json');
+    await writeText(root, '.fliwright/flows/ignored.json', '{}\n');
+    await writeText(root, '.fliwright/flows/older.flow.json', `${JSON.stringify({
+      version: 1,
+      id: 'older',
+      title: 'Checkout happy path',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      source: { kind: 'recording' },
+      nodes: [{ id: 'start', type: 'start', title: 'Start', position: { x: 0, y: 0 } }],
+      edges: [],
+    }, null, 2)}\n`);
+    await writeText(root, '.fliwright/flows/newer.flow.json', `${JSON.stringify({
+      version: 1,
+      id: 'newer',
+      title: 'Payment failed branch',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-03T00:00:00.000Z',
+      source: { kind: 'manual' },
+      nodes: [
+        { id: 'start', type: 'start', title: 'Start', position: { x: 0, y: 0 } },
+        { id: 'failed', type: 'decision', title: 'Payment failed?', position: { x: 240, y: 0 } },
+      ],
+      edges: [{ id: 'edge-1', from: 'start', to: 'failed' }],
+    }, null, 2)}\n`);
+
+    const provider = new FlowsTreeProvider();
+    const flows = await provider.getChildren();
+
+    expect(flows).toHaveLength(2);
+    expect(flows[0]).toMatchObject({
+      kind: 'flowFile',
+      label: 'Payment failed branch',
+      description: 'manual',
+    });
+    expect(flows[1]).toMatchObject({
+      kind: 'flowFile',
+      label: 'Checkout happy path',
+      description: 'recording',
+    });
+
+    const item = provider.getTreeItem(flows[0]!);
+    expect(item.contextValue).toBe('flowFile');
+    expect(item.command).toMatchObject({ command: 'fliwright.openFlow' });
+    expect(item.tooltip).toContain('2 node(s), 1 edge(s)');
+  });
+
+  it('offers a create flow command from the empty flows state', async () => {
+    await createWorkspace();
+    const provider = new FlowsTreeProvider();
+
+    const [empty] = await provider.getChildren();
+
+    expect(empty).toMatchObject({
+      kind: 'empty',
+      label: 'No Fliwright flows',
+      command: { command: 'fliwright.createFlow' },
+    });
+    const item = provider.getTreeItem(empty!);
+    expect(item.command).toMatchObject({ command: 'fliwright.createFlow' });
   });
 
   it('updates state provider rows without replacing the whole tree', () => {

@@ -1,0 +1,10 @@
+{
+  "schema": {
+    "type": "object"
+  },
+  "fallback": {
+    "ok": true
+  },
+  "prompt": "Generate payload",
+  "responseFormat": "json"
+}

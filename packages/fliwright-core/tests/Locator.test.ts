@@ -82,6 +82,76 @@ describe('Locator', () => {
     });
   });
 
+  it('clickIfVisible() clicks visible locators and reports whether it acted', async () => {
+    const sendRequest = createMockSendRequest({
+      resolve: { matches: [testWidget], count: 1 },
+      action: { success: true },
+    });
+    const locator = new Locator({ text: 'Increment' }, sendRequest);
+
+    await expect(locator.clickIfVisible()).resolves.toBe(true);
+
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.resolve', {
+      selector: JSON.stringify({ match: { text: 'Increment' } }),
+      limit: '1',
+      strict: 'false',
+      visible: 'hitTestable',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.action', {
+      action: 'tap',
+      selector: JSON.stringify({ match: { text: 'Increment' } }),
+      strict: 'true',
+      visible: 'hitTestable',
+      alignment: 'center',
+    });
+  });
+
+  it('clickIfVisible() skips hidden locators without sending an action', async () => {
+    const sendRequest = createMockSendRequest({
+      resolve: { matches: [], count: 0 },
+      action: { success: true },
+    });
+    const locator = new Locator({ text: 'Optional dialog close' }, sendRequest);
+
+    await expect(locator.clickIfVisible()).resolves.toBe(false);
+
+    expect(sendRequest).toHaveBeenCalledTimes(1);
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.resolve', {
+      selector: JSON.stringify({ match: { text: 'Optional dialog close' } }),
+      limit: '1',
+      strict: 'false',
+      visible: 'hitTestable',
+    });
+  });
+
+  it('scrollIntoViewAndClick() scrolls first, then clicks with forwarded options', async () => {
+    const sendRequest = createMockSendRequest({ action: { success: true } });
+    const locator = new Locator({ key: 'submit' }, sendRequest);
+
+    await locator.scrollIntoViewAndClick({
+      scroll: { alignment: 0, duration: 500 },
+      click: { alignment: 'bottomCenter', waitForAnimations: true, settleTimeout: 750 },
+    });
+
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.action', {
+      action: 'scrollIntoView',
+      selector: JSON.stringify({ match: { key: 'submit' } }),
+      strict: 'true',
+      visible: 'hitTestable',
+      alignment: '0',
+      duration: '500',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.action', {
+      action: 'tap',
+      selector: JSON.stringify({ match: { key: 'submit' } }),
+      strict: 'true',
+      visible: 'hitTestable',
+      alignment: 'bottomCenter',
+      waitForAnimations: 'true',
+      settleTimeout: '750',
+    });
+  });
+
   it('resolve() returns first widget', async () => {
     const sendRequest = createMockSendRequest({
       resolve: { matches: [testWidget], count: 1 },

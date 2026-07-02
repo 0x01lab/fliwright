@@ -6,17 +6,18 @@
 
 ```typescript
 import { test, expect, createFliwrightTest, defineConfig,
-         createFliwrightScript, script,
+         createFliwrightScript, extendFliwrightTest, script,
          beforeEach, afterEach, beforeAll, afterAll, describe } from '@fliwright/vitest';
 
 // fixture: test('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, logger }) => {})
 // fixture: script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, logger }) => {})
 // expect(locator, title?): Assertion    // auto-wait + healing + timeline assertion
-// createFliwrightTest(config): test     // custom config
+// createFliwrightTest(config, options?): test     // custom config; options.driverProvider? for tests
 // createFliwrightScript(config): script // mode='script', requireAssertions=false
+// extendFliwrightTest<TProjectFixtures>(base, fixtures): test // project-specific fixtures
 // defineConfig(overrides & { vmServiceUrl }): FliwrightConfig   // fills defaults
 //   FliwrightConfig { vmServiceUrl; timeout?: 5000; screenshot?: 'file'|'base64'|'off';
-//                     ai?; mode?: 'test'|'script'; requireAssertions?; agentPolicy?; timelineDir?; runsRoot?; log? }
+//                     plugins?; ai?; mode?: 'test'|'script'; requireAssertions?; agentPolicy?; timelineDir?; runsRoot?; log? }
 ```
 
 环境变量：`FLIWRIGHT_VM_URL`、`FLIWRIGHT_VM_SERVICE_URL`、`FLIWRIGHT_RUNS_ROOT`、`FLIWRIGHT_SCREENSHOT_MODE`、
@@ -40,6 +41,8 @@ flow.assertion(title, body, metadata?)
 
 // mock — timeline-aware facade over driver.mock
 mock.rules(title, body)
+mock.activateRules({ mockDir, routes, clearRoutes?, clearCalls?, assertApplied? })
+//   routes: Array<{ path: string; method?: string; rule: string }>
 mock.loadRules(mockDir?)
 mock.switchRule(endpoint, ruleName, method?)
 mock.route(path, response & { method?, id? })
@@ -89,6 +92,11 @@ page.waitForNew(selector, opts?): Promise<Locator>     // { timeout? }
 page.settle(opts?): Promise<void>                       // { timeout? } default 2000
 page.waitForNetworkIdle(opts?): Promise<void>           // { quietMs?, timeout? }
 page.dismissModal(): Promise<void>
+page.viewport(): Promise<{ width: number; height: number; pixelRatio?: number }>
+page.pullToRefresh(opts?): Promise<{ attempts: number; satisfied: boolean }>
+//   { start?, startRatio?, viewport?, deltaX?, distance?, distanceRatio?, steps?,
+//     maxAttempts?, settleTimeout?, stableFrames?, throwOnSettleTimeout?,
+//     throwOnUnsatisfied?, until?: ({ attempt, page }) => boolean|Promise<boolean> }
 
 // Navigation (requires router in FliwrightBridge.init)
 page.navigate(path, opts?): Promise<void>     // { extra? }
@@ -128,6 +136,7 @@ loc.containing(descendant): Locator
 
 // Gestures / input (Promise<void>)
 loc.click(opts?)                  // { alignment?, timeout?, waitForAnimations?, settleTimeout? }
+loc.clickIfVisible(opts?): Promise<boolean>
 loc.doubleClick(opts?) / tripleClick(opts?) / rightClick(opts?)   // { alignment?, timeout? }
 loc.hover(opts?) / focus(opts?)                                   // { alignment?, timeout? }
 loc.blur(opts?)                                                   // { timeout? }
@@ -145,6 +154,7 @@ loc.check(opts?)                  // { timeout? } alias for setCheckbox(true)
 loc.uncheck(opts?)                // { timeout? } alias for setCheckbox(false)
 loc.selectOption(value, opts?)    // string|number
 loc.scrollIntoView(opts?)         // { alignment?=0.5, duration?=300, timeout? }
+loc.scrollIntoViewAndClick(opts?) // { scroll?: scroll opts, click?: click opts }
 
 // Read (no side effect)
 loc.count(): Promise<number>

@@ -3,7 +3,8 @@ import { FliwrightAgentError } from '../agent/FliwrightAgentError.js';
 import type { MockRouteResponse } from '../types.js';
 import { TimelineRecorder } from '../timeline/TimelineRecorder.js';
 import type { AgentVisibleFailure } from '../timeline/types.js';
-import type { MockTimelineMetadata, NormalizedRequestMatcher, WaitForMockCallOptions } from './types.js';
+import type { ActivateMockRulesOptions, MockTimelineMetadata, NormalizedRequestMatcher, WaitForMockCallOptions } from './types.js';
+import { mockRuleRouteId } from './MockRuleController.js';
 
 export class MockRuntime {
   constructor(
@@ -17,6 +18,31 @@ export class MockRuntime {
 
   async loadRules(mockDir?: string): Promise<void> {
     return this.record('loadRules', { mockDir }, () => this.manager.loadRules(mockDir));
+  }
+
+  async activateRules(options: ActivateMockRulesOptions): Promise<void> {
+    return this.record('activateRules', {
+      mockDir: options.mockDir,
+      routeCount: options.routes.length,
+    }, async () => {
+      await this.manager.loadRules(options.mockDir);
+      if (options.clearRoutes ?? true) await this.manager.clearForeignRoutes();
+
+      for (const route of options.routes) {
+        const method = resolveRuleMethod(this.manager.listRules(), route.path, route.method, route.rule);
+        await this.manager.switchRule(route.path, route.rule, method);
+      }
+
+      if (options.assertApplied ?? true) {
+        const routes = await this.manager.listRoutes();
+        for (const route of options.routes) {
+          const method = resolveRuleMethod(this.manager.listRules(), route.path, route.method, route.rule);
+          assertRouteApplied(routes, route.path, method, route.rule);
+        }
+      }
+
+      if (options.clearCalls ?? true) await this.manager.clearCalls();
+    });
   }
 
   async switchRule(endpoint: string, ruleName: string, method?: string): Promise<void> {
@@ -206,6 +232,63 @@ function summarizeCalls(calls: Array<{ method?: string; path?: string; url?: str
     .slice(-5)
     .map((call) => `${call.method ?? '?'} ${call.path ?? call.url ?? '?'}${call.backend ? ` [${call.backend}]` : ''}`)
     .join(', ');
+}
+
+function resolveRuleMethod(
+  rules: Array<{ endpoint: string; method: string; rules: string[] }>,
+  endpoint: string,
+  method: string | undefined,
+  ruleName: string,
+): string {
+  const endpointRules = rules.filter((entry) => entry.endpoint === endpoint);
+  const loaded = method
+    ? endpointRules.find((entry) => entry.method.toUpperCase() === method.toUpperCase())
+    : endpointRules.find((entry) => entry.rules.includes(ruleName));
+  const methodLabel = method?.toUpperCase() ?? loaded?.method.toUpperCase() ?? '*';
+  if (!loaded) {
+    throw new Error(`No mock rules loaded for ${methodLabel} ${endpoint}.`);
+  }
+  if (!loaded.rules.includes(ruleName)) {
+    throw new Error(
+      `Mock rule ${ruleName} not found for ${methodLabel} ${endpoint}. `
+      + `Available rules: ${loaded.rules.join(', ')}.`,
+    );
+  }
+  if (!method) {
+    const matchingMethods = endpointRules
+      .filter((entry) => entry.rules.includes(ruleName))
+      .map((entry) => entry.method.toUpperCase());
+    if (matchingMethods.length > 1) {
+      throw new Error(
+        `Mock rule ${ruleName} for ${endpoint} is ambiguous across methods: ${matchingMethods.join(', ')}. `
+        + 'Specify method explicitly.',
+      );
+    }
+  }
+  return loaded.method;
+}
+
+function assertRouteApplied(
+  routes: Array<{ id: string; method?: string; path: string }>,
+  endpoint: string,
+  method: string | undefined,
+  ruleName: string,
+): void {
+  const route = routes.find((candidate) => (
+    candidate.path === endpoint &&
+    (!method || candidate.method?.toUpperCase() === method.toUpperCase())
+  ));
+  const methodLabel = method?.toUpperCase() ?? route?.method?.toUpperCase() ?? '*';
+  const expectedRouteId = method ? mockRuleRouteId(endpoint, method, ruleName) : undefined;
+  if (!route) {
+    throw new Error(`Expected mock route for ${methodLabel} ${endpoint} to use ${ruleName}, got missing route.`);
+  }
+  if (expectedRouteId && route.id !== expectedRouteId) {
+    throw new Error(
+      `Expected ${methodLabel} ${endpoint} to use ${ruleName}, `
+      + `got route id ${route.id ?? '(missing)'}.`,
+    );
+  }
 }
 
 function mockTitle(operation: MockTimelineMetadata['operation'], endpoint?: string): string {

@@ -17,6 +17,11 @@ import {
   script as fliwrightScript,
   test as fliwrightTest,
 } from '../src/index.js';
+import type { FliwrightPlugin } from '@fliwright/core';
+
+const mockDriverOptions: unknown[] = [];
+const mockConnectCalls: string[] = [];
+const mockConnectFailures = new Map<string, number>();
 
 vi.mock(import('@fliwright/core'), async () => {
   const actual = await import('../../fliwright-core/src/index.js');
@@ -44,7 +49,21 @@ vi.mock(import('@fliwright/core'), async () => {
       switchRule: vi.fn().mockResolvedValue(undefined),
     };
 
-    async connect(): Promise<void> {}
+    constructor(options?: unknown) {
+      mockDriverOptions.push(options);
+    }
+
+    async connect(vmServiceUrl?: string): Promise<void> {
+      const url = vmServiceUrl ?? '';
+      mockConnectCalls.push(url);
+      const failures = mockConnectFailures.get(url) ?? 0;
+      if (failures > 0) {
+        mockConnectFailures.set(url, failures - 1);
+        throw new Error(`connect failed for ${url}`);
+      }
+    }
+
+    async dispose(): Promise<void> {}
 
     async listenToDiagnostics(): Promise<void> {}
 
@@ -138,6 +157,16 @@ describe('createFliwrightTest', () => {
     });
   });
 
+  it('preserves plugins in defineConfig', () => {
+    const plugin: FliwrightPlugin = { name: 'project-plugin' };
+    const config = defineConfig({
+      vmServiceUrl: 'ws://localhost:12345/ws',
+      plugins: [plugin],
+    });
+
+    expect(config.plugins).toEqual([plugin]);
+  });
+
   it('exposes the AiRuntime type for aiRuntime fixture consumers', () => {
     const runtime: AiRuntime | undefined = undefined;
     expect(runtime).toBeUndefined();
@@ -168,6 +197,37 @@ const testWithTimeline = createFliwrightTest({
   vmServiceUrl: 'ws://localhost:12345/ws',
   runsRoot: testRunsRoot,
   ai: { provider: 'mock' },
+});
+
+const pluginConfiguredTest = createFliwrightTest({
+  vmServiceUrl: 'ws://localhost:22345/ws',
+  runsRoot: testRunsRoot,
+  plugins: [{ name: 'exio-project-plugin' }],
+});
+
+pluginConfiguredTest('passes configured plugins to the shared driver', async ({ driver }) => {
+  expect(driver).toBeDefined();
+  expect(mockDriverOptions).toContainEqual({
+    plugins: [expect.objectContaining({ name: 'exio-project-plugin' })],
+  });
+});
+
+const retryAfterConnectFailureUrl = 'ws://localhost:32345/ws';
+mockConnectFailures.set(retryAfterConnectFailureUrl, 1);
+
+const connectFailureTest = createFliwrightTest({
+  vmServiceUrl: retryAfterConnectFailureUrl,
+  runsRoot: testRunsRoot,
+});
+
+connectFailureTest.fails('surfaces the first shared driver connect failure', async ({ driver }) => {
+  expect(driver).toBeDefined();
+  throw new Error('fixture should fail before this callback runs');
+});
+
+connectFailureTest('retries the same shared driver config after a connect failure', async ({ driver }) => {
+  expect(driver).toBeDefined();
+  expect(mockConnectCalls.filter((url) => url === retryAfterConnectFailureUrl)).toHaveLength(2);
 });
 
 testWithTimeline('provides timeline-native fixtures', async ({ page, flow, mock, agent, timeline }) => {

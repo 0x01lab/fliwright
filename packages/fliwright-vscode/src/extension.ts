@@ -1,20 +1,25 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { FormAnalyzeResult, FormFillResult } from '@fliwright/core';
+import type { FliwrightFlowDocument, FormAnalyzeResult, FormFillResult } from '@fliwright/core';
 import {
   clearWorkspaceVmServiceUrl,
   FLIWRIGHT_RUNS_ROOT_ENV,
+  buildFlowReviewBundle,
+  buildFlowReviewPlan,
+  generateFlowTestSkeleton,
   mockRuleController,
   readWorkspaceConfigSync,
+  sanitizeFlowFileId,
   setConnectorDebugLog,
   writeWorkspaceVmServiceUrl,
 } from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
 import { FailureContextStore } from './failure/FailureContextStore.js';
+import { FlowFileService } from './flows/FlowFileService.js';
 import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug, dataSetLabels } from './form/FormHelperService.js';
 import { FormRuleService } from './form/FormRuleService.js';
-import { RecorderService } from './recording/RecorderService.js';
+import { RecorderService, resolveRecordingTestName } from './recording/RecorderService.js';
 import { FliwrightCodeLensProvider } from './runner/FliwrightCodeLensProvider.js';
 import { TestDiscoveryService } from './runner/TestDiscoveryService.js';
 import { VitestRunner } from './runner/VitestRunner.js';
@@ -27,8 +32,9 @@ import { clearFlutterMockRoutes, formatMockRuleDebug, SandboxService } from './s
 import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
-import type { FailureTreeEntry, FormAnalyzeFieldEntry, FormRule, FormRulesEntry, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunResult, ScriptFileEntry, StateProviderEntry } from './types.js';
+import type { FailureTreeEntry, FlowFileEntry, FormAnalyzeFieldEntry, FormRulesEntry, FormRulesFile, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunResult, ScriptFileEntry, StateProviderEntry } from './types.js';
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
+import { FlowsTreeProvider } from './views/FlowsTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
 import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
 import { ScriptsTreeProvider } from './views/ScriptsTreeProvider.js';
@@ -73,6 +79,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const screenshotService = new ScreenshotService();
   const screenshotPreviewPanel = new ScreenshotPreviewPanel();
   const failureStore = new FailureContextStore();
+  const flowFileService = new FlowFileService();
   const recorderService = new RecorderService();
   const stateService = new StateInjectionService();
   const stateProviderDocuments = new StateProviderDocumentProvider();
@@ -98,6 +105,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const statusStore = new TestStatusStore(runsRoot ?? '');
   const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore);
   const scriptsTree = new ScriptsTreeProvider(scriptDiscoveryService);
+  const flowsTree = new FlowsTreeProvider();
   const stateTree = new StateTreeProvider();
   const statusBar = new StatusBarService();
   const failurePanel = new FailurePanel(context.extensionUri);
@@ -106,10 +114,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       try {
         const recording = await recorderService.setFrameIncluded(session.connectedDriver, frameId, included, getWorkspaceRoot());
         updateRecordingViews(recording);
+        flowsTree.refresh();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         output.appendLine(`Failed to update recorded frame: ${message}`);
         vscode.window.showWarningMessage(message);
+      }
+    },
+    onUpdateFlow: async (flow) => {
+      try {
+        const recording = await recorderService.updateFlow(flow, getWorkspaceRoot());
+        updateRecordingViews(recording);
+        flowsTree.refresh();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        output.appendLine(`Failed to update recording flow: ${message}`);
+        vscode.window.showWarningMessage(message);
+      }
+    },
+    onCleanFlow: async (options) => {
+      try {
+        const result = await recorderService.cleanFlow(options, getWorkspaceRoot());
+        if (result.applied) {
+          updateRecordingViews(recorderService.getSession());
+          flowsTree.refresh();
+        }
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        output.appendLine(`Failed to clean recording flow: ${message}`);
+        vscode.window.showWarningMessage(message);
+        throw error;
       }
     },
   });
@@ -278,6 +313,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerTreeDataProvider('fliwright.devices', devicesTree),
     vscode.window.registerTreeDataProvider('fliwright.mockApis', mockTree),
     vscode.window.registerTreeDataProvider('fliwright.formData', formTree),
+    vscode.window.registerTreeDataProvider('fliwright.flows', flowsTree),
     vscode.window.registerTreeDataProvider('fliwright.scripts', scriptsTree),
     vscode.window.registerTreeDataProvider('fliwright.tests', testsTree),
     vscode.window.registerTreeDataProvider('fliwright.state', stateTree),
@@ -765,14 +801,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // index.json for statuses; source parsing stays lazy (on expand).
       testsTree.refresh();
     }),
+    vscode.commands.registerCommand('fliwright.refreshFlows', () => {
+      flowsTree.refresh();
+    }),
+    vscode.commands.registerCommand('fliwright.createFlow', async () => {
+      await runCommand('Create Flow', async () => {
+        const root = requireWorkspaceRoot();
+        const title = await vscode.window.showInputBox({
+          title: 'Create Fliwright Flow',
+          prompt: 'Flow title',
+          value: 'New business flow',
+        });
+        if (title === undefined) return;
+        const trimmedTitle = title.trim();
+        if (!trimmedTitle) throw new Error('Flow title is required.');
+
+        const created = await flowFileService.create(root, { title: trimmedTitle });
+        flowsTree.refresh();
+        const loaded = recorderService.loadFlow(created.flow, created.uri);
+        updateRecordingViews(loaded, { openTargetEditor: false });
+        recordingPanel.open(loaded);
+        vscode.window.showInformationMessage(`Created flow: ${created.uri.fsPath}`);
+      });
+    }),
     vscode.commands.registerCommand('fliwright.startRecording', async () => {
       await runCommand('Start Recording', async () => {
-        const testName = await vscode.window.showInputBox({
-          title: 'Start Fliwright Recording',
-          prompt: 'Generated test name',
-          value: 'recorded test',
-        });
-        if (testName === undefined) return;
+        const testName = await resolveRecordingTestName(recorderService.getSession());
+        if (!testName) return;
 
         try {
           session.setRecording();
@@ -782,14 +837,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             rawEventCount: 0,
             operationCount: 0,
             frames: [],
-            testName: testName.trim() || 'recorded test',
+            testName,
           };
           updateRecordingViews(pendingRecording);
           recordingPanel.open(pendingRecording);
           output.appendLine(`[debug] session state: ${session.state.status}`);
           output.appendLine(`[debug] calling recorderService.start()...`);
           const recording = await recorderService.start(session.connectedDriver, {
-            testName: testName.trim() || 'recorded test',
+            testName,
             onDidChange: updateRecordingViews,
           });
           output.appendLine(`[debug] start returned: status=${recording.status} rawEvents=${recording.rawEventCount} operations=${recording.operationCount}`);
@@ -811,6 +866,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           const recording = await recorderService.stop(session.connectedDriver, vscode.window.activeTextEditor?.document.uri, {}, getWorkspaceRoot());
           output.appendLine(`[debug] stop returned: status=${recording.status} rawEvents=${recording.rawEventCount} operations=${recording.operationCount}`);
           updateRecordingViews(recording);
+          flowsTree.refresh();
           // Open visual editor if target file is available, otherwise fall back to RecordingPanel
           if (recording.targetFile) {
             const uri = vscode.Uri.file(recording.targetFile);
@@ -846,6 +902,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (target.action === 'insert') {
           const uri = await recorderService.insertGeneratedCode();
           updateRecordingViews(recorderService.getSession());
+          flowsTree.refresh();
           vscode.window.showInformationMessage(`Inserted recorded test into ${uri.fsPath}`);
           return;
         }
@@ -860,6 +917,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         const saved = await recorderService.saveGeneratedCode(root, uri);
         updateRecordingViews(recorderService.getSession());
+        flowsTree.refresh();
         vscode.window.showInformationMessage(`Saved recorded test to ${saved.fsPath}`);
       });
     }),
@@ -885,6 +943,113 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const loaded = await recorderService.loadPersistedRecording(selected.recording.recordingDir);
         updateRecordingViews(loaded);
         recordingPanel.open(loaded);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.openFlow', async (node?: FlowFileEntry) => {
+      await runCommand('Open Flow', async () => {
+        if (!node || node.kind !== 'flowFile') throw new Error('Select a flow to open.');
+        const flow = await readFlowDocument(node.uri);
+        const loaded = recorderService.loadFlow(flow, node.uri);
+        updateRecordingViews(loaded, { openTargetEditor: false });
+        recordingPanel.open(loaded);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.openFlowJson', async (node?: FlowFileEntry) => {
+      await openUriFromNode(node);
+    }),
+    vscode.commands.registerCommand('fliwright.cleanFlowFile', async (node?: FlowFileEntry) => {
+      await runCommand('Clean Flow with AI', async () => {
+        if (!node || node.kind !== 'flowFile') throw new Error('Select a flow to clean.');
+        const root = requireWorkspaceRoot();
+        const confirmed = await vscode.window.showWarningMessage(
+          `Clean "${node.label}" with AI and update the flow file?`,
+          { modal: true },
+          'Clean Flow',
+        );
+        if (confirmed !== 'Clean Flow') return;
+
+        const flow = await readFlowDocument(node.uri);
+        const loaded = recorderService.loadFlow(flow, node.uri);
+        updateRecordingViews(loaded, { openTargetEditor: false });
+        const result = await recorderService.cleanFlow({ apply: true }, root);
+        flowsTree.refresh();
+        updateRecordingViews(recorderService.getSession(), { openTargetEditor: false });
+        recordingPanel.open(recorderService.getSession());
+        vscode.window.showInformationMessage(
+          `Cleaned ${result.plan.removedNodeIds.length} node(s) from ${node.label}.`,
+        );
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.generateFlowTest', async (node?: FlowFileEntry) => {
+      await runCommand('Generate Test from Flow', async () => {
+        if (!node || node.kind !== 'flowFile') throw new Error('Select a flow to generate.');
+        const root = requireWorkspaceRoot();
+        const flow = await readFlowDocument(node.uri);
+        const defaultUri = resolveWorkspacePath(root, `.fliwright/tests/${sanitizeFlowFileId(flow.title ?? flow.id)}.test.ts`);
+        const uri = await vscode.window.showSaveDialog({
+          title: 'Generate Test from Flow',
+          defaultUri,
+          filters: { 'TypeScript Test': ['ts'] },
+        });
+        if (!uri) return;
+
+        const code = generateFlowTestSkeleton(flow, {
+          resetToHomeBeforeEach: true,
+          homeRoute: '/',
+          useFlowSteps: true,
+        });
+        await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(uri.fsPath)));
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(`${code}\n`, 'utf8'));
+        await vscode.window.showTextDocument(uri);
+        vscode.window.showInformationMessage(`Generated flow test: ${uri.fsPath}`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.createFlowReviewPlan', async (node?: FlowFileEntry) => {
+      await runCommand('Create UI Review Plan', async () => {
+        if (!node || node.kind !== 'flowFile') throw new Error('Select a flow to review.');
+        const root = requireWorkspaceRoot();
+        const flow = await readFlowDocument(node.uri);
+        const reviewPlan = buildFlowReviewPlan(flow);
+        const defaultUri = resolveWorkspacePath(root, `.fliwright/reviews/${sanitizeFlowFileId(flow.id)}-review-plan.json`);
+        const uri = await vscode.window.showSaveDialog({
+          title: 'Create UI Review Plan',
+          defaultUri,
+          filters: { JSON: ['json'] },
+        });
+        if (!uri) return;
+
+        await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(uri.fsPath)));
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(`${JSON.stringify(reviewPlan, null, 2)}\n`, 'utf8'));
+        await vscode.window.showTextDocument(uri);
+        vscode.window.showInformationMessage(
+          `Created UI review plan with ${reviewPlan.targets.length} target(s).`,
+        );
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.createFlowReviewBundle', async (node?: FlowFileEntry) => {
+      await runCommand('Create UI Review Bundle', async () => {
+        if (!node || node.kind !== 'flowFile') throw new Error('Select a flow to review.');
+        const root = requireWorkspaceRoot();
+        const flow = await readFlowDocument(node.uri);
+        const bundleOutputDir = `.fliwright/reviews/${sanitizeFlowFileId(flow.id)}`;
+        const bundle = buildFlowReviewBundle(flow, {
+          flowPath: node.uri.fsPath,
+          outputDir: bundleOutputDir,
+        });
+        const defaultUri = resolveWorkspacePath(root, `.fliwright/reviews/${sanitizeFlowFileId(flow.id)}-review-bundle.json`);
+        const uri = await vscode.window.showSaveDialog({
+          title: 'Create UI Review Bundle',
+          defaultUri,
+          filters: { JSON: ['json'] },
+        });
+        if (!uri) return;
+
+        await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(uri.fsPath)));
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(`${JSON.stringify(bundle, null, 2)}\n`, 'utf8'));
+        await vscode.window.showTextDocument(uri);
+        vscode.window.showInformationMessage(
+          `Created UI review bundle with ${bundle.figmaMcp.tasks.length} Figma capture task(s).`,
+        );
       });
     }),
     vscode.commands.registerCommand('fliwright.refreshStateProviders', async () => {
@@ -1042,8 +1207,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return picked?.index;
   }
 
-  function resolveRules(node?: FormRulesEntry): FormRule[] | undefined {
-    if (node?.rulesFile.rules) return node.rulesFile.rules;
+  function resolveRules(node?: FormRulesEntry): FormRulesFile | undefined {
+    if (node?.rulesFile.rules) return node.rulesFile;
     const config = loadConfig();
     const root = getWorkspaceRoot();
     if (config.formRulesFile && root) {
@@ -1051,7 +1216,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       try {
         const raw = fs.readFileSync(filePath, 'utf-8');
         const data = JSON.parse(raw);
-        if (data.rules) return data.rules;
+        if (data.rules) return data as FormRulesFile;
       } catch { /* ignore */ }
     }
     return undefined;
@@ -1061,13 +1226,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return dataIndex !== undefined ? ` [data set ${dataIndex + 1}]` : '';
   }
 
-  function updateRecordingViews(recording: ReturnType<RecorderService['getSession']>): void {
+  function updateRecordingViews(
+    recording: ReturnType<RecorderService['getSession']>,
+    options: { openTargetEditor?: boolean } = {},
+  ): void {
     statusBar.setRecording(recording);
     recordingPanel.update(recording);
     void updateRecordingContext(recording);
 
     // When recording completes, open visual editor instead of RecordingPanel
-    if (recording.status === 'preview' && recording.targetFile) {
+    if (options.openTargetEditor !== false && recording.status === 'preview' && recording.targetFile) {
       const uri = vscode.Uri.file(recording.targetFile);
       void vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
     }
@@ -1523,6 +1691,19 @@ export function deactivate(): void {
 async function openUriFromNode(node?: { uri?: vscode.Uri }): Promise<void> {
   if (!node?.uri) return;
   await vscode.window.showTextDocument(node.uri);
+}
+
+async function readFlowDocument(uri: vscode.Uri): Promise<FliwrightFlowDocument> {
+  const flow = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')) as Partial<FliwrightFlowDocument>;
+  if (
+    flow.version !== 1
+    || typeof flow.id !== 'string'
+    || !Array.isArray(flow.nodes)
+    || !Array.isArray(flow.edges)
+  ) {
+    throw new Error(`Invalid Fliwright flow file: ${uri.fsPath}`);
+  }
+  return flow as FliwrightFlowDocument;
 }
 
 function formRulesNode(node?: FormRulesEntry): FormRulesEntry | undefined {

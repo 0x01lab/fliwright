@@ -76,6 +76,22 @@ export class FormRuleService {
     await writeJson(uri, {
       version: 1,
       locale: 'zh-CN',
+      formData: [
+        {
+          name: 'Default QA account',
+          note: 'Happy path form fill values',
+          values: {
+            email: 'test.user@example.com',
+          },
+        },
+        {
+          name: 'Alternate QA account',
+          note: 'Use when the default account is already registered',
+          values: {
+            email: 'qa.user@example.com',
+          },
+        },
+      ],
       rules: [
         {
           find: {
@@ -100,7 +116,7 @@ export class FormRuleService {
             },
           },
           type: 'PRESET_SKILL',
-          data: ['test.user@example.com', 'qa.user@example.com'],
+          dataKey: 'email',
         },
       ],
     });
@@ -147,6 +163,7 @@ export class FormRuleService {
 
   private validateRulesFile(file: FormRulesFile): void {
     if (file.version !== 1) throw new Error('version must be 1');
+    if (file.formData !== undefined) this.validateFormData(file.formData);
     if (!Array.isArray(file.rules)) throw new Error('rules must be an array');
     file.rules.forEach((rule, index) => {
       if (!rule.find && !rule.match) {
@@ -171,6 +188,9 @@ export class FormRuleService {
       if (!RULE_TYPES.has(rule.type)) {
         throw new Error(`rules[${index}].type must be PRESET_SKILL, REGEXP_MOCK, or LLM_GENERATE`);
       }
+      if (rule.dataKey !== undefined && typeof rule.dataKey !== 'string') {
+        throw new Error(`rules[${index}].dataKey must be a string`);
+      }
       if (rule.type === 'REGEXP_MOCK' && typeof rule.pattern !== 'string') {
         throw new Error(`rules[${index}].pattern is required for REGEXP_MOCK`);
       }
@@ -179,6 +199,24 @@ export class FormRuleService {
       }
       if (rule.action !== undefined) {
         this.validateAction(rule.action, index);
+      }
+    });
+  }
+
+  private validateFormData(formData: unknown): void {
+    if (!Array.isArray(formData)) throw new Error('formData must be an array');
+    formData.forEach((scenario, index) => {
+      if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) {
+        throw new Error(`formData[${index}] must be an object`);
+      }
+      const value = scenario as Record<string, unknown>;
+      for (const key of ['name', 'description', 'note']) {
+        if (value[key] !== undefined && typeof value[key] !== 'string') {
+          throw new Error(`formData[${index}].${key} must be a string`);
+        }
+      }
+      if (!value.values || typeof value.values !== 'object' || Array.isArray(value.values)) {
+        throw new Error(`formData[${index}].values must be an object`);
       }
     });
   }

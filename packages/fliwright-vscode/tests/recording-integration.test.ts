@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Uri, window, __setShowInputBoxResult, __setShowQuickPickResult, __setShowSaveDialogResult, __setWorkspaceRoot } from 'vscode';
 import { FliwrightSession } from '../src/session/FliwrightSession.js';
 import { StatusBarService } from '../src/status/StatusBarService.js';
-import { RecorderService } from '../src/recording/RecorderService.js';
+import { RecorderService, resolveRecordingTestName } from '../src/recording/RecorderService.js';
 import { RecordingPanel } from '../src/webview/RecordingPanel.js';
 import { createWorkspace, readText } from './helpers/workspace.js';
 
@@ -75,6 +75,35 @@ describe('Recording command integration', () => {
   }
 
   describe('startRecording command flow', () => {
+    it('reuses the loaded flow name without prompting again', async () => {
+      const recorder = mockRecorder();
+      connectSession(recorder);
+      const inputSpy = vi.spyOn(window, 'showInputBox');
+      recorderService.loadFlow({
+        version: 1,
+        id: 'checkout-happy-path',
+        title: 'Checkout Happy Path',
+        createdAt: '2026-07-01T00:00:00.000Z',
+        updatedAt: '2026-07-01T00:00:00.000Z',
+        source: { kind: 'manual' },
+        nodes: [],
+        edges: [],
+      }, Uri.file('/tmp/.fliwright/flows/checkout-happy-path.flow.json'));
+
+      const testName = await resolveRecordingTestName(recorderService.getSession());
+      if (!testName) throw new Error('Expected a recording name');
+      session.setRecording();
+      const recording = await recorderService.start(session.connectedDriver, {
+        testName,
+        onDidChange: updateRecordingViews,
+      });
+
+      expect(inputSpy).not.toHaveBeenCalled();
+      expect(recording.testName).toBe('Checkout Happy Path');
+
+      inputSpy.mockRestore();
+    });
+
     it('starts recording and updates all UI components', async () => {
       const recorder = mockRecorder();
       connectSession(recorder);
@@ -140,8 +169,35 @@ describe('Recording command integration', () => {
   describe('stopRecording command flow', () => {
     it('stops recording and transitions to preview', async () => {
       const recorder = mockRecorder({
-        getOperations: vi.fn(() => [{ kind: 'tap' }, { kind: 'type' }]),
+        getOperations: vi.fn(() => [
+          { kind: 'tap', position: { x: 100, y: 200 }, timestamp: 1000, status: 'included' },
+          { kind: 'type', position: { x: 120, y: 240 }, text: 'email@example.com', timestamp: 1200, status: 'included' },
+        ]),
         getRawEvents: vi.fn(() => [{ kind: 'tap' }, { kind: 'type' }]),
+        getFrames: vi.fn(() => [
+          {
+            id: 'frame-1',
+            index: 0,
+            kind: 'tap',
+            status: 'ready',
+            timestamp: 1000,
+            operationIndex: 0,
+            position: { x: 100, y: 200 },
+            selector: 'text=Login',
+            operationStatus: 'included',
+          },
+          {
+            id: 'frame-2',
+            index: 1,
+            kind: 'type',
+            status: 'ready',
+            timestamp: 1200,
+            operationIndex: 1,
+            position: { x: 120, y: 240 },
+            selector: 'input=email',
+            operationStatus: 'included',
+          },
+        ]),
       });
       connectSession(recorder);
 
@@ -161,6 +217,8 @@ describe('Recording command integration', () => {
       expect(recorderService.getSession().status).toBe('preview');
       expect(recorderService.getSession().operationCount).toBe(2);
       expect(recorderService.getSession().generatedCode).toContain('recorded');
+      expect(recorderService.getSession().flow?.nodes.map((node) => node.selector)).toEqual(['text=Login', 'input=email']);
+      expect(recorderService.getSession().flow?.edges).toHaveLength(1);
       expect(session.state.status).toBe('connected');
     });
 

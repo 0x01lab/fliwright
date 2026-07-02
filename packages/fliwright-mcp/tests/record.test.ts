@@ -52,6 +52,17 @@ describe('handleRecord', () => {
     expect(result.testCode).toContain('@fliwright/vitest');
     expect(result.testName).toBe('my test');
     expect(result.operationCount).toBe(1);
+    expect(result.flow).toMatchObject({
+      version: 1,
+      id: 'flow-my-test',
+      title: 'my test',
+      source: {
+        kind: 'recording',
+        testName: 'my test',
+      },
+      nodes: [],
+      edges: [],
+    });
     expect(mockRecorder.stop).toHaveBeenCalledWith(expect.objectContaining({
       lang: 'ts',
       testName: 'my test',

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ServerState } from '../state.js';
-import type { CodegenOptions, RecordedOperation } from '@fliwright/core';
+import { buildFlowFromRecording, type CodegenOptions, type FliwrightFlowDocument, type RecordedOperation, type RecordingFrame } from '@fliwright/core';
 
 export const RecordParamsSchema = z.object({
   vmServiceUrl: z.string().optional().describe('Dart VM Service WebSocket URL'),
@@ -18,12 +18,18 @@ export interface RecordResult {
   testCode: string;
   testName: string;
   operationCount: number;
+  flow: FliwrightFlowDocument;
 }
 
 interface RecorderLike {
-  start: (options?: { onOperation?: (op: RecordedOperation, idx: number) => void }) => Promise<void>;
+  start: (options?: {
+    onOperation?: (op: RecordedOperation, idx: number) => void;
+    captureScreenshots?: boolean;
+    filterNoise?: boolean;
+  }) => Promise<void>;
   stop: (options?: CodegenOptions) => Promise<string>;
   getOperations: () => RecordedOperation[];
+  getFrames?: () => RecordingFrame[];
 }
 
 export type RecorderFactory = (vmUrl: string) => Promise<RecorderLike>;
@@ -42,7 +48,7 @@ export async function handleRecord(
 
   const recorder = await createRecorder(vmUrl);
 
-  await recorder.start();
+  await recorder.start({ captureScreenshots: true, filterNoise: true });
 
   const durationMs = (params.duration ?? 30) * 1000;
   await new Promise((resolve) => setTimeout(resolve, durationMs));
@@ -58,11 +64,13 @@ export async function handleRecord(
 
   const testCode = await recorder.stop(codegenOptions);
   const operations = recorder.getOperations();
+  const frames = recorder.getFrames?.() ?? [];
 
   return {
     testCode,
     testName,
     operationCount: operations.length,
+    flow: buildFlowFromRecording({ frames, operations, testName }),
   };
 }
 

@@ -54,6 +54,28 @@ describe('handleTimelineGet', () => {
     expect(result.previous.id).toBe('page-1');
     expect(result.next.id).toBe('step-3');
   });
+
+  it('can include an editable flow generated from the timeline', async () => {
+    const path = await writeTimeline();
+    const state = createServerState();
+
+    const result = await handleTimelineGet({ path, includeFlow: true }) as {
+      flow: { source: { kind: string; runId: string }; nodes: Array<{ id: string; type: string; screenshot?: { path: string } }> };
+      timeline: { nodes: Array<{ artifacts?: unknown[] }> };
+    };
+
+    expect(result.timeline.nodes[1].artifacts).toBeUndefined();
+    expect(result.flow.source).toEqual(expect.objectContaining({
+      kind: 'timeline',
+      runId: 'run-1',
+    }));
+    expect(result.flow.nodes.map((node) => [node.id, node.type])).toEqual([
+      ['timeline-page-1', 'screen'],
+      ['timeline-step-2', 'action'],
+      ['timeline-step-3', 'action'],
+    ]);
+    expect(result.flow.nodes[1].screenshot?.path).toBe('artifacts/screenshots/step-2.png');
+  });
 });
 
 async function writeTimeline(): Promise<string> {

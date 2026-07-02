@@ -339,5 +339,76 @@ describe('JsonRuleLoader', () => {
       expect(username.generate({} as any, 'zh_CN')).toBe('user_b');
       expect(password.generate({} as any, 'zh_CN')).toBe('pass_b');
     });
+
+    it('picks named formData scenarios by dataIndex for matching rules', () => {
+      writeRuleFile('rules.json', {
+        version: 1,
+        formData: [
+          {
+            name: 'primary qa account',
+            note: 'happy path',
+            values: {
+              'login.username': 'user_a',
+              'login.password': 'pass_a',
+            },
+          },
+          {
+            name: 'kyc pending account',
+            description: 'requires manual review',
+            values: {
+              'login.username': 'user_b',
+              'login.password': 'pass_b',
+            },
+          },
+        ],
+        rules: [
+          {
+            find: { match: { semanticIdentifier: 'login.username' } },
+            type: 'PRESET_SKILL',
+          },
+          {
+            find: { match: { semanticIdentifier: 'login.password' } },
+            type: 'PRESET_SKILL',
+          },
+        ],
+      });
+      const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'), 1);
+      const username = skills.find(s => s.find?.match?.semanticIdentifier === 'login.username')!;
+      const password = skills.find(s => s.find?.match?.semanticIdentifier === 'login.password')!;
+
+      expect(username.generate({} as any, 'zh_CN')).toBe('user_b');
+      expect(password.generate({} as any, 'zh_CN')).toBe('pass_b');
+    });
+
+    it('does not fall back to legacy rule data when formData is present', () => {
+      writeRuleFile('rules.json', {
+        version: 1,
+        formData: [
+          {
+            name: 'only username override',
+            values: {
+              'login.username': 'user_from_scenario',
+            },
+          },
+        ],
+        rules: [
+          {
+            find: { match: { semanticIdentifier: 'login.username' } },
+            type: 'PRESET_SKILL',
+            data: ['legacy_user'],
+          },
+          {
+            find: { match: { semanticIdentifier: 'login.password' } },
+            type: 'PRESET_SKILL',
+            data: ['legacy_pass'],
+          },
+        ],
+      });
+      const skills = loader.loadFromFile(path.join(tmpDir, 'rules.json'), 0);
+      const username = skills.find(s => s.find?.match?.semanticIdentifier === 'login.username')!;
+
+      expect(username.generate({} as any, 'zh_CN')).toBe('user_from_scenario');
+      expect(skills[1].generate({} as any, 'zh_CN')).toBe('');
+    });
   });
 });

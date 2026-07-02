@@ -1,11 +1,12 @@
 import { resolveVmUrl } from '../vm-discovery.js';
 import { writeFile } from 'node:fs/promises';
-import { AssertionSuggester } from '@fliwright/core';
-import type { CodegenOptions, RecordedOperation } from '@fliwright/core';
+import { AssertionSuggester, buildFlowFromRecording } from '@fliwright/core';
+import type { CodegenOptions, FliwrightFlowDocument, RecordedOperation, RecordingFrame } from '@fliwright/core';
 
 export interface RecordOptions {
   vmUrl?: string;
   output?: string;
+  flowOutput?: string;
   lang?: 'ts' | 'dart';
   testName?: string;
   resetToHomeBeforeEach?: boolean;
@@ -16,12 +17,18 @@ export interface RecordOptions {
 export interface RecordResult {
   code: string;
   operations: RecordedOperation[];
+  flow: FliwrightFlowDocument;
 }
 
 export interface RecorderLike {
-  start: (options?: { onOperation?: (op: RecordedOperation, idx: number) => void }) => Promise<void>;
+  start: (options?: {
+    onOperation?: (op: RecordedOperation, idx: number) => void;
+    captureScreenshots?: boolean;
+    filterNoise?: boolean;
+  }) => Promise<void>;
   stop: (options?: CodegenOptions) => Promise<string>;
   getOperations: () => RecordedOperation[];
+  getFrames?: () => RecordingFrame[];
 }
 
 export interface RecordDeps {
@@ -56,6 +63,8 @@ export async function recordCommand(
   console.log('🔴 Recording... Press Ctrl+C to stop.\n');
 
   await recorder.start({
+    captureScreenshots: true,
+    filterNoise: true,
     onOperation: (op, index) => {
       const label = op.kind === 'type' ? `type "${op.text}"` : op.kind;
       const pos = `(${op.position.x}, ${op.position.y})`;
@@ -77,9 +86,16 @@ export async function recordCommand(
     homeRoute: options.homeRoute,
   };
   const code = await recorder.stop(codegenOptions);
+  const operations = recorder.getOperations();
+  const flow = buildFlowFromRecording({
+    frames: recorder.getFrames?.() ?? [],
+    operations,
+    testName,
+    targetFile: options.output,
+  });
 
   const suggester = new AssertionSuggester();
-  const suggestions = suggester.suggest(recorder.getOperations());
+  const suggestions = suggester.suggest(operations);
 
   let finalCode = code;
   if (suggestions.length > 0) {
@@ -97,9 +113,15 @@ export async function recordCommand(
     console.log(finalCode);
   }
 
+  if (options.flowOutput) {
+    await writeFile(options.flowOutput, `${JSON.stringify(flow, null, 2)}\n`, 'utf8');
+    console.log(`\n✅ Flow written to ${options.flowOutput}`);
+  }
+
   return {
     code: finalCode,
-    operations: recorder.getOperations(),
+    operations,
+    flow,
   };
 }
 

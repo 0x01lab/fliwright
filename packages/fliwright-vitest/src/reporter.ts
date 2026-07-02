@@ -1,9 +1,9 @@
-import type { Reporter, File } from 'vitest';
+import type { Reporter, RunnerTestFile } from 'vitest/node';
 
 export class FliwrightReporter implements Reporter {
   onInit() {}
 
-  onFinished(files: File[]) {
+  onFinished(files: RunnerTestFile[]) {
     for (const file of files) {
       for (const task of file.tasks) {
         if (task.type === 'test' && task.result?.state === 'fail') {

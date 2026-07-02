@@ -15,6 +15,7 @@ export 'src/extensions/riverpod.dart';
 export 'src/extensions/router_navigate.dart';
 export 'src/extensions/screenshot.dart';
 export 'src/extensions/snap.dart';
+export 'src/extensions/source_map.dart';
 export 'src/extensions/snapshot.dart';
 export 'src/extensions/storage_reset.dart';
 export 'src/form_control.dart';

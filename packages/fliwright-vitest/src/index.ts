@@ -34,7 +34,8 @@ import {
   createExpect,
   resolveAiConfig,
 } from '@fliwright/core';
-import type { AiRuntimeConfig, AgentPolicy, FailureContext, FliwrightLogger, FliwrightLogLevel, FliwrightLogEvent, HealingReport, Locator, LogSink, Page, TimelineRunMode, VMServiceEvent, TraceMode } from '@fliwright/core';
+import type { AiRuntimeConfig, AgentPolicy, FailureContext, FliwrightLogger, FliwrightLogLevel, FliwrightLogEvent, FliwrightPlugin, HealingReport, Locator, LogSink, Page, TimelineRunMode, VMServiceEvent, TraceMode } from '@fliwright/core';
+import type { TestAPI } from 'vitest';
 
 export type FliwrightLogFormat = 'pretty' | 'compact' | 'jsonl' | 'silent';
 export type FliwrightLogOutput = 'stderr' | 'stdout' | 'file' | 'jsonl-file';
@@ -49,6 +50,7 @@ export interface FliwrightLogConfig {
 
 export interface FliwrightConfig {
   vmServiceUrl: string;
+  plugins?: FliwrightPlugin[];
   timeout?: number;
   screenshot?: 'file' | 'base64' | 'off';
   ai?: AiRuntimeConfig;
@@ -81,6 +83,9 @@ export function resolveRunsRoot(config: { runsRoot?: string; projectRoot?: strin
 }
 
 let sharedDriver: FliwrightDriver | null = null;
+let sharedDriverKey = '';
+let nextPluginId = 1;
+const pluginIds = new WeakMap<FliwrightPlugin, number>();
 
 // Run-level trace ID, generated once per Vitest process
 const runId = TraceStore.generateRunId();
@@ -120,6 +125,13 @@ interface FliwrightFixtures {
   timeline: FliwrightTimelineContext;
   logger: FliwrightLogger;
 }
+
+export type FliwrightTest = TestAPI<FliwrightFixtures>;
+
+export type FliwrightProjectFixtures = Record<
+  string,
+  (fixtures: FliwrightFixtures, use: (value: unknown) => Promise<void>) => Promise<void>
+>;
 
 export interface CreateFliwrightTestOptions {
   /** When set, fixtures use this driver instead of lazily creating sharedDriver. */
@@ -309,6 +321,18 @@ export function createFliwrightTest(config: FliwrightConfig, options?: CreateFli
   return fliwrightTest;
 }
 
+export function extendFliwrightTest<TProjectFixtures extends Record<string, unknown>>(
+  base: FliwrightTest,
+  fixtures: {
+    [K in keyof TProjectFixtures]: (
+      fixtures: Omit<TProjectFixtures, K> & FliwrightFixtures,
+      use: (value: TProjectFixtures[K]) => Promise<void>,
+    ) => Promise<void>;
+  },
+): TestAPI<FliwrightFixtures & TProjectFixtures> {
+  return base.extend<TProjectFixtures>(fixtures as never) as unknown as TestAPI<FliwrightFixtures & TProjectFixtures>;
+}
+
 function attachTraceArtifact(timeline: FliwrightTimelineContext, collector: TraceCollector | undefined): void {
   if (!collector) return;
   const firstNode = timeline.recorder.toJSON().nodes[0];
@@ -454,12 +478,36 @@ async function getSharedDriver(config: FliwrightConfig): Promise<FliwrightDriver
       'No VM Service URL provided. Set FLIWRIGHT_VM_URL or FLIWRIGHT_VM_SERVICE_URL, or use createFliwrightTest({ vmServiceUrl }).',
     );
   }
-  if (!sharedDriver) {
-    sharedDriver = new FliwrightDriver();
-    await sharedDriver.connect(vmServiceUrl);
-    await listenToDiagnostics(sharedDriver);
+  const key = sharedDriverCacheKey(vmServiceUrl, config.plugins);
+  if (!sharedDriver || sharedDriverKey !== key) {
+    if (sharedDriver) {
+      const previousDriver = sharedDriver;
+      sharedDriver = null;
+      sharedDriverKey = '';
+      await previousDriver.dispose();
+    }
+    const nextDriver = new FliwrightDriver({ plugins: config.plugins });
+    await nextDriver.connect(vmServiceUrl);
+    await listenToDiagnostics(nextDriver);
+    sharedDriver = nextDriver;
+    sharedDriverKey = key;
   }
   return sharedDriver;
+}
+
+function sharedDriverCacheKey(vmServiceUrl: string, plugins: FliwrightPlugin[] | undefined): string {
+  return JSON.stringify({
+    vmServiceUrl,
+    plugins: (plugins ?? []).map((plugin) => `${plugin.name}:${pluginIdentity(plugin)}`),
+  });
+}
+
+function pluginIdentity(plugin: FliwrightPlugin): number {
+  const existing = pluginIds.get(plugin);
+  if (existing !== undefined) return existing;
+  const id = nextPluginId++;
+  pluginIds.set(plugin, id);
+  return id;
 }
 
 async function listenToDiagnostics(driver: FliwrightDriver): Promise<void> {

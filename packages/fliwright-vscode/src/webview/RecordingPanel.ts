@@ -1,9 +1,16 @@
 import * as vscode from 'vscode';
+import type { FlowCleanPlan, FliwrightFlowDocument } from '@fliwright/core';
 import type { RecordingSession } from '../types.js';
 import type { CanvasToExtensionMessage, ExtensionToCanvasMessage, RecordingCanvasSession } from './recording-canvas/types.js';
 
 export interface RecordingPanelOptions {
   onSetFrameIncluded?: (frameId: string, included: boolean) => void | Promise<void>;
+  onUpdateFlow?: (flow: FliwrightFlowDocument) => void | Promise<void>;
+  onCleanFlow?: (options: { apply: boolean; instructions?: string }) => Promise<{
+    flow: FliwrightFlowDocument;
+    plan: FlowCleanPlan;
+    applied: boolean;
+  }>;
 }
 
 export class RecordingPanel {
@@ -37,6 +44,9 @@ export class RecordingPanel {
         if (message.type === 'insertRecordedTest') {
           void vscode.commands.executeCommand('fliwright.insertRecordedTest');
         }
+        if (message.type === 'startRecording') {
+          void vscode.commands.executeCommand('fliwright.startRecording');
+        }
         if (message.type === 'openSavedRecording') {
           void vscode.commands.executeCommand('fliwright.openRecording');
         }
@@ -45,6 +55,15 @@ export class RecordingPanel {
         }
         if (message.type === 'setFrameIncluded') {
           void this.options.onSetFrameIncluded?.(message.frameId, message.included);
+        }
+        if (message.type === 'updateFlow') {
+          void this.options.onUpdateFlow?.(message.flow);
+        }
+        if (message.type === 'cleanFlow') {
+          void this.handleCleanFlow(message.requestId, {
+            apply: Boolean(message.apply),
+            instructions: message.instructions,
+          });
         }
       });
       this.panel.webview.html = renderRecordingHtml(this.panel.webview, this.extensionUri);
@@ -65,6 +84,27 @@ export class RecordingPanel {
       session: toCanvasSession(this.lastSession),
     };
     void this.panel.webview.postMessage?.(message);
+  }
+
+  private async handleCleanFlow(requestId: string, options: { apply: boolean; instructions?: string }): Promise<void> {
+    if (!this.panel) return;
+    try {
+      if (!this.options.onCleanFlow) throw new Error('Flow cleaning is not available.');
+      const result = await this.options.onCleanFlow(options);
+      const message: ExtensionToCanvasMessage = {
+        type: 'flowCleanResult',
+        requestId,
+        result,
+      };
+      void this.panel.webview.postMessage?.(message);
+    } catch (error) {
+      const message: ExtensionToCanvasMessage = {
+        type: 'flowCleanResult',
+        requestId,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      void this.panel.webview.postMessage?.(message);
+    }
   }
 }
 

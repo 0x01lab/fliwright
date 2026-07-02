@@ -3,7 +3,16 @@ import * as path from 'node:path';
 import RandExp from 'randexp';
 import { Selector } from './Selector.js';
 import { generateFormDataEntry } from './FormDataDsl.js';
-import type { FormSkill, FormFieldMeta, FormRule, FormRulesFile, MatchCriteria, SemanticType } from './types.js';
+import type {
+  FormDataScenario,
+  FormRuleDataEntry,
+  FormSkill,
+  FormFieldMeta,
+  FormRule,
+  FormRulesFile,
+  MatchCriteria,
+  SemanticType,
+} from './types.js';
 
 export class JsonRuleLoader {
   private readonly projectRoot: string;
@@ -47,15 +56,15 @@ export class JsonRuleLoader {
 
   private parseRules(data: FormRulesFile, dataIndex?: number): FormSkill[] {
     if (data.version !== 1) return [];
-    return data.rules.map((rule) => this.ruleToSkill(rule, dataIndex));
+    return data.rules.map((rule) => this.ruleToSkill(rule, dataIndex, data.formData));
   }
 
-  private ruleToSkill(rule: FormRule, dataIndex?: number): FormSkill {
+  private ruleToSkill(rule: FormRule, dataIndex?: number, formData?: FormDataScenario[]): FormSkill {
     const matchEntries = Object.entries(rule.match ?? {});
     const name = 'rule:' + matchEntries.map(([k, v]) => `${k}=${v}`).join(',');
     const find = rule.find ? new Selector(rule.find).toQuery() : undefined;
 
-    if (rule.type === 'PRESET_SKILL' && rule.data && rule.data.length > 0) {
+    if (rule.type === 'PRESET_SKILL' && this.hasRuleData(rule, formData)) {
       const auto = dataIndex === undefined;
       let index = auto ? 0 : dataIndex;
       return {
@@ -65,14 +74,14 @@ export class JsonRuleLoader {
         action: rule.action,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: (field, locale, options) => {
-          const entry = rule.data![index % rule.data!.length];
+          const entry = this.pickRuleDataEntry(rule, index, formData);
           if (auto) index++;
           return generateFormDataEntry(entry, { field, locale, options });
         },
       };
     }
 
-    if (rule.type === 'LLM_GENERATE' && rule.data) {
+    if (rule.type === 'LLM_GENERATE' && this.hasRuleData(rule, formData)) {
       const auto = dataIndex === undefined;
       let index = auto ? 0 : dataIndex;
       return {
@@ -82,7 +91,7 @@ export class JsonRuleLoader {
         action: rule.action,
         match: (field: FormFieldMeta) => this.matchesRule(field, rule),
         generate: (field, locale, options) => {
-          const entry = rule.data![index % rule.data!.length];
+          const entry = this.pickRuleDataEntry(rule, index, formData);
           if (auto) index++;
           return generateFormDataEntry(entry, { field, locale, options });
         },
@@ -107,6 +116,37 @@ export class JsonRuleLoader {
       match: () => false,
       generate: () => '',
     };
+  }
+
+  private hasRuleData(rule: FormRule, formData?: FormDataScenario[]): boolean {
+    if (formData) {
+      return Boolean(this.formDataKey(rule) && formData.some((scenario) => this.scenarioValue(rule, scenario) !== undefined));
+    }
+    return Boolean(rule.data?.length);
+  }
+
+  private pickRuleDataEntry(rule: FormRule, index: number, formData?: FormDataScenario[]): FormRuleDataEntry {
+    if (formData) {
+      const scenarios = formData.filter((scenario) => this.scenarioValue(rule, scenario) !== undefined);
+      return this.scenarioValue(rule, scenarios[index % scenarios.length])!;
+    }
+    return rule.data![index % rule.data!.length];
+  }
+
+  private scenarioValue(rule: FormRule, scenario: FormDataScenario): FormRuleDataEntry | undefined {
+    const key = this.formDataKey(rule);
+    return key ? scenario.values[key] : undefined;
+  }
+
+  private formDataKey(rule: FormRule): string | undefined {
+    return rule.dataKey
+      ?? rule.find?.match?.semanticIdentifier
+      ?? rule.match?.semanticsId
+      ?? rule.match?.semanticIdentifier
+      ?? rule.match?.name
+      ?? rule.match?.key
+      ?? rule.match?.id
+      ?? rule.match?.selector;
   }
 
   private matchesRule(field: FormFieldMeta & { semanticType?: SemanticType }, rule: FormRule): boolean {

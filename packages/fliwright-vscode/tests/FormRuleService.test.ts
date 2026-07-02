@@ -69,6 +69,32 @@ describe('FormRuleService', () => {
     expect(result.invalid).toHaveLength(0);
   });
 
+  it('accepts named form data scenarios', async () => {
+    const root = await createWorkspace();
+    await writeJson(root, '.fliwright/forms/login.json', {
+      version: 1,
+      formData: [
+        {
+          name: 'default qa account',
+          note: 'happy path',
+          values: {
+            'login.username': 'qa@example.com',
+            'login.password': 'Password123!',
+          },
+        },
+      ],
+      rules: [{
+        find: { match: { semanticIdentifier: 'login.username' } },
+        type: 'PRESET_SKILL',
+      }],
+    });
+
+    const result = await new FormRuleService().discover(Uri.file(root));
+
+    expect(result.files).toHaveLength(1);
+    expect(result.invalid).toHaveLength(0);
+  });
+
   it('reports unsupported match keys', async () => {
     const root = await createWorkspace();
     await writeJson(root, '.fliwright/forms/bad.json', {

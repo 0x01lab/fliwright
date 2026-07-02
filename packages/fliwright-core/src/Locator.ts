@@ -152,6 +152,17 @@ export class Locator {
     this.assertSuccessResponse(response, 'click');
   }
 
+  async clickIfVisible(options?: {
+    alignment?: AlignmentOption;
+    timeout?: number;
+    waitForAnimations?: boolean;
+    settleTimeout?: number;
+  }): Promise<boolean> {
+    if (!(await this.isVisible())) return false;
+    await this.click(options);
+    return true;
+  }
+
   async doubleClick(options?: { alignment?: AlignmentOption; timeout?: number }): Promise<void> {
     const response = await this.sendAction('doubleClick', {
       alignment: options?.alignment ?? 'center',
@@ -363,6 +374,19 @@ export class Locator {
       timeout: options?.timeout,
     });
     this.assertSuccessResponse(response, 'scrollIntoView');
+  }
+
+  async scrollIntoViewAndClick(options?: {
+    scroll?: { alignment?: number; duration?: number; timeout?: number };
+    click?: {
+      alignment?: AlignmentOption;
+      timeout?: number;
+      waitForAnimations?: boolean;
+      settleTimeout?: number;
+    };
+  }): Promise<void> {
+    await this.scrollIntoView(options?.scroll);
+    await this.click(options?.click);
   }
 
   async count(): Promise<number> {

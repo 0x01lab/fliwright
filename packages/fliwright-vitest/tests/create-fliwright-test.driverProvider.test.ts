@@ -2,7 +2,7 @@ import { describe, expect, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createFliwrightTest } from '../src/index.js';
+import { createFliwrightTest, extendFliwrightTest } from '../src/index.js';
 
 function makeStubDriver() {
   return {
@@ -39,5 +39,34 @@ describe('createFliwrightTest driverProvider', () => {
 
   test('called the injected provider instead of requiring a real shared VM driver', () => {
     expect(provider).toHaveBeenCalled();
+  });
+});
+
+describe('extendFliwrightTest', () => {
+  const base = createFliwrightTest(
+    {
+      vmServiceUrl: 'ws://placeholder/ws',
+      requireAssertions: false,
+      mode: 'script',
+      runsRoot: mkdtempSync(join(tmpdir(), 'fliwright-vitest-project-fixture-')),
+    },
+    { driverProvider: async () => makeStubDriver() },
+  );
+
+  const test = extendFliwrightTest(base, {
+    app: async ({ page, logger }, use) => {
+      await use({
+        page,
+        async openHome() {
+          logger.info('project fixture opened home');
+          return 'opened';
+        },
+      });
+    },
+  });
+
+  test('injects project fixtures alongside core fixtures', async ({ app, page }) => {
+    expect(app.page).toBe(page);
+    await expect(app.openHome()).resolves.toBe('opened');
   });
 });

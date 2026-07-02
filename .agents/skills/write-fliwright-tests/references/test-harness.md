@@ -10,7 +10,7 @@ import { test, script, expect } from '@fliwright/vitest';
 ```
 
 包里还重新导出了：`expect`、`createFliwrightTest`、`createFliwrightScript`、`defineConfig`、`beforeEach`、
-`afterEach`、`beforeAll`、`afterAll`、`describe`。
+`extendFliwrightTest`、`afterEach`、`beforeAll`、`afterAll`、`describe`。
 
 ## 默认的 `test` fixture
 
@@ -49,6 +49,18 @@ test('submits through mocked API', async ({ page, flow, mock }) => {
   });
   const calls = await mock.findCalls({ method: 'POST', path: '/api/login' });
   viExpect(calls.length).toBeGreaterThanOrEqual(1);
+});
+```
+
+多条 mock JSON rule 切换优先使用 `mock.activateRules(...)`，它会加载规则、切换 route、校验应用结果并清空 calls：
+
+```typescript
+await mock.activateRules({
+  mockDir: '.fliwright/mocks',
+  routes: [
+    { path: '/api/v1/user/info', method: 'POST', rule: 'kyc-completed' },
+    { path: '/server/config.json', method: 'GET', rule: 'not-under-maintenance' },
+  ],
 });
 ```
 
@@ -108,6 +120,7 @@ const test = createFliwrightTest(defineConfig({
 | 字段 | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `vmServiceUrl` | `string` | *(必填)* | HTTP 或 WS URL；会被转成 `ws://…/ws` |
+| `plugins` | `FliwrightPlugin[]` | *(未设)* | 注入 shared `FliwrightDriver` 的插件。缓存 key 包含插件对象身份，插件变化会重建 driver。 |
 | `timeout` | `number` | `5000` | 默认断言 / 失败超时，单位 ms |
 | `screenshot` | `'file' \| 'base64' \| 'off'` | `'file'` | 失败截图如何序列化 |
 | `ai` | `AiRuntimeConfig` | *(未设)* | AI runtime 配置（`provider`、`cache`、`timeoutMs`、`artifactsDir`、…）。支撑 `aiRuntime` fixture 和自愈。见 [ai.md](./ai.md)。 |
@@ -123,6 +136,46 @@ export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUr
 ```
 
 `defineConfig` 填入默认值（`timeout: 5000`、`screenshot: 'file'`）并应用你的覆盖。
+
+## 项目级 fixture：`extendFliwrightTest`
+
+当一个 app 的测试反复出现打开首页、关闭业务弹窗、批量启用 mock、读取 provider、下拉刷新直到接口命中等逻辑时，把这些能力放进 `.fliwright/support/<app>-test.ts`，测试文件只导入该 support module 的 `test`/`expect`。
+
+```typescript
+import { createFliwrightTest, defineConfig, extendFliwrightTest } from '@fliwright/vitest';
+import type { FliwrightLogger, MockRuntime, Page } from '@fliwright/core';
+
+class AppRuntime {
+  constructor(private readonly ctx: { page: Page; mock: MockRuntime; logger: FliwrightLogger }) {}
+
+  async closeOptionalAlert() {
+    await this.ctx.page.getByKey('businessAlert.closeButton').clickIfVisible({
+      timeout: 1_500,
+      waitForAnimations: true,
+    });
+  }
+
+  async refreshHomeUntilUserInfo() {
+    await this.ctx.mock.clearCalls();
+    await this.ctx.page.pullToRefresh({
+      maxAttempts: 3,
+      throwOnUnsatisfied: true,
+      until: async () => (await this.ctx.mock.getCalls('/api/v1/user/info')).length > 0,
+    });
+  }
+}
+
+const base = createFliwrightTest(defineConfig({
+  vmServiceUrl: process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL ?? '',
+}));
+
+export const test = extendFliwrightTest<{ app: AppRuntime }>(base, {
+  app: async ({ page, mock, logger }, use) => {
+    await use(new AppRuntime({ page, mock, logger }));
+  },
+});
+export { expect } from '@fliwright/vitest';
+```
 
 ## Hooks
 

@@ -1,5 +1,5 @@
 import type * as vscode from 'vscode';
-import type { FormAnalyzeResult, RecordingFrame, SelectorQuery } from '@fliwright/core';
+import type { FliwrightFlowDocument, FormAnalyzeResult, RecordingFrame, SelectorQuery } from '@fliwright/core';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 
@@ -102,6 +102,7 @@ export interface AppliedMockRule {
 export interface FormRulesFile {
   version: 1;
   locale?: string;
+  formData?: FormDataScenario[];
   rules: FormRule[];
 }
 
@@ -109,6 +110,7 @@ export interface FormRule {
   find?: SelectorQuery;
   match?: Record<string, string>;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
+  dataKey?: string;
   data?: FormRuleDataEntry[];
   pattern?: string;
   action?: FormRuleAction;
@@ -128,6 +130,15 @@ export type FormRuleDataEntry =
       timeoutMs?: number;
       temperature?: number;
     };
+
+export type FormDataScenarioValue = FormRuleDataEntry;
+
+export interface FormDataScenario {
+  name?: string;
+  description?: string;
+  note?: string;
+  values: Record<string, FormDataScenarioValue>;
+}
 
 export interface FormRuleAction {
   script: string;
@@ -190,6 +201,14 @@ export interface ScriptFileEntry {
   label: string;
   description?: string;
   lastResult?: RunResult;
+}
+
+export interface FlowFileEntry {
+  kind: 'flowFile';
+  uri: vscode.Uri;
+  label: string;
+  description?: string;
+  flow: FliwrightFlowDocument;
 }
 
 export interface TestCaseResult {
@@ -257,10 +276,12 @@ export interface RecordingSession {
   operationCount: number;
   frames?: RecordingFrame[];
   generatedCode?: string;
+  flow?: FliwrightFlowDocument;
   targetFile?: string;
   testName?: string;
   recordingId?: string;
   recordingDir?: string;
+  flowFile?: string;
 }
 
 export interface StateProviderEntry {
@@ -310,6 +331,10 @@ export type TestTreeNode =
 
 export type ScriptTreeNode =
   | ScriptFileEntry
+  | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
+
+export type FlowTreeNode =
+  | FlowFileEntry
   | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
 
 export type RunTreeNode =

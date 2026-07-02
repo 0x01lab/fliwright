@@ -91,6 +91,38 @@ describe('Page', () => {
     expect(context.route?.location).toBe('/register');
   });
 
+  it('sourceMap calls the source map extension with string options', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      success: true,
+      widgetCreationTracked: true,
+      nodes: [
+        {
+          type: 'ElevatedButton',
+          label: 'Submit',
+          source: { file: 'lib/home_page.dart', line: 12, column: 8 },
+        },
+      ],
+      candidateFiles: ['lib/home_page.dart'],
+      count: 1,
+    });
+    const page = new Page(sendRequest);
+
+    const result = await page.sourceMap({
+      includeFramework: false,
+      includeRects: true,
+      includeProperties: true,
+      limit: 10,
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.sourceMap', {
+      includeFramework: 'false',
+      includeRects: 'true',
+      includeProperties: 'true',
+      limit: '10',
+    });
+    expect(result.candidateFiles).toEqual(['lib/home_page.dart']);
+  });
+
   it('captureFrame forwards capture options', async () => {
     const sendRequest = vi.fn().mockResolvedValue({
       frameId: 'frame-1',
@@ -120,6 +152,28 @@ describe('Page', () => {
     expect(result.toString()).toBe('png');
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', {
       pixelRatio: '2',
+    });
+  });
+
+  it('viewport returns logical dimensions from the screenshot extension', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      success: true,
+      width: 390,
+      height: 844,
+      pixelRatio: 1,
+      screenshot: Buffer.from('png').toString('base64'),
+    });
+    const page = new Page(sendRequest);
+
+    await expect(page.viewport()).resolves.toEqual({
+      width: 390,
+      height: 844,
+      pixelRatio: 1,
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', {
+      pixelRatio: '1.0',
+      waitForFrame: 'false',
     });
   });
 
@@ -182,6 +236,116 @@ describe('Page', () => {
       timeout: '250',
       stableFrames: '4',
     });
+  });
+
+  it('pullToRefresh retries drag and settle until the condition passes', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+    let attempts = 0;
+
+    const result = await page.pullToRefresh({
+      maxAttempts: 3,
+      start: { x: 120, y: 140 },
+      distance: 260,
+      steps: 12,
+      settleTimeout: 500,
+      until: async () => {
+        attempts += 1;
+        return attempts === 2;
+      },
+    });
+
+    expect(result).toEqual({ attempts: 2, satisfied: true });
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.dragFrom', {
+      x: '120',
+      y: '140',
+      deltaX: '0',
+      deltaY: '260',
+      steps: '12',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.settle', {
+      timeout: '500',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(3, 'ext.fliwright.dragFrom', {
+      x: '120',
+      y: '140',
+      deltaX: '0',
+      deltaY: '260',
+      steps: '12',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(4, 'ext.fliwright.settle', {
+      timeout: '500',
+    });
+  });
+
+  it('pullToRefresh infers a viewport-relative gesture when no start point is provided', async () => {
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.screenshot') {
+        return {
+          success: true,
+          width: 390,
+          height: 844,
+          pixelRatio: 1,
+          screenshot: Buffer.from('png').toString('base64'),
+        };
+      }
+      return { success: true };
+    });
+    const page = new Page(sendRequest);
+
+    await page.pullToRefresh({ maxAttempts: 1 });
+
+    expect(sendRequest).toHaveBeenNthCalledWith(1, 'ext.fliwright.screenshot', {
+      pixelRatio: '1.0',
+      waitForFrame: 'false',
+    });
+    expect(sendRequest).toHaveBeenNthCalledWith(2, 'ext.fliwright.dragFrom', {
+      x: '195',
+      y: '152',
+      deltaX: '0',
+      deltaY: '287',
+      steps: '20',
+    });
+  });
+
+  it('pullToRefresh can fail softly when the condition is not satisfied', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    await expect(page.pullToRefresh({
+      maxAttempts: 2,
+      throwOnUnsatisfied: false,
+      until: async () => false,
+    })).resolves.toEqual({ attempts: 2, satisfied: false });
+
+    expect(sendRequest.mock.calls.filter((call) => call[0] === 'ext.fliwright.dragFrom')).toHaveLength(2);
+  });
+
+  it('pullToRefresh keeps settle timeout failures separate from an unsatisfied condition', async () => {
+    const sendRequest = vi.fn().mockImplementation((method: string) => {
+      if (method === 'ext.fliwright.settle') {
+        return { success: true, timedOut: true, settledAfterMs: 250 };
+      }
+      return { success: true };
+    });
+    const page = new Page(sendRequest);
+
+    await expect(page.pullToRefresh({
+      maxAttempts: 1,
+      throwOnUnsatisfied: false,
+      throwOnSettleTimeout: true,
+      until: async () => false,
+    })).rejects.toThrow('settle timed out after 250ms');
+  });
+
+  it('pullToRefresh throws when the condition is still not satisfied by default', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    await expect(page.pullToRefresh({
+      maxAttempts: 1,
+      until: async () => false,
+    })).rejects.toThrow('pullToRefresh condition was not satisfied after 1 attempt');
   });
 
   it('goto navigates and waits for the destination to settle by default', async () => {

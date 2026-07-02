@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { RecordingFrame } from '@fliwright/core';
+import { FLIWRIGHT_FLOWS_DIR, flowFileName, type FliwrightFlowDocument, type RecordingFrame } from '@fliwright/core';
 import type { RecordingSession } from '../types.js';
 
 export interface PersistedRecordingManifest {
@@ -13,6 +13,8 @@ export interface PersistedRecordingManifest {
   testName?: string;
   targetFile?: string;
   generatedCode?: string;
+  flow?: RecordingSession['flow'];
+  flowFile?: string;
   frames: Array<Omit<RecordingFrame, 'screenshot'> & {
     screenshotFile?: string;
     screenshot?: Omit<NonNullable<RecordingFrame['screenshot']>, 'base64'>;
@@ -70,6 +72,8 @@ export class RecordingPersistenceService {
       testName: session.testName,
       targetFile: session.targetFile,
       generatedCode: session.generatedCode,
+      flow: session.flow,
+      flowFile: session.flowFile,
       frames,
     };
     await vscode.workspace.fs.writeFile(
@@ -77,6 +81,17 @@ export class RecordingPersistenceService {
       Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8'),
     );
     return recordingDir;
+  }
+
+  async saveProjectFlow(workspaceRoot: vscode.Uri, flow: FliwrightFlowDocument): Promise<vscode.Uri> {
+    const flowsRoot = vscode.Uri.joinPath(workspaceRoot, ...FLIWRIGHT_FLOWS_DIR.split('/'));
+    await vscode.workspace.fs.createDirectory(flowsRoot);
+    const flowUri = vscode.Uri.joinPath(flowsRoot, flowFileName(flow.id));
+    await vscode.workspace.fs.writeFile(
+      flowUri,
+      Buffer.from(`${JSON.stringify(flow, null, 2)}\n`, 'utf8'),
+    );
+    return flowUri;
   }
 
   async list(workspaceRoot: vscode.Uri): Promise<RecordingListItem[]> {
@@ -138,10 +153,12 @@ export class RecordingPersistenceService {
       operationCount: manifest.operationCount,
       frames,
       generatedCode: manifest.generatedCode,
+      flow: manifest.flow,
       targetFile: manifest.targetFile,
       testName: manifest.testName,
       recordingId: manifest.id,
       recordingDir: recordingDir.fsPath,
+      flowFile: manifest.flowFile,
     };
   }
 }

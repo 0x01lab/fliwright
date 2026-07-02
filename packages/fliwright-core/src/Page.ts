@@ -11,6 +11,8 @@ import type {
   SelectorInput,
   SelectorQuery,
   SendRequest,
+  SourceMapOptions,
+  SourceMapResult,
 } from './types.js';
 import { Selector } from './Selector.js';
 import { FormHelper } from './FormHelper.js';
@@ -31,6 +33,35 @@ export interface PageNavigationOptions {
 
 export interface ResetToHomeOptions extends Omit<PageNavigationOptions, 'extra'> {
   homeRoute?: string;
+}
+
+export interface PullToRefreshOptions {
+  start?: { x: number; y: number };
+  startRatio?: { x: number; y: number };
+  viewport?: PageViewport;
+  deltaX?: number;
+  distance?: number;
+  distanceRatio?: number;
+  steps?: number;
+  maxAttempts?: number;
+  settleTimeout?: number;
+  stableFrames?: number;
+  /** @deprecated Use `throwOnUnsatisfied` and `throwOnSettleTimeout` for separate control. */
+  throwOnTimeout?: boolean;
+  throwOnSettleTimeout?: boolean;
+  throwOnUnsatisfied?: boolean;
+  until?: (context: { attempt: number; page: Page }) => boolean | Promise<boolean>;
+}
+
+export interface PullToRefreshResult {
+  attempts: number;
+  satisfied: boolean;
+}
+
+export interface PageViewport {
+  width: number;
+  height: number;
+  pixelRatio?: number;
 }
 
 export class Page {
@@ -110,12 +141,45 @@ export class Page {
     return (await this.sendRequest('ext.fliwright.context', {})) as BridgeContext;
   }
 
+  async sourceMap(options?: SourceMapOptions): Promise<SourceMapResult> {
+    const params: Record<string, unknown> = {};
+    if (options?.includeFramework != null) params.includeFramework = String(options.includeFramework);
+    if (options?.includeRects != null) params.includeRects = String(options.includeRects);
+    if (options?.includeProperties != null) params.includeProperties = String(options.includeProperties);
+    if (options?.limit != null) params.limit = String(options.limit);
+    return (await this.sendRequest('ext.fliwright.sourceMap', params)) as SourceMapResult;
+  }
+
   async captureFrame(options?: { screenshot?: boolean; snapshot?: boolean; diagnostics?: boolean }): Promise<FrameCaptureResult> {
     const params: Record<string, unknown> = {};
     if (options?.screenshot != null) params.screenshot = String(options.screenshot);
     if (options?.snapshot != null) params.snapshot = String(options.snapshot);
     if (options?.diagnostics != null) params.diagnostics = String(options.diagnostics);
     return (await this.sendRequest('ext.fliwright.captureFrame', params)) as FrameCaptureResult;
+  }
+
+  async viewport(): Promise<PageViewport> {
+    const result = (await this.sendRequest('ext.fliwright.screenshot', {
+      pixelRatio: '1.0',
+      waitForFrame: 'false',
+    })) as {
+      success?: boolean;
+      error?: string;
+      width?: number;
+      height?: number;
+      pixelRatio?: number;
+    };
+    if (result.success === false || result.error) {
+      throw new Error(`viewport failed: ${result.error ?? 'unknown error'}`);
+    }
+    if (!isPositiveNumber(result.width) || !isPositiveNumber(result.height)) {
+      throw new Error('viewport failed: screenshot result did not include positive width and height');
+    }
+    return {
+      width: result.width,
+      height: result.height,
+      pixelRatio: result.pixelRatio,
+    };
   }
 
   async query(query: BridgeQuery, options?: { visible?: 'any' | 'hitTestable'; limit?: number }): Promise<BridgeQueryResult> {
@@ -308,6 +372,51 @@ export class Page {
 
     if (result.success === false || result.error) {
       throw new Error(`dragFrom(${x}, ${y}, ${deltaX}, ${deltaY}) failed: ${result.error ?? 'unknown error'}`);
+    }
+  }
+
+  async pullToRefresh(options?: PullToRefreshOptions): Promise<PullToRefreshResult> {
+    const maxAttempts = options?.maxAttempts ?? 1;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+      throw new Error(`pullToRefresh maxAttempts must be a positive integer, got ${maxAttempts}`);
+    }
+
+    const viewport = options?.start ? undefined : await this.resolvePullViewport(options);
+    const start = options?.start ?? viewportRelativePoint(viewport, options?.startRatio) ?? { x: 200, y: 160 };
+    const deltaX = options?.deltaX ?? 0;
+    const distance = options?.distance ?? viewportRelativeDistance(viewport, options?.distanceRatio) ?? 320;
+    const steps = options?.steps ?? 20;
+    const settleTimeout = options?.settleTimeout ?? 1500;
+    const throwOnSettleTimeout = options?.throwOnSettleTimeout ?? options?.throwOnTimeout ?? false;
+    const throwOnUnsatisfied = options?.throwOnUnsatisfied ?? options?.throwOnTimeout ?? true;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await this.dragFrom(start.x, start.y, deltaX, distance, { steps });
+      await this.settle({
+        timeout: settleTimeout,
+        stableFrames: options?.stableFrames,
+        throwOnTimeout: throwOnSettleTimeout,
+      });
+
+      if (!options?.until || await options.until({ attempt, page: this })) {
+        return { attempts: attempt, satisfied: true };
+      }
+    }
+
+    const result = { attempts: maxAttempts, satisfied: false };
+    if (!throwOnUnsatisfied) return result;
+
+    throw new Error(
+      `pullToRefresh condition was not satisfied after ${maxAttempts} ${maxAttempts === 1 ? 'attempt' : 'attempts'}`,
+    );
+  }
+
+  private async resolvePullViewport(options: PullToRefreshOptions | undefined): Promise<PageViewport | undefined> {
+    if (options?.viewport) return options.viewport;
+    try {
+      return await this.viewport();
+    } catch {
+      return undefined;
     }
   }
 
@@ -504,4 +613,25 @@ function matchesFindQuery(candidate: AgentSnapshotRef, query: AgentFindQuery): b
   if (query.role != null && candidate.role !== query.role) return false;
   if (query.type != null && candidate.type !== query.type) return false;
   return Object.values(query).some((value) => value != null && value !== '');
+}
+
+function viewportRelativePoint(
+  viewport: PageViewport | undefined,
+  ratio: { x: number; y: number } | undefined,
+): { x: number; y: number } | undefined {
+  if (!viewport) return undefined;
+  const resolvedRatio = ratio ?? { x: 0.5, y: 0.18 };
+  return {
+    x: Math.round(viewport.width * resolvedRatio.x),
+    y: Math.round(viewport.height * resolvedRatio.y),
+  };
+}
+
+function viewportRelativeDistance(viewport: PageViewport | undefined, ratio: number | undefined): number | undefined {
+  if (!viewport) return undefined;
+  return Math.round(viewport.height * (ratio ?? 0.34));
+}
+
+function isPositiveNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }

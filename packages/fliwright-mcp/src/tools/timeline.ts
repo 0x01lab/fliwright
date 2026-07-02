@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
+import { buildFlowFromTimeline, type TimelineData } from '@fliwright/core';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ServerState } from '../state.js';
 
@@ -7,6 +8,7 @@ export const TimelineGetParamsSchema = z.object({
   runId: z.string().optional().describe('Run id to inspect; defaults to the last run result'),
   path: z.string().optional().describe('Direct path to a timeline.json file'),
   includeArtifacts: z.boolean().optional().describe('Include artifact refs in returned nodes'),
+  includeFlow: z.boolean().optional().describe('Include an editable business flow generated from the timeline'),
   nodeId: z.string().optional().describe('Return only a selected node plus nearby context'),
 });
 
@@ -25,19 +27,38 @@ export async function handleTimelineGet(
     nodes?: Array<{ id?: string; parentId?: string; artifacts?: unknown[] }>;
   } & Record<string, unknown>;
   const compact = params.includeArtifacts ? data : stripArtifacts(data);
-  if (!params.nodeId) return { path: timelinePath, timeline: compact };
+  const flow = params.includeFlow ? buildFlowFromTimeline({ timeline: data as unknown as TimelineData }) : undefined;
+  if (!params.nodeId) {
+    return {
+      path: timelinePath,
+      timeline: compact,
+      ...(flow ? { flow } : {}),
+    };
+  }
 
   const nodes = compact.nodes ?? [];
   const index = nodes.findIndex((node) => node.id === params.nodeId);
   if (index === -1) {
-    return { path: timelinePath, error: `Timeline node not found: ${params.nodeId}` };
+    return {
+      path: timelinePath,
+      error: `Timeline node not found: ${params.nodeId}`,
+      ...(flow ? { flow } : {}),
+    };
   }
   const node = nodes[index];
   const parent = node.parentId ? nodes.find((candidate) => candidate.id === node.parentId) : undefined;
   const children = nodes.filter((candidate) => candidate.parentId === node.id);
   const previous = index > 0 ? nodes[index - 1] : undefined;
   const next = index < nodes.length - 1 ? nodes[index + 1] : undefined;
-  return { path: timelinePath, node, parent, children, previous, next };
+  return {
+    path: timelinePath,
+    node,
+    parent,
+    children,
+    previous,
+    next,
+    ...(flow ? { flow } : {}),
+  };
 }
 
 export function registerTimelineTool(server: McpServer, state: ServerState): void {

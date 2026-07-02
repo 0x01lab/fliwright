@@ -4,6 +4,7 @@ export type MockBackend = 'flutter' | 'dio' | 'tool-server';
 
 export interface MockTimelineMetadata {
   operation:
+    | 'activateRules'
     | 'loadRules'
     | 'switchRule'
     | 'route'
@@ -37,6 +38,20 @@ export interface WaitForMockCallOptions {
   count?: number;
   timeout?: number;
   interval?: number;
+}
+
+export interface ActivateMockRule {
+  path: string;
+  method?: string;
+  rule: string;
+}
+
+export interface ActivateMockRulesOptions {
+  mockDir?: string;
+  routes: ActivateMockRule[];
+  clearRoutes?: boolean;
+  clearCalls?: boolean;
+  assertApplied?: boolean;
 }
 
 export type TimelineMockResponse = MockRouteResponse & {

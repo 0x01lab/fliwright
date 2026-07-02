@@ -305,6 +305,46 @@ export interface FrameCaptureResult {
   diagnostics?: Record<string, unknown>;
 }
 
+export interface SourceLocation {
+  file: string;
+  line: number;
+  column: number;
+  name?: string;
+}
+
+export interface SourceMapNode {
+  id?: string;
+  type: string;
+  label?: string;
+  text?: string;
+  key?: string;
+  role?: string;
+  rect?: { x: number; y: number; width: number; height: number };
+  source?: SourceLocation;
+  properties?: Record<string, unknown>;
+}
+
+export interface SourceMapResult {
+  success?: boolean;
+  error?: string;
+  widgetCreationTracked: boolean;
+  route?: {
+    location?: string;
+    name?: string;
+  };
+  nodes: SourceMapNode[];
+  candidateFiles: string[];
+  fileCounts?: Record<string, number>;
+  count: number;
+}
+
+export interface SourceMapOptions {
+  includeFramework?: boolean;
+  includeRects?: boolean;
+  includeProperties?: boolean;
+  limit?: number;
+}
+
 export interface BridgeQuery {
   key?: string;
   text?: string;
@@ -560,6 +600,15 @@ export type FormRuleDataEntry =
       temperature?: number;
     };
 
+export type FormDataScenarioValue = FormRuleDataEntry;
+
+export interface FormDataScenario {
+  name?: string;
+  description?: string;
+  note?: string;
+  values: Record<string, FormDataScenarioValue>;
+}
+
 export interface FormSkill {
   name: string;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
@@ -598,6 +647,7 @@ export interface FormRule {
   find?: SelectorQuery;
   match?: Record<string, string>;
   type: 'PRESET_SKILL' | 'REGEXP_MOCK' | 'LLM_GENERATE';
+  dataKey?: string;
   data?: FormRuleDataEntry[];
   pattern?: string;
   action?: FormRuleAction;
@@ -606,6 +656,7 @@ export interface FormRule {
 export interface FormRulesFile {
   version: number;
   locale?: string;
+  formData?: FormDataScenario[];
   rules: FormRule[];
 }
 

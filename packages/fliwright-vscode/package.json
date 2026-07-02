@@ -89,6 +89,14 @@
     "onCommand:fliwright.stopRecording",
     "onCommand:fliwright.insertRecordedTest",
     "onCommand:fliwright.openRecording",
+    "onCommand:fliwright.createFlow",
+    "onCommand:fliwright.openFlow",
+    "onCommand:fliwright.openFlowJson",
+    "onCommand:fliwright.cleanFlowFile",
+    "onCommand:fliwright.generateFlowTest",
+    "onCommand:fliwright.createFlowReviewPlan",
+    "onCommand:fliwright.createFlowReviewBundle",
+    "onCommand:fliwright.refreshFlows",
     "onCommand:fliwright.refreshStateProviders",
     "onCommand:fliwright.readStateProvider",
     "onCommand:fliwright.overrideStateProvider",
@@ -131,6 +139,10 @@
         {
           "id": "fliwright.formData",
           "name": "Form Data"
+        },
+        {
+          "id": "fliwright.flows",
+          "name": "Flows"
         },
         {
           "id": "fliwright.scripts",
@@ -334,6 +346,46 @@
         "icon": "$(history)"
       },
       {
+        "command": "fliwright.createFlow",
+        "title": "Fliwright: Create Flow",
+        "icon": "$(add)"
+      },
+      {
+        "command": "fliwright.openFlow",
+        "title": "Fliwright: Open Flow",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "fliwright.openFlowJson",
+        "title": "Fliwright: Open Flow JSON",
+        "icon": "$(json)"
+      },
+      {
+        "command": "fliwright.cleanFlowFile",
+        "title": "Fliwright: Clean Flow with AI",
+        "icon": "$(wand)"
+      },
+      {
+        "command": "fliwright.generateFlowTest",
+        "title": "Fliwright: Generate Test from Flow",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "fliwright.createFlowReviewPlan",
+        "title": "Fliwright: Create UI Review Plan",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "fliwright.createFlowReviewBundle",
+        "title": "Fliwright: Create UI Review Bundle",
+        "icon": "$(package)"
+      },
+      {
+        "command": "fliwright.refreshFlows",
+        "title": "Fliwright: Refresh Flows",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "fliwright.refreshStateProviders",
         "title": "Fliwright: Refresh State Providers",
         "icon": "$(refresh)"
@@ -519,6 +571,26 @@
           "group": "navigation@5"
         },
         {
+          "command": "fliwright.createFlow",
+          "when": "view == fliwright.flows",
+          "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.startRecording",
+          "when": "view == fliwright.flows && !fliwright.recording.isRecording",
+          "group": "navigation@2"
+        },
+        {
+          "command": "fliwright.stopRecording",
+          "when": "view == fliwright.flows && fliwright.recording.isRecording",
+          "group": "navigation@2"
+        },
+        {
+          "command": "fliwright.refreshFlows",
+          "when": "view == fliwright.flows",
+          "group": "navigation@3"
+        },
+        {
           "command": "fliwright.runScript",
           "when": "view == fliwright.scripts",
           "group": "navigation@1"
@@ -604,6 +676,36 @@
           "command": "fliwright.insertFormFieldSelector",
           "when": "view == fliwright.formData && viewItem == formAnalyzeField",
           "group": "inline@2"
+        },
+        {
+          "command": "fliwright.openFlow",
+          "when": "view == fliwright.flows && viewItem == flowFile",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.cleanFlowFile",
+          "when": "view == fliwright.flows && viewItem == flowFile",
+          "group": "inline@2"
+        },
+        {
+          "command": "fliwright.generateFlowTest",
+          "when": "view == fliwright.flows && viewItem == flowFile",
+          "group": "1_generate@1"
+        },
+        {
+          "command": "fliwright.createFlowReviewPlan",
+          "when": "view == fliwright.flows && viewItem == flowFile",
+          "group": "1_generate@3"
+        },
+        {
+          "command": "fliwright.createFlowReviewBundle",
+          "when": "view == fliwright.flows && viewItem == flowFile",
+          "group": "1_generate@2"
+        },
+        {
+          "command": "fliwright.openFlowJson",
+          "when": "view == fliwright.flows && viewItem == flowFile",
+          "group": "2_open@1"
         },
         {
           "command": "fliwright.runScript",
