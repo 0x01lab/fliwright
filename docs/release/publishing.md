@@ -29,10 +29,10 @@ Before the first release:
 Manual package and publish:
 
 ```bash
-pnpm --filter @fliwright/vscode run lint
-pnpm --filter @fliwright/vscode run test
-pnpm --filter @fliwright/vscode run package
-VSCE_PAT=... pnpm --filter @fliwright/vscode run publish:vsce
+pnpm --filter fliwright-vscode run lint
+pnpm --filter fliwright-vscode run test
+pnpm --filter fliwright-vscode run package
+VSCE_PAT=... pnpm --filter fliwright-vscode run publish:vsce
 ```
 
 Automated publish:

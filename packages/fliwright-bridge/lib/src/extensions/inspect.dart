@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 
 import '../actionability_gate.dart';
 import '../bridge.dart';
@@ -89,6 +90,9 @@ class InspectExtension {
 
     if (action == 'dismissModal') {
       return _dismissModal();
+    }
+    if (action == 'dismissKeyboard') {
+      return _dismissKeyboard();
     }
     if (action == 'waitForNetworkIdle') {
       return _waitForNetworkIdle(params);
@@ -505,6 +509,12 @@ class InspectExtension {
     final navigator = Navigator.maybeOf(root);
     final popped = navigator == null ? false : await navigator.maybePop();
     return {'success': true, 'action': 'dismissModal', 'popped': popped};
+  }
+
+  static Future<Map<String, dynamic>> _dismissKeyboard() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    return {'success': true, 'action': 'dismissKeyboard'};
   }
 
   static Future<Map<String, dynamic>> _waitForNetworkIdle(

@@ -4,7 +4,6 @@ import * as vscode from 'vscode';
 import type { FliwrightFlowDocument, FormAnalyzeResult, FormFillResult } from '@fliwright/core';
 import {
   clearWorkspaceVmServiceUrl,
-  FLIWRIGHT_RUNS_ROOT_ENV,
   buildFlowReviewBundle,
   buildFlowReviewPlan,
   generateFlowTestSkeleton,
@@ -22,8 +21,10 @@ import { FormRuleService } from './form/FormRuleService.js';
 import { RecorderService, resolveRecordingTestName } from './recording/RecorderService.js';
 import { FliwrightCodeLensProvider } from './runner/FliwrightCodeLensProvider.js';
 import { TestDiscoveryService } from './runner/TestDiscoveryService.js';
-import { VitestRunner } from './runner/VitestRunner.js';
+import { resolveVitestCli, VitestRunner } from './runner/VitestRunner.js';
 import { ScriptDiscoveryService } from './scripts/ScriptDiscoveryService.js';
+import { ScriptRunner } from './scripts/ScriptRunner.js';
+import { createVitestScriptConfig } from './scripts/VitestScriptConfig.js';
 import { ScreenshotPreviewPanel, ScreenshotService } from './screenshot/ScreenshotService.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
@@ -76,6 +77,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const testDiscoveryService = new TestDiscoveryService();
   const scriptDiscoveryService = new ScriptDiscoveryService();
   const runner = new VitestRunner();
+  const scriptRunner = new ScriptRunner();
   const screenshotService = new ScreenshotService();
   const screenshotPreviewPanel = new ScreenshotPreviewPanel();
   const failureStore = new FailureContextStore();
@@ -162,6 +164,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(session.onDidChangeState((state) => {
     devicesTree.setState(state);
     statusBar.setConnectionState(state);
+    void vscode.commands.executeCommand('setContext', 'fliwright.connected', isActiveSessionState(state.status));
   }));
 
   let debugLogBuffer = '';
@@ -309,14 +312,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     },
   );
 
+  registerTreeDataProvider(context, 'fliwright.devices', devicesTree, output);
+  registerTreeDataProvider(context, 'fliwright.mockApis', mockTree, output);
+  registerTreeDataProvider(context, 'fliwright.formData', formTree, output);
+  registerTreeDataProvider(context, 'fliwright.flows', flowsTree, output);
+  registerTreeDataProvider(context, 'fliwright.scripts', scriptsTree, output);
+  registerTreeDataProvider(context, 'fliwright.tests', testsTree, output);
+  registerTreeDataProvider(context, 'fliwright.state', stateTree, output);
+
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('fliwright.devices', devicesTree),
-    vscode.window.registerTreeDataProvider('fliwright.mockApis', mockTree),
-    vscode.window.registerTreeDataProvider('fliwright.formData', formTree),
-    vscode.window.registerTreeDataProvider('fliwright.flows', flowsTree),
-    vscode.window.registerTreeDataProvider('fliwright.scripts', scriptsTree),
-    vscode.window.registerTreeDataProvider('fliwright.tests', testsTree),
-    vscode.window.registerTreeDataProvider('fliwright.state', stateTree),
     vscode.languages.registerCodeLensProvider(
       [{ language: 'typescript', scheme: 'file' }, { language: 'typescriptreact', scheme: 'file' }],
       new FliwrightCodeLensProvider(),
@@ -348,17 +352,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const editorProvider = new TestEditorProvider(context.extensionUri);
   const editorBridge = new EditorBridge();
 
-  output.appendLine('[FliwrightEditor] Registering custom editor provider...');
-
-  context.subscriptions.push(
-    vscode.window.registerCustomEditorProvider(
-      'fliwright.testEditor',
-      editorProvider,
-      { supportsMultipleEditorsPerDocument: false },
-    ),
-  );
-
-  output.appendLine('[FliwrightEditor] Custom editor provider registered.');
+  registerTestEditorProvider(context, editorProvider, output);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('fliwright.openVisualEditor', async (uri?: vscode.Uri) => {
@@ -535,7 +529,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (!node || node.kind !== 'rule') throw new Error('Select a mock rule to apply.');
         output.appendLine(`Applying mock ${formatMockRuleDebug(node)}`);
         const applied = await sandboxService.applyRule(session.connectedDriver, node);
-        mockTree.setAppliedRules(await sandboxService.getActiveRules(session.connectedDriver));
+        mockTree.setAppliedRules([
+          ...(await sandboxService.getActiveRules(session.connectedDriver)),
+          applied,
+        ]);
         output.appendLine(`Applied mock ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
         await appendMockControllerDebug('Flutter mock routes after apply:');
         vscode.window.showInformationMessage(`Applied ${applied.method} ${applied.endpoint} -> ${applied.ruleName}`);
@@ -547,6 +544,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const stopped = await sandboxService.stopRule(session.connectedDriver, node);
         mockTree.setAppliedRules(await sandboxService.getActiveRules(session.connectedDriver));
         if (!stopped) {
+          mockTree.removeAppliedRule(node);
           output.appendLine(`Skipped stopping inactive mock ${formatMockRuleDebug(node)}`);
           await appendMockControllerDebug('Flutter mock routes remain:');
           vscode.window.showWarningMessage(`Mock rule is not active: ${node.method} ${node.endpoint} -> ${node.rule.name}`);
@@ -578,7 +576,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           }
         }
         const result = await sandboxService.applyDefaultMocks(session.connectedDriver, discovery);
-        mockTree.setAppliedRules(await sandboxService.getActiveRules(session.connectedDriver));
+        mockTree.setAppliedRules([
+          ...(await sandboxService.getActiveRules(session.connectedDriver)),
+          ...result.applied,
+        ]);
         output.appendLine(`Applied ${result.applied.length} default mock route(s), skipped ${result.skipped}.`);
         await appendMockControllerDebug('Flutter mock routes after apply-default:');
         vscode.window.showInformationMessage(`Applied ${result.applied.length} default mock route(s).`);
@@ -1519,37 +1520,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
       }
 
-      const command = await terminalScriptCommand(root, script);
       const runId = runArtifactStore.generateBaseRunId();
       const traceMode = getTraceMode();
       const scriptTraceDir = runsRoot;
-      const terminal = vscode.window.createTerminal({
-        name: `Fliwright: ${script.label}`,
-        cwd: root.fsPath,
-        env: {
-          ...(session.currentUrl ? {
-            FLIWRIGHT_VM_SERVICE_URL: session.currentUrl,
-            FLIWRIGHT_VM_URL: session.currentUrl,
-          } : {}),
-          ...(runsRoot ? {
-            [FLIWRIGHT_RUNS_ROOT_ENV]: runsRoot,
-            FLIWRIGHT_RUN_ID: runId,
-          } : {}),
-          ...(traceMode !== 'off' && scriptTraceDir ? {
-            FLIWRIGHT_TRACE: traceMode,
-            FLIWRIGHT_TRACE_DIR: scriptTraceDir,
-            FLIWRIGHT_TRACE_LAYOUT: 'run',
-          } : {}),
-        },
-      });
-      context.subscriptions.push(terminal);
-      terminal.show(true);
-      terminal.sendText(command, true);
-
-      output.appendLine(`Started script in terminal: ${script.uri.fsPath}`);
+      output.show(true);
+      output.appendLine(`Running script: ${script.uri.fsPath}`);
       output.appendLine(`VM Service: ${session.currentUrl ?? '(none)'}`);
+      let result: RunResult;
+      try {
+        result = await scriptRunner.run({
+          workspaceRoot: root,
+          script,
+          vmServiceUrl: session.currentUrl,
+          runsRoot,
+          runId,
+          traceMode,
+          traceDir: traceMode !== 'off' && scriptTraceDir ? vscode.Uri.file(scriptTraceDir) : undefined,
+          onOutput: appendScriptOutput,
+        });
+      } finally {
+        if (isActiveSessionState(session.state.status)) {
+          await requestMockStateSync('script run finished');
+        }
+      }
+
+      statusBar.setRunResult(result);
       scriptsTree.refresh();
-      vscode.window.showInformationMessage(`Fliwright script started in terminal: ${script.label}`);
+      output.appendLine(`Script complete: ${result.passed ? 'passed' : 'failed'} in ${result.duration}ms.`);
+      if (result.passed) {
+        vscode.window.showInformationMessage(`Fliwright script passed: ${script.label}`);
+      } else {
+        vscode.window.showErrorMessage(`Fliwright script failed: ${script.label}`);
+      }
     });
   }
 
@@ -1635,14 +1637,27 @@ Add the Fliwright MCP server to your AI coding tool configuration:
 
 Available tools:
 
+- \`fliwright_status\`: inspect ordinary app-interaction connection state and any discoverable VM Service URL. This is for the current running app; \`fliwright_tdd_status\` is only for the persistent TDD runtime.
+- \`fliwright_connect\`: connect to a running Flutter app via VM Service. \`vmServiceUrl\` is optional; when omitted, MCP reuses current state, \`FLIWRIGHT_VM_URL\` / \`FLIWRIGHT_VM_SERVICE_URL\`, or \`.fliwright/config.json\`.
+- \`fliwright_debug_snapshot\`: get a compact runtime bundle for coding agents: route, page refs, diagnostics, mock status, and recent failures. It auto-connects when a VM URL is discoverable. Screenshot bytes are off by default.
+- \`fliwright_screenshot\`: capture the current app as MCP image content for visual inspection. Call this directly; it auto-connects when possible. It does not write files; if the user asks to save the image, the coding agent chooses the path and writes it.
+- \`fliwright_snap\`: read the current page structure and stable refs for follow-up actions.
+- \`fliwright_tap\` / \`fliwright_type\` / \`fliwright_action\`: interact with the app, preferably using refs from \`fliwright_snap\`.
+- \`fliwright_mock_status\`: inspect configured mock rules, applied routes, and recent mock calls.
+- \`fliwright_mock_switch\`: switch an endpoint's active mock rule.
 - \`fliwright_run\`: run a Fliwright test file.
 - \`fliwright_get_failure\`: inspect structured failure context.
-- \`fliwright_generate_test\`: generate tests from Flutter source.
+- \`fliwright_generate_test\`: generate tests from Flutter source or an InteractionSpec.
 - \`fliwright_record\`: record interactions and generate test code.
-- \`fliwright_mock_list\`: list loaded mock endpoints and active rules.
-- \`fliwright_mock_switch\`: switch an endpoint's active mock rule.
 
-Use \`FLIWRIGHT_VM_URL\` or the VS Code connection command to point Fliwright at a running Flutter VM Service.
+Recommended agent workflows:
+
+- Runtime debug: \`fliwright_debug_snapshot\` directly; use \`fliwright_status\` only when diagnosing connection discovery.
+- Visual inspection: \`fliwright_screenshot\` directly. Do not create a temporary script or manually connect to VM Service just to view the current screen.
+- Interaction/debug loop: \`fliwright_connect\` when needed → \`fliwright_snap\` → \`fliwright_tap\` / \`fliwright_type\` / \`fliwright_action\` → \`fliwright_debug_snapshot\`.
+- Mock debugging: \`fliwright_mock_status\` → \`fliwright_mock_switch\` → \`fliwright_debug_snapshot\`.
+
+Use \`FLIWRIGHT_VM_URL\`, \`FLIWRIGHT_VM_SERVICE_URL\`, or the VS Code connection command to point Fliwright at a running Flutter VM Service. Do not use \`fliwright_tdd_status\` to inspect the current app unless you intentionally started the persistent TDD runtime.
 `;
 }
 
@@ -1821,7 +1836,7 @@ async function showFormPreview(
     label: field.label,
     description: field.semanticType,
     detail: field.generatedValue,
-    hint: field.label,
+    hint: field.hint,
     picked: true,
   }));
   const selection = await vscode.window.showQuickPick(items, {
@@ -2055,20 +2070,74 @@ async function withWindowProgress<T>(title: string, task: () => Promise<T>): Pro
   );
 }
 
-async function terminalScriptCommand(root: vscode.Uri, script: ScriptFileEntry): Promise<string> {
+export function registerTestEditorProvider(
+  context: Pick<vscode.ExtensionContext, 'subscriptions'>,
+  provider: vscode.CustomEditorProvider<vscode.CustomDocument>,
+  outputChannel: Pick<vscode.OutputChannel, 'appendLine'>,
+): void {
+  outputChannel.appendLine('[FliwrightEditor] Registering custom editor provider...');
+  try {
+    context.subscriptions.push(
+      vscode.window.registerCustomEditorProvider(
+        'fliwright.testEditor',
+        provider,
+        { supportsMultipleEditorsPerDocument: false },
+      ),
+    );
+  } catch (error) {
+    if (isCustomEditorAlreadyRegisteredError(error)) {
+      outputChannel.appendLine(
+        '[FliwrightEditor] Custom editor provider already registered; '
+        + 'continuing activation with the existing provider.',
+      );
+      return;
+    }
+    throw error;
+  }
+  outputChannel.appendLine('[FliwrightEditor] Custom editor provider registered.');
+}
+
+export function registerTreeDataProvider<T>(
+  context: Pick<vscode.ExtensionContext, 'subscriptions'>,
+  viewId: string,
+  provider: vscode.TreeDataProvider<T>,
+  outputChannel: Pick<vscode.OutputChannel, 'appendLine'>,
+): void {
+  try {
+    context.subscriptions.push(vscode.window.registerTreeDataProvider(viewId, provider));
+  } catch (error) {
+    if (isViewAlreadyRegisteredError(error, viewId)) {
+      outputChannel.appendLine(
+        `[Fliwright] View provider ${viewId} already registered; continuing activation with the existing provider.`,
+      );
+      return;
+    }
+    throw error;
+  }
+}
+
+function isCustomEditorAlreadyRegisteredError(error: unknown): boolean {
+  return error instanceof Error
+    && /Provider for viewType:fliwright\.testEditor already registered/i.test(error.message);
+}
+
+function isViewAlreadyRegisteredError(error: unknown, viewId: string): boolean {
+  return error instanceof Error
+    && error.message.includes(`Cannot register multiple views with same id \`${viewId}\``);
+}
+
+export async function terminalScriptCommand(root: vscode.Uri, script: ScriptFileEntry): Promise<string> {
   const relativeScript = path.relative(root.fsPath, script.uri.fsPath);
   const source = await fs.promises.readFile(script.uri.fsPath, 'utf8');
   if (usesFliwrightVitest(source)) {
+    const config = await createVitestScriptConfig(relativeScript, root.fsPath);
     return [
-      'pnpm',
-      'exec',
-      'vitest',
+      'node',
+      shellQuote(resolveVitestCli(root.fsPath)),
       'run',
       shellQuote(relativeScript),
-      '--pool',
-      'forks',
-      '--poolOptions.forks.singleFork',
-      '--no-fileParallelism',
+      '--config',
+      shellQuote(config.path),
     ].join(' ');
   }
   return ['node', shellQuote(relativeScript)].join(' ');

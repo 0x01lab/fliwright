@@ -133,6 +133,8 @@ let configValue: Record<string, unknown> = {};
 let showInputBoxResult: string | undefined = undefined;
 let showQuickPickResultProvider: ((items: unknown[], options?: { canPickMany?: boolean }) => unknown) | undefined;
 let showSaveDialogResult: Uri | undefined = undefined;
+let registerCustomEditorProviderError: Error | undefined;
+const registerTreeDataProviderErrors = new Map<string, Error>();
 export const __webviewPanels: Array<{
   webview: {
     cspSource: string;
@@ -232,7 +234,13 @@ export const window = {
     __webviewPanels.push(panel);
     return panel;
   },
-  registerTreeDataProvider() {
+  registerTreeDataProvider(viewId?: string) {
+    const error = viewId ? registerTreeDataProviderErrors.get(viewId) : undefined;
+    if (error) throw error;
+    return { dispose() {} };
+  },
+  registerCustomEditorProvider() {
+    if (registerCustomEditorProviderError) throw registerCustomEditorProviderError;
     return { dispose() {} };
   },
   activeTextEditor: undefined as any,
@@ -299,4 +307,13 @@ export function __setShowQuickPickResult(provider: ((items: unknown[], options?:
 
 export function __setShowSaveDialogResult(result: Uri | undefined): void {
   showSaveDialogResult = result;
+}
+
+export function __setRegisterCustomEditorProviderError(error: Error | undefined): void {
+  registerCustomEditorProviderError = error;
+}
+
+export function __setRegisterTreeDataProviderError(viewId: string, error: Error | undefined): void {
+  if (error) registerTreeDataProviderErrors.set(viewId, error);
+  else registerTreeDataProviderErrors.delete(viewId);
 }

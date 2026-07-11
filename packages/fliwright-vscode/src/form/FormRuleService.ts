@@ -191,6 +191,13 @@ export class FormRuleService {
       if (rule.dataKey !== undefined && typeof rule.dataKey !== 'string') {
         throw new Error(`rules[${index}].dataKey must be a string`);
       }
+      if (
+        file.formData !== undefined
+        && (rule.type === 'PRESET_SKILL' || rule.type === 'LLM_GENERATE')
+        && typeof rule.dataKey !== 'string'
+      ) {
+        throw new Error(`rules[${index}].dataKey is required when formData is used`);
+      }
       if (rule.type === 'REGEXP_MOCK' && typeof rule.pattern !== 'string') {
         throw new Error(`rules[${index}].pattern is required for REGEXP_MOCK`);
       }

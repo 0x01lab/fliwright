@@ -120,7 +120,7 @@ export class JsonRuleLoader {
 
   private hasRuleData(rule: FormRule, formData?: FormDataScenario[]): boolean {
     if (formData) {
-      return Boolean(this.formDataKey(rule) && formData.some((scenario) => this.scenarioValue(rule, scenario) !== undefined));
+      return Boolean(rule.dataKey && formData.some((scenario) => this.scenarioValue(rule, scenario) !== undefined));
     }
     return Boolean(rule.data?.length);
   }
@@ -134,19 +134,7 @@ export class JsonRuleLoader {
   }
 
   private scenarioValue(rule: FormRule, scenario: FormDataScenario): FormRuleDataEntry | undefined {
-    const key = this.formDataKey(rule);
-    return key ? scenario.values[key] : undefined;
-  }
-
-  private formDataKey(rule: FormRule): string | undefined {
-    return rule.dataKey
-      ?? rule.find?.match?.semanticIdentifier
-      ?? rule.match?.semanticsId
-      ?? rule.match?.semanticIdentifier
-      ?? rule.match?.name
-      ?? rule.match?.key
-      ?? rule.match?.id
-      ?? rule.match?.selector;
+    return rule.dataKey ? scenario.values[rule.dataKey] : undefined;
   }
 
   private matchesRule(field: FormFieldMeta & { semanticType?: SemanticType }, rule: FormRule): boolean {

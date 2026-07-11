@@ -92,6 +92,7 @@ page.waitForNew(selector, opts?): Promise<Locator>     // { timeout? }
 page.settle(opts?): Promise<void>                       // { timeout? } default 2000
 page.waitForNetworkIdle(opts?): Promise<void>           // { quietMs?, timeout? }
 page.dismissModal(): Promise<void>
+page.dismissKeyboard(): Promise<void>                   // unfocus + native soft-keyboard hide
 page.viewport(): Promise<{ width: number; height: number; pixelRatio?: number }>
 page.pullToRefresh(opts?): Promise<{ attempts: number; satisfied: boolean }>
 //   { start?, startRatio?, viewport?, deltaX?, distance?, distanceRatio?, steps?,

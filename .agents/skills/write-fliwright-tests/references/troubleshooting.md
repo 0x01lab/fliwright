@@ -18,6 +18,7 @@
 | `Unknown method "ext.fliwright.snap"` | 应用跑的是**旧版**桥接 | 升级 `fliwright_bridge`，在 `kDebugMode` 下调用 `FliwrightBridge.init()`，重新构建/重启，确认 `ext.fliwright.snap` 可用 |
 | `Unknown method "ext.fliwright.extractForm"` | 旧版桥接缺表单抽取能力 | 升级；过渡期回退到裸 driver 的 legacy 路径（标注清楚） |
 | `snapshot()`/`findRef()`/`fliwright_snap` 失败 | 同样的旧版桥接问题 | 在使用 snap/ref/observe/actionability 特性之前先升级 |
+| `page.dismissKeyboard()` 报 `VM Service error [-32000]: Server error` | 运行中的 app 还没加载带原生隐藏键盘实现的新版 bridge，或 service extension 内部抛错 | 停掉 Flutter debug session 后重新 `flutter run`；重跑 TS 脚本不会更新设备端 Dart bridge。重启后再用最小调用 `page.dismissKeyboard()` 验证 |
 | mock 规则对应用不生效 | `route()` 静默回退到了工具侧镜像 | 用 `routeFlutter()`（严格），或升级桥接让 Flutter 侧存储被用上 |
 
 **升级方向：** 依赖当前的 `fliwright_bridge`，在 `kDebugMode` 之后初始化 `FliwrightBridge.init()`，重新构建/重启，确认 `ext.fliwright.snap` 可用后再跑套件。不要继续对着一个过时、崩溃或不稳定的应用反复跑。
@@ -32,6 +33,7 @@
 | ref 第一次行之后失败 | 提交了硬编码的 `e<N>` ref（每次快照都不同） | 在同一次运行里捕获快照，或提交 `findRef({...})` / `getBySemantics(...)` 查询 |
 | 路由跳转后元素变旧 | 选择器在跳转过程中匹配到了上一页的控件 | 用 `waitForNew(selector)` 而不是 `waitFor`/`locator` |
 | 填到了错的字段 | 太宽泛的 `getByType('TextField')` | 先 `formHelper.analyze()` 再按 `selector` 匹配，或用 `getByKey`/semantics |
+| 移动端填完表单后找不到/点不到下一步按钮 | 软键盘遮挡按钮，或按钮在当前 viewport 之外 | 填完最后一个输入框后 `await page.dismissKeyboard()`；随后对按钮 `scrollIntoView({ alignment: 0.2 })` 或 `scrollIntoViewAndClick(...)`，并优先用稳定 key/semantics 定位 |
 
 ### 读 `contextDump`
 

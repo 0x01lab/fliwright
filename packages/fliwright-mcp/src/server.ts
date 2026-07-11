@@ -4,10 +4,15 @@ import { registerRunTestTool } from './tools/runTest.js';
 import { registerGetFailureTool } from './tools/getFailure.js';
 import { registerGenerateTestTool } from './tools/generateTest.js';
 import { registerRecordTool } from './tools/record.js';
-import { registerMockListTool, registerMockSwitchTool } from './tools/mockTools.js';
+import {
+  registerMockClearCallsTool,
+  registerMockListTool,
+  registerMockStatusTool,
+  registerMockSwitchTool,
+} from './tools/mockTools.js';
 import { registerTestReportResource } from './resources/testReport.js';
 // ── New interaction tools ──
-import { registerConnectTool } from './tools/connect.js';
+import { registerConnectTool, registerStatusTool } from './tools/connect.js';
 import { registerScreenshotTool } from './tools/screenshot.js';
 import { registerSnapTool } from './tools/snap.js';
 import { registerSourceMapTool } from './tools/sourceMap.js';
@@ -25,6 +30,7 @@ import { registerTimelineTool } from './tools/timeline.js';
 import { registerFlowTools } from './tools/flow.js';
 import { registerAgentDiagnoseTool } from './tools/agentDiagnose.js';
 import { registerTddTools } from './tools/tdd.js';
+import { registerDebugSnapshotTool } from './tools/debugSnapshot.js';
 
 export function createFliwrightServer() {
   const server = new McpServer({
@@ -41,9 +47,12 @@ export function createFliwrightServer() {
   registerRecordTool(server, state);
   registerMockListTool(server, state);
   registerMockSwitchTool(server, state);
+  registerMockStatusTool(server, state);
+  registerMockClearCallsTool(server, state);
   registerTestReportResource(server, state);
 
   // Interaction tools — direct app control via MCP
+  registerStatusTool(server, state);
   registerConnectTool(server, state);
   registerScreenshotTool(server, state);
   registerSnapTool(server, state);
@@ -62,6 +71,7 @@ export function createFliwrightServer() {
   registerFlowTools(server, state);
   registerAgentDiagnoseTool(server, state);
   registerTddTools(server, state);
+  registerDebugSnapshotTool(server, state);
 
   return { server, state };
 }

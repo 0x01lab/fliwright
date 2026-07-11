@@ -1,4 +1,4 @@
-import type { Reporter } from 'vitest/reporters';
+import type { Reporter, TestModule } from 'vitest/node';
 
 export interface CollectedResult {
   testName: string;
@@ -6,39 +6,28 @@ export interface CollectedResult {
   message?: string;
 }
 
-interface TaskLike {
-  type?: string;
-  name: string;
-  result?: {
-    state?: string;
-    errors?: Array<{ message?: string }>;
-  };
-  tasks?: TaskLike[];
-}
-
-type FileLike = TaskLike;
-
 export class ResultReporter implements Reporter {
-  private readonly finishedRuns: FileLike[][] = [];
-  private waiters: Array<(files: FileLike[]) => void> = [];
+  private readonly finishedRuns: TestModule[][] = [];
+  private waiters: Array<(modules: TestModule[]) => void> = [];
 
-  onFinished(files: unknown[]): void {
-    const typedFiles = files as FileLike[];
-    this.finishedRuns.push(typedFiles);
+  /** Vitest 5 reports finished runs via onTestRunEnd instead of onFinished. */
+  onTestRunEnd(testModules: ReadonlyArray<TestModule>): void {
+    const modules = [...testModules];
+    this.finishedRuns.push(modules);
     const waiters = this.waiters;
     this.waiters = [];
-    for (const waiter of waiters) waiter(typedFiles);
+    for (const waiter of waiters) waiter(modules);
   }
 
-  waitForNextRun(): Promise<FileLike[]> {
+  waitForNextRun(): Promise<TestModule[]> {
     return new Promise((resolve) => {
       this.waiters.push(resolve);
     });
   }
 
   collectLatest(): CollectedResult[] {
-    const files = this.finishedRuns.at(-1) ?? [];
-    return collectResultsFromFiles(files);
+    const modules = this.finishedRuns.at(-1) ?? [];
+    return collectResultsFromModules(modules);
   }
 
   drain(): void {
@@ -46,24 +35,21 @@ export class ResultReporter implements Reporter {
   }
 }
 
-export function collectResultsFromFiles(files: FileLike[]): CollectedResult[] {
+export function collectResultsFromModules(modules: TestModule[]): CollectedResult[] {
   const results: CollectedResult[] = [];
-  for (const file of files) collectTaskResults(file, results);
+  for (const module of modules) {
+    for (const testCase of module.children.allTests()) {
+      const result = testCase.result();
+      if (result.state !== 'passed' && result.state !== 'failed') continue;
+      results.push({
+        testName: testCase.name,
+        status: result.state === 'passed' ? 'green' : 'red',
+        message: result.errors?.map((error) => error.message).join('\n'),
+      });
+    }
+  }
   return results;
 }
 
-function collectTaskResults(task: TaskLike, out: CollectedResult[]): void {
-  if (task.type === 'test') {
-    const state = task.result?.state;
-    if (state === 'pass' || state === 'fail') {
-      out.push({
-        testName: task.name,
-        status: state === 'pass' ? 'green' : 'red',
-        message: task.result?.errors?.map((error: { message?: string }) => error.message).join('\n'),
-      });
-    }
-    return;
-  }
-
-  for (const child of task.tasks ?? []) collectTaskResults(child, out);
-}
+/** @deprecated Use {@link collectResultsFromModules}; kept for existing imports. */
+export const collectResultsFromFiles = collectResultsFromModules;

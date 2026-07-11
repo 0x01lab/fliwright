@@ -42,20 +42,21 @@ export class PersistentTestExecutor {
     await this.applyRuntimeEnv(opts);
     try {
       this.reporter = new ResultReporter();
-      this.vitest = await startVitest('test', [], {
+      this.vitest = await startVitest([], {
         config: opts.configRoot,
         watch: true,
         reporters: [this.reporter],
         pool: 'forks',
-        poolOptions: { forks: { singleFork: true } },
+        maxWorkers: 1,
       });
       if (!this.vitest) throw new Error('Failed to start Vitest');
+      await this.vitest.standalone();
     } catch (error) {
       await this.dispose().catch(() => undefined);
       throw error;
     }
 
-    // The provider is kept for same-process executor experiments. Vitest 2.1.9 workers cannot
+    // The provider is kept for same-process executor experiments. Vitest workers cannot
     // receive live driver objects through process boundaries, so the production path also injects
     // FLIWRIGHT_VM_SERVICE_URL for ordinary @fliwright/vitest fixtures.
     void opts.driverProvider;

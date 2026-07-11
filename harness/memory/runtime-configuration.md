@@ -1,4 +1,4 @@
-# Runtime Configuration
+# Runtime Configuration Memory
 
 Fliwright runtime state can live under the target project's `.fliwright`
 directory. The current workspace-level runtime config file is:

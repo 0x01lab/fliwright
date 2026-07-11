@@ -46,6 +46,7 @@ function createDriver(): {
   drag: ReturnType<typeof vi.fn>;
   dragFrom: ReturnType<typeof vi.fn>;
   dismissModal: ReturnType<typeof vi.fn>;
+  dismissKeyboard: ReturnType<typeof vi.fn>;
   waitForNetworkIdle: ReturnType<typeof vi.fn>;
   resetRouteStack: ReturnType<typeof vi.fn>;
 } {
@@ -56,6 +57,7 @@ function createDriver(): {
   const drag = vi.fn().mockResolvedValue(undefined);
   const dragFrom = vi.fn().mockResolvedValue(undefined);
   const dismissModal = vi.fn().mockResolvedValue(undefined);
+  const dismissKeyboard = vi.fn().mockResolvedValue(undefined);
   const waitForNetworkIdle = vi.fn().mockResolvedValue(undefined);
   const resetRouteStack = vi.fn().mockResolvedValue(undefined);
 
@@ -67,6 +69,7 @@ function createDriver(): {
     drag,
     dragFrom,
     dismissModal,
+    dismissKeyboard,
     waitForNetworkIdle,
     resetRouteStack,
     driver: {
@@ -88,6 +91,7 @@ function createDriver(): {
         waitFor: vi.fn().mockResolvedValue(undefined),
         dragFrom,
         dismissModal,
+        dismissKeyboard,
         waitForNetworkIdle,
         resetRouteStack,
         getByKey: vi.fn(() => ({ click, fill, drag })),
@@ -191,9 +195,15 @@ describe('CLI interaction capabilities', () => {
   });
 
   it('routes page-level actions through page APIs', async () => {
-    const { driver, dismissModal, waitForNetworkIdle } = createDriver();
+    const {
+      driver,
+      dismissModal,
+      dismissKeyboard,
+      waitForNetworkIdle,
+    } = createDriver();
 
     await actionInteraction(driver, { action: 'dismissModal' });
+    await actionInteraction(driver, { action: 'dismissKeyboard' });
     await actionInteraction(driver, {
       action: 'waitForNetworkIdle',
       quietMs: 250,
@@ -201,6 +211,7 @@ describe('CLI interaction capabilities', () => {
     });
 
     expect(dismissModal).toHaveBeenCalled();
+    expect(dismissKeyboard).toHaveBeenCalled();
     expect(waitForNetworkIdle).toHaveBeenCalledWith({
       quietMs: 250,
       timeout: 2000,

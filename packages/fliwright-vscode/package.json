@@ -1,5 +1,5 @@
 {
-  "name": "@fliwright/vscode",
+  "name": "fliwright-vscode",
   "displayName": "Fliwright",
   "description": "Flutter automation, recording, mocks, traces, and Riverpod state tools for Fliwright.",
   "version": "0.1.0",
@@ -502,13 +502,13 @@
       "view/title": [
         {
           "command": "fliwright.connect",
-          "when": "view == fliwright.devices",
+          "when": "view == fliwright.devices && !fliwright.connected",
           "group": "navigation@1"
         },
         {
           "command": "fliwright.disconnect",
-          "when": "view == fliwright.devices",
-          "group": "navigation@2"
+          "when": "view == fliwright.devices && fliwright.connected",
+          "group": "navigation@1"
         },
         {
           "command": "fliwright.discoverVmService",

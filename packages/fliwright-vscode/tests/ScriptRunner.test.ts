@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Uri } from 'vscode';
 import { ScriptRunner } from '../src/scripts/ScriptRunner.js';
-import { createWorkspace, writeText } from './helpers/workspace.js';
+import { terminalScriptCommand } from '../src/extension.js';
+import { createWorkspace, readText, writeText } from './helpers/workspace.js';
 
 describe('ScriptRunner', () => {
   it('runs a node script with VM Service environment variables and streamed output', async () => {
@@ -31,59 +32,105 @@ describe('ScriptRunner', () => {
     expect(output).toContain('stderr:ws://127.0.0.1:52746/example=/ws');
   });
 
+  it('waits for script completion before resolving so follow-up state sync can read final app state', async () => {
+    const root = await createWorkspace();
+    await writeText(root, '.fliwright/scripts/sync.mjs', [
+      "import { writeFile } from 'node:fs/promises';",
+      "await new Promise((resolve) => setTimeout(resolve, 50));",
+      "await writeFile('.fliwright/script-state.txt', 'mock-state-ready');",
+    ].join('\n'));
+
+    const result = await new ScriptRunner().run({
+      workspaceRoot: Uri.file(root),
+      script: {
+        kind: 'scriptFile',
+        uri: Uri.file(`${root}/.fliwright/scripts/sync.mjs`),
+        label: 'sync.mjs',
+      },
+    });
+
+    expect(result.passed).toBe(true);
+    await expect(readText(root, '.fliwright/script-state.txt')).resolves.toBe('mock-state-ready');
+  });
+
   it('runs @fliwright/vitest scripts through the Vitest runner', async () => {
     const root = await createWorkspace();
+    await writeText(root, 'package.json', JSON.stringify({ type: 'module' }));
     await writeText(root, '.fliwright/scripts/auto.mjs', [
       "import { script } from '@fliwright/vitest';",
       "script('auto', async () => {});",
     ].join('\n'));
-    await writeText(root, 'bin/pnpm', [
-      '#!/usr/bin/env node',
-      "const fs = require('node:fs');",
+    await writeText(root, 'node_modules/vitest/package.json', JSON.stringify({
+      name: 'vitest',
+      type: 'module',
+      main: './vitest.mjs',
+    }));
+    await writeText(root, 'node_modules/vitest/vitest.mjs', [
+      "import fs from 'node:fs';",
       "const configPath = process.argv[process.argv.indexOf('--config') + 1];",
       'console.log(JSON.stringify({',
+      '  cli: process.argv[1],',
       '  argv: process.argv.slice(2),',
       '  config: fs.readFileSync(configPath, "utf8"),',
       '  vmServiceUrl: process.env.FLIWRIGHT_VM_SERVICE_URL,',
       '  vmUrl: process.env.FLIWRIGHT_VM_URL,',
       '}));',
     ].join('\n'));
-    await import('node:fs/promises').then((fs) => fs.chmod(`${root}/bin/pnpm`, 0o755));
 
-    const originalPath = process.env.PATH;
-    process.env.PATH = `${root}/bin${process.platform === 'win32' ? ';' : ':'}${originalPath ?? ''}`;
-    try {
-      const result = await new ScriptRunner().run({
-        workspaceRoot: Uri.file(root),
-        script: {
-          kind: 'scriptFile',
-          uri: Uri.file(`${root}/.fliwright/scripts/auto.mjs`),
-          label: 'auto.mjs',
-        },
-        vmServiceUrl: 'ws://127.0.0.1:52746/example=/ws',
-      });
+    const result = await new ScriptRunner().run({
+      workspaceRoot: Uri.file(root),
+      script: {
+        kind: 'scriptFile',
+        uri: Uri.file(`${root}/.fliwright/scripts/auto.mjs`),
+        label: 'auto.mjs',
+      },
+      vmServiceUrl: 'ws://127.0.0.1:52746/example=/ws',
+    });
 
-      expect(result.passed).toBe(true);
-      const payload = JSON.parse(result.stdout);
-      expect(payload.argv).toEqual([
-        'exec',
-        'vitest',
-        'run',
-        '.fliwright/scripts/auto.mjs',
-        '--config',
-        expect.stringMatching(/vitest\.config\.mjs$/),
-        '--pool',
-        'forks',
-        '--poolOptions.forks.singleFork',
-        '--no-fileParallelism',
-      ]);
-      expect(payload.config).not.toContain("from 'vitest/config'");
-      expect(payload.config).toContain(`root: ${JSON.stringify(root)}`);
-      expect(payload.config).toContain('include: [".fliwright/scripts/auto.mjs"]');
-      expect(payload.vmServiceUrl).toBe('ws://127.0.0.1:52746/example=/ws');
-      expect(payload.vmUrl).toBe('ws://127.0.0.1:52746/example=/ws');
-    } finally {
-      process.env.PATH = originalPath;
-    }
+    expect(result.passed).toBe(true);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.cli).toMatch(/node_modules[\\/]vitest[\\/]vitest\.mjs$/);
+    expect(payload.argv).toEqual([
+      'run',
+      '.fliwright/scripts/auto.mjs',
+      '--config',
+      expect.stringMatching(/vitest\.config\.mjs$/),
+    ]);
+    expect(payload.config).not.toContain("from 'vitest/config'");
+    expect(payload.config).toContain(`root: ${JSON.stringify(root)}`);
+    expect(payload.config).toContain('include: [".fliwright/scripts/auto.mjs"]');
+    expect(payload.config).toContain('maxWorkers: 1');
+    expect(payload.config).toContain('isolate: false');
+    expect(payload.config).toContain('fileParallelism: false');
+    expect(payload.vmServiceUrl).toBe('ws://127.0.0.1:52746/example=/ws');
+    expect(payload.vmUrl).toBe('ws://127.0.0.1:52746/example=/ws');
+  });
+
+  it('builds the VS Code terminal command without pnpm exec for @fliwright/vitest scripts', async () => {
+    const root = await createWorkspace();
+    await writeText(root, 'package.json', JSON.stringify({ type: 'module' }));
+    await writeText(root, '.fliwright/scripts/auto.mjs', [
+      "import { script } from '@fliwright/vitest';",
+      "script('auto', async () => {});",
+    ].join('\n'));
+    await writeText(root, 'node_modules/vitest/package.json', JSON.stringify({
+      name: 'vitest',
+      type: 'module',
+      main: './vitest.mjs',
+    }));
+    await writeText(root, 'node_modules/vitest/vitest.mjs', '');
+
+    const command = await terminalScriptCommand(Uri.file(root), {
+      kind: 'scriptFile',
+      uri: Uri.file(`${root}/.fliwright/scripts/auto.mjs`),
+      label: 'auto.mjs',
+    });
+
+    expect(command).not.toContain('pnpm');
+    expect(command).not.toContain('exec vitest');
+    expect(command).not.toContain('poolOptions');
+    expect(command).not.toContain('fileParallelism');
+    expect(command.replace(/\\/g, '/')).toContain('/node_modules/vitest/vitest.mjs run .fliwright/scripts/auto.mjs');
+    expect(command).toContain('--config');
   });
 });

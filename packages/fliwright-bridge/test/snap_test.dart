@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 import 'package:fliwright_bridge/src/extensions/inspect.dart';
@@ -93,6 +94,45 @@ void main() {
     expect(clicks, hasLength(1));
     expect(double.parse(clicks.first['x']!), closeTo(expectedX, 0.1));
     expect(double.parse(clicks.first['y']!), closeTo(expectedY, 0.1));
+  });
+
+  testWidgets('dismissKeyboard clears the primary focus', (tester) async {
+    final focusNode = FocusNode();
+    final textInputMethods = <String>[];
+    addTearDown(focusNode.dispose);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.textInput, null);
+    });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.textInput, (call) async {
+      textInputMethods.add(call.method);
+      return null;
+    });
+    FliwrightBridge.registry.reset();
+    InspectExtension.register(FliwrightBridge.registry);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: TextField(autofocus: true, focusNode: focusNode),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(focusNode.hasFocus, isTrue);
+    textInputMethods.clear();
+
+    final result = await FliwrightBridge.registry.invoke(
+      'ext.fliwright.action',
+      {'action': 'dismissKeyboard'},
+    );
+    await tester.pump();
+
+    expect(result['success'], isTrue);
+    expect(result['action'], 'dismissKeyboard');
+    expect(focusNode.hasFocus, isFalse);
+    expect(textInputMethods, contains('TextInput.hide'));
   });
 
   testWidgets('action uses precomputed target rect without resolving selector',

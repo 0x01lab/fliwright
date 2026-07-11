@@ -205,6 +205,17 @@ describe('Page', () => {
     });
   });
 
+  it('dismissKeyboard sends a page-level action', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({ success: true });
+    const page = new Page(sendRequest);
+
+    await page.dismissKeyboard();
+
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.action', {
+      action: 'dismissKeyboard',
+    });
+  });
+
   it('waitForNetworkIdle sends quiet and timeout options', async () => {
     const sendRequest = vi.fn().mockResolvedValue({ success: true });
     const page = new Page(sendRequest);

@@ -108,10 +108,10 @@ registerFliwrightWritableProvider(
 ## Development
 
 ```bash
-pnpm --filter @fliwright/vscode build
-pnpm --filter @fliwright/vscode lint
-pnpm --filter @fliwright/vscode test
-pnpm --filter @fliwright/vscode test:integration
+pnpm --filter fliwright-vscode build
+pnpm --filter fliwright-vscode lint
+pnpm --filter fliwright-vscode test
+pnpm --filter fliwright-vscode test:integration
 ```
 
 Open `packages/fliwright-vscode` in VS Code or launch an Extension Development Host using this package as the extension root.
@@ -119,7 +119,7 @@ Open `packages/fliwright-vscode` in VS Code or launch an Extension Development H
 ## Local Packaging
 
 ```bash
-pnpm --filter @fliwright/vscode package
+pnpm --filter fliwright-vscode package
 ```
 
 The package script builds the extension and invokes `vsce` through `pnpm dlx`, so generated `dist/` output does not need to be committed.
@@ -127,21 +127,21 @@ The package script builds the extension and invokes `vsce` through `pnpm dlx`, s
 Run the full release gate before publishing:
 
 ```bash
-pnpm --filter @fliwright/vscode verify:release
+pnpm --filter fliwright-vscode verify:release
 ```
 
 Publish to the VS Code Marketplace with a configured `VSCE_PAT`:
 
 ```bash
-pnpm --filter @fliwright/vscode publish:vsce
+pnpm --filter fliwright-vscode publish:vsce
 ```
 
 Release checklist:
 
-- Run `pnpm --filter @fliwright/vscode lint`.
-- Run `pnpm --filter @fliwright/vscode test`.
-- Run `pnpm --filter @fliwright/vscode build`.
-- Run `pnpm --filter @fliwright/vscode test:integration` in a local VS Code-capable environment.
-- Run `pnpm --filter @fliwright/vscode package` and install the generated VSIX in an Extension Development Host.
+- Run `pnpm --filter fliwright-vscode lint`.
+- Run `pnpm --filter fliwright-vscode test`.
+- Run `pnpm --filter fliwright-vscode build`.
+- Run `pnpm --filter fliwright-vscode test:integration` in a local VS Code-capable environment.
+- Run `pnpm --filter fliwright-vscode package` and install the generated VSIX in an Extension Development Host.
 - Start `examples/riverpod_demo` through a Fliwright bridge entrypoint, connect from VS Code, refresh State, read `counterProvider`, watch it, tap Increment, verify the value updates, then override `counterProvider` with `2`.
 - Publish only after Marketplace metadata, publisher credentials, and manual smoke testing are complete.

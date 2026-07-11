@@ -13,6 +13,7 @@ import { formRuleFromAnalyzeField } from './FormRuleService.js';
 export interface PreviewField {
   id: string;
   label: string;
+  hint: string;
   semanticType: string;
   generatedValue: string;
   masked: boolean;
@@ -115,6 +116,7 @@ export class FormHelperService {
       return {
         id: field.id,
         label,
+        hint: field.selector || field.id,
         semanticType: field.semanticType,
         generatedValue: masked ? maskValue(generatedValue) : generatedValue,
         masked,

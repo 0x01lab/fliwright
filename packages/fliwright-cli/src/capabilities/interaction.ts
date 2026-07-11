@@ -16,6 +16,7 @@ export interface InteractionPage {
   resetToHome?(options?: ResetToHomeOptions): Promise<void>;
   waitFor?(selector: Record<string, unknown>, timeout?: number): Promise<unknown>;
   dismissModal?(): Promise<void>;
+  dismissKeyboard?(): Promise<void>;
   waitForNetworkIdle?(options?: { quietMs?: number; timeout?: number }): Promise<void>;
   dragFrom?(x: number, y: number, deltaX: number, deltaY: number, options?: { steps?: number }): Promise<void>;
   getByKey?(key: string): InteractionLocator;
@@ -165,6 +166,7 @@ export type ActionName =
   | 'selectOption'
   | 'drag'
   | 'dismissModal'
+  | 'dismissKeyboard'
   | 'waitForNetworkIdle';
 
 export async function snapInteraction(
@@ -339,6 +341,15 @@ export async function actionInteraction(
   if (options.action === 'dismissModal') {
     if (driver.page.dismissModal) {
       await driver.page.dismissModal();
+    } else {
+      assertActionSuccess(await driver.sendRequest('ext.fliwright.action', { action: options.action }), options.action);
+    }
+    return { ...(await withOptionalSnapshot(driver.page, options.includeSnapshot)), action: options.action };
+  }
+
+  if (options.action === 'dismissKeyboard') {
+    if (driver.page.dismissKeyboard) {
+      await driver.page.dismissKeyboard();
     } else {
       assertActionSuccess(await driver.sendRequest('ext.fliwright.action', { action: options.action }), options.action);
     }

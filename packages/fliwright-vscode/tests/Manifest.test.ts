@@ -6,6 +6,12 @@ import { describe, expect, it } from 'vitest';
 const manifest = JSON.parse(readFileSync(join(fileURLToPath(new URL('..', import.meta.url)), 'package.json'), 'utf8'));
 
 describe('VS Code manifest', () => {
+  it('uses the same extension identity in development and packaged VSIX builds', () => {
+    expect(manifest.publisher).toBe('fliwright');
+    expect(manifest.name).toBe('fliwright-vscode');
+    expect(manifest.name).not.toMatch(/[\\/@]/);
+  });
+
   it('declares commands required by the VS Code extension design', () => {
     const commands = new Set(manifest.contributes.commands.map((entry: { command: string }) => entry.command));
 

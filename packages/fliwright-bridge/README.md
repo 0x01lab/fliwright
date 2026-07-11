@@ -27,7 +27,7 @@ TypeScript runtime using the Flutter VM Service URL.
 ## What It Exposes
 
 - Widget inspection and selector queries.
-- Tap, type, scroll, and settle automation.
+- Tap, type, scroll, settle automation, and soft-keyboard dismissal.
 - Screenshots and frame capture.
 - Interaction recording.
 - Runtime network mock support for Dio and HTTP overrides.

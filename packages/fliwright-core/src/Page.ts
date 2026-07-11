@@ -203,6 +203,15 @@ export class Page {
     }
   }
 
+  async dismissKeyboard(): Promise<void> {
+    const result = await this.sendRequest('ext.fliwright.action', {
+      action: 'dismissKeyboard',
+    }) as { success?: boolean; error?: string };
+    if (result.success === false || result.error) {
+      throw new Error(`dismissKeyboard failed: ${result.error ?? 'unknown error'}`);
+    }
+  }
+
   async waitForNetworkIdle(options?: { quietMs?: number; timeout?: number }): Promise<void> {
     const params: Record<string, unknown> = {
       action: 'waitForNetworkIdle',

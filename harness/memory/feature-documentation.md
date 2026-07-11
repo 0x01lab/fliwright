@@ -1,4 +1,4 @@
-# Feature Documentation
+# Feature Documentation Memory
 
 AI-consumable feature documentation for this repository lives under
 `docs/features/`. It summarizes every implemented feature with API signatures,
@@ -6,7 +6,7 @@ type definitions, and usage examples, organized for fast lookup by AI agents.
 
 ## How to read it (strictly on-demand)
 
-`docs/features/index.md` is a ~23 KB lookup table of every package, class, tool,
+`docs/features/index.md` is a generated lookup table of every package, class, tool,
 and command. **Do not load it as a routine.** Use it only when you need to
 discover which component owns a behavior.
 
@@ -19,4 +19,5 @@ route list lives in the index and is not duplicated here.
 ## Regeneration
 
 `docs/features/` is a generated artifact (gitignored). Regenerate it with the
-`/document-features` command whenever source code changes significantly.
+`/document-features` command whenever source code changes significantly. Do not
+hand-edit generated files.

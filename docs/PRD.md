@@ -244,11 +244,13 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 
 ### 5.3 AI 可消费文档
 
-`docs/features/` 提供完整的 API 文档体系，供 AI Agent 快速查阅：
-- **索引**：`docs/features/index.md` — 按包和功能切片的路由表、MCP 工具快速参考
-- **按包概览**：`docs/features/{package}/README.md`
-- **按类详解**：每个导出类对应一个 `.md` 文件（如 `core/FliwrightDriver.md`）
-- **跨包流水线**：`self-healing-pipeline.md`、`recording-pipeline.md`、`form-filling-pipeline.md`、`mcp-integration.md`
+`docs/features/` 提供完整的生成式 API 文档体系，供 AI Agent 按需查阅：
+- 已知包、类或跨包流程时，直接打开对应的包概览、API 页或 pipeline 页。
+- 仅在不知道行为归属时使用 `docs/features/index.md` 进行检索；不要将其作为
+  常规上下文加载。
+- 文档状态、权威顺序和完整的渐进式披露规则见
+  [Documentation Guide](./README.md) 与
+  [Feature Documentation Memory](../harness/memory/feature-documentation.md)。
 
 ---
 

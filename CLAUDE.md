@@ -1,5 +1,5 @@
-# CLAUDE.md
+# Claude Code Entry Point
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-See [AGENTS.md](./AGENTS.md) for full development guidelines including build commands, project structure, coding style, testing, and commit conventions.
+Read [AGENTS.md](./AGENTS.md) for the repository's level-0 contract. It routes
+each task into the Fliwright Harness with progressive disclosure; do not preload
+the Harness or `docs/`.

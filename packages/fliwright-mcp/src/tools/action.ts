@@ -17,6 +17,7 @@ const ActionNameSchema = z.enum([
   'selectOption',
   'drag',
   'dismissModal',
+  'dismissKeyboard',
   'waitForNetworkIdle',
 ]);
 
@@ -40,6 +41,7 @@ export const ActionParamsSchema = z.object({
 }).refine(
   (data) => (
     data.action === 'dismissModal' ||
+    data.action === 'dismissKeyboard' ||
     data.action === 'waitForNetworkIdle' ||
     (data.action === 'drag' && data.x != null && data.y != null) ||
     data.ref ||

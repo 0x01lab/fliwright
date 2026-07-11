@@ -67,7 +67,7 @@ describe('FormHelperService', () => {
       ],
     });
 
-    expect(fields[0]).toMatchObject({ label: 'jobPosition' });
+    expect(fields[0]).toMatchObject({ label: 'jobPosition', hint: 'name=jobPosition' });
   });
 
   it('fills selected fields through FormHelper.fillFields', async () => {
@@ -172,16 +172,16 @@ describe('FormHelperService', () => {
           name: 'Default QA account',
           note: 'happy path',
           values: {
-            'login.username': 'qa@example.com',
-            'login.password': 'Password123!',
+            username: 'qa@example.com',
+            password: 'Password123!',
           },
         },
         {
           name: 'KYC pending account',
           description: 'requires manual review',
           values: {
-            'login.username': 'pending@example.com',
-            'login.password': 'Password123!',
+            username: 'pending@example.com',
+            password: 'Password123!',
           },
         },
       ],

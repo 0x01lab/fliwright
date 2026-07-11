@@ -78,8 +78,33 @@ describe('FormRuleService', () => {
           name: 'default qa account',
           note: 'happy path',
           values: {
-            'login.username': 'qa@example.com',
-            'login.password': 'Password123!',
+            username: 'qa@example.com',
+            password: 'Password123!',
+          },
+        },
+      ],
+      rules: [{
+        find: { match: { semanticIdentifier: 'login.username' } },
+        type: 'PRESET_SKILL',
+        dataKey: 'username',
+      }],
+    });
+
+    const result = await new FormRuleService().discover(Uri.file(root));
+
+    expect(result.files).toHaveLength(1);
+    expect(result.invalid).toHaveLength(0);
+  });
+
+  it('requires explicit dataKey for formData-backed rules', async () => {
+    const root = await createWorkspace();
+    await writeJson(root, '.fliwright/forms/login.json', {
+      version: 1,
+      formData: [
+        {
+          name: 'default qa account',
+          values: {
+            username: 'qa@example.com',
           },
         },
       ],
@@ -91,8 +116,7 @@ describe('FormRuleService', () => {
 
     const result = await new FormRuleService().discover(Uri.file(root));
 
-    expect(result.files).toHaveLength(1);
-    expect(result.invalid).toHaveLength(0);
+    expect(result.invalid[0]?.error).toContain('dataKey is required when formData is used');
   });
 
   it('reports unsupported match keys', async () => {

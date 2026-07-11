@@ -185,6 +185,156 @@ describe('FormHelper', () => {
       }
     });
 
+    it('fills fields from named formData scenarios with explicit dataKey rules', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      sendRequest = createMockSendRequest({
+        ...sampleFields,
+        'ext.fliwright.extractForm': {
+          fields: [
+            {
+              id: 'username-field',
+              type: 'TextFormField',
+              semanticsId: 'login.username',
+              selector: JSON.stringify({ match: { semanticIdentifier: 'login.username' } }),
+              obscureText: false,
+              enabled: true,
+            },
+            {
+              id: 'password-field',
+              type: 'TextFormField',
+              semanticsId: 'login.password',
+              selector: JSON.stringify({ match: { semanticIdentifier: 'login.password' } }),
+              obscureText: true,
+              enabled: true,
+            },
+          ],
+          count: 2,
+        },
+      });
+      helper = new FormHelper(sendRequest);
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          formData: [
+            {
+              name: 'default login',
+              values: {
+                username: 'user@example.com',
+                password: 'Password123!',
+              },
+            },
+            {
+              name: 'alternate login',
+              values: {
+                username: 'alt@example.com',
+                password: 'Alternate123!',
+              },
+            },
+          ],
+          rules: [
+            {
+              find: { match: { semanticIdentifier: 'login.username' } },
+              type: 'PRESET_SKILL',
+              dataKey: 'username',
+            },
+            {
+              find: { match: { semanticIdentifier: 'login.password' } },
+              type: 'PRESET_SKILL',
+              dataKey: 'password',
+            },
+          ],
+        }));
+
+        const result = await helper.fill({
+          rulesFile,
+          dataIndex: 1,
+          requireRuleMatch: true,
+          skipObscureFields: true,
+        });
+
+        expect(result.filled).toBe(2);
+        expect(result.skipped).toBe(0);
+        expect(result.fields.find(f => f.id === 'username-field')?.generatedValue).toBe('alt@example.com');
+        expect(result.fields.find(f => f.id === 'password-field')?.generatedValue).toBe('Alternate123!');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('fills selected fields from named formData scenarios using stable field hints', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
+      const rulesFile = join(dir, 'rules.json');
+      sendRequest = createMockSendRequest({
+        ...sampleFields,
+        'ext.fliwright.extractForm': {
+          fields: [
+            {
+              id: 'username-field',
+              type: 'TextFormField',
+              semanticsId: 'login.username',
+              selector: JSON.stringify({ match: { semanticIdentifier: 'login.username' } }),
+              obscureText: false,
+              enabled: true,
+            },
+            {
+              id: 'password-field',
+              type: 'TextFormField',
+              semanticsId: 'login.password',
+              selector: JSON.stringify({ match: { semanticIdentifier: 'login.password' } }),
+              obscureText: true,
+              enabled: true,
+            },
+          ],
+          count: 2,
+        },
+      });
+      helper = new FormHelper(sendRequest);
+      try {
+        writeFileSync(rulesFile, JSON.stringify({
+          version: 1,
+          formData: [
+            {
+              name: 'default login',
+              values: {
+                username: 'user@example.com',
+                password: 'Password123!',
+              },
+            },
+          ],
+          rules: [
+            {
+              find: { match: { semanticIdentifier: 'login.username' } },
+              type: 'PRESET_SKILL',
+              dataKey: 'username',
+            },
+            {
+              find: { match: { semanticIdentifier: 'login.password' } },
+              type: 'PRESET_SKILL',
+              dataKey: 'password',
+            },
+          ],
+        }));
+
+        const result = await helper.fillFields(
+          [
+            JSON.stringify({ match: { semanticIdentifier: 'login.username' } }),
+            JSON.stringify({ match: { semanticIdentifier: 'login.password' } }),
+          ],
+          {
+            rulesFile,
+            requireRuleMatch: true,
+            skipObscureFields: true,
+          },
+        );
+
+        expect(result.filled).toBe(2);
+        expect(result.skipped).toBe(0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it('matches rules by stable field name and fills using name selector first', async () => {
       const dir = mkdtempSync(join(tmpdir(), 'fliwright-rules-'));
       const rulesFile = join(dir, 'rules.json');

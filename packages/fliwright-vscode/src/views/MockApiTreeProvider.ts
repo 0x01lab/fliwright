@@ -23,6 +23,11 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
+  removeAppliedRule(rule: Pick<MockRuleEntry, 'endpoint' | 'method' | 'rule'>): void {
+    this.appliedRules = this.appliedRules.filter((entry) => !sameAppliedRule(entry, rule));
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
   async refresh(): Promise<void> {
     await this.load();
     this.onDidChangeTreeDataEmitter.fire(undefined);
@@ -89,7 +94,7 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
       return element.endpointFile.rules.map<MockRuleEntry>((rule) => {
         const applied = this.appliedRules.find((entry) => (
           entry.endpoint === element.endpointFile.endpoint
-          && entry.method === element.endpointFile.method
+          && sameMethod(entry.method, element.endpointFile.method)
           && entry.ruleName === rule.name
         ));
         return {
@@ -114,7 +119,7 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
       vscode.TreeItemCollapsibleState.Collapsed,
     );
     const appliedCount = this.appliedRules.filter((rule) => (
-      rule.endpoint === element.endpointFile.endpoint && rule.method === element.endpointFile.method
+      rule.endpoint === element.endpointFile.endpoint && sameMethod(rule.method, element.endpointFile.method)
     )).length;
     item.description = `${element.endpointFile.rules.length} rules${appliedCount ? ` · ${appliedCount} active` : ''}`;
     item.tooltip = `${element.endpointFile.name}\n${element.uri.fsPath}`;
@@ -137,12 +142,18 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
   }
 
   private findAppliedRule(element: MockRuleEntry): AppliedMockRule | undefined {
-    return this.appliedRules.find((entry) => (
-      entry.endpoint === element.endpoint
-      && entry.method.toUpperCase() === element.method.toUpperCase()
-      && entry.ruleName === element.rule.name
-    ));
+    return this.appliedRules.find((entry) => sameAppliedRule(entry, element));
   }
+}
+
+function sameAppliedRule(entry: AppliedMockRule, rule: Pick<MockRuleEntry, 'endpoint' | 'method' | 'rule'>): boolean {
+  return entry.endpoint === rule.endpoint
+    && sameMethod(entry.method, rule.method)
+    && entry.ruleName === rule.rule.name;
+}
+
+function sameMethod(left: string, right: string): boolean {
+  return left.toUpperCase() === right.toUpperCase();
 }
 
 function invalidItem(element: { label: string; error: string; uri: vscode.Uri }): vscode.TreeItem {

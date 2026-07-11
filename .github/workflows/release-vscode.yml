@@ -24,15 +24,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Verify extension
-        run: pnpm --filter @fliwright/vscode run lint && pnpm --filter @fliwright/vscode run test
+        run: pnpm --filter fliwright-vscode run lint && pnpm --filter fliwright-vscode run test
 
       - name: Package VSIX
-        run: pnpm --filter @fliwright/vscode run package
+        run: pnpm --filter fliwright-vscode run package
 
       - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: pnpm --filter @fliwright/vscode run publish:vsce:package
+        run: pnpm --filter fliwright-vscode run publish:vsce:package
 
       - name: Upload VSIX to GitHub release
         uses: softprops/action-gh-release@v2

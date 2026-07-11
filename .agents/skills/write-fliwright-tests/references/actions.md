@@ -109,6 +109,28 @@ await page.getByKey('search').type('hello', { charDelay: 30 });
 await page.getByKey('email').clear();
 ```
 
+### 关闭移动端软键盘
+
+```typescript
+page.dismissKeyboard(): Promise<void>
+```
+
+`dismissKeyboard()` 是 page-level action：它先清除 Flutter 当前焦点，再通过原生 text-input channel 请求隐藏软键盘。移动端表单填完最后一个输入框后，如果下一步/提交按钮可能被键盘遮挡，先调用它，再滚动并点击按钮。
+
+```typescript
+const next = page.getByKey('register.submitButton');
+
+await page.getByKey('passwordConfirmField').fill(password);
+await page.dismissKeyboard();
+await page.settle({ timeout: 1000, stableFrames: 1 });
+await next.scrollIntoViewAndClick({
+  scroll: { alignment: 0.25, timeout: 10_000 },
+  click: { timeout: 10_000, waitForAnimations: false },
+});
+```
+
+如果 `dismissKeyboard()` 返回 `VM Service error [-32000]: Server error`，或手机上键盘仍然没有收起，通常是运行中的 Flutter app 还没加载新版 `fliwright_bridge`。停止当前 debug session 并重新 `flutter run` / hot restart；只重跑 TypeScript 脚本不会更新设备上的 Dart bridge 实现。
+
 ## 按键、复选框、选项
 
 ```typescript

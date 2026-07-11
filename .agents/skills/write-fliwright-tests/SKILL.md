@@ -59,6 +59,7 @@ If unsure which reference applies, open [references/index.md](references/index.m
 - Scope ambiguous UI with descendant/ancestor locators, `.and(...)`, `.nth(...)`, route context, or form context. Do not rely on whichever element happens to be first.
 - Use locator actions (`click`, `longPress`, `drag`, `pinch`, `fill`, `type`, `clear`, `selectOption`) instead of coordinates unless the behavior itself is coordinate-based or outside the Flutter widget tree.
 - Use `fill()` to replace field values and `type()` when testing incremental typing or append behavior.
+- On mobile form flows, call `await page.dismissKeyboard()` after the last text input and before locating/clicking a submit or Next button that may be below the soft keyboard. Then prefer `locator.scrollIntoViewAndClick(...)` or `scrollIntoView(...)` + `expect(locator).toBeEnabled()` for buttons that may be off-screen.
 - For custom selection controls, prefer semantics-aware APIs: `check()` / `uncheck()` / `setCheckbox()` and `toBeChecked()` work for native `Checkbox`/`Switch`/`Radio` and custom widgets that expose Flutter `Semantics(checked: ...)`, `Semantics(toggled: ...)`, or `Semantics(selected: ...)`.
 - Choose select strategies based on the widget: `selectOption()` for standard dropdowns, real user clicks for custom sheets/dialogs, and search-field-plus-option-click flows for virtualized country/region pickers.
 - Assert visible outcomes with `await expect(locator, 'clear title').toBeVisible()`, `toHaveText()`, `toContainText()`, `toBeEnabled()`, or `.not`. The title becomes timeline metadata.
@@ -130,6 +131,7 @@ Treat captcha, slider verification, QR login, SMS approval, and WebView/Platform
 
 - `No VM Service URL provided`: check CLI `--vm-url`, `FLIWRIGHT_VM_URL`, `FLIWRIGHT_VM_SERVICE_URL`, `fliwright.config.ts`, `.fliwright/config.json`, then local port discovery. Fixture and CLI resolution differ slightly; see [references/troubleshooting.md](references/troubleshooting.md).
 - `Unknown method "ext.fliwright.snap"`: the app runs an old bridge. Upgrade/rebuild before using snap/ref/observe/actionability, or isolate a legacy bare-driver script.
+- `page.dismissKeyboard()` fails with `VM Service error [-32000]: Server error` or the phone keyboard stays open: the running app likely has not loaded the bridge version that calls the native text-input hide channel. Stop and restart the Flutter debug app; rerunning only the TypeScript script does not update Dart bridge code already loaded on the device.
 - Flaky selectors: replace broad text/type queries with Keys, semantics, scoped locators, or selectors discovered from snapshot/ref exploration.
 - Form filling wrong fields: inspect `page.formHelper.analyze()` output, then use `fillFields(...)` or more precise locators.
 - Screenshots or draw assertions fail on unstable frames: wait for a stable app state or restart the app; do not keep clicking through an unstable screen.

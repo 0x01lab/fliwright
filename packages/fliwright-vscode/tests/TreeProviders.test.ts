@@ -121,6 +121,80 @@ describe('tree providers', () => {
     expect(item.iconPath).toMatchObject({ id: 'pass-filled' });
   });
 
+  it('marks child mock rules active when the applied method casing differs from config', async () => {
+    const root = await createWorkspace();
+    const provider = new MockApiTreeProvider({
+      discover: vi.fn<MockConfigService['discover']>().mockResolvedValue({
+        root: Uri.file(`${root}/.fliwright/mocks`),
+        indexUri: Uri.file(`${root}/.fliwright/mocks/mock-index.json`),
+        endpoints: [
+          {
+            kind: 'endpoint',
+            uri: Uri.file(`${root}/.fliwright/mocks/api/token.json`),
+            indexed: true,
+            endpointFile: {
+              version: 1,
+              name: 'Token',
+              method: 'POST',
+              endpoint: '/v1/token',
+              rules: [
+                { name: 'success', status: 200 },
+              ],
+            },
+          },
+        ],
+        invalid: [],
+      }),
+    } as unknown as MockConfigService);
+    provider.setAppliedRules([
+      {
+        endpoint: '/v1/token',
+        method: 'post' as never,
+        ruleName: 'success',
+        filePath: `${root}/.fliwright/mocks/api/token.json`,
+        appliedAt: 1,
+      },
+    ]);
+
+    const [endpoint] = await provider.getChildren();
+    const [rule] = await provider.getChildren(endpoint);
+
+    expect(rule).toMatchObject({ kind: 'rule', applied: true });
+    expect(provider.getTreeItem(endpoint!).description).toContain('1 active');
+    expect(provider.getTreeItem(rule!).description).toContain('active');
+  });
+
+  it('can clear a stale optimistic active mock rule after stop reports it inactive', () => {
+    const provider = new MockApiTreeProvider({} as MockConfigService);
+    const rule = {
+      kind: 'rule' as const,
+      uri: Uri.file('/tmp/token.json'),
+      endpoint: '/v1/token',
+      method: 'POST' as const,
+      rule: { name: 'success', status: 200 },
+      isDefault: false,
+      applied: true,
+    };
+    provider.setAppliedRules([
+      {
+        endpoint: '/v1/token',
+        method: 'post' as never,
+        ruleName: 'success',
+        filePath: '/tmp/token.json',
+        appliedAt: 1,
+      },
+    ]);
+
+    expect(provider.getTreeItem(rule).description).toContain('active');
+
+    provider.removeAppliedRule(rule);
+
+    const item = provider.getTreeItem(rule);
+    expect(item.contextValue).toBe('mockRule');
+    expect(item.description).not.toContain('active');
+    expect(item.iconPath).toMatchObject({ id: 'check' });
+  });
+
   it('shows at most one applied rule per mock endpoint', async () => {
     const root = await createWorkspace();
     const provider = new MockApiTreeProvider({

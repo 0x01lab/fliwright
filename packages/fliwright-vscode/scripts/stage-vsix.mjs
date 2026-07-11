@@ -13,7 +13,9 @@ for (const entry of ['dist', 'media', 'README.md', 'CHANGELOG.md', 'LICENSE.md']
 }
 
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
-manifest.name = 'fliwright-vscode';
+if (manifest.name !== 'fliwright-vscode') {
+  throw new Error(`VS Code extension name must be fliwright-vscode, got ${manifest.name}`);
+}
 manifest.scripts = {};
 manifest.files = [
   'dist/**',

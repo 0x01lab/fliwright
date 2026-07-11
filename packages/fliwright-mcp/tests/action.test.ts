@@ -139,13 +139,16 @@ describe('handleAction', () => {
   it('supports page-level actions', async () => {
     const state = createServerState();
     const dismissModal = vi.fn().mockResolvedValue(undefined);
+    const dismissKeyboard = vi.fn().mockResolvedValue(undefined);
     const waitForNetworkIdle = vi.fn().mockResolvedValue(undefined);
     state.setDriver({
-      page: { dismissModal, waitForNetworkIdle },
+      page: { dismissModal, dismissKeyboard, waitForNetworkIdle },
     } as unknown as FliwrightDriver);
 
     await expect(handleAction({ action: 'dismissModal' }, state))
       .resolves.toEqual({ success: true, action: 'dismissModal' });
+    await expect(handleAction({ action: 'dismissKeyboard' }, state))
+      .resolves.toEqual({ success: true, action: 'dismissKeyboard' });
     await expect(handleAction({
       action: 'waitForNetworkIdle',
       quietMs: 250,
@@ -153,6 +156,7 @@ describe('handleAction', () => {
     }, state)).resolves.toEqual({ success: true, action: 'waitForNetworkIdle' });
 
     expect(dismissModal).toHaveBeenCalled();
+    expect(dismissKeyboard).toHaveBeenCalled();
     expect(waitForNetworkIdle).toHaveBeenCalledWith({
       quietMs: 250,
       timeout: 2000,
