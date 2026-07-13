@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { FliwrightLogEvent, TimelineNode, TraceData } from '@fliwright/core';
 import type { SerializableRun } from '../../src/webview/viewer/types.js';
 import {
+  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
+  TIMELINE_ARTIFACT_KIND_SNAPSHOT,
+} from '../../src/viewer/timelineConstants.js';
+import {
   screenshotOfNode,
   screenshotOfStep,
   defaultSelectionKey,
@@ -20,7 +24,7 @@ const NODES: TimelineNode[] = [
     status: 'passed',
     startedAt: 't',
     parentId: 'page',
-    artifacts: [{ kind: 'screenshot', path: 'artifacts/screenshots/click.png' }],
+    artifacts: [{ kind: TIMELINE_ARTIFACT_KIND_SCREENSHOT, path: 'artifacts/screenshots/click.png' }],
   },
   {
     id: 'assert',
@@ -29,8 +33,25 @@ const NODES: TimelineNode[] = [
     status: 'failed',
     startedAt: 't',
     parentId: 'page',
-    artifacts: [{ kind: 'snapshot', path: 'artifacts/snapshots/assert.json' }],
+    artifacts: [{ kind: TIMELINE_ARTIFACT_KIND_SNAPSHOT, path: 'artifacts/snapshots/assert.json' }],
     error: { code: 'assertion_failed', title: 'not visible', message: 'dashboard missing', recoveryHints: [] },
+  },
+  {
+    id: 'step',
+    kind: 'step',
+    title: 'sort markets',
+    status: 'failed',
+    startedAt: 't',
+    error: {
+      code: 'step_failed',
+      title: 'sort markets',
+      message: 'order mismatch',
+      appState: {
+        screenshotPath: 'artifacts/screenshots/step.png',
+        snapshotPath: 'artifacts/snapshots/step.json',
+      },
+      recoveryHints: [],
+    },
   },
 ];
 
@@ -67,6 +88,9 @@ describe('screenshot resolvers', () => {
     expect(screenshotOfStep('step-1.png', 'BT')).toBe('BT/step-1.png');
     expect(screenshotOfStep(undefined, 'BT')).toBeUndefined();
   });
+  it('falls back to failure app state screenshot paths', () => {
+    expect(screenshotOfNode(NODES[3], 'B/')).toBe('B/artifacts/screenshots/step.png');
+  });
 });
 
 describe('defaultSelectionKey', () => {
@@ -79,7 +103,7 @@ describe('defaultSelectionKey', () => {
   });
   it('falls back to the last item when nothing failed', () => {
     const passing = { ...RUN, timeline: { ...RUN.timeline, nodes: NODES.map(n => ({ ...n, status: 'passed' as const })), status: 'passed' as const } };
-    expect(defaultSelectionKey(passing, 'timeline')).toBe('assert');
+    expect(defaultSelectionKey(passing, 'timeline')).toBe('step');
   });
 });
 
@@ -90,6 +114,11 @@ describe('deriveSelection', () => {
     expect(sel?.failure?.code).toBe('assertion_failed');
     expect(sel?.logs.map(l => l.id)).toEqual(['l2']);
     expect(sel?.snapshotPath).toBe('artifacts/snapshots/assert.json');
+  });
+  it('derives screenshot and snapshot paths from failure app state', () => {
+    const sel = deriveSelection(RUN, 'step', 'timeline');
+    expect(sel?.screenshotUri).toBe('vscode-webview://base/artifacts/screenshots/step.png');
+    expect(sel?.snapshotPath).toBe('artifacts/snapshots/step.json');
   });
   it('derives an action step selection with screenshot uri', () => {
     const run = { ...RUN, trace: TRACE };

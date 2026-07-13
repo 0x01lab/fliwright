@@ -1,8 +1,17 @@
 import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { projectRunsRoot, TimelineArtifactStore, TimelineRecorder } from '../../src/index.js';
+import {
+  projectRunsRoot,
+  TIMELINE_ARTIFACTS_DIR,
+  TIMELINE_DIAGNOSTICS_DIR,
+  TIMELINE_FILE_NAME,
+  TIMELINE_SCREENSHOTS_DIR,
+  TIMELINE_SNAPSHOTS_DIR,
+  TimelineArtifactStore,
+  TimelineRecorder,
+} from '../../src/index.js';
 
 describe('TimelineArtifactStore', () => {
   it('writes timeline and deterministic artifact refs', async () => {
@@ -19,16 +28,16 @@ describe('TimelineArtifactStore', () => {
     recorder.passNode(frame.id);
     const timelinePath = await store.writeTimeline(recorder.complete('passed'));
 
-    expect(timelinePath).toBe(join(runsRoot, 'run-1', 'timeline.json'));
+    expect(timelinePath).toBe(join(runsRoot, 'run-1', TIMELINE_FILE_NAME));
     expect(await readFile(join(store.runDir, screenshot.path), 'utf8')).toBe('png');
     expect(JSON.parse(await readFile(join(store.runDir, snapshot.path), 'utf8'))).toEqual({
       snapshot: '- text "Hello"',
     });
     const timeline = JSON.parse(await readFile(timelinePath, 'utf8')) as { nodes: Array<{ artifacts?: Array<{ path: string }> }> };
     expect(timeline.nodes[0].artifacts?.map((artifact) => artifact.path)).toEqual([
-      'artifacts/screenshots/frame-1.png',
-      'artifacts/snapshots/frame-1.json',
-      'artifacts/diagnostics/frame-1.json',
+      posix.join(TIMELINE_ARTIFACTS_DIR, TIMELINE_SCREENSHOTS_DIR, 'frame-1.png'),
+      posix.join(TIMELINE_ARTIFACTS_DIR, TIMELINE_SNAPSHOTS_DIR, 'frame-1.json'),
+      posix.join(TIMELINE_ARTIFACTS_DIR, TIMELINE_DIAGNOSTICS_DIR, 'frame-1.json'),
     ]);
   });
 });

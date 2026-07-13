@@ -7,6 +7,10 @@ import { FliwrightAgentError } from './agent/FliwrightAgentError.js';
 import type { TimelineArtifactStore } from './timeline/TimelineArtifactStore.js';
 import type { TimelineRecorder } from './timeline/TimelineRecorder.js';
 import type { AgentVisibleFailure, TimelineArtifactRef } from './timeline/types.js';
+import {
+  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
+  TIMELINE_ARTIFACT_KIND_SNAPSHOT,
+} from './timeline/constants.js';
 
 const DEFAULT_TIMEOUT = 5000;
 const DEFAULT_INTERVAL = 100;
@@ -432,8 +436,8 @@ function createAssertionFailure(
   artifacts: TimelineArtifactRef[],
 ): AgentVisibleFailure {
   const message = error instanceof Error ? error.message : String(error);
-  const screenshot = artifacts.find((artifact) => artifact.kind === 'screenshot');
-  const snapshot = artifacts.find((artifact) => artifact.kind === 'snapshot');
+  const screenshot = artifacts.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT);
+  const snapshot = artifacts.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SNAPSHOT);
   return {
     code: 'assertion_failed',
     title,

@@ -55,7 +55,7 @@ export class DartCodeGenerator {
 function dartFinder(query: SelectorQuery): string {
   const base = matchFinder(query.match);
   const scoped = query.containing
-    ? `find.ancestor(of: ${base}, matching: ${dartFinder(query.containing)})`
+    ? `find.ancestor(of: ${dartFinder(query.containing)}, matching: ${base})`
     : query.within
       ? `find.descendant(of: ${dartFinder(query.within)}, matching: ${base})`
       : base;

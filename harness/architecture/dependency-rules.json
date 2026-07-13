@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "typescriptPackages": {
+    "@fliwright/core": {
+      "path": "packages/fliwright-core",
+      "capabilities": ["automation runtime", "VM service protocol", "shared domain models"],
+      "responsibility": "Own the reusable TypeScript automation domain, VM-service client protocol, and shared models used by every integration.",
+      "doesNotOwn": ["CLI command orchestration", "MCP transport contracts", "VS Code UI", "Flutter in-app instrumentation"],
+      "mayDependOn": []
+    },
+    "@fliwright/vitest": {
+      "path": "packages/fliwright-vitest",
+      "capabilities": ["Vitest fixtures", "test lifecycle integration"],
+      "responsibility": "Adapt the core runtime to Vitest fixtures, hooks, configuration, reporting, and test lifecycle behavior.",
+      "doesNotOwn": ["automation domain behavior", "VM-service protocol changes", "CLI or editor workflows"],
+      "mayDependOn": ["@fliwright/core"]
+    },
+    "@fliwright/plugin-riverpod": {
+      "path": "packages/fliwright-plugin-riverpod",
+      "capabilities": ["Riverpod state adapter"],
+      "responsibility": "Provide the core-side plugin and StateAdapter that consume the Dart Riverpod bridge surface.",
+      "doesNotOwn": ["Flutter Riverpod observation", "generic automation runtime behavior", "editor UI"],
+      "mayDependOn": ["@fliwright/core"]
+    },
+    "@fliwright/tdd": {
+      "path": "packages/fliwright-tdd",
+      "capabilities": ["TDD execution", "test repair workflow"],
+      "responsibility": "Own persistent TDD execution, baseline reset, focused reruns, red-first generation, and repair planning.",
+      "doesNotOwn": ["general-purpose CLI commands", "MCP transport contracts", "Flutter bridge protocol"],
+      "mayDependOn": ["@fliwright/core", "@fliwright/vitest"]
+    },
+    "@fliwright/cli": {
+      "path": "packages/fliwright-cli",
+      "capabilities": ["command-line workflows", "interaction capabilities"],
+      "responsibility": "Expose operator-facing command-line workflows and reusable command capabilities backed by core and TDD.",
+      "doesNotOwn": ["automation primitives", "agent protocol semantics", "editor UX", "Flutter instrumentation"],
+      "mayDependOn": ["@fliwright/core", "@fliwright/tdd", "@fliwright/vitest"]
+    },
+    "@fliwright/mcp": {
+      "path": "packages/fliwright-mcp",
+      "capabilities": ["MCP server", "MCP tool contracts"],
+      "responsibility": "Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabilities.",
+      "doesNotOwn": ["automation primitives", "CLI command ownership", "editor UX", "Flutter instrumentation"],
+      "mayDependOn": ["@fliwright/core", "@fliwright/cli", "@fliwright/tdd"]
+    },
+    "fliwright-vscode": {
+      "path": "packages/fliwright-vscode",
+      "capabilities": ["VS Code integration", "editor and webview UX"],
+      "responsibility": "Own VS Code commands, views, webviews, and project workflows that consume public package capabilities.",
+      "doesNotOwn": ["automation primitives", "MCP tool contracts", "Flutter instrumentation"],
+      "mayDependOn": ["@fliwright/core", "@fliwright/cli", "@fliwright/plugin-riverpod", "@fliwright/tdd"]
+    },
+    "@fliwright/e2e-tests": {
+      "path": "e2e",
+      "capabilities": ["Flutter VM smoke tests"],
+      "responsibility": "Verify public Fliwright behavior against running Flutter applications through smoke and integration tests.",
+      "doesNotOwn": ["public runtime APIs", "product capabilities", "shared test fixtures for package consumers"],
+      "mayDependOn": ["@fliwright/core", "@fliwright/vitest"]
+    }
+  },
+  "dartPackages": {
+    "fliwright_bridge": {
+      "path": "packages/fliwright-bridge",
+      "capabilities": ["Flutter app instrumentation", "VM service extensions"],
+      "responsibility": "Run inside Flutter applications and expose ext.fliwright.* VM-service methods for inspection, control, capture, recording, and mocks.",
+      "doesNotOwn": ["TypeScript orchestration", "CLI or MCP transport", "editor UX"],
+      "mayDependOn": []
+    },
+    "fliwright_bridge_riverpod": {
+      "path": "packages/fliwright-bridge-riverpod",
+      "capabilities": ["Riverpod bridge adapter"],
+      "responsibility": "Observe Riverpod lifecycle and expose provider state through the base Flutter bridge.",
+      "doesNotOwn": ["generic Flutter instrumentation", "TypeScript state adapters", "editor UX"],
+      "mayDependOn": ["fliwright_bridge"]
+    }
+  },
+  "dartExamples": {
+    "form_demo": {
+      "path": "examples/form_demo",
+      "responsibility": "Exercise form filling and HTTP mock behavior as a consumer of the public Flutter bridge.",
+      "doesNotOwn": ["public Fliwright APIs", "runtime capabilities", "reusable bridge behavior"],
+      "mayDependOn": ["fliwright_bridge"]
+    },
+    "go_router_demo": {
+      "path": "examples/go_router_demo",
+      "responsibility": "Exercise navigation and form behavior as a consumer of the public Flutter bridge.",
+      "doesNotOwn": ["public Fliwright APIs", "runtime capabilities", "reusable bridge behavior"],
+      "mayDependOn": ["fliwright_bridge"]
+    },
+    "riverpod_demo": {
+      "path": "examples/riverpod_demo",
+      "responsibility": "Exercise bridge and Riverpod adapter behavior as a consumer of public Flutter packages.",
+      "doesNotOwn": ["public Fliwright APIs", "runtime capabilities", "reusable bridge behavior"],
+      "mayDependOn": ["fliwright_bridge", "fliwright_bridge_riverpod"]
+    }
+  }
+}

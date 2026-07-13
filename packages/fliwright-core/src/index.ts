@@ -19,6 +19,7 @@ export type {
   VMServiceEvent,
   ProtocolMessage,
   SelectorInput,
+  IconSelector,
   SelectorQuery,
   MatchCriteria,
   FallbackCriteria,
@@ -322,6 +323,23 @@ export type {
 export { TimelineRecorder } from './timeline/TimelineRecorder.js';
 export { TimelineArtifactStore } from './timeline/TimelineArtifactStore.js';
 export type { TimelineArtifactStoreOptions } from './timeline/TimelineArtifactStore.js';
+export {
+  TIMELINE_ARTIFACT_KIND_AI,
+  TIMELINE_ARTIFACT_KIND_DIAGNOSTICS,
+  TIMELINE_ARTIFACT_KIND_LOG,
+  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
+  TIMELINE_ARTIFACT_KIND_SNAPSHOT,
+  TIMELINE_ARTIFACT_KIND_TRACE,
+  TIMELINE_ARTIFACTS_DIR,
+  TIMELINE_DIAGNOSTICS_DIR,
+  TIMELINE_FILE_NAME,
+  TIMELINE_LOG_EVENTS_FILE,
+  TIMELINE_LOGS_DIR,
+  TIMELINE_SCREENSHOTS_DIR,
+  TIMELINE_SNAPSHOTS_DIR,
+  TIMELINE_TRACE_DIR,
+  TIMELINE_TRACE_FILE,
+} from './timeline/constants.js';
 export { FlowRuntime, createAgentFailure, wrapAgentError } from './timeline/FlowRuntime.js';
 export type { FlowFrameOptions, FlowManualOptions, FlowRuntimeOptions } from './timeline/FlowRuntime.js';
 export { FliwrightAgentError } from './agent/FliwrightAgentError.js';

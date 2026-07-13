@@ -2,18 +2,22 @@
 import type { TimelineNode, FliwrightLogEvent, AgentVisibleFailure, TraceStep } from '@fliwright/core';
 import type { SerializableRun } from './types.js';
 import type { FlatNode } from './treeFlatten.js';
+import {
+  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
+  TIMELINE_ARTIFACT_KIND_SNAPSHOT,
+} from '../../viewer/timelineConstants.js';
 
 export type ListMode = 'timeline' | 'actions';
 
 /** Resolve a node's screenshot artifact to a webview <img src>. */
-export function screenshotOfNode(node: TimelineNode, base: string): string | undefined {
-  const art = (node.artifacts ?? []).find(a => a.kind === 'screenshot');
-  return art ? `${base}/${art.path}` : undefined;
+export function screenshotOfNode(node: TimelineNode, base: string, failure?: AgentVisibleFailure): string | undefined {
+  const path = screenshotPathOfNode(node, failure ?? node.error);
+  return path ? joinBasePath(base, path) : undefined;
 }
 
 /** Resolve a trace step's screenshot file to a webview <img src>. */
 export function screenshotOfStep(screenshotFile: string | undefined, base: string): string | undefined {
-  return screenshotFile ? `${base}/${screenshotFile}` : undefined;
+  return screenshotFile ? joinBasePath(base, screenshotFile) : undefined;
 }
 
 export interface Selection {
@@ -64,15 +68,14 @@ export function deriveSelection(
   if (!node) return undefined;
   const failure = node.error ?? run.timeline.agentVisibleFailures?.find(f => f.timelineNodeId === node.id);
   const logs = run.logs.filter(l => l.timelineNodeId === node.id);
-  const snapArt = (node.artifacts ?? []).find(a => a.kind === 'snapshot');
   return {
     key,
     mode,
     node,
     failure,
     logs,
-    screenshotUri: screenshotOfNode(node, run.screenshotBaseUrl),
-    snapshotPath: snapArt?.path,
+    screenshotUri: screenshotOfNode(node, run.screenshotBaseUrl, failure),
+    snapshotPath: snapshotPathOfNode(node, failure),
   };
 }
 
@@ -104,7 +107,7 @@ export function fallbackScreenshot(
   base: string,
 ): { uri: string; sourceTitle: string } | undefined {
   for (let i = currentIndex; i >= 0; i--) {
-    const uri = screenshotOfNode(flat[i].node, base);
+    const uri = screenshotOfNode(flat[i].node, base, flat[i].node.error);
     if (uri) return { uri, sourceTitle: flat[i].node.title };
   }
   return undefined;
@@ -121,4 +124,20 @@ export function neighborKeys(
     prev: idx > 0 ? keys[idx - 1] : null,
     next: idx < keys.length - 1 ? keys[idx + 1] : null,
   };
+}
+
+function screenshotPathOfNode(node: TimelineNode, failure?: AgentVisibleFailure): string | undefined {
+  return artifactPathOfNode(node, TIMELINE_ARTIFACT_KIND_SCREENSHOT) ?? failure?.appState?.screenshotPath;
+}
+
+function snapshotPathOfNode(node: TimelineNode, failure?: AgentVisibleFailure): string | undefined {
+  return artifactPathOfNode(node, TIMELINE_ARTIFACT_KIND_SNAPSHOT) ?? failure?.appState?.snapshotPath;
+}
+
+function artifactPathOfNode(node: TimelineNode, kind: string): string | undefined {
+  return (node.artifacts ?? []).find(a => a.kind === kind)?.path;
+}
+
+function joinBasePath(base: string, path: string): string {
+  return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
 }

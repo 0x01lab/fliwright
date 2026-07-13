@@ -720,6 +720,20 @@ class InspectExtension {
       selectors.add({'kind': 'text', 'value': textRegex, 'match': 'regex'});
     }
 
+    final iconCodePoint = match['iconCodePoint'];
+    if (iconCodePoint is num && iconCodePoint >= 0) {
+      final iconFontFamily = match['iconFontFamily'];
+      final iconFontPackage = match['iconFontPackage'];
+      selectors.add({
+        'kind': 'icon',
+        'codePoint': iconCodePoint.toInt(),
+        if (iconFontFamily is String && iconFontFamily.isNotEmpty)
+          'fontFamily': iconFontFamily,
+        if (iconFontPackage is String && iconFontPackage.isNotEmpty)
+          'fontPackage': iconFontPackage,
+      });
+    }
+
     final semanticIdentifier = match['semanticIdentifier'];
     final semanticsLabel = match['semanticsLabel'];
     final semanticsHint = match['semanticsHint'];

@@ -32,19 +32,17 @@ describe('handleHotReloadAndSnap', () => {
     );
   });
 
-  it('chains reload, snapshot, and screenshot', async () => {
+  it('chains reload and snapshot without capturing screenshot bytes by default', async () => {
     const { state, reloadSources, snapshot, screenshot } = connectedState();
 
     const result = await handleHotReloadAndSnap({
       depth: 3,
       includeRects: false,
       includeProperties: true,
-      pixelRatio: 2,
     }, state);
 
     expect(result.reloaded).toBe(true);
     expect(result.reloadResult).toEqual({ type: 'Success' });
-    expect(result.screenshot).toBe(Buffer.from('png').toString('base64'));
     expect(result.exceptions).toEqual([]);
     expect(reloadSources).toHaveBeenCalled();
     expect(snapshot).toHaveBeenCalledWith({
@@ -52,6 +50,18 @@ describe('handleHotReloadAndSnap', () => {
       includeRects: false,
       includeProperties: true,
     });
+    expect(screenshot).not.toHaveBeenCalled();
+  });
+
+  it('captures screenshot bytes only when explicitly requested', async () => {
+    const { state, screenshot } = connectedState();
+
+    const result = await handleHotReloadAndSnap({
+      includeScreenshot: true,
+      pixelRatio: 2,
+    }, state);
+
+    expect(result.screenshot).toBe(Buffer.from('png').toString('base64'));
     expect(screenshot).toHaveBeenCalledWith({ pixelRatio: 2 });
   });
 
@@ -72,20 +82,14 @@ describe('handleHotReloadAndSnap', () => {
     expect(screenshot).not.toHaveBeenCalled();
   });
 
-  it('keeps snapshot result when screenshot fails', async () => {
-    const { state } = connectedState({
-      screenshot: async () => {
-        throw new Error('No repaint boundary');
-      },
-    });
+  it('keeps the snapshot result without serializing screenshot bytes', async () => {
+    const { state, screenshot } = connectedState();
 
     const result = await handleHotReloadAndSnap({}, state);
 
     expect(result.reloaded).toBe(true);
     expect(result.snapshot).toMatchObject({ count: 1 });
-    expect(result.screenshot).toBeUndefined();
-    expect(result.exceptions).toEqual([
-      { kind: 'screenshot', message: 'No repaint boundary' },
-    ]);
+    expect(screenshot).not.toHaveBeenCalled();
+    expect(result.exceptions).toEqual([]);
   });
 });

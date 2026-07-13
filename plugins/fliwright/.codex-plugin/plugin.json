@@ -1,0 +1,27 @@
+{
+  "name": "fliwright",
+  "version": "0.1.0+codex.20260712075300",
+  "description": "Fliwright Flutter automation workflows, testing skills, and live MCP tools for Codex.",
+  "author": {
+    "name": "Fliwright"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Fliwright",
+    "shortDescription": "Test and automate Flutter apps through the Dart VM Service.",
+    "longDescription": "Write, run, record, diagnose, and review Fliwright Flutter automation with timeline-aware tests, mocks, flows, and TDD.",
+    "developerName": "Fliwright",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write",
+      "Test"
+    ],
+    "defaultPrompt": [
+      "Write a timeline-aware Fliwright test for this Flutter screen.",
+      "Connect to the running Flutter app and inspect the current UI.",
+      "Create a Fliwright flow review plan for this user journey."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

@@ -1,5 +1,6 @@
 import type {
   FilterCriteria,
+  IconSelector,
   RefTarget,
   SelectorAst,
   SelectorInput,
@@ -68,6 +69,10 @@ export class Locator {
     return this.locator({ text, ...options });
   }
 
+  getByTextContaining(text: string | RegExp): Locator {
+    return this.getByText(text, { match: 'contains' });
+  }
+
   getByKey(key: string): Locator {
     return this.locator({ key });
   }
@@ -80,6 +85,10 @@ export class Locator {
     return this.locator({ subtype });
   }
 
+  getByIcon(icon: IconSelector): Locator {
+    return this.locator({ icon });
+  }
+
   getBySemantics(semantics: {
     identifier?: string;
     label?: string;
@@ -89,6 +98,26 @@ export class Locator {
     caseSensitive?: boolean;
   }): Locator {
     return this.locator({ semantics });
+  }
+
+  getBySemanticsLabel(label: string): Locator {
+    return this.getBySemantics({ label });
+  }
+
+  getBySemanticsIdentifier(identifier: string): Locator {
+    return this.getBySemantics({ identifier });
+  }
+
+  getByWidgetWithText(
+    widgetType: string,
+    text: string | RegExp,
+    options?: { exact?: boolean; match?: 'exact' | 'contains' | 'regex'; caseSensitive?: boolean },
+  ): Locator {
+    return this.getByType(widgetType).containing({ text, ...options });
+  }
+
+  getByWidgetWithIcon(widgetType: string, icon: IconSelector): Locator {
+    return this.getByType(widgetType).containing({ icon });
   }
 
   ancestor(selector: SelectorInput): Locator {

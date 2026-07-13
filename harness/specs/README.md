@@ -11,7 +11,7 @@ or evaluates the behavior it defines.
 | Product scope and success criteria | [../../docs/PRD.md](../../docs/PRD.md) |
 | Existing feature design or decision rationale | The matching file in `docs/superpowers/specs/` |
 | Historical implementation sequence | The matching file in `docs/superpowers/plans/` |
-| Current implementation/API contract | [../memory/feature-documentation.md](../memory/feature-documentation.md) |
+| Current implementation/API contract | [../../docs/README.md](../../docs/README.md) |
 | New work needing a design | Create a focused design in `docs/superpowers/specs/`, then an execution plan only when the work merits one |
 
 Do not read the full `docs/superpowers/` tree. Locate a known slice by filename,

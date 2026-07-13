@@ -25,6 +25,9 @@ only the one linked level-1 document that matches the work; do not preload
   unless backward compatibility is explicitly requested.
 - `docs/features/` is generated implementation reference. Do not edit it by hand;
   regenerate it with `/document-features` after significant stable source changes.
+- Do not add, remove, or upgrade a framework/dependency outside
+  `harness/stack/framework.json`; do not add a cross-package import outside
+  `harness/architecture/dependency-rules.json`.
 
 ## Verify
 
@@ -32,6 +35,8 @@ only the one linked level-1 document that matches the work; do not preload
   `pnpm test`, and `pnpm lint`. Scope a package with
   `pnpm --filter @fliwright/core test`.
 - Dart: use `melos bootstrap`, `melos run analyze`, and `melos run test`.
+- Run `node scripts/verify-harness.mjs` for dependency, framework, module-boundary, or
+  shared-memory changes.
 - E2E smoke requires a Flutter VM service:
   `FLIWRIGHT_VM_SERVICE_URL=... pnpm --filter @fliwright/e2e-tests test:smoke`.
 - The "exio app" is `/Users/leo.he/projects/exio/exio_app`.
@@ -40,10 +45,14 @@ only the one linked level-1 document that matches the work; do not preload
 
 | Need | Open exactly this first |
 | --- | --- |
-| Package ownership, change impact, or source/test locations | [harness/boundaries/repository.md](./harness/boundaries/repository.md) |
+| Package ownership, change impact, or source/test locations | [harness/architecture/README.md](./harness/architecture/README.md) |
+| Cross-package import, capability, or dependency direction | [harness/architecture/README.md](./harness/architecture/README.md) |
+| Approved framework, package, or Dart dependency | [harness/stack/README.md](./harness/stack/README.md) |
 | Detailed quality gates or command selection | [harness/constraints/quality.md](./harness/constraints/quality.md) |
 | VM service URL, runtime state, or environment setup | [harness/memory/runtime-configuration.md](./harness/memory/runtime-configuration.md) |
-| Current API or implemented behavior | [harness/memory/feature-documentation.md](./harness/memory/feature-documentation.md) |
+| Create or promote durable shared learning | [harness/memory/ledger/README.md](./harness/memory/ledger/README.md) |
+| Which capabilities are currently implemented | [harness/capabilities/README.md](./harness/capabilities/README.md) |
+| Current API or implemented behavior | [docs/README.md](./docs/README.md) |
 | Product requirements, a feature design, or an implementation plan | [harness/specs/README.md](./harness/specs/README.md) |
 | Commit or pull request work | [harness/workflows/delivery.md](./harness/workflows/delivery.md) |
 | Existing code/docs conflict with the intended behavior | [harness/memory/development-conflict-policy.md](./harness/memory/development-conflict-policy.md) |

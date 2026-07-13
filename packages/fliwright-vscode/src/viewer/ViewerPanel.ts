@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import { RunViewerService, type LoadedRun } from '../runviewer/RunViewerService.js';
 import type { SerializableRun, ViewerInbound, ViewerOutbound } from '../webview/viewer/types.js';
+import { TIMELINE_TRACE_DIR } from './timelineConstants.js';
 
 /** Maximum log events posted to the webview in one shot (keeps postMessage snappy). */
 const LOG_CAP = 2000;
@@ -199,7 +200,7 @@ export class ViewerPanel {
       logs,
       runId: loaded.timeline.runId,
       screenshotBaseUrl: webview.asWebviewUri(loaded.runDir).toString(),
-      traceBaseUrl: webview.asWebviewUri(vscode.Uri.joinPath(loaded.runDir, 'trace')).toString(),
+      traceBaseUrl: webview.asWebviewUri(vscode.Uri.joinPath(loaded.runDir, TIMELINE_TRACE_DIR)).toString(),
     };
     if (loaded.trace) run.trace = loaded.trace;
     if (total > LOG_CAP) {

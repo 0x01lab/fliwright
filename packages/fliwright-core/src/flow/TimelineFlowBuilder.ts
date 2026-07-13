@@ -1,4 +1,5 @@
 import type { TimelineNode } from '../timeline/types.js';
+import { TIMELINE_ARTIFACT_KIND_SCREENSHOT } from '../timeline/constants.js';
 import type {
   FliwrightFlowDocument,
   FliwrightFlowEdge,
@@ -54,7 +55,7 @@ function normalizeTimelineNodes(nodes: TimelineNode[], options: TimelineToFlowOp
 }
 
 function timelineNodeToFlowNode(node: TimelineNode, position: { x: number; y: number }): FliwrightFlowNode {
-  const screenshot = node.artifacts?.find((artifact) => artifact.kind === 'screenshot');
+  const screenshot = node.artifacts?.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT);
   const selector = typeof node.metadata?.selector === 'string' ? node.metadata.selector : undefined;
   return {
     id: `timeline-${sanitizeId(node.id)}`,

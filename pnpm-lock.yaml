@@ -190,6 +190,9 @@ importers:
       '@fliwright/plugin-riverpod':
         specifier: workspace:*
         version: link:../fliwright-plugin-riverpod
+      '@fliwright/tdd':
+        specifier: workspace:*
+        version: link:../fliwright-tdd
       '@radix-ui/react-scroll-area':
         specifier: ^1.2.12
         version: 1.2.12(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

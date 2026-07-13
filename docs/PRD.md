@@ -249,8 +249,7 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 - 仅在不知道行为归属时使用 `docs/features/index.md` 进行检索；不要将其作为
   常规上下文加载。
 - 文档状态、权威顺序和完整的渐进式披露规则见
-  [Documentation Guide](./README.md) 与
-  [Feature Documentation Memory](../harness/memory/feature-documentation.md)。
+  [Documentation Guide](./README.md)。
 
 ---
 

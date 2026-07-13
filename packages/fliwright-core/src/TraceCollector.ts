@@ -3,6 +3,11 @@ import { mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path';
 import type { TimelineArtifactRef } from './timeline/types.js';
 import type { SendRequest } from './types.js';
+import {
+  TIMELINE_ARTIFACT_KIND_TRACE,
+  TIMELINE_TRACE_DIR,
+  TIMELINE_TRACE_FILE,
+} from './timeline/constants.js';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -66,9 +71,9 @@ export class TraceCollector {
   ) {
     this.layout = options.layout ?? 'legacy';
     this.traceDir = this.layout === 'run'
-      ? resolve(traceRoot, 'trace')
+      ? resolve(traceRoot, TIMELINE_TRACE_DIR)
       : resolve(traceRoot, runId, sanitizeTraceSegment(testName));
-    this.traceFilePath = join(this.traceDir, 'trace.json');
+    this.traceFilePath = join(this.traceDir, TIMELINE_TRACE_FILE);
   }
 
   /**
@@ -164,7 +169,7 @@ export class TraceCollector {
 
   artifactRef(baseDir = this.traceRoot): TimelineArtifactRef {
     return {
-      kind: 'trace',
+      kind: TIMELINE_ARTIFACT_KIND_TRACE,
       path: relative(baseDir, this.traceFilePath).replace(/\\/g, '/'),
       mimeType: 'application/json',
       metadata: {
@@ -374,7 +379,7 @@ export namespace TraceStore {
    */
   export async function loadTrace(traceRoot: string, runId: string, testDir: string): Promise<TraceData | null> {
     try {
-      const filePath = join(traceRoot, runId, testDir, 'trace.json');
+      const filePath = join(traceRoot, runId, testDir, TIMELINE_TRACE_FILE);
       const content = await readFile(filePath, 'utf8');
       return JSON.parse(content) as TraceData;
     } catch {

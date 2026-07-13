@@ -128,8 +128,8 @@ describe('DartCodeGenerator structured finders', () => {
   it('containing → find.ancestor', () => {
     const code = gen({ match: { type: 'GestureDetector' }, containing: { match: { text: 'Login' } } });
     expect(code).toContain('find.ancestor(');
-    expect(code).toContain("matching: find.text('Login')");
-    expect(code).toContain('of: find.byType(GestureDetector)');
+    expect(code).toContain("of: find.text('Login')");
+    expect(code).toContain('matching: find.byType(GestureDetector)');
   });
   it('nth → .at', () => {
     expect(gen({ match: { type: 'GestureDetector' }, position: { nth: 2 } })).toContain('find.byType(GestureDetector).at(2)');

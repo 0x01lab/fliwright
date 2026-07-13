@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fliwright TDD"
+  short_description: "以测试优先方式开发 Fliwright"
+  default_prompt: "使用 $fliwright-tdd 以测试优先方式实现这个 Fliwright 改动。"

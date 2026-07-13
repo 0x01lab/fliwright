@@ -32,46 +32,78 @@ import { registerAgentDiagnoseTool } from './tools/agentDiagnose.js';
 import { registerTddTools } from './tools/tdd.js';
 import { registerDebugSnapshotTool } from './tools/debugSnapshot.js';
 
-export function createFliwrightServer() {
+export type FliwrightMcpToolProfile = 'core' | 'development' | 'tdd' | 'flow' | 'full';
+
+export interface CreateFliwrightServerOptions {
+  toolProfile?: FliwrightMcpToolProfile;
+}
+
+const TOOL_PROFILES = new Set<FliwrightMcpToolProfile>([
+  'core',
+  'development',
+  'tdd',
+  'flow',
+  'full',
+]);
+
+export function resolveMcpToolProfile(value: string | undefined): FliwrightMcpToolProfile {
+  const profile = value ?? 'core';
+  if (TOOL_PROFILES.has(profile as FliwrightMcpToolProfile)) {
+    return profile as FliwrightMcpToolProfile;
+  }
+  throw new Error(
+    `Unknown Fliwright MCP tool profile "${profile}". Expected one of: ${Array.from(TOOL_PROFILES).join(', ')}.`,
+  );
+}
+
+export function createFliwrightServer(options: CreateFliwrightServerOptions = {}) {
   const server = new McpServer({
     name: 'fliwright',
     version: '0.1.0',
   });
 
   const state = createServerState();
+  const profile = resolveMcpToolProfile(options.toolProfile ?? process.env.FLIWRIGHT_MCP_TOOL_PROFILE);
 
-  // Existing tools
   registerRunTestTool(server, state);
   registerGetFailureTool(server, state);
   registerGenerateTestTool(server, state);
-  registerRecordTool(server, state);
-  registerMockListTool(server, state);
-  registerMockSwitchTool(server, state);
-  registerMockStatusTool(server, state);
-  registerMockClearCallsTool(server, state);
   registerTestReportResource(server, state);
 
-  // Interaction tools — direct app control via MCP
   registerStatusTool(server, state);
   registerConnectTool(server, state);
   registerScreenshotTool(server, state);
   registerSnapTool(server, state);
-  registerSourceMapTool(server, state);
   registerFindTool(server, state);
   registerObserveTool(server, state);
-  registerHotReloadAndSnapTool(server, state);
   registerNavigateTool(server, state);
   registerTapTool(server, state);
   registerTypeTool(server, state);
   registerDragTool(server, state);
   registerWaitTool(server, state);
-  registerActionTool(server, state);
-  registerDiagnosticsTool(server, state);
-  registerTimelineTool(server, state);
-  registerFlowTools(server, state);
-  registerAgentDiagnoseTool(server, state);
-  registerTddTools(server, state);
   registerDebugSnapshotTool(server, state);
+
+  if (profile === 'development' || profile === 'full') {
+    registerRecordTool(server, state);
+    registerMockListTool(server, state);
+    registerMockSwitchTool(server, state);
+    registerMockStatusTool(server, state);
+    registerMockClearCallsTool(server, state);
+    registerSourceMapTool(server, state);
+    registerHotReloadAndSnapTool(server, state);
+    registerActionTool(server, state);
+    registerDiagnosticsTool(server, state);
+    registerTimelineTool(server, state);
+    registerAgentDiagnoseTool(server, state);
+  }
+
+  if (profile === 'tdd' || profile === 'full') {
+    registerTddTools(server, state);
+  }
+
+  if (profile === 'flow' || profile === 'full') {
+    registerFlowTools(server, state);
+  }
 
   return { server, state };
 }

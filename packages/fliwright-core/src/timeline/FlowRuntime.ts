@@ -3,6 +3,11 @@ import { FliwrightAgentError } from '../agent/FliwrightAgentError.js';
 import type { AgentVisibleFailure, TimelineArtifactRef, TimelineNodeStartOptions } from './types.js';
 import { TimelineArtifactStore } from './TimelineArtifactStore.js';
 import { TimelineRecorder } from './TimelineRecorder.js';
+import {
+  TIMELINE_ARTIFACT_KIND_DIAGNOSTICS,
+  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
+  TIMELINE_ARTIFACT_KIND_SNAPSHOT,
+} from './constants.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
@@ -66,7 +71,9 @@ export class FlowRuntime {
       this.options.recorder.passNode(node.id);
       return value;
     } catch (error) {
-      const failure = createAgentFailure(error, title, node.id, 'step_failed');
+      const artifacts = await this.captureFailureArtifacts(node.id);
+      if (artifacts.length) this.options.recorder.addArtifacts(node.id, artifacts);
+      const failure = withArtifactAppState(createAgentFailure(error, title, node.id, 'step_failed'), artifacts);
       this.options.recorder.failNode(node.id, failure);
       throw wrapAgentError(error, failure);
     }
@@ -80,7 +87,9 @@ export class FlowRuntime {
       this.options.recorder.passNode(node.id);
       return artifacts;
     } catch (error) {
-      const failure = createAgentFailure(error, title, node.id, 'step_failed');
+      const artifacts = await this.captureFailureArtifacts(node.id);
+      if (artifacts.length) this.options.recorder.addArtifacts(node.id, artifacts);
+      const failure = withArtifactAppState(createAgentFailure(error, title, node.id, 'step_failed'), artifacts);
       this.options.recorder.failNode(node.id, failure);
       throw wrapAgentError(error, failure);
     }
@@ -106,7 +115,9 @@ export class FlowRuntime {
       await waitForManualCompletion(message, options, controller.signal);
       this.options.recorder.passNode(node.id);
     } catch (error) {
-      const failure = createAgentFailure(error, title, node.id, 'step_failed');
+      const artifacts = await this.captureFailureArtifacts(node.id);
+      if (artifacts.length) this.options.recorder.addArtifacts(node.id, artifacts);
+      const failure = withArtifactAppState(createAgentFailure(error, title, node.id, 'step_failed'), artifacts);
       this.options.recorder.failNode(node.id, failure, { manual: true });
       throw wrapAgentError(error, failure);
     } finally {
@@ -131,10 +142,16 @@ export class FlowRuntime {
       this.options.recorder.passNode(node.id);
       return value;
     } catch (error) {
-      const failure = createAgentFailure(error, title, node.id, failureCode);
+      const artifacts = await this.captureFailureArtifacts(node.id);
+      if (artifacts.length) this.options.recorder.addArtifacts(node.id, artifacts);
+      const failure = withArtifactAppState(createAgentFailure(error, title, node.id, failureCode), artifacts);
       this.options.recorder.failNode(node.id, failure);
       throw wrapAgentError(error, failure);
     }
+  }
+
+  private async captureFailureArtifacts(nodeId: string): Promise<TimelineArtifactRef[]> {
+    return this.captureFrameArtifacts(nodeId, { screenshot: true, snapshot: true });
   }
 
   private async captureFrameArtifacts(nodeId: string, options: FlowFrameOptions): Promise<TimelineArtifactRef[]> {
@@ -227,6 +244,22 @@ export function createAgentFailure(
 export function wrapAgentError(error: unknown, failure: AgentVisibleFailure): FliwrightAgentError {
   if (error instanceof FliwrightAgentError) return error;
   return new FliwrightAgentError(failure, { cause: error });
+}
+
+function withArtifactAppState(failure: AgentVisibleFailure, artifacts: TimelineArtifactRef[]): AgentVisibleFailure {
+  const screenshot = artifacts.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT);
+  const snapshot = artifacts.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SNAPSHOT);
+  const diagnostics = artifacts.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_DIAGNOSTICS);
+  if (!screenshot && !snapshot && !diagnostics) return failure;
+  return {
+    ...failure,
+    appState: {
+      ...(failure.appState ?? {}),
+      ...(screenshot ? { screenshotPath: screenshot.path } : {}),
+      ...(snapshot ? { snapshotPath: snapshot.path } : {}),
+      ...(diagnostics ? { diagnosticsPath: diagnostics.path } : {}),
+    },
+  };
 }
 
 function defaultRecoveryHints(code: AgentVisibleFailure['code'], message: string): AgentVisibleFailure['recoveryHints'] {

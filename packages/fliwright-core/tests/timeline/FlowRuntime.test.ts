@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   FliwrightAgentError,
   FlowRuntime,
+  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
+  TIMELINE_ARTIFACT_KIND_SNAPSHOT,
   TimelineArtifactStore,
   TimelineRecorder,
   type AgentSnapshotResult,
@@ -55,6 +57,35 @@ describe('FlowRuntime', () => {
       status: 'failed',
       error: { code: 'step_failed', title: 'Tap submit' },
     });
+  });
+
+  it('captures screenshot artifacts for failed steps', async () => {
+    const page = {
+      screenshot: vi.fn().mockResolvedValue(Buffer.from('png')),
+      snapshot: vi.fn().mockResolvedValue({
+        snapshot: '- text "Markets" [ref=e1]',
+        groupId: 'snap-1',
+        refs: [],
+        count: 1,
+      } satisfies AgentSnapshotResult),
+    } as unknown as Page;
+    const { recorder, store, flow } = createFlow(page);
+
+    await expect(flow.step('Sort markets', () => {
+      throw new Error('expected USDT/USD above BTC/USDT');
+    })).rejects.toBeInstanceOf(FliwrightAgentError);
+
+    const node = recorder.toJSON().nodes[0];
+    const screenshot = node.artifacts?.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT);
+    const snapshot = node.artifacts?.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SNAPSHOT);
+    expect(screenshot).toBeDefined();
+    expect(snapshot).toBeDefined();
+    expect(node.error?.appState).toMatchObject({
+      screenshotPath: screenshot?.path,
+      snapshotPath: snapshot?.path,
+    });
+    expect(await readFile(join(store.runDir, screenshot!.path), 'utf8')).toBe('png');
+    expect(page.screenshot).toHaveBeenCalled();
   });
 
   it('records manual checkpoints as timeline nodes', async () => {
@@ -210,7 +241,10 @@ describe('FlowRuntime', () => {
 
     const artifacts = await flow.frame('Register form visible', { screenshot: true, snapshot: true });
 
-    expect(artifacts.map((artifact) => artifact.kind)).toEqual(['screenshot', 'snapshot']);
+    expect(artifacts.map((artifact) => artifact.kind)).toEqual([
+      TIMELINE_ARTIFACT_KIND_SCREENSHOT,
+      TIMELINE_ARTIFACT_KIND_SNAPSHOT,
+    ]);
     expect(await readFile(join(store.runDir, artifacts[0].path), 'utf8')).toBe('png');
     expect(page.screenshot).toHaveBeenCalled();
     expect(page.snapshot).toHaveBeenCalled();
@@ -233,7 +267,7 @@ describe('FlowRuntime', () => {
 
     const artifacts = await flow.frame('Register form filled', { screenshot: true, snapshot: true });
 
-    expect(artifacts.map((artifact) => artifact.kind)).toEqual(['snapshot']);
+    expect(artifacts.map((artifact) => artifact.kind)).toEqual([TIMELINE_ARTIFACT_KIND_SNAPSHOT]);
     expect(page.screenshot).toHaveBeenCalled();
     expect(page.snapshot).toHaveBeenCalled();
   });

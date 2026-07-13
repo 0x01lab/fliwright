@@ -70,7 +70,7 @@ describe('Selector', () => {
       // ancestor correctly preserves the matching type and the original chain as within scope
       const q = wire(selector);
       expect(q.match).toEqual({ type: 'Dialog' });
-      expect(q.within).toBeDefined();
+      expect(q.containing).toBeDefined();
     });
 
     it('validates nth index', () => {

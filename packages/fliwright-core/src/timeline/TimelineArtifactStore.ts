@@ -1,7 +1,17 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { resolveFliwrightRunsRoot } from '../runArtifacts.js';
 import type { TimelineArtifactRef, TimelineData } from './types.js';
+import {
+  TIMELINE_ARTIFACT_KIND_DIAGNOSTICS,
+  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
+  TIMELINE_ARTIFACT_KIND_SNAPSHOT,
+  TIMELINE_ARTIFACTS_DIR,
+  TIMELINE_DIAGNOSTICS_DIR,
+  TIMELINE_FILE_NAME,
+  TIMELINE_SCREENSHOTS_DIR,
+  TIMELINE_SNAPSHOTS_DIR,
+} from './constants.js';
 
 export interface TimelineArtifactStoreOptions {
   cwd?: string;
@@ -22,7 +32,7 @@ export class TimelineArtifactStore {
   }
 
   get timelinePath(): string {
-    return join(this.runDir, 'timeline.json');
+    return join(this.runDir, TIMELINE_FILE_NAME);
   }
 
   async writeTimeline(data: TimelineData): Promise<string> {
@@ -32,21 +42,21 @@ export class TimelineArtifactStore {
   }
 
   async writeScreenshot(nodeId: string, buffer: Buffer | Uint8Array): Promise<TimelineArtifactRef> {
-    const path = join('artifacts', 'screenshots', `${safeName(nodeId)}.png`);
+    const path = posix.join(TIMELINE_ARTIFACTS_DIR, TIMELINE_SCREENSHOTS_DIR, `${safeName(nodeId)}.png`);
     await this.writeBinary(path, buffer);
-    return { kind: 'screenshot', path, mimeType: 'image/png' };
+    return { kind: TIMELINE_ARTIFACT_KIND_SCREENSHOT, path, mimeType: 'image/png' };
   }
 
   async writeSnapshot(nodeId: string, snapshot: unknown): Promise<TimelineArtifactRef> {
-    const path = join('artifacts', 'snapshots', `${safeName(nodeId)}.json`);
+    const path = posix.join(TIMELINE_ARTIFACTS_DIR, TIMELINE_SNAPSHOTS_DIR, `${safeName(nodeId)}.json`);
     await this.writeJson(path, snapshot);
-    return { kind: 'snapshot', path, mimeType: 'application/json' };
+    return { kind: TIMELINE_ARTIFACT_KIND_SNAPSHOT, path, mimeType: 'application/json' };
   }
 
   async writeDiagnostics(nodeId: string, diagnostics: unknown): Promise<TimelineArtifactRef> {
-    const path = join('artifacts', 'diagnostics', `${safeName(nodeId)}.json`);
+    const path = posix.join(TIMELINE_ARTIFACTS_DIR, TIMELINE_DIAGNOSTICS_DIR, `${safeName(nodeId)}.json`);
     await this.writeJson(path, diagnostics);
-    return { kind: 'diagnostics', path, mimeType: 'application/json' };
+    return { kind: TIMELINE_ARTIFACT_KIND_DIAGNOSTICS, path, mimeType: 'application/json' };
   }
 
   private async writeJson(relativePath: string, value: unknown): Promise<void> {

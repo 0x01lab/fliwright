@@ -1,4 +1,12 @@
-import type { FilterCriteria, MatchCriteria, SelectorAst, SelectorInput, SelectorQuery, TextMatchMode } from './types.js';
+import type {
+  FilterCriteria,
+  IconSelector,
+  MatchCriteria,
+  SelectorAst,
+  SelectorInput,
+  SelectorQuery,
+  TextMatchMode,
+} from './types.js';
 
 export class Selector {
   readonly query: SelectorQuery;
@@ -30,12 +38,12 @@ export class Selector {
       return Selector.astToQuery(Selector.parseString(input));
     }
 
-    if (Selector.isQuery(input)) {
-      return Selector.validateQuery(input);
-    }
-
     if (Selector.isAst(input)) {
       return Selector.astToQuery(Selector.validateAst(input));
+    }
+
+    if (Selector.isQuery(input)) {
+      return Selector.validateQuery(input);
     }
 
     const ancestor = 'ancestor' in input && input.ancestor != null
@@ -260,7 +268,7 @@ export class Selector {
     return { kind: 'semantics', ...input };
   }
 
-  private static iconAst(input: { codePoint: number; fontFamily?: string; fontPackage?: string }): SelectorAst {
+  private static iconAst(input: IconSelector): SelectorAst {
     if (!Number.isInteger(input.codePoint) || input.codePoint < 0) {
       throw new Error('Icon selector codePoint must be a non-negative integer');
     }
@@ -272,7 +280,17 @@ export class Selector {
   }
 
   private static isQuery(input: object): input is SelectorQuery {
-    return 'match' in input || 'within' in input || 'fallback' in input || 'position' in input;
+    const match = (input as { match?: unknown }).match;
+    return (
+      (match != null && typeof match === 'object' && !Array.isArray(match)) ||
+      'within' in input ||
+      'fallback' in input ||
+      'position' in input ||
+      'and' in input ||
+      'or' in input ||
+      'filter' in input ||
+      'containing' in input
+    );
   }
 
   private static validateAst(ast: SelectorAst): SelectorAst {
@@ -458,7 +476,7 @@ export class Selector {
       case 'descendant':
         return { ...Selector.astToQuery(ast.matching), within: Selector.astToQuery(ast.of) };
       case 'ancestor':
-        return { ...Selector.astToQuery(ast.matching), within: Selector.astToQuery(ast.of) };
+        return { ...Selector.astToQuery(ast.matching), containing: Selector.astToQuery(ast.of) };
       case 'and':
         return { and: ast.selectors.map((s) => Selector.astToQuery(s)) };
       case 'or':

@@ -3,6 +3,7 @@ import { isAbsolute, join, relative } from 'node:path';
 import type { RunResult, TestCaseResult } from '../types.js';
 import { testNodeId } from './types.js';
 import type { RunArtifactIndexEntry } from './RunArtifactStore.js';
+import { TIMELINE_FILE_NAME } from '../viewer/timelineConstants.js';
 
 export type TestStatusEntry = RunArtifactIndexEntry;
 
@@ -79,8 +80,8 @@ export class TestStatusStore {
     const entry = index.get(testId);
     if (!entry) return [];
 
-    const timeline = await readJson(join(this.runsDir, entry.runId, 'timeline.json'))
-      ?? await readJson(join(this.runsDir, entry.resultRunId, 'timeline.json'));
+    const timeline = await readJson(join(this.runsDir, entry.runId, TIMELINE_FILE_NAME))
+      ?? await readJson(join(this.runsDir, entry.resultRunId, TIMELINE_FILE_NAME));
     const nodes: unknown[] = Array.isArray(timeline?.nodes) ? timeline.nodes : [];
 
     return nodes

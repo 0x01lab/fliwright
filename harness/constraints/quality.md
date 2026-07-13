@@ -22,6 +22,7 @@ choosing verification scope or interpreting a quality rule.
 | TypeScript workspace | `pnpm test`, `pnpm build`, or `pnpm lint` |
 | Dart workspace | `melos bootstrap`, `melos run analyze`, or `melos run test` |
 | Flutter VM smoke test | `FLIWRIGHT_VM_SERVICE_URL=... pnpm --filter @fliwright/e2e-tests test:smoke` |
+| Harness governance | `node scripts/verify-harness.mjs` |
 
 If `pub.dev` is unavailable, source `scripts/use-cn-pub-mirror.sh` in the
 current shell before Dart or Flutter package-resolution commands. It is
@@ -33,3 +34,15 @@ Never commit generated output, VM service URLs, device-specific state, or
 secrets. Local `.fliwright/config.json` is runtime state; open
 [../memory/runtime-configuration.md](../memory/runtime-configuration.md) when
 its precedence or shape matters.
+
+## Governance Gate
+
+Run `node scripts/verify-harness.mjs` whenever a dependency manifest, `tsconfig.json`,
+`pubspec.yaml`, cross-package import, or ledger entry changes. The command
+checks the approved stack, package boundaries, compiler invariants, the single
+pnpm lockfile, and accepted learning-entry headers.
+
+For a pull-request diff, run
+`node scripts/verify-harness.mjs --base <target-commit>`. Source and dependency changes
+must include an accepted learning-ledger entry. Create a deterministic candidate
+first with `node scripts/capture-harness-memory.mjs --base <target-commit> --slug <topic>`.

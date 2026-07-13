@@ -4,6 +4,7 @@ import type * as vscode from 'vscode';
 import { TraceStore } from '@fliwright/core';
 import type { RunResult, TestCaseResult } from '../types.js';
 import { testNodeId } from './types.js';
+import { TIMELINE_FILE_NAME } from '../viewer/timelineConstants.js';
 import {
   ensureProjectRunsRoot,
   projectRunsRoot,
@@ -181,7 +182,7 @@ function runIdsReferencedByIndex(index: Map<string, RunArtifactIndexEntry>): Set
 }
 
 async function isPrunableTestRunDir(runDir: string): Promise<boolean> {
-  const timeline = await readJson(join(runDir, 'timeline.json'));
+  const timeline = await readJson(join(runDir, TIMELINE_FILE_NAME));
   if (timeline) return timeline.mode !== 'script';
   return Boolean(await readJson(join(runDir, 'result.json')));
 }

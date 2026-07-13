@@ -1,4 +1,9 @@
-import { ensureFliwrightRunsRoot, FLIWRIGHT_RUNS_ROOT_ENV } from '@fliwright/core';
+import {
+  ensureFliwrightRunsRoot,
+  FLIWRIGHT_RUNS_ROOT_ENV,
+  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
+  TIMELINE_FILE_NAME,
+} from '@fliwright/core';
 import { resolveVmUrl } from '../vm-discovery.js';
 import { loadConfig } from '../config.js';
 import { formatPretty, formatJson, formatJunit, type CliFailureEntry, type CliRunResult } from '../reporter.js';
@@ -272,7 +277,7 @@ async function readTimelineSummaries(runsRoot: string, runId: string): Promise<N
         pages: nodes.filter((node) => node.kind === 'page').length,
         stepsPassed: nodes.filter((node) => node.kind === 'step' && node.status === 'passed').length,
         stepsFailed: nodes.filter((node) => node.kind === 'step' && node.status === 'failed').length,
-        screenshots: nodes.reduce((count, node) => count + (node.artifacts?.filter((artifact) => artifact.kind === 'screenshot').length ?? 0), 0),
+        screenshots: nodes.reduce((count, node) => count + (node.artifacts?.filter((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT).length ?? 0), 0),
         firstFailure: data.agentVisibleFailures?.[0],
       });
     } catch {
@@ -305,14 +310,14 @@ async function findTimelineFilesInRunDir(runDir: string): Promise<string[]> {
     for (const entry of entries) {
       const path = join(runDir, entry.name);
       if (entry.isDirectory()) {
-        const candidate = join(path, 'timeline.json');
+        const candidate = join(path, TIMELINE_FILE_NAME);
         try {
           await readFile(candidate, 'utf8');
           found.push(candidate);
         } catch {
           found.push(...await findTimelineFilesInRunDir(path));
         }
-      } else if (entry.isFile() && entry.name === 'timeline.json') {
+      } else if (entry.isFile() && entry.name === TIMELINE_FILE_NAME) {
         found.push(path);
       }
     }

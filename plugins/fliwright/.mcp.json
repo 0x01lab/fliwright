@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "fliwright": {
+      "command": "node",
+      "args": [
+        "../../packages/fliwright-mcp/dist/index.js"
+      ],
+      "env": {
+        "FLIWRIGHT_MCP_TOOL_PROFILE": "full"
+      }
+    }
+  }
+}

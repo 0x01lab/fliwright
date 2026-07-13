@@ -5,6 +5,12 @@ export type SendRequest = (method: string, params?: Record<string, unknown>) => 
 
 export type TextMatchMode = 'exact' | 'contains' | 'regex';
 
+export interface IconSelector {
+  codePoint: number;
+  fontFamily?: string;
+  fontPackage?: string;
+}
+
 export interface FilterCriteria {
   hasText?: string;
   hasTextContains?: string;
@@ -117,7 +123,7 @@ export type SelectorInput =
       };
       ancestor?: SelectorInput;
     }
-  | { icon: { codePoint: number; fontFamily?: string; fontPackage?: string }; ancestor?: SelectorInput }
+  | { icon: IconSelector; ancestor?: SelectorInput }
   | { tooltip: string; ancestor?: SelectorInput };
 
 export interface ProviderInfo {

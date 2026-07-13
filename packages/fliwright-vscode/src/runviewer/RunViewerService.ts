@@ -3,6 +3,13 @@ import * as vscode from 'vscode';
 import type { TimelineData, FliwrightLogEvent, TraceData } from '@fliwright/core';
 import { projectRunsRootCandidates } from '../testing/ProjectRunsRoot.js';
 import { RunArtifactStore, type RunArtifactIndexEntry } from '../testing/RunArtifactStore.js';
+import {
+  TIMELINE_FILE_NAME,
+  TIMELINE_LOG_EVENTS_FILE,
+  TIMELINE_LOGS_DIR,
+  TIMELINE_TRACE_DIR,
+  TIMELINE_TRACE_FILE,
+} from '../viewer/timelineConstants.js';
 
 export interface RunSummary {
   runDir: vscode.Uri;
@@ -225,7 +232,7 @@ export class RunViewerService {
   }
 
   private async loadTimeline(runDir: vscode.Uri): Promise<TimelineData | undefined> {
-    const uri = vscode.Uri.joinPath(runDir, 'timeline.json');
+    const uri = vscode.Uri.joinPath(runDir, TIMELINE_FILE_NAME);
     try {
       const buf = await vscode.workspace.fs.readFile(uri);
       const parsed = JSON.parse(Buffer.from(buf).toString('utf8')) as TimelineData;
@@ -237,7 +244,7 @@ export class RunViewerService {
   }
 
   private async loadLogs(runDir: vscode.Uri): Promise<FliwrightLogEvent[]> {
-    const uri = vscode.Uri.joinPath(runDir, 'logs', 'events.jsonl');
+    const uri = vscode.Uri.joinPath(runDir, TIMELINE_LOGS_DIR, TIMELINE_LOG_EVENTS_FILE);
     let buf: Uint8Array;
     try {
       buf = await vscode.workspace.fs.readFile(uri);
@@ -259,7 +266,7 @@ export class RunViewerService {
   }
 
   private async loadRunTrace(runDir: vscode.Uri): Promise<TraceData | undefined> {
-    const uri = vscode.Uri.joinPath(runDir, 'trace', 'trace.json');
+    const uri = vscode.Uri.joinPath(runDir, TIMELINE_TRACE_DIR, TIMELINE_TRACE_FILE);
     try {
       const buf = await vscode.workspace.fs.readFile(uri);
       const parsed = JSON.parse(Buffer.from(buf).toString('utf8')) as TraceData;

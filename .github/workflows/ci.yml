@@ -1,0 +1,76 @@
+name: Continuous integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  harness:
+    name: Harness governance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate Harness
+        if: github.event_name == 'pull_request'
+        run: node scripts/verify-harness.mjs --base "${{ github.event.pull_request.base.sha }}"
+
+      - name: Validate Harness baseline
+        if: github.event_name != 'pull_request'
+        run: node scripts/verify-harness.mjs
+
+  typescript:
+    name: TypeScript quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  dart:
+    name: Dart and Flutter quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Analyze and test Dart and Flutter projects
+        run: |
+          for project in \
+            packages/fliwright-bridge \
+            packages/fliwright-bridge-riverpod \
+            examples/form_demo \
+            examples/go_router_demo \
+            examples/riverpod_demo; do
+            (
+              cd "$project"
+              flutter pub get
+              flutter analyze .
+              flutter test
+            )
+          done

@@ -6,6 +6,13 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",
+    "harness:check": "node scripts/verify-harness.mjs",
+    "harness:capabilities": "node scripts/generate-harness-capabilities.mjs",
+    "harness:learn": "node scripts/capture-harness-memory.mjs",
+    "plugin:check": "node scripts/check-codex-plugin.mjs",
+    "plugin:marketplace": "node scripts/install-codex-plugin-marketplace.mjs",
+    "plugin:reload": "pnpm plugin:sync && node scripts/reload-codex-plugin.mjs",
+    "plugin:sync": "node scripts/sync-codex-plugin-skills.mjs",
     "simulate:flow-clean": "node scripts/simulate-flow-clean.mjs"
   },
   "devDependencies": {
