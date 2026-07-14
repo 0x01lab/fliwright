@@ -9,6 +9,16 @@ export interface FliwrightWorkspaceConfig {
   vmServiceUrl?: string;
   vmServiceUpdatedAt?: string;
   vmServiceSource?: string;
+  e2eAutomation?: FliwrightE2eAutomationConfig;
+  [key: string]: unknown;
+}
+
+export interface FliwrightE2eAutomationConfig {
+  enabled: boolean;
+  updatedAt?: string;
+  source?: string;
+  env?: Record<string, string>;
+  dartDefines?: string[];
   [key: string]: unknown;
 }
 
@@ -70,6 +80,26 @@ export async function clearWorkspaceVmServiceUrl(
   }, options.cwd);
 }
 
+export async function writeWorkspaceE2eAutomation(
+  enabled: boolean,
+  options: {
+    cwd?: string;
+    source?: string;
+    env?: Record<string, string>;
+    dartDefines?: readonly string[];
+  } = {},
+): Promise<FliwrightWorkspaceConfig> {
+  return writeWorkspaceConfig({
+    e2eAutomation: {
+      enabled,
+      source: options.source ?? 'unknown',
+      updatedAt: new Date().toISOString(),
+      ...(options.env ? { env: options.env } : {}),
+      ...(options.dartDefines ? { dartDefines: [...options.dartDefines] } : {}),
+    },
+  }, options.cwd);
+}
+
 function normalizeWorkspaceConfig(value: unknown): FliwrightWorkspaceConfig {
   if (!value || typeof value !== 'object') return { version: 1 };
   const {
@@ -77,13 +107,50 @@ function normalizeWorkspaceConfig(value: unknown): FliwrightWorkspaceConfig {
     vmServiceUrl,
     vmServiceUpdatedAt,
     vmServiceSource,
+    e2eAutomation,
     ...rest
   } = value as Record<string, unknown>;
+  const normalizedE2eAutomation = normalizeE2eAutomationConfig(e2eAutomation);
   return {
     ...rest,
     version: 1,
     ...(typeof vmServiceUrl === 'string' ? { vmServiceUrl } : {}),
     ...(typeof vmServiceUpdatedAt === 'string' ? { vmServiceUpdatedAt } : {}),
     ...(typeof vmServiceSource === 'string' ? { vmServiceSource } : {}),
+    ...(normalizedE2eAutomation ? { e2eAutomation: normalizedE2eAutomation } : {}),
   };
+}
+
+function normalizeE2eAutomationConfig(value: unknown): FliwrightE2eAutomationConfig | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const {
+    enabled,
+    updatedAt,
+    source,
+    env: rawEnv,
+    dartDefines: rawDartDefines,
+    ...rest
+  } = value as Record<string, unknown>;
+  if (typeof enabled !== 'boolean') return undefined;
+  const env = normalizeStringRecord(rawEnv);
+  const dartDefines = Array.isArray(rawDartDefines)
+    ? rawDartDefines.filter((entry): entry is string => typeof entry === 'string')
+    : undefined;
+  return {
+    ...rest,
+    enabled,
+    ...(typeof updatedAt === 'string' ? { updatedAt } : {}),
+    ...(typeof source === 'string' ? { source } : {}),
+    ...(env ? { env } : {}),
+    ...(dartDefines ? { dartDefines } : {}),
+  };
+}
+
+function normalizeStringRecord(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === 'string') result[key] = entry;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }

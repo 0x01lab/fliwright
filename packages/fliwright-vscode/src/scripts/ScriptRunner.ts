@@ -6,6 +6,7 @@ import type * as vscode from 'vscode';
 import { resolveVitestCli } from '../runner/VitestRunner.js';
 import type { RunResult, ScriptFileEntry } from '../types.js';
 import { createVitestScriptConfig } from './VitestScriptConfig.js';
+import { applyE2eAutomationEnv } from '../automation/E2eAutomation.js';
 
 export interface ScriptRunParams {
   workspaceRoot: vscode.Uri;
@@ -15,6 +16,7 @@ export interface ScriptRunParams {
   runId?: string;
   traceDir?: vscode.Uri;
   traceMode?: 'full' | 'on-failure' | 'off';
+  e2eAutomationEnabled?: boolean;
   onOutput?: (chunk: string, stream: 'stdout' | 'stderr') => void;
 }
 
@@ -22,9 +24,9 @@ export class ScriptRunner {
   async run(params: ScriptRunParams): Promise<RunResult> {
     const startedAt = Date.now();
     const relativeScript = path.relative(params.workspaceRoot.fsPath, params.script.uri.fsPath);
-    const env: NodeJS.ProcessEnv = {
+    const env: NodeJS.ProcessEnv = applyE2eAutomationEnv({
       ...process.env,
-    };
+    }, params.e2eAutomationEnabled);
     if (params.vmServiceUrl) {
       env.FLIWRIGHT_VM_SERVICE_URL = params.vmServiceUrl;
       env.FLIWRIGHT_VM_URL = params.vmServiceUrl;

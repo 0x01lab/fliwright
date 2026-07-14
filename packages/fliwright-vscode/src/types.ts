@@ -21,6 +21,7 @@ export interface ExtensionConfig {
   formOperationTimeoutMs: number;
   codeLensEnabled: boolean;
   scriptGlob: string;
+  e2eAutomationEnabled: boolean;
 }
 
 export interface MockIndexFile {

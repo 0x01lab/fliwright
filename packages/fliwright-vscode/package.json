@@ -60,6 +60,7 @@
     "onCommand:fliwright.disconnect",
     "onCommand:fliwright.discoverVmService",
     "onCommand:fliwright.configureMcp",
+    "onCommand:fliwright.toggleE2eAutomation",
     "onCommand:fliwright.takeScreenshot",
     "onCommand:fliwright.createMockConfig",
     "onCommand:fliwright.openMockConfig",
@@ -193,6 +194,11 @@
         "command": "fliwright.configureMcp",
         "title": "Fliwright: Configure MCP",
         "icon": "$(server-environment)"
+      },
+      {
+        "command": "fliwright.toggleE2eAutomation",
+        "title": "Fliwright: Toggle E2E Automation Environment",
+        "icon": "$(shield)"
       },
       {
         "command": "fliwright.takeScreenshot",
@@ -497,6 +503,9 @@
         {
           "command": "fliwright.tddTakeOver",
           "when": "config.fliwright.tddTakeOverEnabled"
+        },
+        {
+          "command": "fliwright.toggleE2eAutomation"
         }
       ],
       "view/title": [
@@ -521,9 +530,14 @@
           "group": "navigation@4"
         },
         {
-          "command": "fliwright.takeScreenshot",
+          "command": "fliwright.toggleE2eAutomation",
           "when": "view == fliwright.devices",
           "group": "navigation@5"
+        },
+        {
+          "command": "fliwright.takeScreenshot",
+          "when": "view == fliwright.devices",
+          "group": "navigation@6"
         },
         {
           "command": "fliwright.reloadMocks",

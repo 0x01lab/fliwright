@@ -135,6 +135,7 @@ let showQuickPickResultProvider: ((items: unknown[], options?: { canPickMany?: b
 let showSaveDialogResult: Uri | undefined = undefined;
 let registerCustomEditorProviderError: Error | undefined;
 const registerTreeDataProviderErrors = new Map<string, Error>();
+const configurationListeners: Array<Listener<{ affectsConfiguration(section: string): boolean }>> = [];
 export const __webviewPanels: Array<{
   webview: {
     cspSource: string;
@@ -159,6 +160,16 @@ export const workspace = {
     return {
       get<T>(key: string, defaultValue: T): T {
         return (key in configValue ? configValue[key] : defaultValue) as T;
+      },
+      update(key: string, value: unknown) {
+        configValue[key] = value;
+        const event = {
+          affectsConfiguration(section: string) {
+            return section === `fliwright.${key}` || section === key;
+          },
+        };
+        for (const listener of configurationListeners) listener(event);
+        return Promise.resolve();
       },
     };
   },
@@ -188,6 +199,14 @@ export const workspace = {
       .filter((entry) => entry.endsWith(suffix ?? ''))
       .map((entry) => Uri.file(path.join(dir, entry)));
   },
+  createFileSystemWatcher() {
+    return {
+      onDidCreate() { return { dispose() {} }; },
+      onDidChange() { return { dispose() {} }; },
+      onDidDelete() { return { dispose() {} }; },
+      dispose() {},
+    };
+  },
   async openTextDocument(input: Uri | { language?: string; content?: string }): Promise<{ uri?: Uri; languageId?: string; getText(): string }> {
     if (input instanceof Uri) {
       return { uri: input, getText: () => '' };
@@ -197,6 +216,15 @@ export const workspace = {
       getText: () => input.content ?? '',
     };
   },
+  onDidChangeConfiguration(listener: Listener<{ affectsConfiguration(section: string): boolean }>) {
+    configurationListeners.push(listener);
+    return {
+      dispose() {
+        const index = configurationListeners.indexOf(listener);
+        if (index >= 0) configurationListeners.splice(index, 1);
+      },
+    };
+  },
 };
 
 export const window = {
@@ -204,7 +232,7 @@ export const window = {
     return { appendLine() {}, show() {}, dispose() {} };
   },
   createStatusBarItem() {
-    const item = { text: '', command: undefined as string | undefined, show() {}, dispose() {} };
+    const item = { text: '', tooltip: undefined as string | undefined, command: undefined as string | undefined, show() {}, dispose() {} };
     (this as any)._lastStatusBarItem = item;
     return item;
   },
@@ -275,6 +303,9 @@ export const languages = {
 };
 
 export const debug = {
+  registerDebugConfigurationProvider() {
+    return { dispose() {} };
+  },
   registerDebugAdapterTrackerFactory() {
     return { dispose() {} };
   },

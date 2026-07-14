@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { FLIWRIGHT_RUNS_ROOT_ENV } from '@fliwright/core';
 import type { RunResult, TestCaseResult } from '../types.js';
 import type { RunParams, TestRunner } from './TestRunner.js';
+import { applyE2eAutomationEnv } from '../automation/E2eAutomation.js';
 
 export class VitestRunner implements TestRunner {
   async run(params: RunParams): Promise<RunResult> {
@@ -25,10 +26,10 @@ export function buildVitestArgs(params: RunParams): string[] {
 }
 
 export function buildRunEnv(params: RunParams): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
+  const env: NodeJS.ProcessEnv = applyE2eAutomationEnv({
     ...process.env,
     FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: params.failureContextDir.fsPath,
-  };
+  }, params.e2eAutomationEnabled);
   if (params.runsRoot) env[FLIWRIGHT_RUNS_ROOT_ENV] = params.runsRoot;
   if (params.runId) env.FLIWRIGHT_RUN_ID = params.runId;
   if (params.vmServiceUrl) env.FLIWRIGHT_VM_URL = params.vmServiceUrl;

@@ -97,6 +97,17 @@ describe('buildRunEnv', () => {
     expect(env.FLIWRIGHT_RUN_ID).toBe('2026-06-22T10-00-00');
   });
 
+  it('sets E2E automation environment variables when enabled', () => {
+    const env = buildRunEnv({
+      ...baseParams,
+      e2eAutomationEnabled: true,
+    });
+
+    expect(env.FLIWRIGHT_E2E_AUTOMATION).toBe('true');
+    expect(env.EXIO_AUTOMATION).toBe('true');
+    expect(env.EXIO_DISABLE_ALIYUN_CAPTCHA).toBe('true');
+  });
+
   it('uses run-integrated trace layout when trace is enabled', () => {
     const env = buildRunEnv({
       ...baseParams,

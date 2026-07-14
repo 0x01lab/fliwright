@@ -19,7 +19,21 @@ Expected shape:
   "version": 1,
   "vmServiceUrl": "ws://127.0.0.1:49864/token=/ws",
   "vmServiceSource": "VS Code connected",
-  "vmServiceUpdatedAt": "2026-06-21T13:33:31.913Z"
+  "vmServiceUpdatedAt": "2026-06-21T13:33:31.913Z",
+  "e2eAutomation": {
+    "enabled": true,
+    "source": "VS Code toggle",
+    "updatedAt": "2026-07-14T07:30:00.000Z",
+    "env": {
+      "FLIWRIGHT_E2E_AUTOMATION": "true",
+      "EXIO_AUTOMATION": "true",
+      "EXIO_DISABLE_ALIYUN_CAPTCHA": "true"
+    },
+    "dartDefines": [
+      "EXIO_E2E_AUTOMATION=true",
+      "EXIO_DISABLE_ALIYUN_CAPTCHA=true"
+    ]
+  }
 }
 ```
 
@@ -35,3 +49,7 @@ services, prefer this priority:
 
 Do not commit `.fliwright/config.json`; it is local runtime state and can contain
 machine-specific ports and VM Service tokens.
+
+For E2E automation, VS Code treats `.fliwright/config.json` as the only project
+source of truth. The VS Code toggle writes the full `e2eAutomation` object so
+humans and agents can inspect or edit the active automation environment directly.

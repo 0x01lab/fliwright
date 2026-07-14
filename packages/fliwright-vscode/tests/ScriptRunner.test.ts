@@ -53,6 +53,34 @@ describe('ScriptRunner', () => {
     await expect(readText(root, '.fliwright/script-state.txt')).resolves.toBe('mock-state-ready');
   });
 
+  it('passes E2E automation environment variables to node scripts when enabled', async () => {
+    const root = await createWorkspace();
+    await writeText(root, '.fliwright/scripts/e2e.mjs', [
+      'console.log(JSON.stringify({',
+      '  fliwright: process.env.FLIWRIGHT_E2E_AUTOMATION,',
+      '  exio: process.env.EXIO_AUTOMATION,',
+      '  aliyun: process.env.EXIO_DISABLE_ALIYUN_CAPTCHA,',
+      '}));',
+    ].join('\n'));
+
+    const result = await new ScriptRunner().run({
+      workspaceRoot: Uri.file(root),
+      script: {
+        kind: 'scriptFile',
+        uri: Uri.file(`${root}/.fliwright/scripts/e2e.mjs`),
+        label: 'e2e.mjs',
+      },
+      e2eAutomationEnabled: true,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(JSON.parse(result.stdout)).toEqual({
+      fliwright: 'true',
+      exio: 'true',
+      aliyun: 'true',
+    });
+  });
+
   it('runs @fliwright/vitest scripts through the Vitest runner', async () => {
     const root = await createWorkspace();
     await writeText(root, 'package.json', JSON.stringify({ type: 'module' }));
@@ -74,6 +102,7 @@ describe('ScriptRunner', () => {
       '  config: fs.readFileSync(configPath, "utf8"),',
       '  vmServiceUrl: process.env.FLIWRIGHT_VM_SERVICE_URL,',
       '  vmUrl: process.env.FLIWRIGHT_VM_URL,',
+      '  fliwrightE2eAutomation: process.env.FLIWRIGHT_E2E_AUTOMATION,',
       '}));',
     ].join('\n'));
 
@@ -85,6 +114,7 @@ describe('ScriptRunner', () => {
         label: 'auto.mjs',
       },
       vmServiceUrl: 'ws://127.0.0.1:52746/example=/ws',
+      e2eAutomationEnabled: true,
     });
 
     expect(result.passed).toBe(true);
@@ -104,6 +134,7 @@ describe('ScriptRunner', () => {
     expect(payload.config).toContain('fileParallelism: false');
     expect(payload.vmServiceUrl).toBe('ws://127.0.0.1:52746/example=/ws');
     expect(payload.vmUrl).toBe('ws://127.0.0.1:52746/example=/ws');
+    expect(payload.fliwrightE2eAutomation).toBe('true');
   });
 
   it('builds the VS Code terminal command without pnpm exec for @fliwright/vitest scripts', async () => {

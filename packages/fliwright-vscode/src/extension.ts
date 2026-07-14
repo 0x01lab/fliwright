@@ -11,9 +11,16 @@ import {
   readWorkspaceConfigSync,
   sanitizeFlowFileId,
   setConnectorDebugLog,
+  writeWorkspaceConfig,
   writeWorkspaceVmServiceUrl,
 } from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
+import {
+  E2E_AUTOMATION_DART_DEFINES,
+  E2E_AUTOMATION_ENV,
+  formatE2eAutomationDartDefines,
+  mergeE2eAutomationDartDefineArgs,
+} from './automation/E2eAutomation.js';
 import { FailureContextStore } from './failure/FailureContextStore.js';
 import { FlowFileService } from './flows/FlowFileService.js';
 import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug, dataSetLabels } from './form/FormHelperService.js';
@@ -33,6 +40,7 @@ import { clearFlutterMockRoutes, formatMockRuleDebug, SandboxService } from './s
 import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
+import { E2eAutomationStatusBarService } from './status/E2eAutomationStatusBarService.js';
 import type { FailureTreeEntry, FlowFileEntry, FormAnalyzeFieldEntry, FormRulesEntry, FormRulesFile, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunResult, ScriptFileEntry, StateProviderEntry } from './types.js';
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
 import { FlowsTreeProvider } from './views/FlowsTreeProvider.js';
@@ -110,6 +118,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const flowsTree = new FlowsTreeProvider();
   const stateTree = new StateTreeProvider();
   const statusBar = new StatusBarService();
+  const e2eAutomationStatusBar = new E2eAutomationStatusBarService(loadConfig().e2eAutomationEnabled);
   const failurePanel = new FailurePanel(context.extensionUri);
   const recordingPanel = new RecordingPanel(context.extensionUri, {
     onSetFrameIncluded: async (frameId, included) => {
@@ -157,6 +166,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(session);
   context.subscriptions.push(screenshotPreviewPanel);
   context.subscriptions.push(statusBar);
+  context.subscriptions.push(e2eAutomationStatusBar);
   context.subscriptions.push(
     stateProviderDocuments,
     vscode.workspace.registerTextDocumentContentProvider(STATE_PROVIDER_DOCUMENT_SCHEME, stateProviderDocuments),
@@ -166,6 +176,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     statusBar.setConnectionState(state);
     void vscode.commands.executeCommand('setContext', 'fliwright.connected', isActiveSessionState(state.status));
   }));
+  const syncE2eAutomationState = () => {
+    const enabled = loadConfig().e2eAutomationEnabled;
+    e2eAutomationStatusBar.setEnabled(enabled);
+    void updateE2eAutomationContext(enabled);
+  };
+  syncE2eAutomationState();
+  const workspaceConfigRoot = getWorkspaceRoot();
+  if (workspaceConfigRoot) {
+    const workspaceConfigWatcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(workspaceConfigRoot, '.fliwright/config.json'),
+    );
+    context.subscriptions.push(
+      workspaceConfigWatcher,
+      workspaceConfigWatcher.onDidCreate(syncE2eAutomationState),
+      workspaceConfigWatcher.onDidChange(syncE2eAutomationState),
+      workspaceConfigWatcher.onDidDelete(syncE2eAutomationState),
+    );
+  }
 
   let debugLogBuffer = '';
   let autoConnectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -283,6 +311,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   context.subscriptions.push(
+    vscode.debug.registerDebugConfigurationProvider('dart', {
+      resolveDebugConfiguration(_folder, debugConfiguration) {
+        if (!loadConfig().e2eAutomationEnabled) return debugConfiguration;
+        const nextConfiguration: vscode.DebugConfiguration = {
+          ...debugConfiguration,
+          toolArgs: mergeE2eAutomationDartDefineArgs(debugConfiguration.toolArgs),
+        };
+        output.appendLine('[Fliwright] Added E2E automation dart-defines to Dart debug launch.');
+        return nextConfiguration;
+      },
+    }),
     vscode.debug.registerDebugAdapterTrackerFactory('*', {
       createDebugAdapterTracker(debugSession) {
         const sessionIdentity = `${debugSession.type} ${debugSession.name}`;
@@ -470,6 +509,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         });
         await vscode.window.showTextDocument(document);
       });
+    }),
+    vscode.commands.registerCommand('fliwright.toggleE2eAutomation', async () => {
+      const root = requireWorkspaceRoot();
+      const current = loadConfig().e2eAutomationEnabled;
+      const next = !current;
+      await writeWorkspaceConfig({
+        e2eAutomation: {
+          enabled: next,
+          source: 'VS Code toggle',
+          updatedAt: new Date().toISOString(),
+          env: next ? E2E_AUTOMATION_ENV : {},
+          dartDefines: next ? [...E2E_AUTOMATION_DART_DEFINES] : [],
+        },
+      }, root.fsPath);
+      e2eAutomationStatusBar.setEnabled(next);
+      await updateE2eAutomationContext(next);
+      const state = next ? 'enabled' : 'disabled';
+      output.appendLine(`[Fliwright] E2E Automation Environment ${state} in .fliwright/config.json.`);
+      if (next) {
+        const dartDefines = formatE2eAutomationDartDefines();
+        vscode.window.showInformationMessage(
+          `E2E Automation enabled in .fliwright/config.json. Restart the Flutter app with ${dartDefines} so Exio can skip Aliyun captcha.`,
+        );
+      } else {
+        vscode.window.showInformationMessage('E2E Automation disabled in .fliwright/config.json.');
+      }
     }),
     vscode.commands.registerCommand('fliwright.takeScreenshot', async () => {
       await runCommand('Take App Screenshot', async () => {
@@ -1443,6 +1508,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
               failureContextDir,
               traceMode,
               traceDir: traceMode !== 'off' ? traceDir : undefined,
+              e2eAutomationEnabled: loadConfig().e2eAutomationEnabled,
               signal: abortController.signal,
             })
           ));
@@ -1536,6 +1602,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           runId,
           traceMode,
           traceDir: traceMode !== 'off' && scriptTraceDir ? vscode.Uri.file(scriptTraceDir) : undefined,
+          e2eAutomationEnabled: loadConfig().e2eAutomationEnabled,
           onOutput: appendScriptOutput,
         });
       } finally {
@@ -1609,6 +1676,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       watching: false,
     })));
   }
+}
+
+async function updateE2eAutomationContext(enabled: boolean): Promise<void> {
+  await vscode.commands.executeCommand('setContext', 'fliwright.e2eAutomationEnabled', enabled);
 }
 
 function stateProvidersEmptyMessage(status?: { observerInstalled: boolean; containerReady: boolean; providerCount: number }): string {
