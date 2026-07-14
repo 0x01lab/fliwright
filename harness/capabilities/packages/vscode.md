@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "8ac27a4f60351d44ae64127510f8d6dabd932824a4938ffc2114e0a66da287c5"
+source_fingerprint: "98316766d9902b8d6c2176539ba9161c47f8f8cbc1769eded0bc9da9efcd65ba"
 generated: true
 ---
 
@@ -157,6 +157,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/testing/types.ts`
 - `packages/fliwright-vscode/src/types.ts`
 - `packages/fliwright-vscode/src/viewer/ViewerPanel.ts`
+- `packages/fliwright-vscode/src/viewer/timelineConstants.ts`
 - `packages/fliwright-vscode/src/views/DevicesTreeProvider.ts`
 - `packages/fliwright-vscode/src/views/FlowsTreeProvider.ts`
 - `packages/fliwright-vscode/src/views/FormDataTreeProvider.ts`

@@ -1,7 +1,7 @@
 ---
 package: "fliwright_bridge"
 path: "packages/fliwright-bridge"
-source_fingerprint: "0dbfd70f0df3d7a5de4f9ac170ffd788c90ea97586050a49d54a8cd2c0594400"
+source_fingerprint: "311a6b5cf3dfcd62a4a7cdcbed59e6e73d44a95f036a10b53ae844ef5648bc34"
 generated: true
 ---
 
@@ -122,6 +122,7 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `ExtractedSemantics`
 - `FliwrightAppCapability`
 - `FliwrightAppInstance`
+- `FliwrightAuthCapability`
 - `FliwrightBridge`
 - `FliwrightDioMockInterceptor`
 - `FliwrightFormControl`

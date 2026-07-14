@@ -3,9 +3,35 @@ import 'dart:convert';
 
 import '../extension_registry.dart';
 
-typedef FliwrightAppSnapshotProvider =
-    FutureOr<Map<String, Object?>> Function();
+typedef FliwrightAppSnapshotProvider = FutureOr<Map<String, Object?>>
+    Function();
 typedef FliwrightCapabilityMethod = FutureOr<Object?> Function(Object? input);
+
+class FliwrightAuthCapability extends FliwrightAppCapability {
+  FliwrightAuthCapability({
+    String name = 'auth',
+    String? description,
+    FliwrightCapabilityMethod? getStatus,
+    FliwrightCapabilityMethod? seedLoggedIn,
+    FliwrightCapabilityMethod? clearSession,
+    Map<String, FliwrightCapabilityMethod>? methods,
+  }) : super(
+          name: name,
+          description: description ?? 'Authentication test capability',
+          methods: {
+            if (getStatus != null) 'getStatus': getStatus,
+            if (seedLoggedIn != null) 'seedLoggedIn': seedLoggedIn,
+            if (clearSession != null) 'clearSession': clearSession,
+            ...?methods,
+          },
+        ) {
+    if (methodNames.isEmpty) {
+      throw ArgumentError(
+        'FliwrightAuthCapability must register at least one method',
+      );
+    }
+  }
+}
 
 class FliwrightAppCapability {
   FliwrightAppCapability({
@@ -43,10 +69,10 @@ class FliwrightAppCapability {
   }
 
   Map<String, Object?> toJson() => {
-    'name': name,
-    if (description != null) 'description': description,
-    'methods': methodNames,
-  };
+        'name': name,
+        if (description != null) 'description': description,
+        'methods': methodNames,
+      };
 }
 
 class FliwrightAppInstance {

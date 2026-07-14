@@ -199,14 +199,6 @@ export const workspace = {
       .filter((entry) => entry.endsWith(suffix ?? ''))
       .map((entry) => Uri.file(path.join(dir, entry)));
   },
-  createFileSystemWatcher() {
-    return {
-      onDidCreate() { return { dispose() {} }; },
-      onDidChange() { return { dispose() {} }; },
-      onDidDelete() { return { dispose() {} }; },
-      dispose() {},
-    };
-  },
   async openTextDocument(input: Uri | { language?: string; content?: string }): Promise<{ uri?: Uri; languageId?: string; getText(): string }> {
     if (input instanceof Uri) {
       return { uri: input, getText: () => '' };

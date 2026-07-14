@@ -157,6 +157,7 @@ export type {
   AppSnapshot,
   AuthCapability,
   AuthStatus,
+  SeedLoggedInInput,
 } from './AppInstance.js';
 export { FliwrightDriver } from './Driver.js';
 export type { DriverOptions } from './Driver.js';
@@ -167,10 +168,9 @@ export {
   readWorkspaceConfigSync,
   workspaceConfigPath,
   writeWorkspaceConfig,
-  writeWorkspaceE2eAutomation,
   writeWorkspaceVmServiceUrl,
 } from './WorkspaceConfig.js';
-export type { FliwrightE2eAutomationConfig, FliwrightWorkspaceConfig } from './WorkspaceConfig.js';
+export type { FliwrightWorkspaceConfig } from './WorkspaceConfig.js';
 
 export { Page } from './Page.js';
 export type {

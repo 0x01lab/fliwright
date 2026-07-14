@@ -134,4 +134,52 @@ void main() {
       expect(result['error'], contains('Capability "auth" is not registered'));
     },
   );
+
+  test('auth capability standardizes seeded login handlers', () async {
+    final calls = <Object?>[];
+    FliwrightAppInstance.registerCapability(
+      FliwrightAuthCapability(
+        seedLoggedIn: (input) {
+          calls.add(input);
+          return {
+            'isAuthenticated': true,
+            'userId': (input as Map)['userId'],
+          };
+        },
+        clearSession: (_) => {'isAuthenticated': false},
+      ),
+    );
+    await FliwrightBridge.initForDioMock();
+
+    final capabilities = await FliwrightBridge.registry.invoke(
+      'ext.fliwright.app.capabilities',
+      {},
+    );
+    expect(capabilities['capabilities'], [
+      {
+        'name': 'auth',
+        'description': 'Authentication test capability',
+        'methods': ['seedLoggedIn', 'clearSession'],
+      },
+    ]);
+
+    final seeded = await FliwrightBridge.registry.invoke(
+      'ext.fliwright.app.invoke',
+      {
+        'capability': 'auth',
+        'method': 'seedLoggedIn',
+        'input': jsonEncode({'userId': 'u_1'}),
+      },
+    );
+
+    expect(seeded['success'], isTrue);
+    expect(seeded['result'], {'isAuthenticated': true, 'userId': 'u_1'});
+    expect(calls, [
+      {'userId': 'u_1'},
+    ]);
+  });
+
+  test('auth capability requires at least one handler', () {
+    expect(() => FliwrightAuthCapability(), throwsArgumentError);
+  });
 }

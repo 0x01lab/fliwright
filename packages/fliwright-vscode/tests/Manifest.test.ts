@@ -52,7 +52,6 @@ describe('VS Code manifest', () => {
       'fliwright.copyStateProviderValue',
       'fliwright.openRiverpodSetupHelp',
       'fliwright.takeScreenshot',
-      'fliwright.toggleE2eAutomation',
     ]) {
       expect(commands.has(command), command).toBe(true);
     }
@@ -70,10 +69,6 @@ describe('VS Code manifest', () => {
       type: 'boolean',
       default: true,
     });
-  });
-
-  it('does not expose E2E automation as a VS Code setting', () => {
-    expect(manifest.contributes.configuration.properties['fliwright.e2eAutomationEnabled']).toBeUndefined();
   });
 
   it('does not expose settings that auto-activate mock rules', () => {

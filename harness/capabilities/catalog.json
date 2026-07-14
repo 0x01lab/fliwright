@@ -63,7 +63,7 @@
         "form",
         "interaction"
       ],
-      "sourceFingerprint": "1aacd8563c865c959bc89693570da571bf8204f44303350caccbf8f7e0ec9283"
+      "sourceFingerprint": "211cd357dfd2656152c832e4d1852627f781d8ac98b3ca40a68753298977981d"
     },
     {
       "name": "@fliwright/core",
@@ -163,6 +163,7 @@
         "packages/fliwright-core/src/timeline/FlowRuntime.ts",
         "packages/fliwright-core/src/timeline/TimelineArtifactStore.ts",
         "packages/fliwright-core/src/timeline/TimelineRecorder.ts",
+        "packages/fliwright-core/src/timeline/constants.ts",
         "packages/fliwright-core/src/timeline/types.ts",
         "packages/fliwright-core/src/types.ts",
         "packages/fliwright-core/src/wire-protocol.ts"
@@ -458,6 +459,7 @@
         "SafeRepairAction",
         "sanitizeFlowFileId",
         "sanitizeProjectPathName",
+        "SeedLoggedInInput",
         "SelectController",
         "Selector",
         "SelectorAst",
@@ -482,6 +484,21 @@
         "StateAdapter",
         "StructuredLogger",
         "TestResult",
+        "TIMELINE_ARTIFACT_KIND_AI",
+        "TIMELINE_ARTIFACT_KIND_DIAGNOSTICS",
+        "TIMELINE_ARTIFACT_KIND_LOG",
+        "TIMELINE_ARTIFACT_KIND_SCREENSHOT",
+        "TIMELINE_ARTIFACT_KIND_SNAPSHOT",
+        "TIMELINE_ARTIFACT_KIND_TRACE",
+        "TIMELINE_ARTIFACTS_DIR",
+        "TIMELINE_DIAGNOSTICS_DIR",
+        "TIMELINE_FILE_NAME",
+        "TIMELINE_LOG_EVENTS_FILE",
+        "TIMELINE_LOGS_DIR",
+        "TIMELINE_SCREENSHOTS_DIR",
+        "TIMELINE_SNAPSHOTS_DIR",
+        "TIMELINE_TRACE_DIR",
+        "TIMELINE_TRACE_FILE",
         "TimelineArtifactRef",
         "TimelineArtifactStore",
         "TimelineArtifactStoreOptions",
@@ -525,7 +542,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "fcd0ae3b51098d7d84fd36aa69d34ceac2cc633a1a3de39d1c776c77380d7d28"
+      "sourceFingerprint": "2b470552ad60e11a35e6890a94b14c2c70e4950afb8b4faa85d5030ff90c60b6"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -696,7 +713,7 @@
         "fliwright_type",
         "fliwright_wait"
       ],
-      "sourceFingerprint": "1ec36f96fd4db6f9f8f7e071dedd22eb7dc9ae856f6f1fe1be681c631d23a3f8"
+      "sourceFingerprint": "fe7c236d296d977791498592b95c7c82577cefeb6e1cd6ace34088583fde16ad"
     },
     {
       "name": "@fliwright/plugin-riverpod",
@@ -988,6 +1005,7 @@
         "ExtractedSemantics",
         "FliwrightAppCapability",
         "FliwrightAppInstance",
+        "FliwrightAuthCapability",
         "FliwrightBridge",
         "FliwrightDioMockInterceptor",
         "FliwrightFormControl",
@@ -1100,7 +1118,7 @@
         "ext.fliwright.storage.reset",
         "ext.fliwright.type"
       ],
-      "sourceFingerprint": "0dbfd70f0df3d7a5de4f9ac170ffd788c90ea97586050a49d54a8cd2c0594400"
+      "sourceFingerprint": "311a6b5cf3dfcd62a4a7cdcbed59e6e73d44a95f036a10b53ae844ef5648bc34"
     },
     {
       "name": "fliwright_bridge_riverpod",
@@ -1193,6 +1211,7 @@
         "packages/fliwright-vscode/src/testing/types.ts",
         "packages/fliwright-vscode/src/types.ts",
         "packages/fliwright-vscode/src/viewer/ViewerPanel.ts",
+        "packages/fliwright-vscode/src/viewer/timelineConstants.ts",
         "packages/fliwright-vscode/src/views/DevicesTreeProvider.ts",
         "packages/fliwright-vscode/src/views/FlowsTreeProvider.ts",
         "packages/fliwright-vscode/src/views/FormDataTreeProvider.ts",
@@ -1311,7 +1330,7 @@
         "fliwright.state",
         "fliwright.tests"
       ],
-      "sourceFingerprint": "8ac27a4f60351d44ae64127510f8d6dabd932824a4938ffc2114e0a66da287c5"
+      "sourceFingerprint": "98316766d9902b8d6c2176539ba9161c47f8f8cbc1769eded0bc9da9efcd65ba"
     }
   ]
 }

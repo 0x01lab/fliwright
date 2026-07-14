@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "fcd0ae3b51098d7d84fd36aa69d34ceac2cc633a1a3de39d1c776c77380d7d28"
+source_fingerprint: "2b470552ad60e11a35e6890a94b14c2c70e4950afb8b4faa85d5030ff90c60b6"
 generated: true
 ---
 
@@ -326,6 +326,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `SafeRepairAction`
 - `sanitizeFlowFileId`
 - `sanitizeProjectPathName`
+- `SeedLoggedInInput`
 - `SelectController`
 - `Selector`
 - `SelectorAst`
@@ -350,6 +351,21 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `StateAdapter`
 - `StructuredLogger`
 - `TestResult`
+- `TIMELINE_ARTIFACT_KIND_AI`
+- `TIMELINE_ARTIFACT_KIND_DIAGNOSTICS`
+- `TIMELINE_ARTIFACT_KIND_LOG`
+- `TIMELINE_ARTIFACT_KIND_SCREENSHOT`
+- `TIMELINE_ARTIFACT_KIND_SNAPSHOT`
+- `TIMELINE_ARTIFACT_KIND_TRACE`
+- `TIMELINE_ARTIFACTS_DIR`
+- `TIMELINE_DIAGNOSTICS_DIR`
+- `TIMELINE_FILE_NAME`
+- `TIMELINE_LOG_EVENTS_FILE`
+- `TIMELINE_LOGS_DIR`
+- `TIMELINE_SCREENSHOTS_DIR`
+- `TIMELINE_SNAPSHOTS_DIR`
+- `TIMELINE_TRACE_DIR`
+- `TIMELINE_TRACE_FILE`
 - `TimelineArtifactRef`
 - `TimelineArtifactStore`
 - `TimelineArtifactStoreOptions`
@@ -471,6 +487,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/timeline/FlowRuntime.ts`
 - `packages/fliwright-core/src/timeline/TimelineArtifactStore.ts`
 - `packages/fliwright-core/src/timeline/TimelineRecorder.ts`
+- `packages/fliwright-core/src/timeline/constants.ts`
 - `packages/fliwright-core/src/timeline/types.ts`
 - `packages/fliwright-core/src/types.ts`
 - `packages/fliwright-core/src/wire-protocol.ts`

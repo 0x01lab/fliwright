@@ -26,8 +26,18 @@ export interface AuthStatus {
   metadata?: Record<string, unknown>;
 }
 
+export interface SeedLoggedInInput {
+  preset?: string;
+  userId?: string;
+  roles?: string[];
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface AuthCapability {
   getStatus(): Promise<AuthStatus>;
+  seedLoggedIn?(input?: SeedLoggedInInput): Promise<AuthStatus | Record<string, unknown> | void>;
+  clearSession?(): Promise<AuthStatus | Record<string, unknown> | void>;
   signIn?(input?: unknown): Promise<void>;
   signOut?(): Promise<void>;
 }
@@ -96,6 +106,19 @@ export class AppInstance {
   async hasCapability(name: string): Promise<boolean> {
     const info = await this.info();
     return info.capabilities.includes(name);
+  }
+
+  async seedLoggedIn<TInput = SeedLoggedInInput, TOutput = AuthStatus | Record<string, unknown> | void>(
+    input?: TInput,
+    options: { capability?: string } = {},
+  ): Promise<TOutput> {
+    return this.invoke<TInput, TOutput>(options.capability ?? 'auth', 'seedLoggedIn', input);
+  }
+
+  async clearSession<TOutput = AuthStatus | Record<string, unknown> | void>(
+    options: { capability?: string } = {},
+  ): Promise<TOutput> {
+    return this.invoke<undefined, TOutput>(options.capability ?? 'auth', 'clearSession');
   }
 
   async getCapability<TCapability extends object = Record<string, unknown>>(

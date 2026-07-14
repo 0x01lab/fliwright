@@ -1,6 +1,5 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { readWorkspaceConfigSync } from '@fliwright/core';
 import type { ExtensionConfig } from './types.js';
 
 export function getWorkspaceRoot(): vscode.Uri | undefined {
@@ -9,9 +8,6 @@ export function getWorkspaceRoot(): vscode.Uri | undefined {
 
 export function loadConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('fliwright');
-  const workspaceRoot = getWorkspaceRoot();
-  const workspaceConfig = workspaceRoot ? readWorkspaceConfigSync(workspaceRoot.fsPath) : undefined;
-  const workspaceE2eAutomationEnabled = getWorkspaceE2eAutomationEnabled(workspaceConfig);
   return {
     mockDir: config.get<string>('mockDir', '.fliwright/mocks'),
     mockIndex: config.get<string>('mockIndex', '.fliwright/mocks/mock-index.json'),
@@ -30,16 +26,7 @@ export function loadConfig(): ExtensionConfig {
     formOperationTimeoutMs: config.get<number>('formOperationTimeoutMs', 60_000),
     codeLensEnabled: config.get<boolean>('codeLensEnabled', true),
     scriptGlob: config.get<string>('scriptGlob', '.fliwright/scripts/**/*.{js,mjs,cjs}'),
-    e2eAutomationEnabled: workspaceE2eAutomationEnabled ?? false,
   };
-}
-
-function getWorkspaceE2eAutomationEnabled(config: unknown): boolean | undefined {
-  if (!config || typeof config !== 'object') return undefined;
-  const e2eAutomation = (config as { e2eAutomation?: unknown }).e2eAutomation;
-  if (!e2eAutomation || typeof e2eAutomation !== 'object') return undefined;
-  const enabled = (e2eAutomation as { enabled?: unknown }).enabled;
-  return typeof enabled === 'boolean' ? enabled : undefined;
 }
 
 export function resolveWorkspacePath(root: vscode.Uri, value: string): vscode.Uri {

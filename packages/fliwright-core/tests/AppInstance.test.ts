@@ -118,6 +118,63 @@ describe('AppInstance', () => {
     });
   });
 
+  it('provides convenience helpers for seeded auth state', async () => {
+    const protocol = createProtocolMock();
+    const invocations: Array<Record<string, unknown>> = [];
+    protocol.mockExtension('ext.fliwright.app.invoke', (params) => {
+      invocations.push(params);
+      if (params.method === 'seedLoggedIn') {
+        expect(JSON.parse(params.input)).toEqual({
+          preset: 'standard-user',
+          userId: 'u_1',
+        });
+        return {
+          success: true,
+          result: { isAuthenticated: true, userId: 'u_1' },
+        };
+      }
+      return {
+        success: true,
+        result: { isAuthenticated: false },
+      };
+    });
+    const driver = new FliwrightDriver();
+    await driver.attachMockConnector(protocol.ws);
+
+    await expect(driver.app.seedLoggedIn({
+      preset: 'standard-user',
+      userId: 'u_1',
+    })).resolves.toEqual({
+      isAuthenticated: true,
+      userId: 'u_1',
+    });
+    await expect(driver.app.clearSession()).resolves.toEqual({
+      isAuthenticated: false,
+    });
+    expect(invocations.map((entry) => [entry.capability, entry.method])).toEqual([
+      ['auth', 'seedLoggedIn'],
+      ['auth', 'clearSession'],
+    ]);
+  });
+
+  it('allows seeded auth helpers to target app-specific capability names', async () => {
+    const protocol = createProtocolMock();
+    protocol.mockExtension('ext.fliwright.app.invoke', (params) => {
+      expect(params.capability).toBe('exio.auth');
+      expect(params.method).toBe('seedLoggedIn');
+      return {
+        success: true,
+        result: { ok: true },
+      };
+    });
+    const driver = new FliwrightDriver();
+    await driver.attachMockConnector(protocol.ws);
+
+    await expect(
+      driver.app.seedLoggedIn({ preset: 'standard-user' }, { capability: 'exio.auth' }),
+    ).resolves.toEqual({ ok: true });
+  });
+
   it('throws when a capability invocation returns an extension error payload', async () => {
     const protocol = createProtocolMock();
     protocol.mockExtension('ext.fliwright.app.invoke', () => ({
