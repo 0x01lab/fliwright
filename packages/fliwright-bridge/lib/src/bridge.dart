@@ -69,7 +69,7 @@ class FliwrightBridge {
     _router = router;
     if (_initialized) return;
     _initialized = true;
-    _warnIfNotDebugMode();
+    _warnIfReleaseMode();
 
     _registerPingAndHandshake();
 
@@ -124,7 +124,7 @@ class FliwrightBridge {
     _router = router;
     if (_initialized) return;
     _initialized = true;
-    _warnIfNotDebugMode();
+    _warnIfReleaseMode();
 
     _registerPingAndHandshake();
 
@@ -170,6 +170,8 @@ class FliwrightBridge {
         'compatible': clientVersion <= 1,
         'initialized': _initialized,
         'debugMode': kDebugMode,
+        'profileMode': kProfileMode,
+        'releaseMode': kReleaseMode,
         'dartSdkVersion': dartSdkVersion,
         'bridgeCapabilities': {
           'recordingPointerEvents': true,
@@ -193,11 +195,11 @@ class FliwrightBridge {
     });
   }
 
-  static void _warnIfNotDebugMode() {
-    if (kDebugMode) return;
+  static void _warnIfReleaseMode() {
+    if (!kReleaseMode) return;
     debugPrint(
-      '[fliwright] Warning: FliwrightBridge was initialized outside debug mode. '
-      'Guard setup with kDebugMode so release builds can tree-shake it.',
+      '[fliwright] Warning: FliwrightBridge was initialized in release mode. '
+      'Guard setup with kReleaseMode so release builds can tree-shake it.',
     );
   }
 

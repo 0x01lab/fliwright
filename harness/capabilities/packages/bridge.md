@@ -1,7 +1,7 @@
 ---
 package: "fliwright_bridge"
 path: "packages/fliwright-bridge"
-source_fingerprint: "311a6b5cf3dfcd62a4a7cdcbed59e6e73d44a95f036a10b53ae844ef5648bc34"
+source_fingerprint: "343d781eb80937242469559d897a4a37b97a3d1fd270904a91c31ad42d602c9a"
 generated: true
 ---
 
@@ -15,7 +15,7 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 
 ### May Depend On
 
-- None
+- `fliwright_design_qa`
 
 ### Must Not Own
 
@@ -82,6 +82,7 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `app_instance`
 - `capture_frame`
 - `context`
+- `design_qa`
 - `diagnostics`
 - `dio_mock_extension`
 - `dio_mock_interceptor`
@@ -124,6 +125,7 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `FliwrightAppInstance`
 - `FliwrightAuthCapability`
 - `FliwrightBridge`
+- `FliwrightDesignQaExtension`
 - `FliwrightDioMockInterceptor`
 - `FliwrightFormControl`
 - `FliwrightFormOption`
@@ -167,6 +169,7 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `packages/fliwright-bridge/lib/src/extensions/app_instance.dart`
 - `packages/fliwright-bridge/lib/src/extensions/capture_frame.dart`
 - `packages/fliwright-bridge/lib/src/extensions/context.dart`
+- `packages/fliwright-bridge/lib/src/extensions/design_qa.dart`
 - `packages/fliwright-bridge/lib/src/extensions/diagnostics.dart`
 - `packages/fliwright-bridge/lib/src/extensions/dio_mock_extension.dart`
 - `packages/fliwright-bridge/lib/src/extensions/dio_mock_interceptor.dart`

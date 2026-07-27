@@ -5,6 +5,7 @@ export 'src/debug_value_encoder.dart';
 export 'src/extensions/app_instance.dart';
 export 'src/extensions/dio_mock_extension.dart';
 export 'src/extensions/dio_mock_interceptor.dart';
+export 'src/extensions/design_qa.dart';
 export 'src/extensions/gesture.dart';
 export 'src/extensions/http_overrides.dart';
 export 'src/extensions/hive_mock_rule_storage.dart';

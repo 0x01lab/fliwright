@@ -14,6 +14,7 @@ coverage/
 .vscode-test/
 *.log
 /packages/fliwright-bridge/pubspec.lock
+/packages/fliwright-design-qa/pubspec.lock
 .codex/
 .superpowers/
 docs/features

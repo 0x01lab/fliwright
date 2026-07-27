@@ -24,6 +24,9 @@ void main() {
       'ext.fliwright.handshake',
       {'protocolVersion': '1'},
     );
+    expect(handshake['debugMode'], isA<bool>());
+    expect(handshake['profileMode'], isA<bool>());
+    expect(handshake['releaseMode'], isA<bool>());
     final capabilities =
         handshake['bridgeCapabilities'] as Map<dynamic, dynamic>;
     expect(capabilities['timelineContext'], isTrue);
@@ -37,9 +40,11 @@ void main() {
     ContextExtension.register(registry);
     await tester.pumpWidget(
       const MaterialApp(
-        home: TextField(
-          key: Key('email'),
-          decoration: InputDecoration(labelText: 'Email'),
+        home: Scaffold(
+          body: TextField(
+            key: Key('email'),
+            decoration: InputDecoration(labelText: 'Email'),
+          ),
         ),
       ),
     );

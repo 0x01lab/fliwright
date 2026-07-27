@@ -10,6 +10,8 @@
     "test:mock-e2e": "vitest run mock-api-e2e.test.ts",
     "test:form-mock": "vitest run form-mock-e2e.test.ts",
     "test:go-router": "vitest run go-router-navigation-e2e.test.ts",
+    "test:design-qa": "pnpm --filter @fliwright/core build && vitest run design-qa-smoke.test.ts",
+    "test:design-qa:auto": "node scripts/run-design-qa-smoke.mjs",
     "test:exio": "vitest run exio-app-e2e.test.ts"
   },
   "dependencies": {

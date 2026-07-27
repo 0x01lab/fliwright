@@ -63,7 +63,7 @@
         "form",
         "interaction"
       ],
-      "sourceFingerprint": "211cd357dfd2656152c832e4d1852627f781d8ac98b3ca40a68753298977981d"
+      "sourceFingerprint": "61c1cdc269d96baff1db204e604d15d4e1613c5ab084e4f8a7642b44fa9feea8"
     },
     {
       "name": "@fliwright/core",
@@ -88,6 +88,7 @@
         "packages/fliwright-core/src/AssertionSuggester.ts",
         "packages/fliwright-core/src/CodeGenerator.ts",
         "packages/fliwright-core/src/DartCodeGenerator.ts",
+        "packages/fliwright-core/src/DesignQaClient.ts",
         "packages/fliwright-core/src/Driver.ts",
         "packages/fliwright-core/src/EventAggregator.ts",
         "packages/fliwright-core/src/FailureCollector.ts",
@@ -261,6 +262,18 @@
         "createNoopLogger",
         "DartCodeGenerator",
         "DecodedPng",
+        "DesignQaCaptureCommandResult",
+        "DesignQaCaptureResult",
+        "DesignQaClient",
+        "DesignQaControllerState",
+        "DesignQaDiagnosticsOptions",
+        "DesignQaDiagnosticsResult",
+        "DesignQaExtensionResult",
+        "DesignQaPairingInfo",
+        "DesignQaPairOptions",
+        "DesignQaPairResult",
+        "DesignQaPeerServerInfo",
+        "DesignQaSnapshot",
         "DriverOptions",
         "ensureFliwrightRunsRoot",
         "EnsureFliwrightRunsRootOptions",
@@ -542,7 +555,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "2b470552ad60e11a35e6890a94b14c2c70e4950afb8b4faa85d5030ff90c60b6"
+      "sourceFingerprint": "7a275785fcbf5208b23f30f5341b119284be3e0f350f3ccc7337803fe88e4c35"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -562,6 +575,8 @@
         "Flutter VM smoke tests"
       ],
       "sourceFiles": [
+        "e2e/design-qa-smoke-runner.test.ts",
+        "e2e/design-qa-smoke.test.ts",
         "e2e/exio-app-e2e.test.ts",
         "e2e/form-fill-e2e.test.ts",
         "e2e/form-mock-e2e.test.ts",
@@ -574,7 +589,7 @@
       "publicExports": [],
       "packageEntrypoints": [],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "2c42ccbdeca71053039e47418c5975257b823512562a9a6ea724a5ca3759316a"
+      "sourceFingerprint": "0419d9c6022e5ab7e4abd9915dca5474fca66c563862b994138db5064953f44f"
     },
     {
       "name": "@fliwright/mcp",
@@ -713,7 +728,7 @@
         "fliwright_type",
         "fliwright_wait"
       ],
-      "sourceFingerprint": "fe7c236d296d977791498592b95c7c82577cefeb6e1cd6ace34088583fde16ad"
+      "sourceFingerprint": "4e043937a0a7188160349425912c9f63e646bbc1c2613f277539416d94822b9f"
     },
     {
       "name": "@fliwright/plugin-riverpod",
@@ -744,7 +759,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "a84e105326ebbb515ecc5e55fe8d26b8ff2147b8a6d8a28692c6d74e2ab9e284"
+      "sourceFingerprint": "715afe8b250c8bd4edd48978566a66a29a2d2dbaf2e4a20000ed4103c0f589be"
     },
     {
       "name": "@fliwright/tdd",
@@ -893,7 +908,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "2b20cad303ead331884344789a6565e57c2a5301463782f708435a4401850230"
+      "sourceFingerprint": "7c608b3c2e9b0a082184824231301f047c001f7c867d125648f1c47affb1d5bb"
     },
     {
       "name": "@fliwright/vitest",
@@ -940,7 +955,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "2a3ef751bc4cf90344446a26719a5976ce297104c77f04739dfb29fb396a0308"
+      "sourceFingerprint": "d3488901e00dfd92f6c056a57b01d4f68a4cc4047caada3fabbcaca4117ed44e"
     },
     {
       "name": "fliwright_bridge",
@@ -952,7 +967,9 @@
         "CLI or MCP transport",
         "editor UX"
       ],
-      "mayDependOn": [],
+      "mayDependOn": [
+        "fliwright_design_qa"
+      ],
       "ownedCapabilities": [
         "Flutter app instrumentation",
         "VM service extensions"
@@ -967,6 +984,7 @@
         "packages/fliwright-bridge/lib/src/extensions/app_instance.dart",
         "packages/fliwright-bridge/lib/src/extensions/capture_frame.dart",
         "packages/fliwright-bridge/lib/src/extensions/context.dart",
+        "packages/fliwright-bridge/lib/src/extensions/design_qa.dart",
         "packages/fliwright-bridge/lib/src/extensions/diagnostics.dart",
         "packages/fliwright-bridge/lib/src/extensions/dio_mock_extension.dart",
         "packages/fliwright-bridge/lib/src/extensions/dio_mock_interceptor.dart",
@@ -1007,6 +1025,7 @@
         "FliwrightAppInstance",
         "FliwrightAuthCapability",
         "FliwrightBridge",
+        "FliwrightDesignQaExtension",
         "FliwrightDioMockInterceptor",
         "FliwrightFormControl",
         "FliwrightFormOption",
@@ -1046,6 +1065,7 @@
         "app_instance",
         "capture_frame",
         "context",
+        "design_qa",
         "diagnostics",
         "dio_mock_extension",
         "dio_mock_interceptor",
@@ -1118,7 +1138,7 @@
         "ext.fliwright.storage.reset",
         "ext.fliwright.type"
       ],
-      "sourceFingerprint": "311a6b5cf3dfcd62a4a7cdcbed59e6e73d44a95f036a10b53ae844ef5648bc34"
+      "sourceFingerprint": "343d781eb80937242469559d897a4a37b97a3d1fd270904a91c31ad42d602c9a"
     },
     {
       "name": "fliwright_bridge_riverpod",
@@ -1143,7 +1163,67 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-bridge-riverpod/lib/fliwright_bridge_riverpod.dart"
       ],
-      "sourceFingerprint": "c4818f6c970bd9a0ca39a48537e828b15d73f3034e532db4869acc896a52c60a"
+      "sourceFingerprint": "223f23af21f9d38a1482fc5fe29c88389189d9a12061dac5cb711334ad0759f9"
+    },
+    {
+      "name": "fliwright_design_qa",
+      "path": "packages/fliwright-design-qa",
+      "kind": "dart",
+      "responsibility": "Run inside debug/profile Flutter applications, provide the optional QR pairing UI, and send clean shake-triggered screenshots to a paired Figma Design QA plugin over the Design QA protocol.",
+      "doesNotOwn": [
+        "Figma plugin UI",
+        "signaling service deployment",
+        "GitLab issue creation",
+        "generic VM-service automation"
+      ],
+      "mayDependOn": [],
+      "ownedCapabilities": [
+        "Design QA capture SDK",
+        "shake-triggered screenshot workflow",
+        "QR pairing UI"
+      ],
+      "sourceFiles": [
+        "packages/fliwright-design-qa/lib/fliwright_design_qa.dart",
+        "packages/fliwright-design-qa/lib/src/accelerometer_event_channel.dart",
+        "packages/fliwright-design-qa/lib/src/design_qa_controller.dart",
+        "packages/fliwright-design-qa/lib/src/design_qa_pairing_page.dart",
+        "packages/fliwright-design-qa/lib/src/design_qa_sdk.dart",
+        "packages/fliwright-design-qa/lib/src/pairing.dart",
+        "packages/fliwright-design-qa/lib/src/peerjs_signaling.dart",
+        "packages/fliwright-design-qa/lib/src/platform_transport.dart",
+        "packages/fliwright-design-qa/lib/src/protocol.dart",
+        "packages/fliwright-design-qa/lib/src/render_view_screenshot_provider.dart",
+        "packages/fliwright-design-qa/lib/src/shake_detector.dart",
+        "packages/fliwright-design-qa/lib/src/shake_trigger.dart",
+        "packages/fliwright-design-qa/lib/src/signaling_config.dart",
+        "packages/fliwright-design-qa/lib/src/transport.dart",
+        "packages/fliwright-design-qa/lib/src/webrtc_transport.dart"
+      ],
+      "publicClasses": [
+        "DesignQaAccelerationSample",
+        "DesignQaAccelerometerEventChannel",
+        "DesignQaCapture",
+        "DesignQaCaptureResult",
+        "DesignQaController",
+        "DesignQaControllerConfig",
+        "DesignQaControllerSnapshot",
+        "DesignQaDeviceContext",
+        "DesignQaPairingPage",
+        "DesignQaPairingPayload",
+        "DesignQaPeerJsMessage",
+        "DesignQaPeerServerConfig",
+        "DesignQaPlatformTransport",
+        "DesignQaRenderViewScreenshotProvider",
+        "DesignQaSdk",
+        "DesignQaSdkConfig",
+        "DesignQaShakeDetector",
+        "DesignQaShakeTriggerBinding",
+        "DesignQaWebRtcTransport"
+      ],
+      "dartLibraryEntrypoints": [
+        "packages/fliwright-design-qa/lib/fliwright_design_qa.dart"
+      ],
+      "sourceFingerprint": "4b9bb981862e2338955cba182898a62e70c5c59e9d006027a72e43555ecd5646"
     },
     {
       "name": "fliwright-vscode",
@@ -1330,7 +1410,7 @@
         "fliwright.state",
         "fliwright.tests"
       ],
-      "sourceFingerprint": "98316766d9902b8d6c2176539ba9161c47f8f8cbc1769eded0bc9da9efcd65ba"
+      "sourceFingerprint": "32b2b75a4e0ef783a6498f70729d61a0cdd1702bfc8915e675e078e21952dd37"
     }
   ]
 }

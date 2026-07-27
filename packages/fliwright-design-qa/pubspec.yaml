@@ -1,0 +1,36 @@
+name: fliwright_design_qa
+description: Debug/profile-only Design QA capture SDK for sending clean shake-triggered Flutter screenshots to Figma.
+version: 0.1.0
+repository: https://github.com/0x01lab/fliwright/tree/main/packages/fliwright-design-qa
+issue_tracker: https://github.com/0x01lab/fliwright/issues
+topics:
+  - flutter
+  - testing
+  - qa
+  - screenshot
+  - figma
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  crypto: ^3.0.0
+  flutter:
+    sdk: flutter
+  flutter_webrtc: ^1.5.2
+  mobile_scanner: ^7.2.0
+  web_socket_channel: ^3.0.3
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.fliwright.designqa
+        pluginClass: FliwrightDesignQaPlugin
+      ios:
+        pluginClass: FliwrightDesignQaPlugin
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: ^1.25.0

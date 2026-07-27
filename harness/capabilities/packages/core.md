@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "2b470552ad60e11a35e6890a94b14c2c70e4950afb8b4faa85d5030ff90c60b6"
+source_fingerprint: "7a275785fcbf5208b23f30f5341b119284be3e0f350f3ccc7337803fe88e4c35"
 generated: true
 ---
 
@@ -128,6 +128,18 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `createNoopLogger`
 - `DartCodeGenerator`
 - `DecodedPng`
+- `DesignQaCaptureCommandResult`
+- `DesignQaCaptureResult`
+- `DesignQaClient`
+- `DesignQaControllerState`
+- `DesignQaDiagnosticsOptions`
+- `DesignQaDiagnosticsResult`
+- `DesignQaExtensionResult`
+- `DesignQaPairingInfo`
+- `DesignQaPairOptions`
+- `DesignQaPairResult`
+- `DesignQaPeerServerInfo`
+- `DesignQaSnapshot`
 - `DriverOptions`
 - `ensureFliwrightRunsRoot`
 - `EnsureFliwrightRunsRootOptions`
@@ -412,6 +424,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/AssertionSuggester.ts`
 - `packages/fliwright-core/src/CodeGenerator.ts`
 - `packages/fliwright-core/src/DartCodeGenerator.ts`
+- `packages/fliwright-core/src/DesignQaClient.ts`
 - `packages/fliwright-core/src/Driver.ts`
 - `packages/fliwright-core/src/EventAggregator.ts`
 - `packages/fliwright-core/src/FailureCollector.ts`

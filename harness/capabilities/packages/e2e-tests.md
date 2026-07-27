@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/e2e-tests"
 path: "e2e"
-source_fingerprint: "2c42ccbdeca71053039e47418c5975257b823512562a9a6ea724a5ca3759316a"
+source_fingerprint: "0419d9c6022e5ab7e4abd9915dca5474fca66c563862b994138db5064953f44f"
 generated: true
 ---
 
@@ -30,6 +30,8 @@ Verify public Fliwright behavior against running Flutter applications through sm
 
 ## Source Anchors
 
+- `e2e/design-qa-smoke-runner.test.ts`
+- `e2e/design-qa-smoke.test.ts`
 - `e2e/exio-app-e2e.test.ts`
 - `e2e/form-fill-e2e.test.ts`
 - `e2e/form-mock-e2e.test.ts`

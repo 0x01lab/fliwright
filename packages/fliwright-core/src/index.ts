@@ -159,6 +159,20 @@ export type {
   AuthStatus,
   SeedLoggedInInput,
 } from './AppInstance.js';
+export { DesignQaClient } from './DesignQaClient.js';
+export type {
+  DesignQaCaptureCommandResult,
+  DesignQaCaptureResult,
+  DesignQaControllerState,
+  DesignQaDiagnosticsOptions,
+  DesignQaDiagnosticsResult,
+  DesignQaExtensionResult,
+  DesignQaPairOptions,
+  DesignQaPairResult,
+  DesignQaPairingInfo,
+  DesignQaPeerServerInfo,
+  DesignQaSnapshot,
+} from './DesignQaClient.js';
 export { FliwrightDriver } from './Driver.js';
 export type { DriverOptions } from './Driver.js';
 export {

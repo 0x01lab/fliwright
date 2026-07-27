@@ -1,5 +1,6 @@
 import { Page } from './Page.js';
 import { AppInstance } from './AppInstance.js';
+import { DesignQaClient } from './DesignQaClient.js';
 import { StorageManager } from './StorageManager.js';
 import { PluginRegistry } from './PluginRegistry.js';
 import { VMServiceConnector } from './VMServiceConnector.js';
@@ -23,6 +24,7 @@ export class FliwrightDriver {
   private connector = new VMServiceConnector();
   private _page: Page | null = null;
   private _app: AppInstance | null = null;
+  private _designQa: DesignQaClient | null = null;
   private _mock: MockManager | null = null;
   private _storage: StorageManager | null = null;
   private _healing: SelfHealingEngine | null = null;
@@ -79,6 +81,13 @@ export class FliwrightDriver {
       this._app = new AppInstance((method, params) => this.connector.sendRequest(method, params));
     }
     return this._app;
+  }
+
+  get designQa(): DesignQaClient {
+    if (!this._designQa) {
+      this._designQa = new DesignQaClient((method, params) => this.connector.sendRequest(method, params));
+    }
+    return this._designQa;
   }
 
   /**
