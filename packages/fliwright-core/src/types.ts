@@ -290,8 +290,14 @@ export interface BridgeContext {
     type?: string;
     key?: string;
   };
+  keyboard?: SoftKeyboardState;
   diagnostics?: Record<string, unknown>;
   capabilities?: Record<string, boolean>;
+}
+
+export interface SoftKeyboardState {
+  visible: boolean;
+  insetBottom: number;
 }
 
 export interface FrameCaptureResult {

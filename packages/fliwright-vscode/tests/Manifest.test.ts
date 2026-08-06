@@ -12,6 +12,23 @@ describe('VS Code manifest', () => {
     expect(manifest.name).not.toMatch(/[\\/@]/);
   });
 
+  it('includes the metadata required for Marketplace publication', () => {
+    expect(manifest.displayName).toBe('Fliwright');
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+    expect(manifest.license).toBe('MIT');
+    expect(manifest.icon).toBe('media/fliwright-marketplace.png');
+    expect(manifest.repository).toMatchObject({
+      type: 'git',
+      url: 'https://github.com/0x01lab/fliwright.git',
+      directory: 'packages/fliwright-vscode',
+    });
+    expect(manifest.bugs.url).toBe('https://github.com/0x01lab/fliwright/issues');
+    expect(manifest.homepage).toContain('packages/fliwright-vscode');
+    expect(manifest.categories).toContain('Testing');
+    expect(manifest.keywords).toContain('flutter');
+    expect(manifest.galleryBanner).toEqual({ color: '#111827', theme: 'dark' });
+  });
+
   it('declares commands required by the VS Code extension design', () => {
     const commands = new Set(manifest.contributes.commands.map((entry: { command: string }) => entry.command));
 
@@ -28,11 +45,21 @@ describe('VS Code manifest', () => {
       'fliwright.insertRecordedTest',
       'fliwright.stopSandbox',
       'fliwright.reloadMocks',
+      'fliwright.reloadWebSocketMocks',
       'fliwright.applyMockRule',
       'fliwright.stopMockRule',
       'fliwright.applyDefaultMocks',
       'fliwright.openMockConfig',
       'fliwright.createMockConfig',
+      'fliwright.createWebSocketMockProfile',
+      'fliwright.createWebSocketMockProfileFromCall',
+      'fliwright.openWebSocketMockProfile',
+      'fliwright.inspectWebSocketMockCall',
+      'fliwright.applyWebSocketMockProfile',
+      'fliwright.clearWebSocketMockRules',
+      'fliwright.sendWebSocketMockPush',
+      'fliwright.refreshWebSocketMockCalls',
+      'fliwright.clearWebSocketMockCalls',
       'fliwright.fillForm',
       'fliwright.analyzeForm',
       'fliwright.fillFormWithRules',
@@ -96,5 +123,10 @@ describe('VS Code manifest', () => {
       .map((entry: { command: string }) => entry.command);
 
     expect(devicesTitleActions).toContain('fliwright.takeScreenshot');
+  });
+
+  it('contributes the separate WebSocket mock view', () => {
+    const views = manifest.contributes.views.fliwright as Array<{ id: string }>;
+    expect(views).toContainEqual(expect.objectContaining({ id: 'fliwright.websocketMocks' }));
   });
 });

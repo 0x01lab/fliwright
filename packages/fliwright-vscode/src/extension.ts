@@ -30,14 +30,17 @@ import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
 import { clearFlutterMockRoutes, formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js';
+import { WebSocketMockConfigService } from './websocket/WebSocketMockConfigService.js';
+import { WebSocketMockService } from './websocket/WebSocketMockService.js';
 import { STATE_PROVIDER_DOCUMENT_SCHEME, StateProviderDocumentProvider } from './state/StateProviderDocumentProvider.js';
 import { StateInjectionService } from './state/StateInjectionService.js';
 import { StatusBarService } from './status/StatusBarService.js';
-import type { FailureTreeEntry, FlowFileEntry, FormAnalyzeFieldEntry, FormRulesEntry, FormRulesFile, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunResult, ScriptFileEntry, StateProviderEntry } from './types.js';
+import type { FailureTreeEntry, FlowFileEntry, FormAnalyzeFieldEntry, FormRulesEntry, FormRulesFile, InvalidFileEntry, MockEndpointEntry, MockRuleEntry, RunResult, ScriptFileEntry, StateProviderEntry, WebSocketMockCallEntry, WebSocketMockProfileEntry, WebSocketMockPushEntry } from './types.js';
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
 import { FlowsTreeProvider } from './views/FlowsTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
 import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
+import { WebSocketMockTreeProvider } from './views/WebSocketMockTreeProvider.js';
 import { ScriptsTreeProvider } from './views/ScriptsTreeProvider.js';
 import { StateTreeProvider } from './views/StateTreeProvider.js';
 import { TestsTreeProvider } from './views/TestsTreeProvider.js';
@@ -69,9 +72,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   setConnectorDebugLog((message) => output.appendLine(message));
 
   const mockService = new MockConfigService();
+  const websocketMockConfigService = new WebSocketMockConfigService();
   const formService = new FormRuleService();
   const session = new FliwrightSession();
   const sandboxService = new SandboxService();
+  const websocketMockService = new WebSocketMockService();
   const formHelperService = new FormHelperService();
   formHelperService.setDebugLogger((message) => output.appendLine(message));
   const testDiscoveryService = new TestDiscoveryService();
@@ -87,6 +92,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const stateProviderDocuments = new StateProviderDocumentProvider();
   const devicesTree = new DevicesTreeProvider();
   const mockTree = new MockApiTreeProvider(mockService);
+  const websocketMockTree = new WebSocketMockTreeProvider(websocketMockConfigService);
   const formTree = new FormDataTreeProvider(formService);
   const runArtifactStore = new RunArtifactStore();
   // Resolve the per-project runs root (~/​.fliwright/​projects/​<project>/​runs).
@@ -173,6 +179,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let healthCheckInFlight = false;
   let mockSyncInFlight: Promise<void> | undefined;
   let mockSyncQueued = false;
+  let websocketMockSupported: boolean | undefined;
   const stateProviderWatches = new Map<string, () => void>();
 
   const rememberDebugOutput = (text: string) => {
@@ -219,6 +226,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         output.appendLine(`${message}${staleUrl ? ` (${staleUrl})` : ''}`);
         clearStateProviderWatches();
         mockTree.setAppliedRules([]);
+        websocketMockSupported = undefined;
+        websocketMockTree.setSupported(undefined);
         await session.markConnectionLost(message);
         scheduleAutoConnect('VM Service connection lost', 100, { forceReconnect: true });
       }).finally(() => {
@@ -282,6 +291,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await mockSyncInFlight;
   };
 
+  const requestWebSocketMockStateSync = async (reason: string): Promise<void> => {
+    if (!isActiveSessionState(session.state.status)) {
+      websocketMockSupported = undefined;
+      websocketMockTree.setSupported(undefined);
+      return;
+    }
+
+    const driver = session.connectedDriver;
+    websocketMockSupported = await websocketMockService.isSupported(driver);
+    websocketMockTree.setSupported(websocketMockSupported);
+    if (!websocketMockSupported) {
+      output.appendLine(`WebSocket mock unavailable (${reason}): app did not register websocketMock.`);
+      return;
+    }
+
+    await websocketMockTree.refresh();
+    const [rules, calls] = await Promise.all([
+      websocketMockService.getActiveRules(driver),
+      websocketMockService.getCalls(driver),
+    ]);
+    websocketMockTree.setRuntimeState(rules, calls);
+  };
+
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterTrackerFactory('*', {
       createDebugAdapterTracker(debugSession) {
@@ -314,6 +346,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   registerTreeDataProvider(context, 'fliwright.devices', devicesTree, output);
   registerTreeDataProvider(context, 'fliwright.mockApis', mockTree, output);
+  registerTreeDataProvider(context, 'fliwright.websocketMocks', websocketMockTree, output);
   registerTreeDataProvider(context, 'fliwright.formData', formTree, output);
   registerTreeDataProvider(context, 'fliwright.flows', flowsTree, output);
   registerTreeDataProvider(context, 'fliwright.scripts', scriptsTree, output);
@@ -449,6 +482,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         stopHealthCheck();
         clearStateProviderWatches();
         mockTree.setAppliedRules([]);
+        websocketMockSupported = undefined;
+        websocketMockTree.setSupported(undefined);
         await session.disconnect();
         await clearPersistedWorkspaceVmServiceUrl('VS Code disconnected');
         vscode.window.showInformationMessage('Disconnected from VM Service');
@@ -491,6 +526,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         await mockTree.refresh();
       });
     }),
+    vscode.commands.registerCommand('fliwright.createWebSocketMockProfile', async () => {
+      await runCommand('Create WebSocket Mock Profile', async () => {
+        const root = requireWorkspaceRoot();
+        const input = await vscode.window.showInputBox({
+          title: 'Create WebSocket Mock Profile',
+          prompt: 'File name under .fliwright/mocks/websocket',
+          value: 'example-websocket.json',
+        });
+        if (input === undefined) return;
+        const uri = await websocketMockConfigService.createTemplate(root, input);
+        await vscode.window.showTextDocument(uri);
+        await websocketMockTree.refresh();
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.createWebSocketMockProfileFromCall', async (node?: WebSocketMockCallEntry) => {
+      await runCommand('Create WebSocket Mock Profile From Call', async () => {
+        if (!node || node.kind !== 'websocketCall') throw new Error('Select a WebSocket call with a topic or channel.');
+        const root = requireWorkspaceRoot();
+        const input = await vscode.window.showInputBox({
+          title: 'Create WebSocket Mock Profile From Call',
+          prompt: 'File name under .fliwright/mocks/websocket',
+          value: `${node.connection}-${node.channel ?? 'message'}.json`.replace(/[^A-Za-z0-9.-]+/g, '-'),
+        });
+        if (input === undefined) return;
+        const uri = await websocketMockConfigService.createProfileFromCall(root, input, node);
+        await vscode.window.showTextDocument(uri);
+        await websocketMockTree.refresh();
+      });
+    }),
     vscode.commands.registerCommand('fliwright.createFormRules', async () => {
       await runCommand('Create Form Rules', async () => {
         const root = requireWorkspaceRoot();
@@ -507,6 +571,72 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.openMockConfig', async (node?: MockEndpointEntry | MockRuleEntry | InvalidFileEntry) => {
       await openUriFromNode(node);
+    }),
+    vscode.commands.registerCommand('fliwright.openWebSocketMockProfile', async (node?: WebSocketMockProfileEntry | InvalidFileEntry) => {
+      await openUriFromNode(node);
+    }),
+    vscode.commands.registerCommand('fliwright.inspectWebSocketMockCall', async (node?: WebSocketMockCallEntry) => {
+      if (!node || node.kind !== 'websocketCall') return;
+      const document = await vscode.workspace.openTextDocument({
+        language: 'json',
+        content: `${JSON.stringify({
+          connection: node.connection,
+          channel: node.channel,
+          direction: node.direction,
+          mockPayload: node.mockPayload,
+          payload: node.payload,
+        }, null, 2)}\n`,
+      });
+      await vscode.window.showTextDocument(document, { preview: true });
+    }),
+    vscode.commands.registerCommand('fliwright.reloadWebSocketMocks', async () => {
+      await runCommand('Reload WebSocket Mock Profiles', async () => {
+        await requestWebSocketMockStateSync('profiles reloaded');
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.applyWebSocketMockProfile', async (node?: WebSocketMockProfileEntry) => {
+      await runCommand('Apply WebSocket Mock Profile', async () => {
+        if (!node || node.kind !== 'websocketProfile') throw new Error('Select a WebSocket mock profile to apply.');
+        ensureWebSocketMockSupported();
+        await websocketMockService.applyProfile(session.connectedDriver, node);
+        await requestWebSocketMockStateSync(`profile ${node.profile.name} applied`);
+        vscode.window.showInformationMessage(`Applied WebSocket profile: ${node.profile.name}`);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.clearWebSocketMockRules', async () => {
+      await runCommand('Clear WebSocket Mock Rules', async () => {
+        ensureWebSocketMockSupported();
+        await websocketMockService.clearRules(session.connectedDriver);
+        await requestWebSocketMockStateSync('rules cleared');
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.sendWebSocketMockPush', async (node?: WebSocketMockPushEntry) => {
+      await runCommand('Send WebSocket Mock Push', async () => {
+        if (!node || node.kind !== 'websocketPush') throw new Error('Select a WebSocket push template to send.');
+        ensureWebSocketMockSupported();
+        const result = await websocketMockService.sendPush(session.connectedDriver, node.push);
+        await requestWebSocketMockStateSync(`push ${node.push.name} sent`);
+        const summary = `WebSocket push ${node.push.name}: ${result.deliveredSessions}/${result.matchedSessions} session(s) delivered.`;
+        output.appendLine(summary);
+        if (result.deliveredSessions === 0) {
+          vscode.window.showWarningMessage(`${summary} Inspect Live calls for the delivery reason.`);
+        } else {
+          vscode.window.showInformationMessage(summary);
+        }
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.refreshWebSocketMockCalls', async () => {
+      await runCommand('Refresh WebSocket Mock Calls', async () => {
+        ensureWebSocketMockSupported();
+        await requestWebSocketMockStateSync('calls refreshed');
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.clearWebSocketMockCalls', async () => {
+      await runCommand('Clear WebSocket Mock Calls', async () => {
+        ensureWebSocketMockSupported();
+        await websocketMockService.clearCalls(session.connectedDriver);
+        await requestWebSocketMockStateSync('calls cleared');
+      });
     }),
     vscode.commands.registerCommand('fliwright.openFormRules', async (node?: FormRulesEntry | InvalidFileEntry) => {
       await openUriFromNode(node);
@@ -1355,6 +1485,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   async function configureMocksAfterConnect(): Promise<void> {
     if (!mockTree.currentResult) await mockTree.refresh();
     await requestMockStateSync('VM Service connected');
+    await requestWebSocketMockStateSync('VM Service connected');
+  }
+
+  function ensureWebSocketMockSupported(): void {
+    if (!websocketMockSupported) {
+      throw new Error('The connected app has not registered the WebSocket mock bridge module.');
+    }
   }
 
   async function appendMockStartupDebug(): Promise<void> {

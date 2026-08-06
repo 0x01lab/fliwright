@@ -2,7 +2,7 @@
   "name": "fliwright-vscode",
   "displayName": "Fliwright",
   "description": "Flutter automation, recording, mocks, traces, and Riverpod state tools for Fliwright.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "fliwright",
   "license": "MIT",
   "repository": {
@@ -34,6 +34,10 @@
     "mocking"
   ],
   "icon": "media/fliwright-marketplace.png",
+  "galleryBanner": {
+    "color": "#111827",
+    "theme": "dark"
+  },
   "main": "./dist/extension.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && pnpm run bundle && pnpm run bundle:tw && pnpm run bundle:webview && pnpm run bundle:viewer",
@@ -54,6 +58,7 @@
   "activationEvents": [
     "onDebug",
     "onCommand:fliwright.reloadMocks",
+    "onCommand:fliwright.reloadWebSocketMocks",
     "onCommand:fliwright.reloadFormRules",
     "onCommand:fliwright.reloadScripts",
     "onCommand:fliwright.connect",
@@ -62,7 +67,11 @@
     "onCommand:fliwright.configureMcp",
     "onCommand:fliwright.takeScreenshot",
     "onCommand:fliwright.createMockConfig",
+    "onCommand:fliwright.createWebSocketMockProfile",
+    "onCommand:fliwright.createWebSocketMockProfileFromCall",
     "onCommand:fliwright.openMockConfig",
+    "onCommand:fliwright.openWebSocketMockProfile",
+    "onCommand:fliwright.inspectWebSocketMockCall",
     "onCommand:fliwright.copyMockEndpoint",
     "onCommand:fliwright.copyMockRuleJson",
     "onCommand:fliwright.createFormRules",
@@ -73,6 +82,11 @@
     "onCommand:fliwright.createFormRulesFromLastAnalyze",
     "onCommand:fliwright.appendLastAnalyzeToFormRules",
     "onCommand:fliwright.applyMockRule",
+    "onCommand:fliwright.applyWebSocketMockProfile",
+    "onCommand:fliwright.clearWebSocketMockRules",
+    "onCommand:fliwright.sendWebSocketMockPush",
+    "onCommand:fliwright.refreshWebSocketMockCalls",
+    "onCommand:fliwright.clearWebSocketMockCalls",
     "onCommand:fliwright.stopMockRule",
     "onCommand:fliwright.applyDefaultMocks",
     "onCommand:fliwright.stopSandbox",
@@ -135,6 +149,10 @@
         {
           "id": "fliwright.mockApis",
           "name": "Mock APIs"
+        },
+        {
+          "id": "fliwright.websocketMocks",
+          "name": "WebSocket Mocks"
         },
         {
           "id": "fliwright.formData",
@@ -205,13 +223,35 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "fliwright.reloadWebSocketMocks",
+        "title": "Fliwright: Reload WebSocket Mock Profiles",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "fliwright.createMockConfig",
         "title": "Fliwright: Create Mock Config",
         "icon": "$(add)"
       },
       {
+        "command": "fliwright.createWebSocketMockProfile",
+        "title": "Fliwright: Create WebSocket Mock Profile",
+        "icon": "$(add)"
+      },
+      {
+        "command": "fliwright.createWebSocketMockProfileFromCall",
+        "title": "Fliwright: Create WebSocket Mock Profile From Call"
+      },
+      {
         "command": "fliwright.openMockConfig",
         "title": "Fliwright: Open Mock Config"
+      },
+      {
+        "command": "fliwright.openWebSocketMockProfile",
+        "title": "Fliwright: Open WebSocket Mock Profile"
+      },
+      {
+        "command": "fliwright.inspectWebSocketMockCall",
+        "title": "Fliwright: Inspect WebSocket Mock Call"
       },
       {
         "command": "fliwright.copyMockEndpoint",
@@ -225,6 +265,31 @@
         "command": "fliwright.applyMockRule",
         "title": "Fliwright: Apply Mock Rule",
         "icon": "$(play)"
+      },
+      {
+        "command": "fliwright.applyWebSocketMockProfile",
+        "title": "Fliwright: Apply WebSocket Mock Profile",
+        "icon": "$(play)"
+      },
+      {
+        "command": "fliwright.clearWebSocketMockRules",
+        "title": "Fliwright: Clear WebSocket Mock Rules",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "fliwright.sendWebSocketMockPush",
+        "title": "Fliwright: Send WebSocket Mock Push",
+        "icon": "$(send)"
+      },
+      {
+        "command": "fliwright.refreshWebSocketMockCalls",
+        "title": "Fliwright: Refresh WebSocket Mock Calls",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "fliwright.clearWebSocketMockCalls",
+        "title": "Fliwright: Clear WebSocket Mock Calls",
+        "icon": "$(clear-all)"
       },
       {
         "command": "fliwright.stopMockRule",
@@ -546,6 +611,31 @@
           "group": "navigation@4"
         },
         {
+          "command": "fliwright.reloadWebSocketMocks",
+          "when": "view == fliwright.websocketMocks",
+          "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.createWebSocketMockProfile",
+          "when": "view == fliwright.websocketMocks",
+          "group": "navigation@2"
+        },
+        {
+          "command": "fliwright.clearWebSocketMockRules",
+          "when": "view == fliwright.websocketMocks",
+          "group": "navigation@3"
+        },
+        {
+          "command": "fliwright.refreshWebSocketMockCalls",
+          "when": "view == fliwright.websocketMocks",
+          "group": "navigation@4"
+        },
+        {
+          "command": "fliwright.clearWebSocketMockCalls",
+          "when": "view == fliwright.websocketMocks",
+          "group": "navigation@5"
+        },
+        {
           "command": "fliwright.reloadFormRules",
           "when": "view == fliwright.formData",
           "group": "navigation@1"
@@ -646,6 +736,26 @@
           "command": "fliwright.stopMockRule",
           "when": "view == fliwright.mockApis && viewItem == mockRuleApplied",
           "group": "inline@3"
+        },
+        {
+          "command": "fliwright.openWebSocketMockProfile",
+          "when": "view == fliwright.websocketMocks && viewItem =~ /websocketProfile|websocketInvalid/",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.applyWebSocketMockProfile",
+          "when": "view == fliwright.websocketMocks && viewItem =~ /websocketProfile/",
+          "group": "inline@2"
+        },
+        {
+          "command": "fliwright.sendWebSocketMockPush",
+          "when": "view == fliwright.websocketMocks && viewItem == websocketPush",
+          "group": "inline@1"
+        },
+        {
+          "command": "fliwright.createWebSocketMockProfileFromCall",
+          "when": "view == fliwright.websocketMocks && viewItem == websocketCall",
+          "group": "inline@1"
         },
         {
           "command": "fliwright.openFormRules",

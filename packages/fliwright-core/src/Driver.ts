@@ -2,6 +2,7 @@ import { Page } from './Page.js';
 import { AppInstance } from './AppInstance.js';
 import { DesignQaClient } from './DesignQaClient.js';
 import { StorageManager } from './StorageManager.js';
+import { WebSocketMockManager } from './WebSocketMockManager.js';
 import { PluginRegistry } from './PluginRegistry.js';
 import { VMServiceConnector } from './VMServiceConnector.js';
 import type { MockWebSocket } from './VMServiceConnector.js';
@@ -27,6 +28,7 @@ export class FliwrightDriver {
   private _designQa: DesignQaClient | null = null;
   private _mock: MockManager | null = null;
   private _storage: StorageManager | null = null;
+  private _websocketMock: WebSocketMockManager | null = null;
   private _healing: SelfHealingEngine | null = null;
   private _recorder: RecorderController | null = null;
   private _sdkVersion: string | null = null;
@@ -100,6 +102,14 @@ export class FliwrightDriver {
       this._storage = new StorageManager((method, params) => this.connector.sendRequest(method, params));
     }
     return this._storage;
+  }
+
+  /** Controls the optional app-provided WebSocket mock delegate. */
+  get websocketMock(): WebSocketMockManager {
+    if (!this._websocketMock) {
+      this._websocketMock = new WebSocketMockManager((method, params) => this.connector.sendRequest(method, params));
+    }
+    return this._websocketMock;
   }
 
   async connect(vmServiceUrl: string): Promise<void> {

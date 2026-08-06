@@ -1,7 +1,7 @@
 ---
 package: "fliwright_bridge"
 path: "packages/fliwright-bridge"
-source_fingerprint: "343d781eb80937242469559d897a4a37b97a3d1fd270904a91c31ad42d602c9a"
+source_fingerprint: "2509e09e88d38e051950b000e2b0c75b99b547843c57c00e3d39a1e858324172"
 generated: true
 ---
 
@@ -76,6 +76,12 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `ext.fliwright.stopRecording`
 - `ext.fliwright.storage.reset`
 - `ext.fliwright.type`
+- `ext.fliwright.websocket.clearCalls`
+- `ext.fliwright.websocket.clearRules`
+- `ext.fliwright.websocket.getCalls`
+- `ext.fliwright.websocket.getRules`
+- `ext.fliwright.websocket.push`
+- `ext.fliwright.websocket.setRules`
 
 ## Bridge Extension Modules
 
@@ -106,6 +112,7 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `source_map`
 - `storage_reset`
 - `type_extension`
+- `websocket_mock`
 
 ## Dart Library Entrypoints
 
@@ -154,15 +161,23 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `SettleExtension`
 - `SnapExtension`
 - `SnapshotExtension`
+- `SoftKeyboard`
+- `SoftKeyboardState`
 - `SourceMapExtension`
 - `StorageResetExtension`
 - `TypeExtension`
+- `WebSocketMockBridgeModule`
+- `WebSocketMockCall`
+- `WebSocketMockPush`
+- `WebSocketMockPushResult`
+- `WebSocketMockRule`
 
 ## Source Anchors
 
 - `packages/fliwright-bridge/lib/fliwright_bridge.dart`
 - `packages/fliwright-bridge/lib/src/actionability_gate.dart`
 - `packages/fliwright-bridge/lib/src/bridge.dart`
+- `packages/fliwright-bridge/lib/src/bridge_module.dart`
 - `packages/fliwright-bridge/lib/src/click_indicator.dart`
 - `packages/fliwright-bridge/lib/src/debug_value_encoder.dart`
 - `packages/fliwright-bridge/lib/src/extension_registry.dart`
@@ -193,6 +208,8 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `packages/fliwright-bridge/lib/src/extensions/source_map.dart`
 - `packages/fliwright-bridge/lib/src/extensions/storage_reset.dart`
 - `packages/fliwright-bridge/lib/src/extensions/type_extension.dart`
+- `packages/fliwright-bridge/lib/src/extensions/websocket_mock.dart`
 - `packages/fliwright-bridge/lib/src/form_control.dart`
 - `packages/fliwright-bridge/lib/src/ref_registry.dart`
 - `packages/fliwright-bridge/lib/src/semantics_compat.dart`
+- `packages/fliwright-bridge/lib/src/soft_keyboard.dart`

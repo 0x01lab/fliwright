@@ -58,6 +58,7 @@ export type {
   MockIndex,
   MockRuleEntry,
   BridgeContext,
+  SoftKeyboardState,
   SourceLocation,
   SourceMapNode,
   SourceMapOptions,
@@ -175,6 +176,14 @@ export type {
 } from './DesignQaClient.js';
 export { FliwrightDriver } from './Driver.js';
 export type { DriverOptions } from './Driver.js';
+export { WebSocketMockManager } from './WebSocketMockManager.js';
+export type {
+  WebSocketMockCall,
+  WebSocketMockPush,
+  WebSocketMockPushResult,
+  WebSocketMockRule,
+  WebSocketMockRulePush,
+} from './WebSocketMockManager.js';
 export {
   FLIWRIGHT_WORKSPACE_CONFIG_PATH,
   clearWorkspaceVmServiceUrl,

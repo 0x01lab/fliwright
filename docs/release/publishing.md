@@ -26,6 +26,12 @@ Before the first release:
    `publisher`, `displayName`, `description`, `categories`, `keywords`, `icon`,
    `repository`, `bugs`, and `homepage`.
 
+The GitHub Actions workflow expects the repository to be hosted at
+`0x01lab/fliwright`, the Marketplace publisher to be `fliwright`, and the
+repository secret to be named `VSCE_PAT`. The token is never stored in the
+repository. The workflow publishes only after the release tag exactly matches
+the manifest version.
+
 Manual package and publish:
 
 ```bash
@@ -35,15 +41,17 @@ pnpm --filter fliwright-vscode run package
 VSCE_PAT=... pnpm --filter fliwright-vscode run publish:vsce
 ```
 
-Automated publish:
+Automated publish after updating the manifest version and changelog:
 
 ```bash
-git tag vscode-v0.1.0
-git push origin vscode-v0.1.0
+git tag vscode-v0.2.0
+git push origin vscode-v0.2.0
 ```
 
-The `release-vscode.yml` workflow packages the VSIX, publishes it with `vsce`,
-and uploads the VSIX to the matching GitHub release.
+The `release-vscode.yml` workflow validates the tag/version match, verifies the
+Marketplace credential, runs lint, unit, and VS Code integration tests, packages
+the VSIX, publishes it with `vsce`, and uploads the VSIX to the matching GitHub
+release. It uses `xvfb` for the VS Code integration test on the Linux runner.
 
 ## pub.dev
 

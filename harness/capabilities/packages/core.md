@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "7a275785fcbf5208b23f30f5341b119284be3e0f350f3ccc7337803fe88e4c35"
+source_fingerprint: "4392b5b9fd258a135a67a7f86eaf5cf6d8a833865eb9dd27f34091260999e8fa"
 generated: true
 ---
 
@@ -356,6 +356,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `setConnectorDebugLog`
 - `SkillRegistry`
 - `SnapshotStore`
+- `SoftKeyboardState`
 - `SourceLocation`
 - `SourceMapNode`
 - `SourceMapOptions`
@@ -409,6 +410,12 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `VMServiceConnector`
 - `VMServiceEvent`
 - `WaitForMockCallOptions`
+- `WebSocketMockCall`
+- `WebSocketMockManager`
+- `WebSocketMockPush`
+- `WebSocketMockPushResult`
+- `WebSocketMockRule`
+- `WebSocketMockRulePush`
 - `WidgetInfo`
 - `WidgetMatch`
 - `WidgetSnapshot`
@@ -453,6 +460,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/ToolMockServer.ts`
 - `packages/fliwright-core/src/TraceCollector.ts`
 - `packages/fliwright-core/src/VMServiceConnector.ts`
+- `packages/fliwright-core/src/WebSocketMockManager.ts`
 - `packages/fliwright-core/src/WorkspaceConfig.ts`
 - `packages/fliwright-core/src/agent/AgentRepair.ts`
 - `packages/fliwright-core/src/agent/AgentRuntime.ts`

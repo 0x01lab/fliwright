@@ -12,6 +12,7 @@ import type {
   SelectorInput,
   SelectorQuery,
   SendRequest,
+  SoftKeyboardState,
   SourceMapOptions,
   SourceMapResult,
 } from './types.js';
@@ -168,6 +169,11 @@ export class Page {
 
   async context(): Promise<BridgeContext> {
     return (await this.sendRequest('ext.fliwright.context', {})) as BridgeContext;
+  }
+
+  async keyboard(): Promise<SoftKeyboardState> {
+    const context = await this.context();
+    return context.keyboard ?? { visible: false, insetBottom: 0 };
   }
 
   async sourceMap(options?: SourceMapOptions): Promise<SourceMapResult> {

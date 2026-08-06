@@ -99,6 +99,66 @@ export interface AppliedMockRule {
   appliedAt: number;
 }
 
+export interface WebSocketMockRuleFile {
+  id: string;
+  connection: string;
+  channel: string;
+  suppressRemote?: boolean;
+  onSubscribe?: Array<{
+    payload: unknown;
+    delayMs?: number;
+  }>;
+}
+
+export interface WebSocketMockPushTemplate {
+  name: string;
+  connection: string;
+  channel: string;
+  payload: unknown;
+  delayMs?: number;
+}
+
+export interface WebSocketMockProfileFile {
+  version: 1;
+  name: string;
+  description?: string;
+  rules: WebSocketMockRuleFile[];
+  pushes?: WebSocketMockPushTemplate[];
+}
+
+export interface WebSocketMockProfileEntry {
+  kind: 'websocketProfile';
+  uri: vscode.Uri;
+  profile: WebSocketMockProfileFile;
+}
+
+export interface WebSocketMockRuleEntry {
+  kind: 'websocketRule';
+  profile: WebSocketMockProfileEntry;
+  rule: WebSocketMockRuleFile;
+}
+
+export interface WebSocketMockPushEntry {
+  kind: 'websocketPush';
+  profile: WebSocketMockProfileEntry;
+  push: WebSocketMockPushTemplate;
+}
+
+export interface WebSocketMockCallEntry {
+  kind: 'websocketCall';
+  connection: string;
+  channel?: string;
+  direction: string;
+  mockPayload?: unknown;
+  payload?: unknown;
+}
+
+export interface WebSocketMockDiscoveryResult {
+  root: vscode.Uri;
+  profiles: WebSocketMockProfileEntry[];
+  invalid: InvalidFileEntry[];
+}
+
 export interface FormRulesFile {
   version: 1;
   locale?: string;
@@ -306,6 +366,15 @@ export type MockTreeNode =
   | MockEndpointEntry
   | MockRuleEntry
   | InvalidFileEntry
+  | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
+
+export type WebSocketMockTreeNode =
+  | WebSocketMockProfileEntry
+  | WebSocketMockRuleEntry
+  | WebSocketMockPushEntry
+  | WebSocketMockCallEntry
+  | InvalidFileEntry
+  | { kind: 'websocketCallsRoot'; label: string }
   | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
 
 export type FormTreeNode =

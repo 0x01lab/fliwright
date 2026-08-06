@@ -91,6 +91,19 @@ describe('Page', () => {
     expect(context.route?.location).toBe('/register');
   });
 
+  it('keyboard returns the soft keyboard state from bridge context', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      keyboard: { visible: true, insetBottom: 301 },
+    });
+    const page = new Page(sendRequest);
+
+    await expect(page.keyboard()).resolves.toEqual({
+      visible: true,
+      insetBottom: 301,
+    });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.context', {});
+  });
+
   it('sourceMap calls the source map extension with string options', async () => {
     const sendRequest = vi.fn().mockResolvedValue({
       success: true,

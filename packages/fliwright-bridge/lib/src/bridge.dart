@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'extension_registry.dart';
+import 'bridge_module.dart';
 import 'extensions/app_instance.dart';
 import 'extensions/capture_frame.dart';
 import 'extensions/context.dart';
@@ -34,6 +35,8 @@ class FliwrightBridge {
   static final ExtensionRegistry _registry = ExtensionRegistry();
   static ExtensionRegistry get registry => _registry;
   static bool _initialized = false;
+  static final Map<String, FliwrightBridgeModule> _modules =
+      <String, FliwrightBridgeModule>{};
 
   /// Router instance injected by the app (e.g. GoRouter).
   /// Accessed by [RouterNavigateExtension] to perform navigation.
@@ -49,6 +52,10 @@ class FliwrightBridge {
     await MockServerExtension.reset();
     RiverpodExtension.reset();
     DioMockExtension.reset();
+    for (final module in _modules.values) {
+      await module.reset();
+    }
+    _modules.clear();
     FliwrightAppInstance.reset();
     StorageResetExtension.reset();
     RefRegistry.disposeAll();
@@ -92,6 +99,7 @@ class FliwrightBridge {
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
     StorageResetExtension.register(_registry);
+    _registerModules();
 
     final mockRuleStore = MockRuleStore(
       storage: await _resolveMockStorage(mockStorage),
@@ -147,6 +155,7 @@ class FliwrightBridge {
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
     StorageResetExtension.register(_registry);
+    _registerModules();
 
     final mockRuleStore = MockRuleStore(
       storage: await _resolveMockStorage(mockStorage),
@@ -154,6 +163,29 @@ class FliwrightBridge {
     await mockRuleStore.loadFromStorage();
     // Dio mock — no HttpServer, no HttpOverrides.
     DioMockExtension.register(_registry, store: mockRuleStore);
+  }
+
+  /// Registers an optional, application-owned bridge module.
+  ///
+  /// Configure modules before initialization so startup order and handshake
+  /// discovery remain deterministic. A module registered later is installed
+  /// immediately when the bridge is already initialized.
+  static void registerModule(FliwrightBridgeModule module) {
+    if (_modules.containsKey(module.id)) {
+      throw StateError('Bridge module "${module.id}" is already registered.');
+    }
+    _modules[module.id] = module;
+    if (_initialized && module.isAvailable) {
+      module.register(_registry);
+    }
+  }
+
+  static void _registerModules() {
+    for (final module in _modules.values) {
+      if (module.isAvailable) {
+        module.register(_registry);
+      }
+    }
   }
 
   static void _registerPingAndHandshake() {
@@ -190,6 +222,12 @@ class FliwrightBridge {
           'appInstance': true,
           'appCapabilities': true,
           'storageReset': true,
+          'keyboardState': true,
+          'keyboardDismiss': true,
+          'modules': _modules.values
+              .where((module) => module.isAvailable)
+              .map((module) => module.describe())
+              .toList(),
         },
       };
     });

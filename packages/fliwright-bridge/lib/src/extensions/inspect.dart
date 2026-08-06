@@ -9,6 +9,7 @@ import '../actionability_gate.dart';
 import '../bridge.dart';
 import '../ref_registry.dart';
 import '../semantics_compat.dart';
+import '../soft_keyboard.dart';
 
 class InspectExtension {
   static void register(ExtensionRegistry registry) {
@@ -104,50 +105,94 @@ class InspectExtension {
       if (entry == null) {
         return {'error': 'Unknown or stale ref: $ref', 'success': false};
       }
+      Rect actionableRect;
+      var keyboardDismissed = false;
       try {
-        await ensureActionable(
+        actionableRect = await ensureActionable(
           entry,
           ref: ref,
           checkStable: params['checkStable'] != 'false',
           checkReceivesEvents: params['checkReceivesEvents'] == 'true',
         );
       } on ActionabilityException catch (error) {
-        return {
-          'error': error.reason,
-          'success': false,
-          'actionability': {'ref': ref, 'reason': error.reason},
-        };
+        if (!error.keyboardObscured) {
+          return _actionabilityError(ref, error);
+        }
+        await SoftKeyboard.dismiss();
+        keyboardDismissed = true;
+        try {
+          actionableRect = await ensureActionable(
+            entry,
+            ref: ref,
+            checkStable: params['checkStable'] != 'false',
+            checkReceivesEvents: params['checkReceivesEvents'] == 'true',
+          );
+        } on ActionabilityException catch (retryError) {
+          return _actionabilityError(ref, retryError);
+        }
       }
       final rect = {
-        'x': entry.rect.left,
-        'y': entry.rect.top,
-        'width': entry.rect.width,
-        'height': entry.rect.height,
+        'x': actionableRect.left,
+        'y': actionableRect.top,
+        'width': actionableRect.width,
+        'height': actionableRect.height,
       };
-      return _actionWithResolvedTarget(
+      final result = await _actionWithResolvedTarget(
         action: action,
         rect: rect,
         targetId: '${entry.element.hashCode}',
         params: {...params, 'selector': params['selector'] ?? 'ref=$ref'},
       );
+      return {
+        ...result,
+        if (keyboardDismissed) 'keyboardDismissed': true,
+      };
     }
 
     final precomputedTargetId = params['targetId'];
     final precomputedRect = _parseRectJson(params['targetRect']);
     if (precomputedTargetId != null && precomputedRect != null) {
-      return _actionWithResolvedTarget(
+      final keyboard = SoftKeyboard.current();
+      final alignment = _alignmentFromString(params['alignment'] ?? 'center');
+      final covered = keyboard.restricts(
+        _pointInRect(precomputedRect, alignment),
+      );
+      if (covered) {
+        await SoftKeyboard.dismiss();
+        final selector = params['selector'];
+        if (selector != null && selector.isNotEmpty) {
+          final retryParams = Map<String, String>.from(params)
+            ..remove('targetId')
+            ..remove('targetRect');
+          final result = await _action(retryParams);
+          return {...result, 'keyboardDismissed': true};
+        }
+      }
+      final result = await _actionWithResolvedTarget(
         action: action,
         rect: precomputedRect,
         targetId: precomputedTargetId,
         params: params,
       );
+      return {
+        ...result,
+        if (covered) 'keyboardDismissed': true,
+      };
     }
 
     final resolveParams = Map<String, String>.from(params);
     resolveParams['strict'] = params['strict'] ?? 'true';
     resolveParams['visible'] = params['visible'] ?? 'hitTestable';
     resolveParams['limit'] = params['limit'] ?? '2';
-    final resolveResult = await _resolve(resolveParams);
+    var resolveResult = await _resolve(resolveParams);
+    var keyboardDismissed = false;
+    if (resolveResult['success'] == false &&
+        resolveResult['count'] == 0 &&
+        await _hasKeyboardCoveredMatch(resolveParams)) {
+      await SoftKeyboard.dismiss();
+      keyboardDismissed = true;
+      resolveResult = await _resolve(resolveParams);
+    }
     if (resolveResult['success'] == false) return resolveResult;
 
     final matches = resolveResult['matches'];
@@ -170,12 +215,52 @@ class InspectExtension {
       };
     }
 
-    return _actionWithResolvedTarget(
+    final result = await _actionWithResolvedTarget(
       action: action,
       rect: rect,
       targetId: target['id'].toString(),
       params: params,
     );
+    return {
+      ...result,
+      if (keyboardDismissed) 'keyboardDismissed': true,
+    };
+  }
+
+  static Map<String, dynamic> _actionabilityError(
+    String ref,
+    ActionabilityException error,
+  ) {
+    return {
+      'error': error.reason,
+      'success': false,
+      'actionability': {'ref': ref, 'reason': error.reason},
+    };
+  }
+
+  static Future<bool> _hasKeyboardCoveredMatch(
+    Map<String, String> resolveParams,
+  ) async {
+    final keyboard = SoftKeyboard.current();
+    if (!keyboard.visible) return false;
+
+    final result = await _resolve({
+      ...resolveParams,
+      'strict': 'false',
+      'visible': 'any',
+    });
+    final matches = result['matches'];
+    if (matches is! List) return false;
+    final alignment =
+        _alignmentFromString(resolveParams['alignment'] ?? 'center');
+    for (final match in matches.whereType<Map<String, dynamic>>()) {
+      final rect = match['rect'];
+      if (rect is! Map<String, dynamic>) continue;
+      if (keyboard.restricts(_pointInRect(rect, alignment))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static Future<Map<String, dynamic>> _actionWithResolvedTarget({
@@ -512,9 +597,15 @@ class InspectExtension {
   }
 
   static Future<Map<String, dynamic>> _dismissKeyboard() async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-    return {'success': true, 'action': 'dismissKeyboard'};
+    final before = SoftKeyboard.current();
+    final after = await SoftKeyboard.dismiss();
+    return {
+      'success': true,
+      'action': 'dismissKeyboard',
+      'wasVisible': before.visible,
+      'visible': after.visible,
+      'insetBottom': after.insetBottom,
+    };
   }
 
   static Future<Map<String, dynamic>> _waitForNetworkIdle(
@@ -1870,6 +1961,9 @@ class InspectExtension {
 
     final rect = renderObject.localToGlobal(Offset.zero) & renderObject.size;
     final point = alignment.withinRect(rect);
+    if (!SoftKeyboard.current().interactiveViewport.contains(point)) {
+      return false;
+    }
     final result = HitTestResult();
     WidgetsBinding.instance.hitTestInView(
       result,

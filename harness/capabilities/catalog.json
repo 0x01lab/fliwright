@@ -117,6 +117,7 @@
         "packages/fliwright-core/src/ToolMockServer.ts",
         "packages/fliwright-core/src/TraceCollector.ts",
         "packages/fliwright-core/src/VMServiceConnector.ts",
+        "packages/fliwright-core/src/WebSocketMockManager.ts",
         "packages/fliwright-core/src/WorkspaceConfig.ts",
         "packages/fliwright-core/src/agent/AgentRepair.ts",
         "packages/fliwright-core/src/agent/AgentRuntime.ts",
@@ -490,6 +491,7 @@
         "setConnectorDebugLog",
         "SkillRegistry",
         "SnapshotStore",
+        "SoftKeyboardState",
         "SourceLocation",
         "SourceMapNode",
         "SourceMapOptions",
@@ -543,6 +545,12 @@
         "VMServiceConnector",
         "VMServiceEvent",
         "WaitForMockCallOptions",
+        "WebSocketMockCall",
+        "WebSocketMockManager",
+        "WebSocketMockPush",
+        "WebSocketMockPushResult",
+        "WebSocketMockRule",
+        "WebSocketMockRulePush",
         "WidgetInfo",
         "WidgetMatch",
         "WidgetSnapshot",
@@ -555,7 +563,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "7a275785fcbf5208b23f30f5341b119284be3e0f350f3ccc7337803fe88e4c35"
+      "sourceFingerprint": "4392b5b9fd258a135a67a7f86eaf5cf6d8a833865eb9dd27f34091260999e8fa"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -978,6 +986,7 @@
         "packages/fliwright-bridge/lib/fliwright_bridge.dart",
         "packages/fliwright-bridge/lib/src/actionability_gate.dart",
         "packages/fliwright-bridge/lib/src/bridge.dart",
+        "packages/fliwright-bridge/lib/src/bridge_module.dart",
         "packages/fliwright-bridge/lib/src/click_indicator.dart",
         "packages/fliwright-bridge/lib/src/debug_value_encoder.dart",
         "packages/fliwright-bridge/lib/src/extension_registry.dart",
@@ -1008,9 +1017,11 @@
         "packages/fliwright-bridge/lib/src/extensions/source_map.dart",
         "packages/fliwright-bridge/lib/src/extensions/storage_reset.dart",
         "packages/fliwright-bridge/lib/src/extensions/type_extension.dart",
+        "packages/fliwright-bridge/lib/src/extensions/websocket_mock.dart",
         "packages/fliwright-bridge/lib/src/form_control.dart",
         "packages/fliwright-bridge/lib/src/ref_registry.dart",
-        "packages/fliwright-bridge/lib/src/semantics_compat.dart"
+        "packages/fliwright-bridge/lib/src/semantics_compat.dart",
+        "packages/fliwright-bridge/lib/src/soft_keyboard.dart"
       ],
       "publicClasses": [
         "ActionabilityException",
@@ -1054,9 +1065,16 @@
         "SettleExtension",
         "SnapExtension",
         "SnapshotExtension",
+        "SoftKeyboard",
+        "SoftKeyboardState",
         "SourceMapExtension",
         "StorageResetExtension",
-        "TypeExtension"
+        "TypeExtension",
+        "WebSocketMockBridgeModule",
+        "WebSocketMockCall",
+        "WebSocketMockPush",
+        "WebSocketMockPushResult",
+        "WebSocketMockRule"
       ],
       "dartLibraryEntrypoints": [
         "packages/fliwright-bridge/lib/fliwright_bridge.dart"
@@ -1088,7 +1106,8 @@
         "snapshot",
         "source_map",
         "storage_reset",
-        "type_extension"
+        "type_extension",
+        "websocket_mock"
       ],
       "vmServiceMethods": [
         "ext.fliwright.action",
@@ -1136,9 +1155,15 @@
         "ext.fliwright.startRecording",
         "ext.fliwright.stopRecording",
         "ext.fliwright.storage.reset",
-        "ext.fliwright.type"
+        "ext.fliwright.type",
+        "ext.fliwright.websocket.clearCalls",
+        "ext.fliwright.websocket.clearRules",
+        "ext.fliwright.websocket.getCalls",
+        "ext.fliwright.websocket.getRules",
+        "ext.fliwright.websocket.push",
+        "ext.fliwright.websocket.setRules"
       ],
-      "sourceFingerprint": "343d781eb80937242469559d897a4a37b97a3d1fd270904a91c31ad42d602c9a"
+      "sourceFingerprint": "2509e09e88d38e051950b000e2b0c75b99b547843c57c00e3d39a1e858324172"
     },
     {
       "name": "fliwright_bridge_riverpod",
@@ -1185,10 +1210,12 @@
       "sourceFiles": [
         "packages/fliwright-design-qa/lib/fliwright_design_qa.dart",
         "packages/fliwright-design-qa/lib/src/accelerometer_event_channel.dart",
+        "packages/fliwright-design-qa/lib/src/capture_success_indicator.dart",
         "packages/fliwright-design-qa/lib/src/design_qa_controller.dart",
         "packages/fliwright-design-qa/lib/src/design_qa_pairing_page.dart",
         "packages/fliwright-design-qa/lib/src/design_qa_sdk.dart",
         "packages/fliwright-design-qa/lib/src/pairing.dart",
+        "packages/fliwright-design-qa/lib/src/peerjs_keep_alive.dart",
         "packages/fliwright-design-qa/lib/src/peerjs_signaling.dart",
         "packages/fliwright-design-qa/lib/src/platform_transport.dart",
         "packages/fliwright-design-qa/lib/src/protocol.dart",
@@ -1204,6 +1231,7 @@
         "DesignQaAccelerometerEventChannel",
         "DesignQaCapture",
         "DesignQaCaptureResult",
+        "DesignQaCaptureSuccessIndicator",
         "DesignQaController",
         "DesignQaControllerConfig",
         "DesignQaControllerSnapshot",
@@ -1211,6 +1239,7 @@
         "DesignQaPairingPage",
         "DesignQaPairingPayload",
         "DesignQaPeerJsMessage",
+        "DesignQaPeerJsSignalingKeepAlive",
         "DesignQaPeerServerConfig",
         "DesignQaPlatformTransport",
         "DesignQaRenderViewScreenshotProvider",
@@ -1223,7 +1252,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-design-qa/lib/fliwright_design_qa.dart"
       ],
-      "sourceFingerprint": "4b9bb981862e2338955cba182898a62e70c5c59e9d006027a72e43555ecd5646"
+      "sourceFingerprint": "5f147ebbc4d1bce2e802a0e49ab32ee5fe5a9675ca014eb09e78bde21e89cd0a"
     },
     {
       "name": "fliwright-vscode",
@@ -1299,6 +1328,9 @@
         "packages/fliwright-vscode/src/views/ScriptsTreeProvider.ts",
         "packages/fliwright-vscode/src/views/StateTreeProvider.ts",
         "packages/fliwright-vscode/src/views/TestsTreeProvider.ts",
+        "packages/fliwright-vscode/src/views/WebSocketMockTreeProvider.ts",
+        "packages/fliwright-vscode/src/websocket/WebSocketMockConfigService.ts",
+        "packages/fliwright-vscode/src/websocket/WebSocketMockService.ts",
         "packages/fliwright-vscode/src/webview/FailurePanel.ts",
         "packages/fliwright-vscode/src/webview/RecordingPanel.ts",
         "packages/fliwright-vscode/src/webview/components/ui/badge.tsx",
@@ -1343,7 +1375,10 @@
         "fliwright.appendLastAnalyzeToFormRules",
         "fliwright.applyDefaultMocks",
         "fliwright.applyMockRule",
+        "fliwright.applyWebSocketMockProfile",
         "fliwright.cleanFlowFile",
+        "fliwright.clearWebSocketMockCalls",
+        "fliwright.clearWebSocketMockRules",
         "fliwright.configureMcp",
         "fliwright.connect",
         "fliwright.copyMockEndpoint",
@@ -1355,6 +1390,8 @@
         "fliwright.createFormRules",
         "fliwright.createFormRulesFromLastAnalyze",
         "fliwright.createMockConfig",
+        "fliwright.createWebSocketMockProfile",
+        "fliwright.createWebSocketMockProfileFromCall",
         "fliwright.disconnect",
         "fliwright.discoverVmService",
         "fliwright.fillForm",
@@ -1362,6 +1399,7 @@
         "fliwright.generateFlowTest",
         "fliwright.insertFormFieldSelector",
         "fliwright.insertRecordedTest",
+        "fliwright.inspectWebSocketMockCall",
         "fliwright.openFailure",
         "fliwright.openFlow",
         "fliwright.openFlowJson",
@@ -1374,6 +1412,7 @@
         "fliwright.openTddLoop",
         "fliwright.openTraceViewer",
         "fliwright.openVisualEditor",
+        "fliwright.openWebSocketMockProfile",
         "fliwright.overrideStateProvider",
         "fliwright.readStateProvider",
         "fliwright.refreshFlows",
@@ -1381,12 +1420,15 @@
         "fliwright.refreshTddLoop",
         "fliwright.refreshTestFile",
         "fliwright.refreshTests",
+        "fliwright.refreshWebSocketMockCalls",
         "fliwright.reloadFormRules",
         "fliwright.reloadMocks",
         "fliwright.reloadScripts",
+        "fliwright.reloadWebSocketMocks",
         "fliwright.runCurrentTest",
         "fliwright.runScript",
         "fliwright.runWorkspaceTests",
+        "fliwright.sendWebSocketMockPush",
         "fliwright.showLastRun",
         "fliwright.showLastTrace",
         "fliwright.startRecording",
@@ -1408,9 +1450,10 @@
         "fliwright.mockApis",
         "fliwright.scripts",
         "fliwright.state",
-        "fliwright.tests"
+        "fliwright.tests",
+        "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "32b2b75a4e0ef783a6498f70729d61a0cdd1702bfc8915e675e078e21952dd37"
+      "sourceFingerprint": "af3468f901c0e7d6c5e0284ebd27e8f0899e29a76b7edcf32c1f4fd09da6fef3"
     }
   ]
 }

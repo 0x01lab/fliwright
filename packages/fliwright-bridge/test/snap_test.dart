@@ -135,6 +135,107 @@ void main() {
     expect(textInputMethods, contains('TextInput.hide'));
   });
 
+  testWidgets('tap hides a soft keyboard that covers ref and selector targets',
+      (tester) async {
+    final clicks = <Map<String, String>>[];
+    final textInputMethods = <String>[];
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.textInput, null);
+    });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.textInput, (call) async {
+      textInputMethods.add(call.method);
+      if (call.method == 'TextInput.hide') {
+        tester.view.viewInsets = const FakeViewPadding();
+      }
+      return null;
+    });
+    FliwrightBridge.registry.reset();
+    SnapExtension.register(FliwrightBridge.registry);
+    InspectExtension.register(FliwrightBridge.registry);
+    FliwrightBridge.registry.register('ext.fliwright.click', (params) async {
+      clicks.add(params);
+      return {'success': true};
+    });
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Stack(
+          children: [
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 20,
+              height: 48,
+              child: ElevatedButton(
+                key: const Key('submit'),
+                onPressed: () {},
+                child: const Text('Submit'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final snap = await FliwrightBridge.registry.invoke(
+      'ext.fliwright.snap',
+      {},
+    );
+    final refs = (snap['refs'] as List<dynamic>).cast<Map<String, dynamic>>();
+    final submitRef = refs.firstWhere(
+      (entry) => entry['key'] == 'submit',
+    )['ref'] as String;
+
+    final action = FliwrightBridge.registry.invoke(
+      'ext.fliwright.action',
+      {'action': 'tap', 'ref': submitRef},
+    );
+    Map<String, dynamic>? result;
+    action.then((value) => result = value);
+    for (var i = 0; i < 10 && result == null; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(result, isNotNull);
+    expect(result!['success'], isTrue);
+    expect(result!['keyboardDismissed'], isTrue);
+    expect(textInputMethods, contains('TextInput.hide'));
+    expect(clicks, hasLength(1));
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    final selectorAction = FliwrightBridge.registry.invoke(
+      'ext.fliwright.action',
+      {
+        'action': 'tap',
+        'selector': '{"match":{"key":"submit"}}',
+        'strict': 'true',
+        'visible': 'hitTestable',
+      },
+    );
+    Map<String, dynamic>? selectorResult;
+    selectorAction.then((value) => selectorResult = value);
+    for (var i = 0; i < 10 && selectorResult == null; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(selectorResult, isNotNull);
+    expect(selectorResult!['success'], isTrue);
+    expect(selectorResult!['keyboardDismissed'], isTrue);
+    expect(
+      textInputMethods.where((method) => method == 'TextInput.hide'),
+      hasLength(2),
+    );
+    expect(clicks, hasLength(2));
+  });
+
   testWidgets('action uses precomputed target rect without resolving selector',
       (
     tester,

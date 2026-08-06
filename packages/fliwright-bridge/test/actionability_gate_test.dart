@@ -56,20 +56,55 @@ void main() {
       ),
     );
   });
+
+  testWidgets('classifies a target below the keyboard viewport as obscured',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+    final entry = await _entryFor(tester, enabled: true, top: 880);
+
+    await expectLater(
+      ensureActionable(entry, ref: 'e1', checkStable: false),
+      throwsA(
+        isA<ActionabilityException>()
+            .having(
+              (error) => error.keyboardObscured,
+              'keyboardObscured',
+              isTrue,
+            )
+            .having(
+              (error) => error.reason,
+              'reason',
+              contains('covered by soft keyboard'),
+            ),
+      ),
+    );
+  });
 }
 
 Future<RefEntry> _entryFor(
   WidgetTester tester, {
   required bool enabled,
   Rect rect = const Rect.fromLTWH(0, 0, 100, 40),
+  double top = 0,
 }) async {
   await tester.pumpWidget(
     Directionality(
       textDirection: TextDirection.ltr,
-      child: SizedBox(
-        width: 100,
-        height: 40,
-        child: Text(enabled ? 'Enabled' : 'Disabled'),
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: top,
+            width: 100,
+            height: 40,
+            child: Text(enabled ? 'Enabled' : 'Disabled'),
+          ),
+        ],
       ),
     ),
   );

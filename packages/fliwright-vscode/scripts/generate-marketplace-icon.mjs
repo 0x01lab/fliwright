@@ -4,77 +4,52 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const size = 256;
+const supersample = 4;
 const root = fileURLToPath(new URL('..', import.meta.url));
-const out = join(root, 'media', 'fliwright-marketplace.png');
+const palettes = [
+  { file: 'fliwright-marketplace.png', background: [20, 31, 59], glyph: [126, 155, 238] },
+  { file: 'fliwright-marketplace-forest.png', background: [13, 48, 43], glyph: [89, 219, 185] },
+  { file: 'fliwright-marketplace-sunset.png', background: [65, 29, 43], glyph: [247, 147, 168] },
+  { file: 'fliwright-marketplace-gold.png', background: [57, 43, 18], glyph: [248, 202, 108] },
+];
 
-const data = Buffer.alloc(size * size * 4);
-
-function mix(a, b, t) {
-  return Math.round(a + (b - a) * t);
-}
+let data;
 
 function setPixel(x, y, rgba) {
-  const i = (y * size + x) * 4;
+  const i = (y * size + x) * 3;
   data[i] = rgba[0];
   data[i + 1] = rgba[1];
   data[i + 2] = rgba[2];
-  data[i + 3] = rgba[3];
 }
 
-function roundedRect(x, y, w, h, r) {
-  return (px, py) => {
-    const dx = Math.max(x - px, 0, px - (x + w));
-    const dy = Math.max(y - py, 0, py - (y + h));
-    if (dx || dy) return dx * dx + dy * dy <= r * r;
-    const nearLeft = px < x + r;
-    const nearRight = px > x + w - r;
-    const nearTop = py < y + r;
-    const nearBottom = py > y + h - r;
-    if (!(nearLeft || nearRight) || !(nearTop || nearBottom)) return true;
-    const cx = nearLeft ? x + r : x + w - r;
-    const cy = nearTop ? y + r : y + h - r;
-    return (px - cx) ** 2 + (py - cy) ** 2 <= r ** 2;
-  };
+// This is the activity-bar F, scaled into a Marketplace-sized canvas.
+const isGlyph = (x, y) => (
+  (x >= 58 && x <= 102 && y >= 46 && y <= 210)
+  || (x >= 58 && x <= 196 && y >= 46 && y <= 88)
+  || (x >= 58 && x <= 174 && y >= 110 && y <= 152)
+);
+// The square is part of the mark, not a separate status indicator: it extends
+// the activity-bar glyph into a connected, pixel-like monogram.
+const isGlyphBlock = (x, y) => x >= 142 && x <= 194 && y >= 152 && y <= 204;
+
+function sample(x, y, palette) {
+  if (isGlyph(x, y) || isGlyphBlock(x, y)) return palette.glyph;
+  return palette.background;
 }
 
-const appShape = roundedRect(16, 16, 224, 224, 42);
-const fStem = roundedRect(70, 58, 44, 140, 10);
-const fTop = roundedRect(70, 58, 124, 38, 10);
-const fMid = roundedRect(70, 112, 104, 36, 10);
-const checkA = (x, y) => y > 163 + (x - 145) * 0.72 && y < 179 + (x - 145) * 0.72 && x >= 130 && x <= 162;
-const checkB = (x, y) => y > 204 - (x - 162) * 0.9 && y < 220 - (x - 162) * 0.9 && x >= 158 && x <= 206;
-
-for (let y = 0; y < size; y += 1) {
-  for (let x = 0; x < size; x += 1) {
-    if (!appShape(x, y)) {
-      setPixel(x, y, [0, 0, 0, 0]);
-      continue;
-    }
-
-    const t = (x + y) / (size * 2);
-    const bg = [
-      mix(12, 11, t),
-      mix(32, 72, t),
-      mix(49, 70, t),
-      255,
-    ];
-    setPixel(x, y, bg);
-
-    const isF = fStem(x, y) || fTop(x, y) || fMid(x, y);
-    if (isF) {
-      setPixel(x, y, [248, 252, 255, 255]);
-    }
-
-    if (checkA(x, y) || checkB(x, y)) {
-      setPixel(x, y, [44, 221, 172, 255]);
-    }
-
-    const glow = Math.hypot(x - 188, y - 188);
-    if (glow < 28) {
-      const i = (y * size + x) * 4;
-      data[i] = Math.max(data[i], 44);
-      data[i + 1] = Math.max(data[i + 1], 221);
-      data[i + 2] = Math.max(data[i + 2], 172);
+function render(palette) {
+  data = Buffer.alloc(size * size * 3);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const sum = [0, 0, 0];
+      for (let subY = 0; subY < supersample; subY += 1) {
+        for (let subX = 0; subX < supersample; subX += 1) {
+          const rgba = sample(x + (subX + 0.5) / supersample, y + (subY + 0.5) / supersample, palette);
+          for (let channel = 0; channel < 3; channel += 1) sum[channel] += rgba[channel];
+        }
+      }
+      const divisor = supersample * supersample;
+      setPixel(x, y, sum.map((channel) => Math.round(channel / divisor)));
     }
   }
 }
@@ -104,18 +79,20 @@ const ihdr = Buffer.alloc(13);
 ihdr.writeUInt32BE(size, 0);
 ihdr.writeUInt32BE(size, 4);
 ihdr[8] = 8;
-ihdr[9] = 6;
+ihdr[9] = 2;
 
-const scanlines = Buffer.alloc((size * 4 + 1) * size);
-for (let y = 0; y < size; y += 1) {
-  const row = y * (size * 4 + 1);
-  scanlines[row] = 0;
-  data.copy(scanlines, row + 1, y * size * 4, (y + 1) * size * 4);
+for (const palette of palettes) {
+  render(palette);
+  const scanlines = Buffer.alloc((size * 3 + 1) * size);
+  for (let y = 0; y < size; y += 1) {
+    const row = y * (size * 3 + 1);
+    scanlines[row] = 0;
+    data.copy(scanlines, row + 1, y * size * 3, (y + 1) * size * 3);
+  }
+  writeFileSync(join(root, 'media', palette.file), Buffer.concat([
+    header,
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(scanlines)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]));
 }
-
-writeFileSync(out, Buffer.concat([
-  header,
-  chunk('IHDR', ihdr),
-  chunk('IDAT', deflateSync(scanlines)),
-  chunk('IEND', Buffer.alloc(0)),
-]));

@@ -8,11 +8,17 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: vscode-marketplace-release
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -23,8 +29,34 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Verify extension
+      - name: Verify release tag matches extension version
+        shell: bash
+        run: |
+          version="$(node -p "require('./packages/fliwright-vscode/package.json').version")"
+          expected_tag="vscode-v${version}"
+          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match extension version ${version}. Expected ${expected_tag}." >&2
+            exit 1
+          fi
+
+      - name: Verify Marketplace credential
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        shell: bash
+        run: |
+          if [[ -z "${VSCE_PAT}" ]]; then
+            echo "Missing required VSCE_PAT GitHub Actions secret." >&2
+            exit 1
+          fi
+
+      - name: Lint and unit test extension
         run: pnpm --filter fliwright-vscode run lint && pnpm --filter fliwright-vscode run test
+
+      - name: Build extension
+        run: pnpm --filter fliwright-vscode run build
+
+      - name: Run VS Code integration test
+        run: xvfb-run -a pnpm --filter fliwright-vscode run test:integration
 
       - name: Package VSIX
         run: pnpm --filter fliwright-vscode run package
@@ -38,3 +70,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: packages/fliwright-vscode/fliwright-vscode-*.vsix
+          generate_release_notes: true

@@ -1,7 +1,7 @@
 ---
 package: "fliwright_design_qa"
 path: "packages/fliwright-design-qa"
-source_fingerprint: "4b9bb981862e2338955cba182898a62e70c5c59e9d006027a72e43555ecd5646"
+source_fingerprint: "5f147ebbc4d1bce2e802a0e49ab32ee5fe5a9675ca014eb09e78bde21e89cd0a"
 generated: true
 ---
 
@@ -40,6 +40,7 @@ Run inside debug/profile Flutter applications, provide the optional QR pairing U
 - `DesignQaAccelerometerEventChannel`
 - `DesignQaCapture`
 - `DesignQaCaptureResult`
+- `DesignQaCaptureSuccessIndicator`
 - `DesignQaController`
 - `DesignQaControllerConfig`
 - `DesignQaControllerSnapshot`
@@ -47,6 +48,7 @@ Run inside debug/profile Flutter applications, provide the optional QR pairing U
 - `DesignQaPairingPage`
 - `DesignQaPairingPayload`
 - `DesignQaPeerJsMessage`
+- `DesignQaPeerJsSignalingKeepAlive`
 - `DesignQaPeerServerConfig`
 - `DesignQaPlatformTransport`
 - `DesignQaRenderViewScreenshotProvider`
@@ -60,10 +62,12 @@ Run inside debug/profile Flutter applications, provide the optional QR pairing U
 
 - `packages/fliwright-design-qa/lib/fliwright_design_qa.dart`
 - `packages/fliwright-design-qa/lib/src/accelerometer_event_channel.dart`
+- `packages/fliwright-design-qa/lib/src/capture_success_indicator.dart`
 - `packages/fliwright-design-qa/lib/src/design_qa_controller.dart`
 - `packages/fliwright-design-qa/lib/src/design_qa_pairing_page.dart`
 - `packages/fliwright-design-qa/lib/src/design_qa_sdk.dart`
 - `packages/fliwright-design-qa/lib/src/pairing.dart`
+- `packages/fliwright-design-qa/lib/src/peerjs_keep_alive.dart`
 - `packages/fliwright-design-qa/lib/src/peerjs_signaling.dart`
 - `packages/fliwright-design-qa/lib/src/platform_transport.dart`
 - `packages/fliwright-design-qa/lib/src/protocol.dart`

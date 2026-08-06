@@ -6,21 +6,24 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import 'ref_registry.dart';
+import 'soft_keyboard.dart';
 
 class ActionabilityException implements Exception {
   const ActionabilityException({
     required this.ref,
     required this.reason,
+    this.keyboardObscured = false,
   });
 
   final String ref;
   final String reason;
+  final bool keyboardObscured;
 
   @override
   String toString() => 'Actionability failed for $ref: $reason';
 }
 
-Future<void> ensureActionable(
+Future<Rect> ensureActionable(
   RefEntry entry, {
   required String ref,
   bool checkStable = true,
@@ -45,13 +48,23 @@ Future<void> ensureActionable(
   rect = _liveRectOf(entry.element) ?? rect;
 
   final view = _firstFlutterView();
-  if (view == null) return;
+  if (view == null) return rect;
 
-  final viewport = _logicalViewport(view);
-  if (!rect.overlaps(viewport)) {
+  final keyboard = SoftKeyboard.current();
+  final viewport = keyboard.viewport;
+  final interactiveViewport = keyboard.interactiveViewport;
+  if (!interactiveViewport.contains(rect.center)) {
     await _tryScrollIntoView(entry.element);
     rect = _liveRectOf(entry.element) ?? rect;
-    if (!rect.overlaps(viewport)) {
+    if (!interactiveViewport.contains(rect.center)) {
+      if (keyboard.restricts(rect.center)) {
+        throw ActionabilityException(
+          ref: ref,
+          reason:
+              'covered by soft keyboard (rect=$rect, keyboard=${keyboard.keyboardRect})',
+          keyboardObscured: true,
+        );
+      }
       throw ActionabilityException(
         ref: ref,
         reason: 'off-viewport (rect=$rect, viewport=$viewport)',
@@ -76,7 +89,7 @@ Future<void> ensureActionable(
 
   if (checkReceivesEvents) {
     final target = entry.element.findRenderObject();
-    if (target == null) return;
+    if (target == null) return rect;
 
     final result = BoxHitTestResult();
     RendererBinding.instance.hitTestInView(result, rect.center, view.viewId);
@@ -94,6 +107,8 @@ Future<void> ensureActionable(
       );
     }
   }
+
+  return rect;
 }
 
 RenderObject _findRenderObject(Element element, String ref) {
@@ -123,12 +138,6 @@ ui.FlutterView? _firstFlutterView() {
   final views = WidgetsBinding.instance.platformDispatcher.views;
   final iterator = views.iterator;
   return iterator.moveNext() ? iterator.current : null;
-}
-
-Rect _logicalViewport(ui.FlutterView view) {
-  final size = view.physicalSize;
-  final dpr = view.devicePixelRatio;
-  return Rect.fromLTWH(0, 0, size.width / dpr, size.height / dpr);
 }
 
 Future<void> _tryScrollIntoView(Element element) async {

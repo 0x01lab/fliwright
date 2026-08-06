@@ -122,7 +122,8 @@ Open `packages/fliwright-vscode` in VS Code or launch an Extension Development H
 pnpm --filter fliwright-vscode package
 ```
 
-The package script builds the extension and invokes `vsce` through `pnpm dlx`, so generated `dist/` output does not need to be committed.
+The package script builds the extension and invokes the repository-managed
+`@vscode/vsce` binary, so generated `dist/` output does not need to be committed.
 
 Run the full release gate before publishing:
 
@@ -143,5 +144,7 @@ Release checklist:
 - Run `pnpm --filter fliwright-vscode build`.
 - Run `pnpm --filter fliwright-vscode test:integration` in a local VS Code-capable environment.
 - Run `pnpm --filter fliwright-vscode package` and install the generated VSIX in an Extension Development Host.
+- Bump `package.json` and `CHANGELOG.md` together, then push a matching
+  `vscode-v<version>` tag to trigger the GitHub Marketplace release workflow.
 - Start `examples/riverpod_demo` through a Fliwright bridge entrypoint, connect from VS Code, refresh State, read `counterProvider`, watch it, tap Increment, verify the value updates, then override `counterProvider` with `2`.
 - Publish only after Marketplace metadata, publisher credentials, and manual smoke testing are complete.

@@ -1,6 +1,7 @@
 library fliwright_bridge;
 
 export 'src/bridge.dart';
+export 'src/bridge_module.dart';
 export 'src/debug_value_encoder.dart';
 export 'src/extensions/app_instance.dart';
 export 'src/extensions/dio_mock_extension.dart';
@@ -19,6 +20,7 @@ export 'src/extensions/snap.dart';
 export 'src/extensions/source_map.dart';
 export 'src/extensions/snapshot.dart';
 export 'src/extensions/storage_reset.dart';
+export 'src/extensions/websocket_mock.dart';
 export 'src/form_control.dart';
 export 'src/ref_registry.dart';
 export 'src/semantics_compat.dart';

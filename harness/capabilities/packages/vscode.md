@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "32b2b75a4e0ef783a6498f70729d61a0cdd1702bfc8915e675e078e21952dd37"
+source_fingerprint: "af3468f901c0e7d6c5e0284ebd27e8f0899e29a76b7edcf32c1f4fd09da6fef3"
 generated: true
 ---
 
@@ -42,7 +42,10 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.appendLastAnalyzeToFormRules`
 - `fliwright.applyDefaultMocks`
 - `fliwright.applyMockRule`
+- `fliwright.applyWebSocketMockProfile`
 - `fliwright.cleanFlowFile`
+- `fliwright.clearWebSocketMockCalls`
+- `fliwright.clearWebSocketMockRules`
 - `fliwright.configureMcp`
 - `fliwright.connect`
 - `fliwright.copyMockEndpoint`
@@ -54,6 +57,8 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.createFormRules`
 - `fliwright.createFormRulesFromLastAnalyze`
 - `fliwright.createMockConfig`
+- `fliwright.createWebSocketMockProfile`
+- `fliwright.createWebSocketMockProfileFromCall`
 - `fliwright.disconnect`
 - `fliwright.discoverVmService`
 - `fliwright.fillForm`
@@ -61,6 +66,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.generateFlowTest`
 - `fliwright.insertFormFieldSelector`
 - `fliwright.insertRecordedTest`
+- `fliwright.inspectWebSocketMockCall`
 - `fliwright.openFailure`
 - `fliwright.openFlow`
 - `fliwright.openFlowJson`
@@ -73,6 +79,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.openTddLoop`
 - `fliwright.openTraceViewer`
 - `fliwright.openVisualEditor`
+- `fliwright.openWebSocketMockProfile`
 - `fliwright.overrideStateProvider`
 - `fliwright.readStateProvider`
 - `fliwright.refreshFlows`
@@ -80,12 +87,15 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.refreshTddLoop`
 - `fliwright.refreshTestFile`
 - `fliwright.refreshTests`
+- `fliwright.refreshWebSocketMockCalls`
 - `fliwright.reloadFormRules`
 - `fliwright.reloadMocks`
 - `fliwright.reloadScripts`
+- `fliwright.reloadWebSocketMocks`
 - `fliwright.runCurrentTest`
 - `fliwright.runScript`
 - `fliwright.runWorkspaceTests`
+- `fliwright.sendWebSocketMockPush`
 - `fliwright.showLastRun`
 - `fliwright.showLastTrace`
 - `fliwright.startRecording`
@@ -109,6 +119,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.scripts`
 - `fliwright.state`
 - `fliwright.tests`
+- `fliwright.websocketMocks`
 
 ## Source Anchors
 
@@ -165,6 +176,9 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/views/ScriptsTreeProvider.ts`
 - `packages/fliwright-vscode/src/views/StateTreeProvider.ts`
 - `packages/fliwright-vscode/src/views/TestsTreeProvider.ts`
+- `packages/fliwright-vscode/src/views/WebSocketMockTreeProvider.ts`
+- `packages/fliwright-vscode/src/websocket/WebSocketMockConfigService.ts`
+- `packages/fliwright-vscode/src/websocket/WebSocketMockService.ts`
 - `packages/fliwright-vscode/src/webview/FailurePanel.ts`
 - `packages/fliwright-vscode/src/webview/RecordingPanel.ts`
 - `packages/fliwright-vscode/src/webview/components/ui/badge.tsx`

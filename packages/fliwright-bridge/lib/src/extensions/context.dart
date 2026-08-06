@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../bridge.dart';
+import '../soft_keyboard.dart';
 
 class ContextExtension {
   static void register(ExtensionRegistry registry) {
@@ -13,6 +14,7 @@ class ContextExtension {
     return {
       'route': await _route(),
       'focused': _focused(),
+      'keyboard': SoftKeyboard.current().toJson(),
       'diagnostics': {
         'transientCallbacks': WidgetsBinding.instance.transientCallbackCount,
         'schedulerPhase': WidgetsBinding.instance.schedulerPhase.name,
@@ -26,6 +28,8 @@ class ContextExtension {
         'normalizedActionErrors': false,
         'normalizedMockCalls': true,
         'normalizedProviderState': true,
+        'keyboardState': true,
+        'keyboardDismiss': true,
       },
     };
   }
