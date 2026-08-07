@@ -25,7 +25,7 @@ class ContextExtension {
         'captureFrame': true,
         'query': true,
         'assertionDiagnostics': true,
-        'normalizedActionErrors': false,
+        'normalizedActionErrors': true,
         'normalizedMockCalls': true,
         'normalizedProviderState': true,
         'keyboardState': true,

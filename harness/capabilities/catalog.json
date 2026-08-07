@@ -134,6 +134,8 @@
         "packages/fliwright-core/src/ai/config.ts",
         "packages/fliwright-core/src/ai/errors.ts",
         "packages/fliwright-core/src/ai/types.ts",
+        "packages/fliwright-core/src/assertions/AssertRuntime.ts",
+        "packages/fliwright-core/src/assertions/types.ts",
         "packages/fliwright-core/src/devassist/DevAssistTrace.ts",
         "packages/fliwright-core/src/flow/FigmaBinding.ts",
         "packages/fliwright-core/src/flow/FigmaRestScreenshotProvider.ts",
@@ -224,10 +226,13 @@
         "AppSnapshot",
         "Assertion",
         "AssertionError",
+        "AssertionMetadata",
         "AssertionOptions",
         "AssertionSuggester",
         "AssertionSuggestion",
         "AssertionTimelineOptions",
+        "AssertRuntime",
+        "AssertRuntimeOptions",
         "AuthCapability",
         "AuthStatus",
         "BridgeContext",
@@ -484,6 +489,7 @@
         "ResolvedSelector",
         "resolveFliwrightRunsRoot",
         "ResolveFliwrightRunsRootOptions",
+        "RuntimeAssertionOptions",
         "SafeRepairAction",
         "sanitizeFlowFileId",
         "sanitizeProjectPathName",
@@ -578,7 +584,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "9b85ad8238c1bbd80d98734f7f85a378c23d8521cdb4ccde0d615931b94553df"
+      "sourceFingerprint": "5d669183b829b28c6ad377f470b2db6a06b63df9aa08f4f0e996e38845a0da30"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -943,7 +949,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "80826215e26d4eb957f44038fe841bf7603aad3f0d2274ca18b2e667a65e5d6b"
+      "sourceFingerprint": "9b66a120b0304e7780b1c97e07b3dfc535820cd4430863d2c07970c5dd2e32f0"
     },
     {
       "name": "@fliwright/vitest",
@@ -990,7 +996,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "d3488901e00dfd92f6c056a57b01d4f68a4cc4047caada3fabbcaca4117ed44e"
+      "sourceFingerprint": "e6c578dd052b3a21f0506c290262ae458730081da5d132ed9c80d7432d61c9b6"
     },
     {
       "name": "fliwright_bridge",
@@ -1190,7 +1196,7 @@
         "ext.fliwright.websocket.push",
         "ext.fliwright.websocket.setRules"
       ],
-      "sourceFingerprint": "2509e09e88d38e051950b000e2b0c75b99b547843c57c00e3d39a1e858324172"
+      "sourceFingerprint": "57529773a7c4110baaf1af6c491acb114f2f3ec0e049a0372d2ada5cf182169f"
     },
     {
       "name": "fliwright_bridge_riverpod",

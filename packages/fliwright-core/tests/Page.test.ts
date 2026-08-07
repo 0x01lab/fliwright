@@ -207,6 +207,21 @@ describe('Page', () => {
     expect(result.count).toBe(1);
   });
 
+  it('serializes ref queries and rejects bridge errors', async () => {
+    const sendRequest = vi.fn().mockResolvedValue({
+      success: false,
+      error: 'Unknown or stale ref: e99',
+    });
+    const page = new Page(sendRequest);
+
+    await expect(page.query({ ref: 'e99' }, { visible: 'hitTestable' }))
+      .rejects.toThrow('query failed: Unknown or stale ref: e99');
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.query', {
+      query: JSON.stringify({ ref: 'e99' }),
+      visible: 'hitTestable',
+    });
+  });
+
   it('dismissModal sends a page-level action', async () => {
     const sendRequest = vi.fn().mockResolvedValue({ success: true });
     const page = new Page(sendRequest);

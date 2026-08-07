@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "9b85ad8238c1bbd80d98734f7f85a378c23d8521cdb4ccde0d615931b94553df"
+source_fingerprint: "5d669183b829b28c6ad377f470b2db6a06b63df9aa08f4f0e996e38845a0da30"
 generated: true
 ---
 
@@ -88,10 +88,13 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `AppSnapshot`
 - `Assertion`
 - `AssertionError`
+- `AssertionMetadata`
 - `AssertionOptions`
 - `AssertionSuggester`
 - `AssertionSuggestion`
 - `AssertionTimelineOptions`
+- `AssertRuntime`
+- `AssertRuntimeOptions`
 - `AuthCapability`
 - `AuthStatus`
 - `BridgeContext`
@@ -348,6 +351,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ResolvedSelector`
 - `resolveFliwrightRunsRoot`
 - `ResolveFliwrightRunsRootOptions`
+- `RuntimeAssertionOptions`
 - `SafeRepairAction`
 - `sanitizeFlowFileId`
 - `sanitizeProjectPathName`
@@ -491,6 +495,8 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/ai/config.ts`
 - `packages/fliwright-core/src/ai/errors.ts`
 - `packages/fliwright-core/src/ai/types.ts`
+- `packages/fliwright-core/src/assertions/AssertRuntime.ts`
+- `packages/fliwright-core/src/assertions/types.ts`
 - `packages/fliwright-core/src/devassist/DevAssistTrace.ts`
 - `packages/fliwright-core/src/flow/FigmaBinding.ts`
 - `packages/fliwright-core/src/flow/FigmaRestScreenshotProvider.ts`

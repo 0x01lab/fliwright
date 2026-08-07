@@ -222,7 +222,10 @@ export class Page {
       query: JSON.stringify(query),
       ...(options?.visible ? { visible: options.visible } : {}),
       ...(options?.limit != null ? { limit: String(options.limit) } : {}),
-    }) as Partial<BridgeQueryResult>;
+    }) as Partial<BridgeQueryResult> & { success?: boolean; error?: string };
+    if (result.success === false || result.error) {
+      throw new Error(`query failed: ${result.error ?? 'unknown error'}`);
+    }
     return {
       matches: result.matches ?? [],
       count: result.count ?? result.matches?.length ?? 0,

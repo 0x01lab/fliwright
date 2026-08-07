@@ -257,6 +257,43 @@ testWithTimeline('records locator expect assertions in the timeline', async ({ p
   }));
 });
 
+testWithTimeline('provides the timeline-native assert fixture', async ({ page, assert, timeline }) => {
+  await assert.visible('Next is visible through assert', page.locator({ text: 'Next' }));
+  expect(timeline.recorder.toJSON().nodes).toContainEqual(expect.objectContaining({
+    kind: 'assertion',
+    title: 'Next is visible through assert',
+    metadata: expect.objectContaining({ matcher: 'visible' }),
+  }));
+});
+
+let persistedFailedAssertionTimelinePath = '';
+
+testWithTimeline.fails('persists failed timeline-native assertions', async ({ assert, timeline }) => {
+  persistedFailedAssertionTimelinePath = timeline.artifactStore.timelinePath;
+  const missing = {
+    selectorString: 'text=Missing',
+    isVisible: async () => false,
+  } as Locator;
+
+  await assert.visible('Missing control', missing, { timeout: 0 });
+});
+
+vitestTest('failed assert fixture writes an agent-visible failure to timeline.json', async () => {
+  const timeline = JSON.parse(await readFile(persistedFailedAssertionTimelinePath, 'utf8')) as {
+    nodes: Array<{ kind: string; status: string; error?: { code?: string; actionContext?: { action?: string } } }>;
+    agentVisibleFailures?: Array<{ code: string }>;
+  };
+  expect(timeline.nodes).toContainEqual(expect.objectContaining({
+    kind: 'assertion',
+    status: 'failed',
+    error: expect.objectContaining({
+      code: 'assertion_failed',
+      actionContext: expect.objectContaining({ action: 'visible' }),
+    }),
+  }));
+  expect(timeline.agentVisibleFailures).toContainEqual(expect.objectContaining({ code: 'assertion_failed' }));
+});
+
 const testWithLogger = createFliwrightTest({
   vmServiceUrl: 'ws://localhost:12345/ws',
   timelineDir: await mkdtemp(join(tmpdir(), 'fliwright-vitest-logs-')),

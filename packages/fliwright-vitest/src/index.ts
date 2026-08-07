@@ -11,6 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import {
   AgentRuntime,
+  AssertRuntime,
   AiRuntime,
   AssertionError,
   Assertion,
@@ -122,6 +123,7 @@ interface FliwrightFixtures {
   flow: FlowRuntime;
   mock: MockRuntime;
   agent: AgentRuntime;
+  assert: AssertRuntime;
   timeline: FliwrightTimelineContext;
   logger: FliwrightLogger;
 }
@@ -312,6 +314,14 @@ export function createFliwrightTest(config: FliwrightConfig, options?: CreateFli
     },
     agent: async ({ aiRuntime, timeline }, use) => {
       await use(new AgentRuntime({ aiRuntime, recorder: timeline.recorder }));
+    },
+    assert: async ({ page, mock, timeline }, use) => {
+      await use(new AssertRuntime({
+        page,
+        mock,
+        recorder: timeline.recorder,
+        artifactStore: timeline.artifactStore,
+      }));
     },
     logger: async ({ timeline }, use) => {
       await use(timeline.logger);

@@ -391,6 +391,12 @@ export { PassiveAgent } from './agent/PassiveAgent.js';
 export type { AgentDiagnosis, PassiveAgentContext, PassiveAgentOptions } from './agent/PassiveAgent.js';
 export { AgentRepair } from './agent/AgentRepair.js';
 export type { AgentRepairOptions, RepairProposal, RepairResult, SafeRepairAction } from './agent/AgentRepair.js';
+export { AssertRuntime } from './assertions/AssertRuntime.js';
+export type {
+  AssertRuntimeOptions,
+  AssertionMetadata,
+  RuntimeAssertionOptions,
+} from './assertions/types.js';
 export { MockRuntime, matchesCall } from './mocks/MockRuntime.js';
 export { FliwrightMockService, mock } from './mocks/MockService.js';
 export {

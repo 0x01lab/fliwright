@@ -18,6 +18,20 @@ class InspectExtension {
     registry.register('ext.fliwright.action', _action);
   }
 
+  /// Resolve a snapshot/query ref into the same normalized widget payload used
+  /// by `ext.fliwright.resolve`. QueryExtension uses this to keep ref queries
+  /// on the live element path instead of trying to reconstruct selector text.
+  static Map<String, dynamic>? resolveRefInfo(String ref) {
+    if (ref.isEmpty) return null;
+    final entry = RefRegistry.lookupEntry(ref) ?? _resolveQueryRef(ref);
+    if (entry == null) return null;
+    final info = extractWidgetInfo(entry.element);
+    if (info == null) return null;
+    info['ref'] = ref;
+    info['hitTestable'] = _isHitTestable(entry.element, Alignment.center);
+    return info;
+  }
+
   static Future<Map<String, dynamic>> _resolve(
     Map<String, String> params,
   ) async {

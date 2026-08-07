@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../bridge.dart';
+import 'inspect.dart';
 
 class QueryExtension {
   static void register(ExtensionRegistry registry) {
@@ -17,13 +18,39 @@ class QueryExtension {
         'count': 0,
       };
     }
-    final resolved = await FliwrightBridge.registry
-        .invoke('ext.fliwright.resolve', {
-          'selector': jsonEncode(_selectorFor(decoded)),
-          'visible': params['visible'] ?? 'any',
-          'strict': 'false',
-          if (params['limit'] != null) 'limit': params['limit']!,
-        });
+    final ref = decoded['ref'];
+    if (ref is String && ref.isNotEmpty) {
+      final info = InspectExtension.resolveRefInfo(ref);
+      if (info == null) {
+        return {
+          'success': false,
+          'error': 'Unknown or stale ref: $ref',
+          'matches': <dynamic>[],
+          'count': 0,
+        };
+      }
+      final match = _normalizeMatch(info);
+      if (params['visible'] == 'hitTestable' &&
+          match['hitTestable'] != true) {
+        return {
+          'success': true,
+          'matches': <dynamic>[],
+          'count': 0,
+        };
+      }
+      return {
+        'success': true,
+        'matches': [match],
+        'count': 1,
+      };
+    }
+    final resolved =
+        await FliwrightBridge.registry.invoke('ext.fliwright.resolve', {
+      'selector': jsonEncode(_selectorFor(decoded)),
+      'visible': params['visible'] ?? 'any',
+      'strict': 'false',
+      if (params['limit'] != null) 'limit': params['limit']!,
+    });
     final matches = (resolved['matches'] as List<dynamic>? ?? <dynamic>[])
         .whereType<Map>()
         .map(_normalizeMatch)
