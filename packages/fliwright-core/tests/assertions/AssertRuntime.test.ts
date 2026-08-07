@@ -81,6 +81,31 @@ describe('AssertRuntime', () => {
     ]);
   });
 
+  it('honors disabled failure evidence for locator assertions', async () => {
+    const timeline = recorder();
+    const page = {
+      screenshot: vi.fn(),
+      snapshot: vi.fn(),
+    } as unknown as Page;
+    const artifactStore = {
+      writeScreenshot: vi.fn().mockResolvedValue({ kind: 'screenshot', path: 'artifacts/screenshots/assertion-1.png' }),
+      writeSnapshot: vi.fn().mockResolvedValue({ kind: 'snapshot', path: 'artifacts/snapshots/assertion-1.json' }),
+    } as unknown as TimelineArtifactStore;
+    const runtime = new AssertRuntime({ recorder: timeline, page, artifactStore });
+
+    await expect(runtime.visible(
+      'Missing save control',
+      locator({ isVisible: vi.fn().mockResolvedValue(false) }),
+      { timeout: 0, includeScreenshot: false, includeSnapshot: false },
+    )).rejects.toMatchObject({ failure: expect.objectContaining({ code: 'assertion_failed' }) });
+
+    expect(page.screenshot).not.toHaveBeenCalled();
+    expect(page.snapshot).not.toHaveBeenCalled();
+    expect(artifactStore.writeScreenshot).not.toHaveBeenCalled();
+    expect(artifactStore.writeSnapshot).not.toHaveBeenCalled();
+    expect(timeline.toJSON().nodes[0]?.artifacts).toBeUndefined();
+  });
+
   it('supports request, noRequest, and requestCount through MockRuntime', async () => {
     const timeline = recorder();
     const manager = {

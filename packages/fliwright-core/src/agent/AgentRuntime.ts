@@ -1,6 +1,7 @@
 import type { AiGenerateRequest, AiInspectRequest, AiRequest, AiVisibleOptions } from '../ai/types.js';
 import type { AiRuntime } from '../ai/AiRuntime.js';
 import { FliwrightAgentError } from './FliwrightAgentError.js';
+import { TimelineNodeLifecycle } from '../timeline/TimelineNodeLifecycle.js';
 import { TimelineRecorder } from '../timeline/TimelineRecorder.js';
 import type { AgentVisibleFailure } from '../timeline/types.js';
 
@@ -10,7 +11,11 @@ export interface AgentRuntimeOptions {
 }
 
 export class AgentRuntime {
-  constructor(private readonly options: AgentRuntimeOptions) {}
+  private readonly lifecycle: TimelineNodeLifecycle;
+
+  constructor(private readonly options: AgentRuntimeOptions) {
+    this.lifecycle = new TimelineNodeLifecycle(options.recorder);
+  }
 
   ask(titleOrPrompt: string, request: Partial<AiRequest> = {}) {
     const prompt = request.prompt ?? titleOrPrompt;
@@ -69,18 +74,20 @@ export class AgentRuntime {
     body: () => Promise<T>,
     successMetadata?: () => Record<string, unknown>,
   ): Promise<T> {
-    const node = this.options.recorder?.startNode('ai-call', title, {
-      metadata: maskSecrets({ mode: 'active', ...this.options.aiRuntime.timelineMetadata, ...metadata }),
+    return this.lifecycle.run({
+      kind: 'ai-call',
+      title,
+      start: {
+        metadata: maskSecrets({ mode: 'active', ...this.options.aiRuntime.timelineMetadata, ...metadata }),
+      },
+      body,
+      successMetadata,
+      onFailure: (error, timelineNodeId) => ({
+        failure: createAiFailure(error, title, timelineNodeId),
+      }),
+      // AI failures intentionally replace an existing error with the AI-specific failure context.
+      wrapError: (error, failure) => new FliwrightAgentError(failure, { cause: error }),
     });
-    try {
-      const value = await body();
-      if (node) this.options.recorder?.passNode(node.id, successMetadata?.());
-      return value;
-    } catch (error) {
-      const failure = createAiFailure(error, title, node?.id);
-      if (node) this.options.recorder?.failNode(node.id, failure);
-      throw new FliwrightAgentError(failure, { cause: error });
-    }
   }
 }
 

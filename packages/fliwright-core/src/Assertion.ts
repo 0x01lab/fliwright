@@ -3,14 +3,9 @@ import type { Page } from './Page.js';
 import type { WidgetSnapshot } from './types.js';
 import type { FailureCollector } from './FailureCollector.js';
 import type { SelfHealingEngine } from './SelfHealingEngine.js';
-import { FliwrightAgentError } from './agent/FliwrightAgentError.js';
 import type { TimelineArtifactStore } from './timeline/TimelineArtifactStore.js';
 import type { TimelineRecorder } from './timeline/TimelineRecorder.js';
-import type { AgentVisibleFailure, TimelineArtifactRef } from './timeline/types.js';
-import {
-  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
-  TIMELINE_ARTIFACT_KIND_SNAPSHOT,
-} from './timeline/constants.js';
+import { runTimelineAssertion } from './assertions/AssertionTimeline.js';
 
 const DEFAULT_TIMEOUT = 5000;
 const DEFAULT_INTERVAL = 100;
@@ -381,39 +376,15 @@ export class Assertion {
       expected,
       ...(this.negated ? { negated: true } : {}),
     };
-    const node = recorder.startNode('assertion', title, { metadata });
-    try {
-      await body();
-      recorder.passNode(node.id);
-    } catch (error) {
-      const artifacts = await this.captureFailureArtifacts(node.id, options);
-      if (artifacts.length) recorder.addArtifacts(node.id, artifacts);
-      const failure = createAssertionFailure(error, title, node.id, metadata, artifacts);
-      recorder.failNode(node.id, failure, { ...metadata, actual: assertionActual(error) });
-      throw new FliwrightAgentError(failure, { cause: error });
-    }
-  }
-
-  private async captureFailureArtifacts(nodeId: string, options?: AssertionOptions): Promise<TimelineArtifactRef[]> {
-    const page = this.timeline?.page;
-    const store = this.timeline?.artifactStore;
-    if (!page || !store) return [];
-    const artifacts: TimelineArtifactRef[] = [];
-    try {
-      if (options?.includeScreenshot !== false && typeof page.screenshot === 'function') {
-        artifacts.push(await store.writeScreenshot(nodeId, await page.screenshot()));
-      }
-    } catch {
-      // Best effort only.
-    }
-    try {
-      if (options?.includeSnapshot !== false && typeof page.snapshot === 'function') {
-        artifacts.push(await store.writeSnapshot(nodeId, await page.snapshot()));
-      }
-    } catch {
-      // Best effort only.
-    }
-    return artifacts;
+    await runTimelineAssertion({
+      title,
+      metadata,
+      recorder,
+      page: this.timeline?.page,
+      artifactStore: this.timeline?.artifactStore,
+      includeScreenshot: options?.includeScreenshot,
+      includeSnapshot: options?.includeSnapshot,
+    }, body);
   }
 }
 
@@ -426,42 +397,6 @@ export function createExpect(
   timeline?: AssertionTimelineOptions,
 ): Assertion {
   return new Assertion(locator, false, failureCollector, undefined, undefined, undefined, timeline);
-}
-
-function createAssertionFailure(
-  error: unknown,
-  title: string,
-  timelineNodeId: string,
-  metadata: Record<string, unknown>,
-  artifacts: TimelineArtifactRef[],
-): AgentVisibleFailure {
-  const message = error instanceof Error ? error.message : String(error);
-  const screenshot = artifacts.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT);
-  const snapshot = artifacts.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SNAPSHOT);
-  return {
-    code: 'assertion_failed',
-    title,
-    message,
-    timelineNodeId,
-    appState: {
-      ...(screenshot ? { screenshotPath: screenshot.path } : {}),
-      ...(snapshot ? { snapshotPath: snapshot.path } : {}),
-    },
-    actionContext: {
-      action: String(metadata.matcher),
-      target: typeof metadata.target === 'string' ? metadata.target : undefined,
-    },
-    recoveryHints: [
-      { kind: 'observe', description: 'Inspect the current screen and semantic snapshot around the failed assertion.' },
-      { kind: 'retry', description: 'Retry after the UI has settled if the expected state is asynchronous.' },
-      { kind: 'manual', description: 'Check whether the assertion target or expected value still matches the app behavior.' },
-    ],
-  };
-}
-
-function assertionActual(error: unknown): unknown {
-  if (error instanceof AssertionError) return error.actual;
-  return error instanceof Error ? error.message : String(error);
 }
 
 /**

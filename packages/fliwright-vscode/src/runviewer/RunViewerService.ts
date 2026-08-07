@@ -1,6 +1,12 @@
 // packages/fliwright-vscode/src/runviewer/RunViewerService.ts
 import * as vscode from 'vscode';
-import type { TimelineData, FliwrightLogEvent, TraceData } from '@fliwright/core';
+import {
+  parseTimelineData,
+  summarizeTimeline,
+  type TimelineData,
+  type FliwrightLogEvent,
+  type TraceData,
+} from '@fliwright/core';
 import { projectRunsRootCandidates } from '../testing/ProjectRunsRoot.js';
 import { RunArtifactStore, type RunArtifactIndexEntry } from '../testing/RunArtifactStore.js';
 import {
@@ -96,6 +102,7 @@ export class RunViewerService {
       const runDir = vscode.Uri.joinPath(runsDir, name);
       const timeline = await this.loadTimeline(runDir);
       if (!timeline) continue;
+      const summary = summarizeTimeline(timeline);
       summaries.push({
         runDir,
         runId: timeline.runId ?? name,
@@ -104,7 +111,7 @@ export class RunViewerService {
         status: timeline.status,
         startedAt: timeline.startedAt,
         endedAt: timeline.endedAt,
-        nodeCount: timeline.nodes?.length ?? 0,
+        nodeCount: summary.nodeCount,
       });
     }
 
@@ -235,9 +242,7 @@ export class RunViewerService {
     const uri = vscode.Uri.joinPath(runDir, TIMELINE_FILE_NAME);
     try {
       const buf = await vscode.workspace.fs.readFile(uri);
-      const parsed = JSON.parse(Buffer.from(buf).toString('utf8')) as TimelineData;
-      if (!parsed || !Array.isArray(parsed.nodes)) return undefined;
-      return parsed;
+      return parseTimelineData(Buffer.from(buf).toString('utf8'));
     } catch {
       return undefined;
     }

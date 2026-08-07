@@ -347,6 +347,8 @@ export type {
 export { TimelineRecorder } from './timeline/TimelineRecorder.js';
 export { TimelineArtifactStore } from './timeline/TimelineArtifactStore.js';
 export type { TimelineArtifactStoreOptions } from './timeline/TimelineArtifactStore.js';
+export { parseTimelineData, summarizeTimeline } from './timeline/TimelineReader.js';
+export type { TimelineSummary } from './timeline/TimelineReader.js';
 export {
   DevAssistTraceStore,
   buildChangeSetSnapshot,

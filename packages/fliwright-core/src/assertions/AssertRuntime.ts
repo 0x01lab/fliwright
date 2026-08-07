@@ -1,14 +1,8 @@
-import { Assertion, AssertionError, type AssertionOptions } from '../Assertion.js';
-import { FliwrightAgentError } from '../agent/FliwrightAgentError.js';
+import { Assertion, type AssertionOptions } from '../Assertion.js';
 import type { Locator } from '../Locator.js';
 import { MockRuntime } from '../mocks/MockRuntime.js';
 import type { NormalizedRequestMatcher } from '../mocks/types.js';
-import { TimelineRecorder } from '../timeline/TimelineRecorder.js';
-import type { AgentVisibleFailure, TimelineArtifactRef } from '../timeline/types.js';
-import {
-  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
-  TIMELINE_ARTIFACT_KIND_SNAPSHOT,
-} from '../timeline/constants.js';
+import { runTimelineAssertion } from './AssertionTimeline.js';
 import type {
   AssertRuntimeOptions,
   AssertionMetadata,
@@ -19,11 +13,7 @@ const DEFAULT_TIMEOUT = 5_000;
 const DEFAULT_INTERVAL = 100;
 
 export class AssertRuntime {
-  private readonly recorder?: TimelineRecorder;
-
-  constructor(private readonly options: AssertRuntimeOptions = {}) {
-    this.recorder = options.recorder;
-  }
+  constructor(private readonly options: AssertRuntimeOptions = {}) {}
 
   visible(title: string, locator: Locator, options?: RuntimeAssertionOptions): Promise<void> {
     return this.runLocator(title, 'visible', locator, options, (assertionOptions) => new Assertion(locator).toBeVisible(assertionOptions));
@@ -50,14 +40,14 @@ export class AssertRuntime {
   }
 
   count(title: string, locator: Locator, expected: number, options?: RuntimeAssertionOptions): Promise<void> {
-    return this.run(title, { matcher: 'count', target: locator.selectorString, expected }, async () => {
+    return this.run(title, { matcher: 'count', target: locator.selectorString, expected }, options, async () => {
       const actual = await pollValue(() => locator.count(), (value) => value === expected, options);
       if (actual !== expected) throw new Error(`Expected ${locator.selectorString} to have count ${expected}, got ${actual}.`);
     });
   }
 
   request(title: string, matcher: NormalizedRequestMatcher, options?: RuntimeAssertionOptions): Promise<void> {
-    return this.run(title, { matcher: 'request', target: describeMatcher(matcher), expected: matcher }, async () => {
+    return this.run(title, { matcher: 'request', target: describeMatcher(matcher), expected: matcher }, options, async () => {
       const actual = await pollValue(
         () => this.requireMock().findCalls(matcher),
         (calls) => calls.length > 0,
@@ -68,14 +58,14 @@ export class AssertRuntime {
   }
 
   noRequest(title: string, matcher: NormalizedRequestMatcher, options?: RuntimeAssertionOptions): Promise<void> {
-    return this.run(title, { matcher: 'noRequest', target: describeMatcher(matcher), expected: matcher }, async () => {
+    return this.run(title, { matcher: 'noRequest', target: describeMatcher(matcher), expected: matcher }, options, async () => {
       const actual = await this.requireMock().findCalls(matcher);
       if (actual.length > 0) throw new Error(`Expected ${describeMatcher(matcher)} not to be requested, got ${actual.length} call(s).`);
     });
   }
 
   requestCount(title: string, matcher: NormalizedRequestMatcher, expected: number, options?: RuntimeAssertionOptions): Promise<void> {
-    return this.run(title, { matcher: 'requestCount', target: describeMatcher(matcher), expected }, async () => {
+    return this.run(title, { matcher: 'requestCount', target: describeMatcher(matcher), expected }, options, async () => {
       const actual = await pollValue(
         () => this.requireMock().findCalls(matcher),
         (calls) => calls.length === expected,
@@ -93,43 +83,28 @@ export class AssertRuntime {
     body: (options: AssertionOptions) => Promise<void>,
     expected?: unknown,
   ): Promise<void> {
-    return this.run(title, { matcher, target: locator.selectorString, ...(expected === undefined ? {} : { expected }) }, () => body({
+    return this.run(title, { matcher, target: locator.selectorString, ...(expected === undefined ? {} : { expected }) }, options, () => body({
       timeout: options?.timeout,
       includeScreenshot: options?.includeScreenshot,
       includeSnapshot: options?.includeSnapshot,
     }));
   }
 
-  private async run(title: string, metadata: AssertionMetadata, body: () => Promise<void>): Promise<void> {
-    const node = this.recorder?.startNode('assertion', title, { metadata });
-    try {
-      await body();
-      if (node) this.recorder?.passNode(node.id);
-    } catch (error) {
-      const artifacts = node ? await this.captureFailureArtifacts(node.id) : [];
-      if (node && artifacts.length) this.recorder?.addArtifacts(node.id, artifacts);
-      const failure = createAssertionFailure(error, title, node?.id, metadata, artifacts);
-      if (node) this.recorder?.failNode(node.id, failure, { ...metadata, actual: assertionActual(error) });
-      throw error instanceof FliwrightAgentError ? error : new FliwrightAgentError(failure, { cause: error });
-    }
-  }
-
-  private async captureFailureArtifacts(nodeId: string): Promise<TimelineArtifactRef[]> {
-    const { page, artifactStore } = this.options;
-    if (!page || !artifactStore) return [];
-
-    const artifacts: TimelineArtifactRef[] = [];
-    try {
-      artifacts.push(await artifactStore.writeScreenshot(nodeId, await page.screenshot()));
-    } catch {
-      // Failure artifacts are best-effort and must not mask the assertion error.
-    }
-    try {
-      artifacts.push(await artifactStore.writeSnapshot(nodeId, await page.snapshot()));
-    } catch {
-      // Failure artifacts are best-effort and must not mask the assertion error.
-    }
-    return artifacts;
+  private async run(
+    title: string,
+    metadata: AssertionMetadata,
+    options: RuntimeAssertionOptions | undefined,
+    body: () => Promise<void>,
+  ): Promise<void> {
+    await runTimelineAssertion({
+      title,
+      metadata,
+      recorder: this.options.recorder,
+      page: this.options.page,
+      artifactStore: this.options.artifactStore,
+      includeScreenshot: options?.includeScreenshot,
+      includeSnapshot: options?.includeSnapshot,
+    }, body);
   }
 
   private requireMock(): MockRuntime {
@@ -148,40 +123,6 @@ async function pollValue<T>(read: () => Promise<T>, matches: (value: T) => boole
     value = await read();
   }
   return value;
-}
-
-function createAssertionFailure(
-  error: unknown,
-  title: string,
-  timelineNodeId?: string,
-  metadata: AssertionMetadata = { matcher: 'unknown' },
-  artifacts: TimelineArtifactRef[] = [],
-): AgentVisibleFailure {
-  const screenshot = artifacts.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT);
-  const snapshot = artifacts.find((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SNAPSHOT);
-  return {
-    code: 'assertion_failed',
-    title,
-    message: error instanceof Error ? error.message : String(error),
-    timelineNodeId,
-    appState: {
-      ...(screenshot ? { screenshotPath: screenshot.path } : {}),
-      ...(snapshot ? { snapshotPath: snapshot.path } : {}),
-    },
-    actionContext: {
-      action: metadata.matcher,
-      target: metadata.target,
-    },
-    recoveryHints: [
-      { kind: 'observe', description: 'Inspect the current app state and timeline artifacts.' },
-      { kind: 'retry', description: 'Retry after the app has settled.' },
-    ],
-  };
-}
-
-function assertionActual(error: unknown): unknown {
-  if (error instanceof AssertionError) return error.actual;
-  return error instanceof Error ? error.message : String(error);
 }
 
 function describeMatcher(matcher: NormalizedRequestMatcher): string {

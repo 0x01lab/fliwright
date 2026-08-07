@@ -6,6 +6,8 @@ import { SnapshotStore } from '../src/SnapshotStore.js';
 import { MultiDimensionalHealingStrategy } from '../src/strategies/MultiDimensionalHealingStrategy.js';
 import { TimelineRecorder } from '../src/timeline/TimelineRecorder.js';
 import type { Locator } from '../src/Locator.js';
+import type { Page } from '../src/Page.js';
+import type { TimelineArtifactStore } from '../src/timeline/TimelineArtifactStore.js';
 import type { WidgetInfo, WidgetSnapshot } from '../src/types.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -99,6 +101,31 @@ describe('timeline-aware expect', () => {
       status: 'failed',
       error: { code: 'assertion_failed' },
     });
+  });
+
+  it('honors disabled failure evidence for expect assertions', async () => {
+    const recorder = new TimelineRecorder({ runId: 'run-1', testName: 'timeline expect evidence opt-out' });
+    const page = {
+      screenshot: vi.fn(),
+      snapshot: vi.fn(),
+    } as unknown as Page;
+    const artifactStore = {
+      writeScreenshot: vi.fn(),
+      writeSnapshot: vi.fn(),
+    } as unknown as TimelineArtifactStore;
+
+    await expect(createExpect(createMockLocator(false), undefined, {
+      recorder,
+      page,
+      artifactStore,
+    }).toBeVisible({ timeout: 0, includeScreenshot: false, includeSnapshot: false }))
+      .rejects.toBeInstanceOf(FliwrightAgentError);
+
+    expect(page.screenshot).not.toHaveBeenCalled();
+    expect(page.snapshot).not.toHaveBeenCalled();
+    expect(artifactStore.writeScreenshot).not.toHaveBeenCalled();
+    expect(artifactStore.writeSnapshot).not.toHaveBeenCalled();
+    expect(recorder.toJSON().nodes[0]?.artifacts).toBeUndefined();
   });
 });
 

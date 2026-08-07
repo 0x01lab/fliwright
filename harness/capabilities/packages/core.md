@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "f387c23a80a61a11586e651bbbed2ef052406e5cbf2716634fadc0b320be8ab2"
+source_fingerprint: "9df634c2561c2a7eb8a5df7de1ba63b1c4b299073ed7febe4698907f290f0292"
 generated: true
 ---
 
@@ -313,6 +313,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ParsedMockRuleRouteId`
 - `parseFigmaUrl`
 - `parseSelectorJson`
+- `parseTimelineData`
 - `PassiveAgent`
 - `PassiveAgentContext`
 - `PassiveAgentOptions`
@@ -381,6 +382,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `stableJsonStringify`
 - `StateAdapter`
 - `StructuredLogger`
+- `summarizeTimeline`
 - `TestResult`
 - `TIMELINE_ARTIFACT_KIND_AI`
 - `TIMELINE_ARTIFACT_KIND_DIAGNOSTICS`
@@ -410,6 +412,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `TimelineRecorderOptions`
 - `TimelineRunMode`
 - `TimelineRunStatus`
+- `TimelineSummary`
 - `TimelineToFlowInput`
 - `TimelineToFlowOptions`
 - `ToolMockRequest`
@@ -496,6 +499,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/ai/errors.ts`
 - `packages/fliwright-core/src/ai/types.ts`
 - `packages/fliwright-core/src/assertions/AssertRuntime.ts`
+- `packages/fliwright-core/src/assertions/AssertionTimeline.ts`
 - `packages/fliwright-core/src/assertions/types.ts`
 - `packages/fliwright-core/src/devassist/DevAssistTrace.ts`
 - `packages/fliwright-core/src/flow/FigmaBinding.ts`
@@ -528,6 +532,8 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts`
 - `packages/fliwright-core/src/timeline/FlowRuntime.ts`
 - `packages/fliwright-core/src/timeline/TimelineArtifactStore.ts`
+- `packages/fliwright-core/src/timeline/TimelineNodeLifecycle.ts`
+- `packages/fliwright-core/src/timeline/TimelineReader.ts`
 - `packages/fliwright-core/src/timeline/TimelineRecorder.ts`
 - `packages/fliwright-core/src/timeline/constants.ts`
 - `packages/fliwright-core/src/timeline/types.ts`

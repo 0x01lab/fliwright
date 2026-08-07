@@ -63,7 +63,7 @@
         "form",
         "interaction"
       ],
-      "sourceFingerprint": "00c572666a812d5b1853988e376bd9b303cf1b1d14dfbe07fa2a15e2365281c8"
+      "sourceFingerprint": "8f8268598589760c245ebcb9159d2e9f7ffe11a84ff952afb89bbc44e617163f"
     },
     {
       "name": "@fliwright/core",
@@ -135,6 +135,7 @@
         "packages/fliwright-core/src/ai/errors.ts",
         "packages/fliwright-core/src/ai/types.ts",
         "packages/fliwright-core/src/assertions/AssertRuntime.ts",
+        "packages/fliwright-core/src/assertions/AssertionTimeline.ts",
         "packages/fliwright-core/src/assertions/types.ts",
         "packages/fliwright-core/src/devassist/DevAssistTrace.ts",
         "packages/fliwright-core/src/flow/FigmaBinding.ts",
@@ -167,6 +168,8 @@
         "packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts",
         "packages/fliwright-core/src/timeline/FlowRuntime.ts",
         "packages/fliwright-core/src/timeline/TimelineArtifactStore.ts",
+        "packages/fliwright-core/src/timeline/TimelineNodeLifecycle.ts",
+        "packages/fliwright-core/src/timeline/TimelineReader.ts",
         "packages/fliwright-core/src/timeline/TimelineRecorder.ts",
         "packages/fliwright-core/src/timeline/constants.ts",
         "packages/fliwright-core/src/timeline/types.ts",
@@ -451,6 +454,7 @@
         "ParsedMockRuleRouteId",
         "parseFigmaUrl",
         "parseSelectorJson",
+        "parseTimelineData",
         "PassiveAgent",
         "PassiveAgentContext",
         "PassiveAgentOptions",
@@ -519,6 +523,7 @@
         "stableJsonStringify",
         "StateAdapter",
         "StructuredLogger",
+        "summarizeTimeline",
         "TestResult",
         "TIMELINE_ARTIFACT_KIND_AI",
         "TIMELINE_ARTIFACT_KIND_DIAGNOSTICS",
@@ -548,6 +553,7 @@
         "TimelineRecorderOptions",
         "TimelineRunMode",
         "TimelineRunStatus",
+        "TimelineSummary",
         "TimelineToFlowInput",
         "TimelineToFlowOptions",
         "ToolMockRequest",
@@ -584,7 +590,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "f387c23a80a61a11586e651bbbed2ef052406e5cbf2716634fadc0b320be8ab2"
+      "sourceFingerprint": "9df634c2561c2a7eb8a5df7de1ba63b1c4b299073ed7febe4698907f290f0292"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -1486,7 +1492,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "af3468f901c0e7d6c5e0284ebd27e8f0899e29a76b7edcf32c1f4fd09da6fef3"
+      "sourceFingerprint": "4155192563874b95a54762560544fe66dc8fd702b3b37f57152ec98d93d328d1"
     }
   ]
 }

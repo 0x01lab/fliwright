@@ -2,6 +2,7 @@ import type { Page } from '../Page.js';
 import { FliwrightAgentError } from '../agent/FliwrightAgentError.js';
 import type { AgentVisibleFailure, TimelineArtifactRef, TimelineNodeStartOptions } from './types.js';
 import { TimelineArtifactStore } from './TimelineArtifactStore.js';
+import { TimelineNodeLifecycle, wrapTimelineError } from './TimelineNodeLifecycle.js';
 import { TimelineRecorder } from './TimelineRecorder.js';
 import {
   TIMELINE_ARTIFACT_KIND_DIAGNOSTICS,
@@ -34,7 +35,11 @@ export interface FlowManualOptions {
 }
 
 export class FlowRuntime {
-  constructor(private readonly options: FlowRuntimeOptions) {}
+  private readonly lifecycle: TimelineNodeLifecycle;
+
+  constructor(private readonly options: FlowRuntimeOptions) {
+    this.lifecycle = new TimelineNodeLifecycle(options.recorder);
+  }
 
   async step<T>(title: string, body: () => T | Promise<T>, metadata?: Record<string, unknown>): Promise<T> {
     return this.runNode('step', title, { metadata }, body);
@@ -136,18 +141,22 @@ export class FlowRuntime {
     body: () => T | Promise<T>,
     failureCode: AgentVisibleFailure['code'] = 'step_failed',
   ): Promise<T> {
-    const node = this.options.recorder.startNode(kind, title, options);
-    try {
-      const value = await body();
-      this.options.recorder.passNode(node.id);
-      return value;
-    } catch (error) {
-      const artifacts = await this.captureFailureArtifacts(node.id);
-      if (artifacts.length) this.options.recorder.addArtifacts(node.id, artifacts);
-      const failure = withArtifactAppState(createAgentFailure(error, title, node.id, failureCode), artifacts);
-      this.options.recorder.failNode(node.id, failure);
-      throw wrapAgentError(error, failure);
-    }
+    return this.lifecycle.run({
+      kind,
+      title,
+      start: options,
+      body,
+      onFailure: async (error, timelineNodeId) => {
+        const artifacts = timelineNodeId ? await this.captureFailureArtifacts(timelineNodeId) : [];
+        return {
+          artifacts,
+          failure: withArtifactAppState(
+            createAgentFailure(error, title, timelineNodeId, failureCode),
+            artifacts,
+          ),
+        };
+      },
+    });
   }
 
   private async captureFailureArtifacts(nodeId: string): Promise<TimelineArtifactRef[]> {
@@ -242,8 +251,7 @@ export function createAgentFailure(
 }
 
 export function wrapAgentError(error: unknown, failure: AgentVisibleFailure): FliwrightAgentError {
-  if (error instanceof FliwrightAgentError) return error;
-  return new FliwrightAgentError(failure, { cause: error });
+  return wrapTimelineError(error, failure);
 }
 
 function withArtifactAppState(failure: AgentVisibleFailure, artifacts: TimelineArtifactRef[]): AgentVisibleFailure {

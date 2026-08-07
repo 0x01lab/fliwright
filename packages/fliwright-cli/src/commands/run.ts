@@ -1,8 +1,9 @@
 import {
   ensureFliwrightRunsRoot,
   FLIWRIGHT_RUNS_ROOT_ENV,
-  TIMELINE_ARTIFACT_KIND_SCREENSHOT,
   TIMELINE_FILE_NAME,
+  parseTimelineData,
+  summarizeTimeline,
 } from '@fliwright/core';
 import { resolveVmUrl } from '../vm-discovery.js';
 import { loadConfig } from '../config.js';
@@ -265,31 +266,11 @@ async function readTimelineSummaries(
   const summaries: NonNullable<CliRunResult['timelines']> = [];
   const agentVisibleFailures: NonNullable<CliRunResult['agentVisibleFailures']> = [];
   for (const path of entries) {
-    try {
-      const data = JSON.parse(await readFile(path, 'utf8')) as {
-        mode?: 'script' | 'test';
-        nodes?: Array<{
-          kind?: string;
-          status?: string;
-          artifacts?: Array<{ kind?: string }>;
-        }>;
-        agentVisibleFailures?: Array<{ code: string; title: string; message: string; timelineNodeId?: string }>;
-      };
-      const nodes = data.nodes ?? [];
-      const failures = data.agentVisibleFailures ?? [];
-      summaries.push({
-        path,
-        mode: data.mode,
-        pages: nodes.filter((node) => node.kind === 'page').length,
-        stepsPassed: nodes.filter((node) => node.kind === 'step' && node.status === 'passed').length,
-        stepsFailed: nodes.filter((node) => node.kind === 'step' && node.status === 'failed').length,
-        screenshots: nodes.reduce((count, node) => count + (node.artifacts?.filter((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT).length ?? 0), 0),
-        firstFailure: failures[0],
-      });
-      agentVisibleFailures.push(...failures);
-    } catch {
-      // Ignore malformed sidecar timelines.
-    }
+    const timeline = parseTimelineData(await readFile(path, 'utf8').catch(() => ''));
+    if (!timeline) continue;
+    const summary = summarizeTimeline(timeline);
+    summaries.push({ path, ...summary });
+    agentVisibleFailures.push(...(timeline.agentVisibleFailures ?? []));
   }
   return { timelines: summaries, agentVisibleFailures };
 }

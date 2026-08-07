@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cli"
 path: "packages/fliwright-cli"
-source_fingerprint: "00c572666a812d5b1853988e376bd9b303cf1b1d14dfbe07fa2a15e2365281c8"
+source_fingerprint: "8f8268598589760c245ebcb9159d2e9f7ffe11a84ff952afb89bbc44e617163f"
 generated: true
 ---
 
