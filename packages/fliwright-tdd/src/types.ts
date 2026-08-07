@@ -177,9 +177,14 @@ export interface TddCycleResult {
   file: string;
   durationMs: number;
   lastSync: 'reload' | 'restart' | 'none';
+  /** True only when an automatic reload failure retry escalated this cycle to one restart. */
+  syncEscalated?: boolean;
   baselineVersion: number;
   failure?: { message?: string };
   failureContext?: TddFailureContext;
+  /** Existing per-test timeline produced by @fliwright/vitest, available for both red and green runs. */
+  timelinePath?: string;
+  timelineNodeId?: string;
   unsupportedState?: ResetCategory[];
 }
 
@@ -203,6 +208,8 @@ export interface TddRuntimeDeps {
       status: 'red' | 'green';
       testName?: string;
       failure?: { message?: string };
+      timelinePath?: string;
+      timelineNodeId?: string;
       failureDetails?: {
         source?: {
           file: string;

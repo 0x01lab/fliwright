@@ -31,6 +31,16 @@ export {
 export { TddRepairPlanner } from './repair/TddRepairPlanner.js';
 export type { TddRepairPlannerOptions } from './repair/TddRepairPlanner.js';
 export { TddRuntime } from './runtime/TddRuntime.js';
+export { DevAssistCoordinator } from './devassist/DevAssistCoordinator.js';
+export type {
+  DevAssistAction,
+  DevAssistCoordinatorDeps,
+  DevAssistCycleInput,
+  DevAssistCycleResult,
+  DevAssistInferenceResult,
+  DevAssistRuntime,
+  DevAssistStatus,
+} from './devassist/DevAssistCoordinator.js';
 export { PersistentTestExecutor } from './executor/PersistentTestExecutor.js';
 export type { BootOptions, TestRunOutcome } from './executor/PersistentTestExecutor.js';
 export { defaultArtifactsRoot, defaultStatusFilePath } from './executor/PersistentTestExecutor.js';

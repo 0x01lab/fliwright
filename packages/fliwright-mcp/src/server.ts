@@ -30,6 +30,7 @@ import { registerTimelineTool } from './tools/timeline.js';
 import { registerFlowTools } from './tools/flow.js';
 import { registerAgentDiagnoseTool } from './tools/agentDiagnose.js';
 import { registerTddTools } from './tools/tdd.js';
+import { registerDevAssistTool } from './tools/devassist.js';
 import { registerDebugSnapshotTool } from './tools/debugSnapshot.js';
 
 export type FliwrightMcpToolProfile = 'core' | 'development' | 'tdd' | 'flow' | 'full';
@@ -99,6 +100,7 @@ export function createFliwrightServer(options: CreateFliwrightServerOptions = {}
 
   if (profile === 'tdd' || profile === 'full') {
     registerTddTools(server, state);
+    registerDevAssistTool(server, state);
   }
 
   if (profile === 'flow' || profile === 'full') {

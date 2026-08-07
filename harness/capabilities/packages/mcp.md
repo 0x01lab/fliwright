@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/mcp"
 path: "packages/fliwright-mcp"
-source_fingerprint: "4e043937a0a7188160349425912c9f63e646bbc1c2613f277539416d94822b9f"
+source_fingerprint: "9108b63047bace8e37af976d89e6e86a78c9b95b4f66fcfcb60f9530b55ad0ed"
 generated: true
 ---
 
@@ -45,6 +45,7 @@ Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabi
 - `fliwright_agent_diagnose`
 - `fliwright_connect`
 - `fliwright_debug_snapshot`
+- `fliwright_devassist_cycle`
 - `fliwright_diagnostics`
 - `fliwright_drag`
 - `fliwright_find`
@@ -99,6 +100,7 @@ Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabi
 - `agentDiagnose`
 - `connect`
 - `debugSnapshot`
+- `devassist`
 - `diagnostics`
 - `drag`
 - `find`
@@ -130,6 +132,7 @@ Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabi
 - `packages/fliwright-mcp/src/tools/agentDiagnose.ts`
 - `packages/fliwright-mcp/src/tools/connect.ts`
 - `packages/fliwright-mcp/src/tools/debugSnapshot.ts`
+- `packages/fliwright-mcp/src/tools/devassist.ts`
 - `packages/fliwright-mcp/src/tools/diagnostics.ts`
 - `packages/fliwright-mcp/src/tools/drag.ts`
 - `packages/fliwright-mcp/src/tools/find.ts`

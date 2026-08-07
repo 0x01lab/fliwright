@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/tdd"
 path: "packages/fliwright-tdd"
-source_fingerprint: "7c608b3c2e9b0a082184824231301f047c001f7c867d125648f1c47affb1d5bb"
+source_fingerprint: "80826215e26d4eb957f44038fe841bf7603aad3f0d2274ca18b2e667a65e5d6b"
 generated: true
 ---
 
@@ -54,6 +54,14 @@ Own persistent TDD execution, baseline reset, focused reruns, red-first generati
 - `decideSync`
 - `defaultArtifactsRoot`
 - `defaultStatusFilePath`
+- `DevAssistAction`
+- `DevAssistCoordinator`
+- `DevAssistCoordinatorDeps`
+- `DevAssistCycleInput`
+- `DevAssistCycleResult`
+- `DevAssistInferenceResult`
+- `DevAssistRuntime`
+- `DevAssistStatus`
 - `FlutterDaemonController`
 - `focusAndRerun`
 - `generateRedFirstTest`
@@ -146,6 +154,7 @@ Own persistent TDD execution, baseline reset, focused reruns, red-first generati
 - `packages/fliwright-tdd/src/daemon/FlutterDaemonController.ts`
 - `packages/fliwright-tdd/src/daemon/ReloadStrategy.ts`
 - `packages/fliwright-tdd/src/daemon/SubprocessDaemonTransport.ts`
+- `packages/fliwright-tdd/src/devassist/DevAssistCoordinator.ts`
 - `packages/fliwright-tdd/src/diagnostics/TddFailureContext.ts`
 - `packages/fliwright-tdd/src/executor/FocusedRerunRecipe.ts`
 - `packages/fliwright-tdd/src/executor/PersistentTestExecutor.ts`

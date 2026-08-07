@@ -46,6 +46,7 @@ describe('createFliwrightServer', () => {
     expect(developmentTools).not.toContain('fliwright_flow_list');
 
     expect(tddTools).toContain('fliwright_tdd_start');
+    expect(tddTools).toContain('fliwright_devassist_cycle');
     expect(tddTools).not.toContain('fliwright_flow_list');
 
     expect(flowTools).toContain('fliwright_flow_list');
@@ -55,10 +56,11 @@ describe('createFliwrightServer', () => {
   it('keeps the complete legacy tool surface behind the full profile', () => {
     const tools = toolNames('full');
 
-    expect(tools).toHaveLength(51);
+    expect(tools).toHaveLength(52);
     expect(tools).toContain('fliwright_action');
     expect(tools).toContain('fliwright_flow_review_run');
     expect(tools).toContain('fliwright_tdd_cycle');
+    expect(tools).toContain('fliwright_devassist_cycle');
   });
 
   it('validates configured tool profiles', () => {

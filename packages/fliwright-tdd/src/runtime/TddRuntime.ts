@@ -235,7 +235,7 @@ export class TddRuntime {
             changes: undefined,
             autoEscalate: false,
           });
-          if (escalated.lastSync === 'restart') return escalated;
+          if (escalated.lastSync === 'restart') return { ...escalated, syncEscalated: true };
         } catch {
           // Escalation is best-effort: if the restart cycle itself fails, surface the reload result.
         }
@@ -415,6 +415,8 @@ export class TddRuntime {
       baselineVersion: resetReport.version,
       failure: outcome.failure,
       failureContext,
+      timelinePath: outcome.timelinePath ?? outcome.failureDetails?.artifacts?.timelinePath,
+      timelineNodeId: outcome.timelineNodeId ?? outcome.failureDetails?.artifacts?.timelineNodeId,
       unsupportedState,
     };
   }

@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "4392b5b9fd258a135a67a7f86eaf5cf6d8a833865eb9dd27f34091260999e8fa"
+source_fingerprint: "9b85ad8238c1bbd80d98734f7f85a378c23d8521cdb4ccde0d615931b94553df"
 generated: true
 ---
 
@@ -99,6 +99,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `BridgeQueryMatch`
 - `BridgeQueryResult`
 - `buildBaseSelector`
+- `buildChangeSetSnapshot`
 - `buildFlowAgentSpec`
 - `buildFlowCleanPrompt`
 - `buildFlowFromRecording`
@@ -110,6 +111,10 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `builtInFormActionScripts`
 - `builtInSelectRecipes`
 - `captureFigmaReviewScreenshots`
+- `ChangeSetFile`
+- `ChangeSetFileStatus`
+- `ChangeSetInputFile`
+- `ChangeSetSnapshot`
 - `ClaudeCliAdapter`
 - `cleanFlowWithAi`
 - `clearWorkspaceVmServiceUrl`
@@ -140,6 +145,11 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `DesignQaPairResult`
 - `DesignQaPeerServerInfo`
 - `DesignQaSnapshot`
+- `DevAssistCycleTrace`
+- `DevAssistInference`
+- `DevAssistTrace`
+- `DevAssistTraceStore`
+- `DevAssistTraceStoreOptions`
 - `DriverOptions`
 - `ensureFliwrightRunsRoot`
 - `EnsureFliwrightRunsRootOptions`
@@ -238,11 +248,13 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `FormRulesFile`
 - `FormSkill`
 - `FrameCaptureResult`
+- `GeneratedTestCandidateMetadata`
 - `generateFlowTestSkeleton`
 - `HealingReport`
 - `HealingResult`
 - `HealingStrategy`
 - `IconSelector`
+- `InferenceEvidence`
 - `isActionMethod`
 - `JsonlLogSink`
 - `JsonLogFormatter`
@@ -327,6 +339,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `RecordingScreenshot`
 - `RecordingToFlowInput`
 - `RecordingToFlowOptions`
+- `redactDevAssistTrace`
 - `RefTarget`
 - `RepairProposal`
 - `RepairResult`
@@ -361,6 +374,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `SourceMapNode`
 - `SourceMapOptions`
 - `SourceMapResult`
+- `stableJsonStringify`
 - `StateAdapter`
 - `StructuredLogger`
 - `TestResult`
@@ -477,6 +491,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/ai/config.ts`
 - `packages/fliwright-core/src/ai/errors.ts`
 - `packages/fliwright-core/src/ai/types.ts`
+- `packages/fliwright-core/src/devassist/DevAssistTrace.ts`
 - `packages/fliwright-core/src/flow/FigmaBinding.ts`
 - `packages/fliwright-core/src/flow/FigmaRestScreenshotProvider.ts`
 - `packages/fliwright-core/src/flow/FlowAgentSpec.ts`

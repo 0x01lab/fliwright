@@ -11,6 +11,8 @@ export interface TestRunOutcome {
   testName?: string;
   failure?: { message?: string };
   failureDetails?: TddFailureDetails;
+  timelinePath?: string;
+  timelineNodeId?: string;
 }
 
 export interface BootOptions {
@@ -71,15 +73,21 @@ export class PersistentTestExecutor {
     const files = await nextRun;
     const results = this.reporter.collectLatest();
     const picked = this.pickResult(results, testName);
-    const failureDetails = picked?.status === 'red'
-      ? await this.readFailureDetails(picked.testName)
+    const resolvedTestName = picked?.testName ?? testName;
+    const timelineArtifacts = resolvedTestName
+      ? await this.readLatestTimelineArtifacts(resolvedTestName)
+      : {};
+    const failureDetails = picked?.status === 'red' && resolvedTestName
+      ? await this.readFailureDetails(resolvedTestName)
       : undefined;
 
     return {
       status: picked?.status ?? this.statusFromUnhandled(files),
-      testName: picked?.testName ?? testName,
+      testName: resolvedTestName,
       failure: picked?.status === 'red' ? { message: picked.message } : undefined,
       failureDetails,
+      timelinePath: failureDetails?.artifacts?.timelinePath ?? timelineArtifacts.timelinePath,
+      timelineNodeId: failureDetails?.artifacts?.timelineNodeId ?? timelineArtifacts.timelineNodeId,
     };
   }
 

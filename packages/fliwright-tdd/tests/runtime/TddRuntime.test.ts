@@ -2,6 +2,67 @@ import { describe, expect, it, vi } from 'vitest';
 import { TddRuntime } from '../../src/runtime/TddRuntime.js';
 
 describe('TddRuntime', () => {
+  it('returns the focused run timeline for a green cycle', async () => {
+    const driver = {
+      connect: vi.fn(async () => {}),
+      dispose: vi.fn(async () => {}),
+      page: { resetToHome: vi.fn(async () => {}) },
+      mock: { clear: vi.fn(async () => {}), clearCalls: vi.fn(async () => {}) },
+    };
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => ({
+        status: 'green' as const,
+        testName: 'opens Markets',
+        timelinePath: '/tmp/runs/run-2/timeline.json',
+      })),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ driverFactory: () => driver, executor });
+    await runtime.start({ configRoot: '/tmp/vitest.config.ts', vmServiceUrl: 'ws://vm/ws' });
+    await runtime.focus('/tmp/sample.test.ts', 'opens Markets');
+
+    const result = await runtime.cycle();
+
+    expect(result).toMatchObject({
+      status: 'green',
+      timelinePath: '/tmp/runs/run-2/timeline.json',
+    });
+  });
+
+  it('marks a single reload-to-restart escalation in the cycle result', async () => {
+    const driver = {
+      connect: vi.fn(async () => {}),
+      dispose: vi.fn(async () => {}),
+      page: { resetToHome: vi.fn(async () => {}) },
+      mock: { clear: vi.fn(async () => {}), clearCalls: vi.fn(async () => {}) },
+    };
+    const daemon = {
+      start: vi.fn(async () => {}),
+      startApp: vi.fn(async () => ({ appId: 'app-1', wsUri: 'ws://vm/ws', supportsRestart: true })),
+      reload: vi.fn(async () => {}),
+      restart: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+      dispose: vi.fn(async () => {}),
+    };
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn()
+        .mockResolvedValueOnce({ status: 'red', failure: { message: 'No widget found matching selector' } })
+        .mockResolvedValueOnce({ status: 'green' }),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ daemon, driverFactory: () => driver, executor });
+    await runtime.start({ configRoot: '/tmp/vitest.config.ts', app: { deviceId: 'device-1' } });
+    await runtime.focus('/tmp/sample.test.ts', 'opens Markets');
+
+    const result = await runtime.cycle(undefined, { sync: 'auto', changes: ['lib/home.dart'] });
+
+    expect(result).toMatchObject({ status: 'green', lastSync: 'restart', syncEscalated: true });
+    expect(daemon.reload).toHaveBeenCalledTimes(1);
+    expect(daemon.restart).toHaveBeenCalledTimes(1);
+  });
+
   it('starts in attach mode, focuses, resets baseline, and reruns the focused test', async () => {
     const driver = {
       connect: vi.fn(async () => {}),

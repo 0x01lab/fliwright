@@ -348,6 +348,24 @@ export { TimelineRecorder } from './timeline/TimelineRecorder.js';
 export { TimelineArtifactStore } from './timeline/TimelineArtifactStore.js';
 export type { TimelineArtifactStoreOptions } from './timeline/TimelineArtifactStore.js';
 export {
+  DevAssistTraceStore,
+  buildChangeSetSnapshot,
+  redactDevAssistTrace,
+  stableJsonStringify,
+} from './devassist/DevAssistTrace.js';
+export type {
+  ChangeSetFile,
+  ChangeSetFileStatus,
+  ChangeSetInputFile,
+  ChangeSetSnapshot,
+  DevAssistCycleTrace,
+  DevAssistInference,
+  DevAssistTrace,
+  DevAssistTraceStoreOptions,
+  GeneratedTestCandidateMetadata,
+  InferenceEvidence,
+} from './devassist/DevAssistTrace.js';
+export {
   TIMELINE_ARTIFACT_KIND_AI,
   TIMELINE_ARTIFACT_KIND_DIAGNOSTICS,
   TIMELINE_ARTIFACT_KIND_LOG,
