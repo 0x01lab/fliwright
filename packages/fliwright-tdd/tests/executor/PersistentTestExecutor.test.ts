@@ -1,6 +1,6 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import { defaultArtifactsRoot, PersistentTestExecutor } from '../../src/executor/PersistentTestExecutor.js';
@@ -50,6 +50,33 @@ describe('PersistentTestExecutor.rerun', () => {
       await executor.dispose();
     }
     expect(process.env.FLIWRIGHT_VM_SERVICE_URL).not.toBe('ws://runtime/ws');
+  }, 30_000);
+
+  it('runs a generated candidate as an explicit focus without broadening ordinary discovery', async () => {
+    const artifactsRoot = await mkdtemp(resolve(tmpdir(), 'fliwright-tdd-generated-'));
+    const executor = new PersistentTestExecutor();
+    const fixtureRoot = resolve(__dirname, '../../spike/fixture-project');
+    const candidatePath = resolve(fixtureRoot, '.fliwright/generated/generated-candidate.test.ts');
+
+    await executor.boot({
+      configRoot: resolve(fixtureRoot, 'vitest.config.ts'),
+      artifactsRoot,
+      vmServiceUrl: 'ws://runtime/ws',
+      driverProvider: async () => ({}),
+    });
+
+    try {
+      const candidate = await executor.rerun(candidatePath, 'generated candidate passes');
+
+      expect(candidate).toMatchObject({
+        status: 'green',
+        testName: 'generated candidate passes',
+      });
+      expect(candidate.timelinePath).toBeUndefined();
+      expect(await readdir(resolve(fixtureRoot, '.fliwright/tests'))).toEqual(['sample.test.ts']);
+    } finally {
+      await executor.dispose();
+    }
   }, 30_000);
 
   it('reads TDD failure details from the MCP failure sidecar when present', async () => {

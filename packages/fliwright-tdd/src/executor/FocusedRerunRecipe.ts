@@ -1,3 +1,5 @@
+import { stat } from 'node:fs/promises';
+import { relative, resolve, sep } from 'node:path';
 import type { TestSpecification, Vitest } from 'vitest/node';
 
 /**
@@ -29,7 +31,37 @@ async function resolveSpecifications(vitest: Vitest, file: string): Promise<Test
   let specifications = vitest.getModuleSpecifications(file);
   if (specifications.length > 0) return specifications;
 
-  return (await vitest.globTestSpecifications([file])).filter(
+  specifications = (await vitest.globTestSpecifications([file])).filter(
     (spec) => spec.moduleId === file,
   );
+  if (specifications.length > 0 || !isGeneratedCandidate(file)) return specifications;
+
+  const candidate = resolve(file);
+  if (!(await isFile(candidate))) return [];
+
+  // Generated candidates are deliberately excluded from normal project discovery.
+  // A focused rerun creates a specification for this exact, validated file only.
+  return vitest.projects
+    .filter((project) => isWithinProject(project.config.root, candidate))
+    .map((project) => project.createSpecification(candidate));
+}
+
+function isGeneratedCandidate(file: string): boolean {
+  const segments = relative(process.cwd(), resolve(file)).split(sep);
+  return segments.includes('.fliwright')
+    && segments[segments.indexOf('.fliwright') + 1] === 'generated'
+    && /\.test\.[cm]?[jt]sx?$/.test(file);
+}
+
+function isWithinProject(root: string, file: string): boolean {
+  const path = relative(root, file);
+  return path !== '' && !path.startsWith(`..${sep}`) && path !== '..' && !path.startsWith(sep);
+}
+
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
 }

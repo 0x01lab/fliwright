@@ -24,6 +24,7 @@ describe('DevAssistCoordinator', () => {
           artifacts: {
             timelinePath: '/tmp/runs/run-1/timeline.json',
             timelineNodeId: 'assertion-1',
+            screenshotPath: '/tmp/runs/run-1/failure.png',
           },
         },
       })),
@@ -56,6 +57,10 @@ describe('DevAssistCoordinator', () => {
       candidateTestPath: candidatePath,
       timelinePath: '/tmp/runs/run-1/timeline.json',
       timelineNodeId: 'assertion-1',
+      artifacts: [
+        { kind: 'trace', path: '/tmp/runs/run-1/timeline.json' },
+        { kind: 'screenshot', path: '/tmp/runs/run-1/failure.png' },
+      ],
       sync: { decision: 'reload' },
       diagnosis: { rootCause: 'handler' },
       nextCall: { action: 'continue', devAssistSessionId: 'session-1' },
@@ -79,6 +84,7 @@ describe('DevAssistCoordinator', () => {
         .mockResolvedValueOnce({
           status: 'red', testName: 'opens Markets', file: candidatePath, durationMs: 1,
           lastSync: 'reload', baselineVersion: 1, failure: { message: 'missing Markets' },
+          timelinePath: '/tmp/runs/run-1/timeline.json',
         })
         .mockResolvedValueOnce({
           status: 'green', testName: 'opens Markets', file: candidatePath, durationMs: 1,
@@ -112,6 +118,11 @@ describe('DevAssistCoordinator', () => {
     expect(runtime.cycle).toHaveBeenLastCalledWith('opens Markets', expect.objectContaining({
       changes: ['lib/home.dart'],
     }));
+    const trace = JSON.parse(await readFile(join(cwd, '.fliwright', 'devassist', 'session-2.json'), 'utf8'));
+    expect(trace.cycles).toMatchObject([
+      { timelinePath: '/tmp/runs/run-1/timeline.json', sync: { decision: 'reload' } },
+      { timelinePath: '/tmp/runs/run-2/timeline.json', sync: { decision: 'reload' } },
+    ]);
   });
 
   it('requires explicit regeneration when the saved candidate no longer matches its hash', async () => {
@@ -166,9 +177,82 @@ describe('DevAssistCoordinator', () => {
 
     await expect(coordinator.cycle({ request: 'Open Markets.' })).resolves.toMatchObject({
       status: 'needs_review',
+      candidateTestPath: join(cwd, '.fliwright/generated/session-4.test.ts'),
       reason: 'The inferred candidate has no supported assertion.',
     });
     expect(runtime.cycle).not.toHaveBeenCalled();
+  });
+
+  it('requires explicit regeneration after the candidate has a structural test error', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'fliwright-devassist-structural-'));
+    const candidatePath = join(cwd, '.fliwright/generated/session-5.test.ts');
+    const runtime = {
+      focus: vi.fn(async () => {}),
+      cycle: vi.fn(async () => ({
+        status: 'red' as const,
+        testName: 'opens Markets',
+        file: candidatePath,
+        durationMs: 1,
+        lastSync: 'restart' as const,
+        baselineVersion: 1,
+        failure: { message: 'SyntaxError: Unexpected token' },
+        failureContext: { kind: 'test-error' as const, message: 'SyntaxError: Unexpected token' },
+      })),
+    };
+    const infer = vi.fn(async () => ({ testName: 'opens Markets', provider: 'mock', spec: marketsSpec }));
+    const coordinator = new DevAssistCoordinator({
+      cwd,
+      runtime,
+      infer,
+      createSessionId: () => 'session-5',
+      changeSetProvider: async () => buildChangeSetSnapshot({ files: [] }),
+    });
+
+    const result = await coordinator.cycle({ request: 'Open Markets.' });
+
+    expect(result).toMatchObject({
+      status: 'needs_regeneration',
+      candidateTestPath: candidatePath,
+      nextCall: { action: 'regenerate', devAssistSessionId: 'session-5' },
+    });
+    await expect(coordinator.cycle({ devAssistSessionId: 'session-5' })).resolves.toMatchObject({
+      status: 'needs_regeneration',
+    });
+    expect(infer).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the original request when explicitly regenerating an invalid candidate', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'fliwright-devassist-regenerate-intent-'));
+    const candidatePath = join(cwd, '.fliwright/generated/session-6.test.ts');
+    const runtime = {
+      focus: vi.fn(async () => {}),
+      cycle: vi.fn(async () => ({
+        status: 'red' as const,
+        testName: 'opens Markets',
+        file: candidatePath,
+        durationMs: 1,
+        lastSync: 'none' as const,
+        baselineVersion: 1,
+        failureContext: { kind: 'test-error' as const, message: 'candidate no longer compiles' },
+      })),
+    };
+    const infer = vi.fn(async () => ({ testName: 'opens Markets', provider: 'mock', spec: marketsSpec }));
+    const coordinator = new DevAssistCoordinator({
+      cwd,
+      runtime,
+      infer,
+      createSessionId: () => 'session-6',
+      changeSetProvider: async () => buildChangeSetSnapshot({ files: [] }),
+    });
+
+    await coordinator.cycle({ request: 'Open Markets.' });
+    await coordinator.cycle({
+      action: 'regenerate',
+      devAssistSessionId: 'session-6',
+      request: 'Open Settings instead.',
+    });
+
+    expect(infer).toHaveBeenNthCalledWith(2, expect.objectContaining({ request: 'Open Markets.' }));
   });
 });
 

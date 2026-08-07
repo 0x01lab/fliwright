@@ -30,6 +30,44 @@ describe('TddRuntime', () => {
     });
   });
 
+  it('runs a navigation-only baseline without mutating mock state and returns timeline artifacts', async () => {
+    const driver = {
+      connect: vi.fn(async () => {}),
+      dispose: vi.fn(async () => {}),
+      page: { resetToHome: vi.fn(async () => {}) },
+      mock: { clear: vi.fn(async () => {}), clearCalls: vi.fn(async () => {}) },
+    };
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => ({
+        status: 'green' as const,
+        testName: 'Exio shell navigates to markets and trading tabs',
+        timelinePath: '/tmp/runs/exio-navigation/timeline.json',
+        timelineNodeId: 'assertion-3',
+      })),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ driverFactory: () => driver, executor });
+    await runtime.start({
+      configRoot: '/tmp/exio/vitest.config.ts',
+      vmServiceUrl: 'ws://vm/ws',
+      scenario: { homeRoute: '/home', resetCategories: ['navigation'] },
+    });
+    await runtime.focus('/tmp/exio/.fliwright/tests/exio-navigation.test.ts', 'Exio shell navigates to markets and trading tabs');
+
+    const result = await runtime.cycle(undefined, { sync: 'none', autoEscalate: false });
+
+    expect(driver.page.resetToHome).toHaveBeenCalledWith({ homeRoute: '/home' });
+    expect(driver.mock.clear).not.toHaveBeenCalled();
+    expect(driver.mock.clearCalls).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'green',
+      lastSync: 'none',
+      timelinePath: '/tmp/runs/exio-navigation/timeline.json',
+      timelineNodeId: 'assertion-3',
+    });
+  });
+
   it('marks a single reload-to-restart escalation in the cycle result', async () => {
     const driver = {
       connect: vi.fn(async () => {}),

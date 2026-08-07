@@ -14,6 +14,7 @@ import {
   type ChangeSetSnapshot,
   type DevAssistTrace,
   type JsonSchema,
+  type TimelineArtifactRef,
 } from '@fliwright/core';
 import { generateRedFirstTest } from '../generator/RedFirstTestGenerator.js';
 import { validateInteractionSpec, type InteractionSpec } from '../spec/InteractionSpec.js';
@@ -43,6 +44,7 @@ export interface DevAssistCycleResult {
   devAssistTracePath?: string;
   timelinePath?: string;
   timelineNodeId?: string;
+  artifacts?: TimelineArtifactRef[];
   candidateTestPath?: string;
   changeSet?: ChangeSetSnapshot;
   sync?: { decision: 'none' | 'reload' | 'restart'; escalation?: boolean };
@@ -129,7 +131,7 @@ export class DevAssistCoordinator {
         };
       }
       return await this.generateAndRun({
-        input: { ...input, request: input.request ?? trace.request },
+        input: { ...input, request: trace.request },
         changeSet,
         sessionId: trace.devAssistSessionId,
         previousTrace: trace,
@@ -166,6 +168,7 @@ export class DevAssistCoordinator {
         status: 'needs_review',
         devAssistSessionId: options.sessionId,
         devAssistTracePath,
+        candidateTestPath: candidatePath,
         changeSet: options.changeSet,
         reason: trace.candidate.validation.reason,
       };
@@ -183,6 +186,7 @@ export class DevAssistCoordinator {
         status: 'needs_review',
         devAssistSessionId: options.sessionId,
         devAssistTracePath,
+        candidateTestPath: candidatePath,
         changeSet: options.changeSet,
         reason: trace.candidate.validation.reason,
       };
@@ -201,6 +205,7 @@ export class DevAssistCoordinator {
         status: 'needs_review',
         devAssistSessionId: options.sessionId,
         devAssistTracePath,
+        candidateTestPath: candidatePath,
         changeSet: options.changeSet,
         reason: trace.candidate.validation.reason,
       };
@@ -284,6 +289,7 @@ export class DevAssistCoordinator {
       sync: { decision: cycle.lastSync, ...(cycle.syncEscalated ? { escalation: true } : {}) },
       ...(timelinePath ? { timelinePath } : {}),
       ...(timelineNodeId ? { timelineNodeId } : {}),
+      ...(artifacts.length > 0 ? { artifacts } : {}),
       ...(diagnosis ? { diagnosis } : {}),
       nextCall: candidateInvalid
         ? { action: 'regenerate', devAssistSessionId: trace.devAssistSessionId }
