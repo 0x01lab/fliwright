@@ -1,0 +1,3 @@
+# Compose DevAssist traces from existing test timelines
+
+Each DevAssistSession writes a DevAssistTrace that records its request, structured InferenceEvidence, candidate test, ChangeSetSnapshots, and references to every cycle's existing `timeline.json` and artifacts. It records model and prompt-template identity, hashes, validation outcomes, and failure reasons, but not hidden model reasoning or unsanitized duplicated context. It does not duplicate or redefine per-test Trace data. High-level MCP results return the DevAssistTrace path, latest timeline path, and relevant timeline node id, preserving `fliwright_timeline_get` and Flow generation while adding cross-cycle repair history.

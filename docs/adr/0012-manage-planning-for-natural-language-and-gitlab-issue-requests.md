@@ -1,0 +1,3 @@
+# Manage planning for natural-language and GitLab issue requests
+
+The TeamTestQueue control plane owns the Planner for natural-language requests and GitLab issue URLs, so submitters can request an automated E2E run without first authoring a TestPlan. At submission, an IssueTestRequest is frozen as an IssueSnapshot; the Planner uses only that snapshot, the pinned ApplicationTarget context, and runtime snapshots, and records its input revision, model identity, generated plan, and validation outcome in the RunBundle. Later issue edits require a new request. DevAssistMode remains externally agent-driven for code editing.
