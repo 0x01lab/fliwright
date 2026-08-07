@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Assertion, Locator } from '@fliwright/core';
+import { Assertion, Locator, MockAiAdapter } from '@fliwright/core';
 import { AiRuntime } from '@fliwright/core';
 import {
   afterEach as fliwrightAfterEach,
@@ -197,6 +197,52 @@ const testWithTimeline = createFliwrightTest({
   vmServiceUrl: 'ws://localhost:12345/ws',
   runsRoot: testRunsRoot,
   ai: { provider: 'mock' },
+});
+
+const testWithPassiveDiagnosis = createFliwrightTest({
+  vmServiceUrl: 'ws://localhost:12346/ws',
+  runsRoot: testRunsRoot,
+  ai: {
+    provider: 'mock',
+    adapter: new MockAiAdapter([{
+      text: JSON.stringify({
+        summary: 'The action failed.',
+        rootCause: 'The test raised an error.',
+        suggestedActions: ['Inspect the timeline.'],
+        confidence: 0.9,
+      }),
+      json: {
+        summary: 'The action failed.',
+        rootCause: 'The test raised an error.',
+        suggestedActions: ['Inspect the timeline.'],
+        confidence: 0.9,
+      },
+    }]),
+  },
+  agentPolicy: { passive: true },
+});
+
+let passiveDiagnosisTimelinePath = '';
+
+testWithPassiveDiagnosis.fails('records a configured passive diagnosis after failure', async ({ flow, timeline }) => {
+  passiveDiagnosisTimelinePath = timeline.artifactStore.timelinePath;
+  await flow.step('Fail operation', () => {
+    throw new Error('operation failed');
+  });
+});
+
+vitestTest('persists the configured passive diagnosis without replacing the original failure', async () => {
+  const timeline = JSON.parse(await readFile(passiveDiagnosisTimelinePath, 'utf8')) as {
+    agentVisibleFailures?: Array<{ code: string }>;
+    nodes: Array<{ kind: string; status: string; metadata?: Record<string, unknown> }>;
+  };
+
+  expect(timeline.agentVisibleFailures).toContainEqual(expect.objectContaining({ code: 'step_failed' }));
+  expect(timeline.nodes).toContainEqual(expect.objectContaining({
+    kind: 'ai-call',
+    status: 'passed',
+    metadata: expect.objectContaining({ mode: 'passive-diagnosis', failureCode: 'step_failed' }),
+  }));
 });
 
 const pluginConfiguredTest = createFliwrightTest({

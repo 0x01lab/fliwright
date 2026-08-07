@@ -207,7 +207,10 @@ describe('runCommand', () => {
       "        { id: 'step-2', kind: 'step', title: 'Fill', status: 'passed', startedAt: 'x', endedAt: 'x', artifacts: [{ kind: 'screenshot', path: 'artifacts/screenshots/step-2.png' }] },",
       "        { id: 'step-3', kind: 'step', title: 'Submit', status: 'failed', startedAt: 'x', endedAt: 'x' }",
       "      ],",
-      "      agentVisibleFailures: [{ code: 'assertion_failed', title: 'Submit', message: 'button disabled', timelineNodeId: 'step-3' }]",
+      "      agentVisibleFailures: [",
+      "        { code: 'assertion_failed', title: 'Submit', message: 'button disabled', timelineNodeId: 'step-3' },",
+      "        { code: 'actionability_failed', title: 'Continue', message: 'overlay obscures control', timelineNodeId: 'step-4' }",
+      "      ]",
       "    }));",
       "    expect(true).toBe(true);",
       "  });",
@@ -237,6 +240,7 @@ describe('runCommand', () => {
     });
     expect(result.agentVisibleFailures).toEqual([
       { code: 'assertion_failed', title: 'Submit', message: 'button disabled', timelineNodeId: 'step-3' },
+      { code: 'actionability_failed', title: 'Continue', message: 'overlay obscures control', timelineNodeId: 'step-4' },
     ]);
     expect(result.artifacts?.timelines?.[0]).toContain('timeline.json');
     expect(result.artifacts?.timelines?.[0]).toContain(expectedHomeRoot);

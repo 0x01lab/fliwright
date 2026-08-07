@@ -1,10 +1,6 @@
-import type { RecordedOperation } from './types.js';
+import type { AssertionSuggestion, RecordedOperation } from './types.js';
 
-export interface AssertionSuggestion {
-  afterIndex: number;
-  reason: string;
-  template: string;
-}
+export type { AssertionSuggestion } from './types.js';
 
 export class AssertionSuggester {
   suggest(operations: RecordedOperation[]): AssertionSuggestion[] {
@@ -19,6 +15,7 @@ export class AssertionSuggester {
       if (op.kind === 'tap' && op.position.y < 100) {
         suggestions.push({
           afterIndex: i,
+          ...(i + 1 < operations.length ? { targetOperationIndex: i + 1 } : {}),
           reason: 'possible navigation tap (top of screen)',
           template: '// TODO: Assert expected page content',
         });
@@ -29,6 +26,7 @@ export class AssertionSuggester {
       if (op.kind === 'tap' && hasRecentTypeInput(operations, i)) {
         suggestions.push({
           afterIndex: i,
+          ...(i + 1 < operations.length ? { targetOperationIndex: i + 1 } : {}),
           reason: 'possible form submit after input',
           template: '// TODO: Assert submission result',
         });
@@ -39,6 +37,7 @@ export class AssertionSuggester {
       if (op.kind === 'tap' && prev?.kind === 'drag') {
         suggestions.push({
           afterIndex: i,
+          ...(i + 1 < operations.length ? { targetOperationIndex: i + 1 } : {}),
           reason: 'tap after scroll suggests list item selection',
           template: '// TODO: Assert detail page content',
         });
@@ -51,6 +50,7 @@ export class AssertionSuggester {
         if (next.position.y < op.position.y - 200) {
           suggestions.push({
             afterIndex: i,
+            targetOperationIndex: i + 1,
             reason: 'large Y position change suggests navigation',
             template: '// TODO: Assert expected page loaded',
           });

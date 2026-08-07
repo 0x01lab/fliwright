@@ -1,5 +1,6 @@
 import { CodeGenerator } from './CodeGenerator.js';
 import { EventAggregator } from './EventAggregator.js';
+import { AssertionSuggester } from './AssertionSuggester.js';
 import { RecordedSelectorResolver } from './RecordedSelectorResolver.js';
 import { serializeSelectorQuery } from './SelectorSerializer.js';
 import type {
@@ -119,7 +120,11 @@ export class RecorderController {
       this.setFrameSelector(i, display);
     }
     this.lastSelectors = selectors;
-    this.lastCodegenOptions = options;
+    this.lastCodegenOptions = {
+      ...options,
+      recordingFrames: this.getFrames(),
+      assertionSuggestions: new AssertionSuggester().suggest(this.operations),
+    };
 
     return this.generateCode();
   }

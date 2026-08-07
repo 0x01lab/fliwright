@@ -24,6 +24,13 @@ export class AiRuntime {
     private readonly context: AiRuntimeContext = {},
   ) {}
 
+  get timelineMetadata(): { provider?: string; artifactsDir?: string } {
+    return {
+      ...(this.config.provider ? { provider: this.config.provider } : {}),
+      ...(this.config.artifactsDir ? { artifactsDir: this.config.artifactsDir } : {}),
+    };
+  }
+
   async ask(input: AiRequest, call?: AiCallContext): Promise<AiResponse> {
     const adapter = this.resolveAdapter();
     const callId = `ai-${++this.callCounter}`;
@@ -77,18 +84,43 @@ export class AiRuntime {
   }
 
   async generate<T = unknown>(input: AiGenerateRequest<T>, call?: AiCallContext): Promise<T> {
+    return (await this.generateWithStatus(input, call)).value;
+  }
+
+  async generateWithStatus<T = unknown>(
+    input: AiGenerateRequest<T>,
+    call?: AiCallContext,
+  ): Promise<{ value: T; fallbackUsed: boolean; artifactsDir?: string }> {
     try {
       const response = await this.ask({ ...input, responseFormat: 'json' }, call);
       const json = response.json ?? parseJsonIfNeeded(response.text, 'json', response.artifactsDir);
-      return input.schema ? validateJsonSchema<T>(json, input.schema) : json as T;
+      return {
+        value: input.schema ? validateJsonSchema<T>(json, input.schema) : json as T,
+        fallbackUsed: false,
+        artifactsDir: response.artifactsDir,
+      };
     } catch (error) {
-      if ('fallback' in input) return input.fallback as T;
+      if ('fallback' in input) {
+        return {
+          value: input.fallback as T,
+          fallbackUsed: true,
+          ...(error instanceof AiInvocationError && error.artifactsDir ? { artifactsDir: error.artifactsDir } : {}),
+        };
+      }
       throw error;
     }
   }
 
   async visible(prompt: string, options: AiVisibleOptions = {}, call?: AiCallContext): Promise<void> {
-    const result = await this.inspect<{ pass: boolean; reason: string }>({
+    await this.visibleWithMetadata(prompt, options, call);
+  }
+
+  async visibleWithMetadata(
+    prompt: string,
+    options: AiVisibleOptions = {},
+    call?: AiCallContext,
+  ): Promise<{ artifactsDir?: string }> {
+    const result = await this.inspectWithMetadata<{ pass: boolean; reason: string }>({
       prompt,
       responseFormat: 'json',
       schema: visibleSchema,
@@ -97,14 +129,25 @@ export class AiRuntime {
       screenshot: options.screenshot,
       timeoutMs: options.timeoutMs,
     }, call);
-    if (!result.pass) throw new AiAssertionError(result.reason || 'provider returned pass=false');
+    if (!result.value.pass) throw new AiAssertionError(result.value.reason || 'provider returned pass=false');
+    return { artifactsDir: result.artifactsDir };
   }
 
   async inspect<T = unknown>(input: AiInspectRequest, call?: AiCallContext): Promise<T> {
+    return (await this.inspectWithMetadata<T>(input, call)).value;
+  }
+
+  async inspectWithMetadata<T = unknown>(
+    input: AiInspectRequest,
+    call?: AiCallContext,
+  ): Promise<{ value: T; artifactsDir?: string }> {
     const request = await this.withVisionContext(input, call);
     const response = await this.ask({ ...request, responseFormat: 'json' }, call);
     const json = response.json ?? parseJsonIfNeeded(response.text, 'json', response.artifactsDir);
-    return input.schema ? validateJsonSchema<T>(json, input.schema) : json as T;
+    return {
+      value: input.schema ? validateJsonSchema<T>(json, input.schema) : json as T,
+      artifactsDir: response.artifactsDir,
+    };
   }
 
   async classify(input: AiClassifyRequest, call?: AiCallContext): Promise<string> {

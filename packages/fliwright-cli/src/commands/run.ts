@@ -235,7 +235,7 @@ async function attachArtifacts(
   await mkdir(options.outputDir, { recursive: true });
   const screenshots: string[] = [];
   const failures = await persistScreenshots(result.failures ?? [], options.outputDir, options.screenshot, screenshots);
-  const timelines = await readTimelineSummaries(options.runsRoot, options.runId);
+  const { timelines, agentVisibleFailures } = await readTimelineSummaries(options.runsRoot, options.runId);
   const report: CliRunResult = {
     ...result,
     ...(failures.length > 0 ? { failures } : {}),
@@ -246,9 +246,7 @@ async function attachArtifacts(
       screenshots,
       timelines: timelines.map((timeline) => timeline.path),
     },
-    ...(timelines.length ? { timelines, agentVisibleFailures: timelines.flatMap((timeline) => (
-      timeline.firstFailure ? [timeline.firstFailure] : []
-    )) } : {}),
+    ...(timelines.length ? { timelines, agentVisibleFailures } : {}),
     reproduceCommand: buildReproduceCommand(options.testPattern, options.testName),
   };
   await mkdir(dirname(options.reportPath), { recursive: true });
@@ -256,9 +254,16 @@ async function attachArtifacts(
   return report;
 }
 
-async function readTimelineSummaries(runsRoot: string, runId: string): Promise<NonNullable<CliRunResult['timelines']>> {
+async function readTimelineSummaries(
+  runsRoot: string,
+  runId: string,
+): Promise<{
+  timelines: NonNullable<CliRunResult['timelines']>;
+  agentVisibleFailures: NonNullable<CliRunResult['agentVisibleFailures']>;
+}> {
   const entries = await findTimelineFiles(runsRoot, runId);
   const summaries: NonNullable<CliRunResult['timelines']> = [];
+  const agentVisibleFailures: NonNullable<CliRunResult['agentVisibleFailures']> = [];
   for (const path of entries) {
     try {
       const data = JSON.parse(await readFile(path, 'utf8')) as {
@@ -271,6 +276,7 @@ async function readTimelineSummaries(runsRoot: string, runId: string): Promise<N
         agentVisibleFailures?: Array<{ code: string; title: string; message: string; timelineNodeId?: string }>;
       };
       const nodes = data.nodes ?? [];
+      const failures = data.agentVisibleFailures ?? [];
       summaries.push({
         path,
         mode: data.mode,
@@ -278,13 +284,14 @@ async function readTimelineSummaries(runsRoot: string, runId: string): Promise<N
         stepsPassed: nodes.filter((node) => node.kind === 'step' && node.status === 'passed').length,
         stepsFailed: nodes.filter((node) => node.kind === 'step' && node.status === 'failed').length,
         screenshots: nodes.reduce((count, node) => count + (node.artifacts?.filter((artifact) => artifact.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT).length ?? 0), 0),
-        firstFailure: data.agentVisibleFailures?.[0],
+        firstFailure: failures[0],
       });
+      agentVisibleFailures.push(...failures);
     } catch {
       // Ignore malformed sidecar timelines.
     }
   }
-  return summaries;
+  return { timelines: summaries, agentVisibleFailures };
 }
 
 async function findTimelineFiles(runsRoot: string, runId: string): Promise<string[]> {

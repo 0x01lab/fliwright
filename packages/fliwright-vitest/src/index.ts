@@ -22,6 +22,7 @@ import {
   FliwrightAgentError,
   JsonlLogSink,
   MockRuntime,
+  PassiveAgent,
   Page as FliwrightPage,
   PrettyLogFormatter,
   readWorkspaceConfigSync,
@@ -175,6 +176,7 @@ export function createFliwrightTest(config: FliwrightConfig, options?: CreateFli
       try {
         logger.info(`${config.mode === 'script' ? 'Script' : 'Test'} started`);
         await use(timeline);
+        await diagnoseTimelineFailures(timeline, config, resolveDriver);
         if (config.requireAssertions && !timeline.recorder.toJSON().nodes.some((node) => node.kind === 'assertion')) {
           throw new FliwrightAgentError({
             code: 'assertion_failed',
@@ -191,9 +193,10 @@ export function createFliwrightTest(config: FliwrightConfig, options?: CreateFli
         logger.error(`${config.mode === 'script' ? 'Script' : 'Test'} failed`, error);
         throw error;
       } finally {
-        const data = timeline.recorder.complete(failed ? 'failed' : 'passed');
+        const status = failed || timeline.recorder.toJSON().status === 'failed' ? 'failed' : 'passed';
+        const data = timeline.recorder.complete(status);
         timeline.timelinePath = await timeline.artifactStore.writeTimeline(data);
-        if (!failed) logger.success(`${config.mode === 'script' ? 'Script' : 'Test'} passed`);
+        if (status === 'passed') logger.success(`${config.mode === 'script' ? 'Script' : 'Test'} passed`);
       }
     },
     driver: async ({ task, timeline }, use) => {
@@ -784,6 +787,43 @@ function captureTimelineFailure(timeline: FliwrightTimelineContext, error: unkno
       { kind: 'manual', description: 'Review the thrown error and app state at failure time.' },
     ],
   });
+}
+
+async function diagnoseTimelineFailures(
+  timeline: FliwrightTimelineContext,
+  config: FliwrightConfig,
+  resolveDriver: () => Promise<FliwrightDriver>,
+): Promise<void> {
+  if (config.agentPolicy?.passive !== true || (config.agentPolicy.onFailure ?? 'diagnose') !== 'diagnose') return;
+
+  const failures = timeline.recorder.toJSON().agentVisibleFailures ?? [];
+  if (failures.length === 0) return;
+
+  try {
+    const driver = await resolveDriver();
+    const aiRuntime = new AiRuntime(resolveAiConfig(config.ai), {
+      page: driver.page,
+      driver,
+      testName: timeline.recorder.testName,
+      runId: timeline.runId,
+      cwd: process.cwd(),
+    });
+    const agent = new PassiveAgent({ aiRuntime, recorder: timeline.recorder, passive: true });
+    const data = timeline.recorder.toJSON();
+
+    for (const failure of failures) {
+      const currentNode = data.nodes.find((node) => node.id === failure.timelineNodeId);
+      await agent.diagnose(failure, {
+        currentNode,
+        recentNodes: data.nodes.slice(-8),
+        artifacts: currentNode?.artifacts,
+      });
+    }
+  } catch (error) {
+    timeline.logger.warn('Passive AI diagnosis failed; preserving the original failure.', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 function safeName(value: string): string {

@@ -57,9 +57,12 @@ Active AI calls are explicit authoring actions:
   "title": "Generate register payload",
   "metadata": {
     "mode": "active",
+    "provider": "mock",
+    "artifactsDir": ".fliwright/ai/run-1/ai-1",
     "responseFormat": "json",
     "hasSchema": true,
-    "hasFallback": true
+    "hasFallback": true,
+    "fallbackUsed": false
   }
 }
 ```

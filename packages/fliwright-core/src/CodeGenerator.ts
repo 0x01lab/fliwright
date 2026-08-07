@@ -1,4 +1,4 @@
-import type { RecordedOperation, CodegenOptions, ResolvedSelector } from './types.js';
+import type { AssertionSuggestion, RecordedOperation, CodegenOptions, ResolvedSelector } from './types.js';
 import { DartCodeGenerator } from './DartCodeGenerator.js';
 import { serializeSelectorQuery } from './SelectorSerializer.js';
 
@@ -37,7 +37,9 @@ export class CodeGenerator {
 
     const runner = timeline && mode === 'script' ? 'script' : 'test';
     const fixtureArgs = timeline
-      ? '{ page, flow, mock, agent }'
+      ? mode === 'test'
+        ? '{ page, flow, mock, assert, agent }'
+        : '{ page, flow, mock, agent }'
       : '{ page }';
     lines.push(`${runner}('${escapeString(testName)}', async (${fixtureArgs}) => {`);
 
@@ -53,6 +55,18 @@ export class CodeGenerator {
         lines.push(`  await flow.step('${escapeString(stepTitle(op))}', async () => {`);
         lines.push(`    ${action}`);
         lines.push('  });');
+        for (const frame of framesForOperation(options?.recordingFrames, i)) {
+          lines.push(`  await flow.frame('Recorded frame ${frame.index + 1}', { screenshot: true });`);
+        }
+        if (mode === 'test') {
+          for (const suggestion of suggestionsForOperation(options?.assertionSuggestions, i)) {
+            lines.push(`  // ${escapeComment(suggestion.template).replace(/^\/\/\s*/, '')}`);
+            const assertionLocator = assertionLocatorForSuggestion(suggestion, selectors);
+            if (assertionLocator) {
+              lines.push(`  await assert.visible('Suggested: ${escapeString(suggestion.reason)}', ${assertionLocator});`);
+            }
+          }
+        }
         continue;
       }
 
@@ -79,6 +93,30 @@ export class CodeGenerator {
     lines.push('});');
     return lines.join('\n');
   }
+}
+
+function framesForOperation(
+  frames: readonly { operationIndex?: number; index: number; screenshot?: unknown }[] | undefined,
+  operationIndex: number,
+) {
+  return (frames ?? []).filter((frame) => frame.operationIndex === operationIndex && frame.screenshot != null);
+}
+
+function suggestionsForOperation(
+  suggestions: readonly AssertionSuggestion[] | undefined,
+  operationIndex: number,
+) {
+  return (suggestions ?? []).filter((suggestion) => suggestion.afterIndex === operationIndex);
+}
+
+function assertionLocatorForSuggestion(
+  suggestion: AssertionSuggestion,
+  selectors: Map<number, ResolvedSelector>,
+): string | undefined {
+  if (suggestion.targetOperationIndex === undefined) return undefined;
+  const resolved = selectors.get(suggestion.targetOperationIndex);
+  if (!resolved || resolved.ambiguous) return undefined;
+  return `page.locator(${serializeSelectorQuery(resolved.query)})`;
 }
 
 function timelineImports(mode: 'script' | 'test', options?: CodegenOptions): string {
@@ -120,4 +158,8 @@ function escapeString(s: string): string {
     .replace(/'/g, "\\'")
     .replace(/\r/g, '\\r')
     .replace(/\n/g, '\\n');
+}
+
+function escapeComment(s: string): string {
+  return s.replace(/[\r\n]+/g, ' ').replace(/\*\//g, '* /');
 }

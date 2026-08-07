@@ -14,43 +14,67 @@ export class AgentRuntime {
 
   ask(titleOrPrompt: string, request: Partial<AiRequest> = {}) {
     const prompt = request.prompt ?? titleOrPrompt;
-    return this.runAiCall(titleOrPrompt, { prompt, ...request }, () => this.options.aiRuntime.ask({ prompt, ...request }));
+    let artifactsDir: string | undefined;
+    return this.runAiCall(titleOrPrompt, { prompt, ...request }, async () => {
+      const response = await this.options.aiRuntime.ask({ prompt, ...request });
+      artifactsDir = response.artifactsDir;
+      return response;
+    }, () => ({ ...(artifactsDir ? { artifactsDir } : {}) }));
   }
 
   generate<T = unknown>(titleOrPrompt: string, request: Omit<AiGenerateRequest<T>, 'prompt'> & { prompt?: string }): Promise<T> {
     const prompt = request.prompt ?? titleOrPrompt;
+    let fallbackUsed = false;
+    let artifactsDir: string | undefined;
     return this.runAiCall(titleOrPrompt, {
       prompt,
       responseFormat: 'json',
       hasSchema: Boolean(request.schema),
       hasFallback: 'fallback' in request,
-    }, () => this.options.aiRuntime.generate<T>({ ...request, prompt }));
+    }, async () => {
+      const result = await this.options.aiRuntime.generateWithStatus<T>({ ...request, prompt });
+      fallbackUsed = result.fallbackUsed;
+      artifactsDir = result.artifactsDir;
+      return result.value;
+    }, () => ({ fallbackUsed, ...(artifactsDir ? { artifactsDir } : {}) }));
   }
 
   verify(prompt: string, options?: AiVisibleOptions): Promise<void> {
-    return this.runAiCall(prompt, { prompt, mode: 'verify', includeScreenshot: options?.includeScreenshot }, () => (
-      this.options.aiRuntime.visible(prompt, options)
-    ));
+    let artifactsDir: string | undefined;
+    return this.runAiCall(prompt, { prompt, mode: 'verify', includeScreenshot: options?.includeScreenshot }, async () => {
+      const result = await this.options.aiRuntime.visibleWithMetadata(prompt, options);
+      artifactsDir = result.artifactsDir;
+    }, () => ({ ...(artifactsDir ? { artifactsDir } : {}) }));
   }
 
   inspect<T = unknown>(titleOrPrompt: string, request: Omit<AiInspectRequest, 'prompt'> & { prompt?: string }): Promise<T> {
     const prompt = request.prompt ?? titleOrPrompt;
+    let artifactsDir: string | undefined;
     return this.runAiCall(titleOrPrompt, {
       prompt,
       responseFormat: 'json',
       hasSchema: Boolean(request.schema),
       includeScreenshot: request.includeScreenshot,
       includeSnapshot: request.includeSnapshot,
-    }, () => this.options.aiRuntime.inspect<T>({ ...request, prompt }));
+    }, async () => {
+      const result = await this.options.aiRuntime.inspectWithMetadata<T>({ ...request, prompt });
+      artifactsDir = result.artifactsDir;
+      return result.value;
+    }, () => ({ ...(artifactsDir ? { artifactsDir } : {}) }));
   }
 
-  private async runAiCall<T>(title: string, metadata: Record<string, unknown>, body: () => Promise<T>): Promise<T> {
+  private async runAiCall<T>(
+    title: string,
+    metadata: Record<string, unknown>,
+    body: () => Promise<T>,
+    successMetadata?: () => Record<string, unknown>,
+  ): Promise<T> {
     const node = this.options.recorder?.startNode('ai-call', title, {
-      metadata: maskSecrets({ mode: 'active', ...metadata }),
+      metadata: maskSecrets({ mode: 'active', ...this.options.aiRuntime.timelineMetadata, ...metadata }),
     });
     try {
       const value = await body();
-      if (node) this.options.recorder?.passNode(node.id);
+      if (node) this.options.recorder?.passNode(node.id, successMetadata?.());
       return value;
     } catch (error) {
       const failure = createAiFailure(error, title, node?.id);
@@ -74,15 +98,26 @@ function createAiFailure(error: unknown, title: string, timelineNodeId?: string)
 }
 
 function maskSecrets(value: Record<string, unknown>): Record<string, unknown> {
+  return maskSecretValue(value) as Record<string, unknown>;
+}
+
+function maskSecretValue(value: unknown, key?: string): unknown {
+  if (key && /password|secret|token|credential|api[-_]?key|authorization/i.test(key)) {
+    return '<masked>';
+  }
+  if (typeof value === 'string' && /password|token|secret/i.test(value)) {
+    return '<masked>';
+  }
+  if (Array.isArray(value)) return value.map((entry) => maskSecretValue(entry));
+  if (!isRecord(value)) return value;
+
   const output: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
-    if (/password|secret|token|credential/i.test(key)) {
-      output[key] = '<masked>';
-    } else if (typeof entry === 'string' && /password|token|secret/i.test(entry)) {
-      output[key] = '<masked>';
-    } else {
-      output[key] = entry;
-    }
+    output[key] = maskSecretValue(entry, key);
   }
   return output;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

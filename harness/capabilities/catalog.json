@@ -63,7 +63,7 @@
         "form",
         "interaction"
       ],
-      "sourceFingerprint": "61c1cdc269d96baff1db204e604d15d4e1613c5ab084e4f8a7642b44fa9feea8"
+      "sourceFingerprint": "00c572666a812d5b1853988e376bd9b303cf1b1d14dfbe07fa2a15e2365281c8"
     },
     {
       "name": "@fliwright/core",
@@ -584,7 +584,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "5d669183b829b28c6ad377f470b2db6a06b63df9aa08f4f0e996e38845a0da30"
+      "sourceFingerprint": "f387c23a80a61a11586e651bbbed2ef052406e5cbf2716634fadc0b320be8ab2"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -996,7 +996,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "e6c578dd052b3a21f0506c290262ae458730081da5d132ed9c80d7432d61c9b6"
+      "sourceFingerprint": "2c9e026923e1c7f15462f364456d04b1301a5ace752219b3400f5b3a2e538e00"
     },
     {
       "name": "fliwright_bridge",

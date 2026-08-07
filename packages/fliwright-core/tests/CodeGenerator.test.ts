@@ -1,7 +1,7 @@
 // packages/fliwright-core/tests/CodeGenerator.test.ts
 import { describe, it, expect } from 'vitest';
 import { CodeGenerator } from '../src/CodeGenerator.js';
-import type { RecordedOperation, ResolvedSelector } from '../src/types.js';
+import type { RecordedOperation, RecordingFrame, ResolvedSelector } from '../src/types.js';
 
 function tap(x: number, y: number, ts: number): RecordedOperation {
   return { kind: 'tap', position: { x, y }, timestamp: ts };
@@ -162,7 +162,7 @@ describe('CodeGenerator', () => {
     const code = gen.generate(ops, selectors, { timeline: true, mode: 'test', testName: 'register flow' });
 
     expect(code).toContain("import { test } from '@fliwright/vitest'");
-    expect(code).toContain("test('register flow', async ({ page, flow, mock, agent }) => {");
+    expect(code).toContain("test('register flow', async ({ page, flow, mock, assert, agent }) => {");
     expect(code).toContain("await flow.step('Tap target', async () => {");
     expect(code).toContain("await page.locator({ text: 'Register' }).click();");
     expect(code).toContain("await flow.step('Type text', async () => {");
@@ -179,6 +179,71 @@ describe('CodeGenerator', () => {
     expect(code).toContain("import { script } from '@fliwright/vitest'");
     expect(code).toContain("script('open app', async ({ page, flow, mock, agent }) => {");
     expect(code).toContain("await flow.step('Tap target', async () => {");
+  });
+
+  it('emits timeline frames for recorded screenshots', () => {
+    const gen = new CodeGenerator();
+    const operations: RecordedOperation[] = [tap(100, 200, 1000)];
+    const frames: RecordingFrame[] = [{
+      id: 'frame-1',
+      index: 0,
+      kind: 'tap',
+      status: 'ready',
+      timestamp: 1000,
+      position: { x: 100, y: 200 },
+      operationIndex: 0,
+      screenshot: { base64: 'png', format: 'png' },
+    }];
+
+    const code = gen.generate(operations, sel({ 0: { match: { text: 'Start' } } }), {
+      timeline: true,
+      recordingFrames: frames,
+    });
+
+    expect(code).toContain("await flow.frame('Recorded frame 1', { screenshot: true });");
+  });
+
+  it('emits a timeline-native assertion only for a recorded postcondition target', () => {
+    const code = new CodeGenerator().generate(
+      [tap(100, 200, 1000), tap(100, 300, 2000)],
+      sel({
+        0: { match: { text: 'Register' } },
+        1: { match: { text: 'Account details' } },
+      }),
+      {
+        timeline: true,
+        mode: 'test',
+        assertionSuggestions: [{
+          afterIndex: 0,
+          targetOperationIndex: 1,
+          reason: 'possible navigation tap',
+          template: '// TODO: Assert expected page content',
+        }],
+      },
+    );
+
+    expect(code).toContain('// TODO: Assert expected page content');
+    expect(code).toContain("await assert.visible('Suggested: possible navigation tap', page.locator({ text: 'Account details' }));");
+    expect(code).not.toContain("assert.visible('Suggested: possible navigation tap', page.locator({ text: 'Register' }))");
+  });
+
+  it('keeps suggestions as TODO comments without a reliable postcondition target', () => {
+    const code = new CodeGenerator().generate(
+      [tap(100, 200, 1000)],
+      sel({ 0: { match: { text: 'Register' } } }),
+      {
+        timeline: true,
+        mode: 'test',
+        assertionSuggestions: [{
+          afterIndex: 0,
+          reason: 'possible navigation tap',
+          template: '// TODO: Assert expected page content',
+        }],
+      },
+    );
+
+    expect(code).toContain('// TODO: Assert expected page content');
+    expect(code).not.toContain('await assert.visible(');
   });
 });
 

@@ -498,6 +498,15 @@ export interface CodegenOptions {
   homeRoute?: string;
   timeline?: boolean;
   mode?: 'script' | 'test';
+  recordingFrames?: readonly RecordingFrame[];
+  assertionSuggestions?: readonly AssertionSuggestion[];
+}
+
+export interface AssertionSuggestion {
+  afterIndex: number;
+  targetOperationIndex?: number;
+  reason: string;
+  template: string;
 }
 
 export interface FormFieldMeta {
