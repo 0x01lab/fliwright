@@ -1,6 +1,15 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { readWorkspaceConfig, type FliwrightDriver } from '@fliwright/core';
+import {
+  VmServiceEndpointResolver,
+  explicitEndpointSource,
+  normalizeVmServiceUrl,
+  readWorkspaceConfig,
+  verifyVmServiceEndpoint,
+  workspaceEndpointSource,
+  type FliwrightDriver,
+  type VmServiceEndpointSource,
+} from '@fliwright/core';
 import type { ServerState } from '../state.js';
 
 export const ConnectParamsSchema = z.object({
@@ -11,20 +20,21 @@ export const ConnectParamsSchema = z.object({
 
 export interface ResolvedVmServiceUrl {
   vmServiceUrl: string;
-  source: 'argument' | 'state' | 'env:FLIWRIGHT_VM_URL' | 'env:FLIWRIGHT_VM_SERVICE_URL' | 'workspace-config';
+  source: string;
 }
 
 export interface ConnectOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
   driverFactory?: () => FliwrightDriver | Promise<FliwrightDriver>;
+  verifyEndpoint?: boolean;
 }
 
 export interface ConnectResult {
   connected: boolean;
   message: string;
   vmServiceUrl: string;
-  source: ResolvedVmServiceUrl['source'];
+  source: string;
 }
 
 export async function handleConnect(
@@ -38,6 +48,7 @@ export async function handleConnect(
     state,
     cwd: options.cwd,
     env: options.env,
+    verifyEndpoint: options.verifyEndpoint ?? !options.driverFactory,
   });
   // Dispose previous driver if any
   const prev = state.getDriver();
@@ -82,25 +93,37 @@ export async function resolveMcpVmServiceUrl(options: {
   state?: ServerState;
   cwd?: string;
   env?: Record<string, string | undefined>;
+  verifyEndpoint?: boolean;
 }): Promise<ResolvedVmServiceUrl> {
-  const explicit = cleanUrl(options.explicit);
-  if (explicit) return { vmServiceUrl: explicit, source: 'argument' };
-
-  const stateUrl = cleanUrl(options.state?.getVmServiceUrl() ?? undefined);
-  if (stateUrl) return { vmServiceUrl: stateUrl, source: 'state' };
-
   const env = options.env ?? process.env;
-  const fliwrightVmUrl = cleanUrl(env.FLIWRIGHT_VM_URL);
-  if (fliwrightVmUrl) return { vmServiceUrl: fliwrightVmUrl, source: 'env:FLIWRIGHT_VM_URL' };
+  const sources: VmServiceEndpointSource[] = [];
+  if (options.explicit) sources.push(explicitEndpointSource(options.explicit, { source: 'argument' }));
+  const stateUrl = options.state?.getVmServiceUrl();
+  if (stateUrl) sources.push(explicitEndpointSource(stateUrl, { source: 'state' }));
+  if (env.FLIWRIGHT_VM_URL) sources.push(explicitEndpointSource(env.FLIWRIGHT_VM_URL, { source: 'env:FLIWRIGHT_VM_URL' }));
+  if (env.FLIWRIGHT_VM_SERVICE_URL) sources.push(explicitEndpointSource(env.FLIWRIGHT_VM_SERVICE_URL, { source: 'env:FLIWRIGHT_VM_SERVICE_URL' }));
+  sources.push(workspaceEndpointSource({ cwd: options.cwd }));
 
-  const vmServiceUrl = cleanUrl(env.FLIWRIGHT_VM_SERVICE_URL);
-  if (vmServiceUrl) return { vmServiceUrl, source: 'env:FLIWRIGHT_VM_SERVICE_URL' };
-
-  const config = await readWorkspaceConfig(options.cwd);
-  const configUrl = cleanUrl(config.vmServiceUrl);
-  if (configUrl) return { vmServiceUrl: configUrl, source: 'workspace-config' };
-
-  throw new Error('No Flutter VM Service URL found. Pass vmServiceUrl, set FLIWRIGHT_VM_URL or FLIWRIGHT_VM_SERVICE_URL, or let Fliwright VS Code write .fliwright/config.json for the running app.');
+  try {
+    const lease = await new VmServiceEndpointResolver(sources, {
+      cwd: options.cwd,
+      verify: options.verifyEndpoint ? verifyVmServiceEndpoint : async () => ({ status: 'ok', checkedAt: new Date().toISOString() }),
+      persistWorkspaceCache: options.verifyEndpoint === true,
+    }).acquire();
+    const source = lease.source;
+    const originalUrl = source === 'argument'
+      ? options.explicit
+      : source === 'state'
+        ? options.state?.getVmServiceUrl()
+        : source === 'env:FLIWRIGHT_VM_URL'
+          ? env.FLIWRIGHT_VM_URL
+          : source === 'env:FLIWRIGHT_VM_SERVICE_URL'
+            ? env.FLIWRIGHT_VM_SERVICE_URL
+            : (await readWorkspaceConfig(options.cwd)).vmServiceUrl;
+    return { vmServiceUrl: originalUrl?.trim() ?? lease.url, source };
+  } catch {
+    throw new Error('No Flutter VM Service URL found. Pass vmServiceUrl, set FLIWRIGHT_VM_URL or FLIWRIGHT_VM_SERVICE_URL, or let Fliwright VS Code write .fliwright/config.json for the running app.');
+  }
 }
 
 export interface FliwrightStatusResult {
@@ -108,7 +131,7 @@ export interface FliwrightStatusResult {
   connected: boolean;
   vmServiceUrl: string | null;
   availableVmServiceUrl?: string;
-  availableVmServiceUrlSource?: ResolvedVmServiceUrl['source'];
+  availableVmServiceUrlSource?: string;
   tddRuntimeConnected: boolean;
   tddRuntimeTool: 'fliwright_tdd_status';
   guidance: string;
@@ -141,21 +164,13 @@ export async function handleStatus(
   };
 }
 
-function cleanUrl(url: string | undefined): string | undefined {
-  const trimmed = url?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
 async function createDefaultDriver(): Promise<FliwrightDriver> {
   const { FliwrightDriver } = await import('@fliwright/core');
   return new FliwrightDriver();
 }
 
 export function toWebSocketUrl(url: string): string {
-  const converted = url
-    .replace('http://', 'ws://')
-    .replace('https://', 'wss://');
-  return converted.endsWith('/ws') ? converted : converted.replace(/\/?$/, '/ws');
+  return normalizeVmServiceUrl(url) ?? url;
 }
 
 export function registerConnectTool(server: McpServer, state: ServerState): void {

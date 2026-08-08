@@ -63,7 +63,7 @@
         "form",
         "interaction"
       ],
-      "sourceFingerprint": "8f8268598589760c245ebcb9159d2e9f7ffe11a84ff952afb89bbc44e617163f"
+      "sourceFingerprint": "f4834218282e718efc18ec4c1594c5d4f5975c93fa963ad9dbdaaf9e4514d77d"
     },
     {
       "name": "@fliwright/core",
@@ -117,6 +117,7 @@
         "packages/fliwright-core/src/ToolMockServer.ts",
         "packages/fliwright-core/src/TraceCollector.ts",
         "packages/fliwright-core/src/VMServiceConnector.ts",
+        "packages/fliwright-core/src/VmServiceEndpoint.ts",
         "packages/fliwright-core/src/WebSocketMockManager.ts",
         "packages/fliwright-core/src/WorkspaceConfig.ts",
         "packages/fliwright-core/src/agent/AgentRepair.ts",
@@ -298,6 +299,7 @@
         "ensureFliwrightRunsRoot",
         "EnsureFliwrightRunsRootOptions",
         "EventAggregator",
+        "explicitEndpointSource",
         "FailureCollector",
         "FailureContext",
         "FakerGenerator",
@@ -447,6 +449,7 @@
         "NormalizedRequestMatcher",
         "normalizeLogError",
         "normalizeMockEndpointConfig",
+        "normalizeVmServiceUrl",
         "Page",
         "PageNavigationOptions",
         "PageViewport",
@@ -569,8 +572,20 @@
         "validateFlow",
         "validateJsonSchema",
         "validateSelectorQuery",
+        "verifyVmServiceEndpoint",
+        "VmServiceAcquisitionRequest",
         "VMServiceConnector",
+        "VmServiceEndpoint",
+        "VmServiceEndpointHealth",
+        "VmServiceEndpointKind",
+        "VmServiceEndpointLease",
+        "VmServiceEndpointResolver",
+        "VmServiceEndpointResolverOptions",
+        "VmServiceEndpointScope",
+        "VmServiceEndpointSource",
+        "VmServiceEndpointVerifier",
         "VMServiceEvent",
+        "VmServiceUnavailableError",
         "WaitForMockCallOptions",
         "WebSocketMockCall",
         "WebSocketMockManager",
@@ -582,6 +597,10 @@
         "WidgetMatch",
         "WidgetSnapshot",
         "workspaceConfigPath",
+        "WorkspaceEndpointOwner",
+        "WorkspaceEndpointOwnerLease",
+        "WorkspaceEndpointOwnerOptions",
+        "workspaceEndpointSource",
         "wrapAgentError",
         "writeWorkspaceConfig",
         "writeWorkspaceVmServiceUrl"
@@ -590,7 +609,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "9df634c2561c2a7eb8a5df7de1ba63b1c4b299073ed7febe4698907f290f0292"
+      "sourceFingerprint": "f0b594c7a2bdd9ac537b69822e0eb10de6a3b3367234150a11ac8c0f672a0450"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -766,7 +785,7 @@
         "fliwright_type",
         "fliwright_wait"
       ],
-      "sourceFingerprint": "9108b63047bace8e37af976d89e6e86a78c9b95b4f66fcfcb60f9530b55ad0ed"
+      "sourceFingerprint": "df6b7248f08611356170d359ebdb15d374b008501330b48362719d4554e7cbec"
     },
     {
       "name": "@fliwright/plugin-riverpod",
@@ -823,6 +842,7 @@
         "packages/fliwright-tdd/src/baseline/StorageResetAdapter.ts",
         "packages/fliwright-tdd/src/daemon/DaemonTransport.ts",
         "packages/fliwright-tdd/src/daemon/FlutterDaemonController.ts",
+        "packages/fliwright-tdd/src/daemon/FlutterDaemonEndpointSource.ts",
         "packages/fliwright-tdd/src/daemon/ReloadStrategy.ts",
         "packages/fliwright-tdd/src/daemon/SubprocessDaemonTransport.ts",
         "packages/fliwright-tdd/src/devassist/DevAssistCoordinator.ts",
@@ -869,6 +889,8 @@
         "DevAssistRuntime",
         "DevAssistStatus",
         "FlutterDaemonController",
+        "FlutterDaemonEndpointSource",
+        "FlutterDaemonEndpointSourceOptions",
         "focusAndRerun",
         "generateRedFirstTest",
         "GenerateRedFirstTestResult",
@@ -955,7 +977,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "9b66a120b0304e7780b1c97e07b3dfc535820cd4430863d2c07970c5dd2e32f0"
+      "sourceFingerprint": "d8523102f0ddabdc609160ccc64c99209d5b051583e2ff5ca0bf05f1bd9c5591"
     },
     {
       "name": "@fliwright/vitest",
@@ -1492,7 +1514,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "4155192563874b95a54762560544fe66dc8fd702b3b37f57152ec98d93d328d1"
+      "sourceFingerprint": "adc54eb662382df42ca9f69fbd5254b14ee88d359c506f50fbed2b6ea6e0b10a"
     }
   ]
 }

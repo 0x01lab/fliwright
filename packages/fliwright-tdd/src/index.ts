@@ -1,5 +1,7 @@
 export type { AppHandle, AppStartParams, DaemonMessage, DaemonTransport } from './daemon/DaemonTransport.js';
 export { FlutterDaemonController } from './daemon/FlutterDaemonController.js';
+export { FlutterDaemonEndpointSource } from './daemon/FlutterDaemonEndpointSource.js';
+export type { FlutterDaemonEndpointSourceOptions } from './daemon/FlutterDaemonEndpointSource.js';
 export { SubprocessDaemonTransport, parseDaemonLines } from './daemon/SubprocessDaemonTransport.js';
 export {
   decideSync,

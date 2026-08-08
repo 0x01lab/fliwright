@@ -11,6 +11,8 @@ import {
   readWorkspaceConfigSync,
   sanitizeFlowFileId,
   setConnectorDebugLog,
+  VmServiceEndpointResolver,
+  explicitEndpointSource,
   writeWorkspaceVmServiceUrl,
 } from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
@@ -1429,7 +1431,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     let lastError: string | undefined;
     for (const candidate of orderedCandidates) {
       output.appendLine(`Trying VM Service candidate from ${candidate.source}: ${candidate.url}`);
-      const state = await session.connect(candidate.url);
+      let verifiedUrl: string;
+      try {
+        const endpoint = await new VmServiceEndpointResolver([
+          explicitEndpointSource(candidate.url, { source: candidate.source }),
+        ], {
+          cwd: workspaceRoot?.fsPath,
+        }).acquire();
+        verifiedUrl = endpoint.url;
+      } catch (error) {
+        lastError = messageOf(error);
+        output.appendLine(`VM Service candidate failed verification: ${candidate.url} (${lastError})`);
+        continue;
+      }
+      const state = await session.connect(verifiedUrl);
       if (state.status === 'connected') {
         await onConnected(state.url, options.interactive);
         return true;

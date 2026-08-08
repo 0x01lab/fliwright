@@ -1,7 +1,8 @@
-import { FliwrightDriver } from '@fliwright/core';
+import { FliwrightDriver, VmServiceEndpointResolver, explicitEndpointSource } from '@fliwright/core';
 import { dirname } from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { FlutterDaemonController } from '../daemon/FlutterDaemonController.js';
+import { FlutterDaemonEndpointSource } from '../daemon/FlutterDaemonEndpointSource.js';
 import { SubprocessDaemonTransport } from '../daemon/SubprocessDaemonTransport.js';
 import { decideSync, looksStructuralAfterReload } from '../daemon/ReloadStrategy.js';
 import { PersistentTestExecutor } from '../executor/PersistentTestExecutor.js';
@@ -90,9 +91,10 @@ export class TddRuntime {
       let vmServiceUrl = opts.vmServiceUrl;
       if (opts.app) {
         await this.daemon.start();
-        const app = await this.daemon.startApp(opts.app);
-        this.app = app;
-        vmServiceUrl = app.wsUri;
+        const source = new FlutterDaemonEndpointSource({ controller: this.daemon, ...opts.app });
+        const endpoint = await source.acquire();
+        this.app = source.lastApp;
+        vmServiceUrl = endpoint.url;
         this.launchMode = 'start';
       }
 
@@ -102,6 +104,7 @@ export class TddRuntime {
       this.vmServiceUrl = vmServiceUrl;
 
       this.driver = this.driverFactory();
+      await this.verifyManagedEndpoint(vmServiceUrl);
       await this.driver.connect(vmServiceUrl);
       this.driverConnections += 1;
 
@@ -192,9 +195,10 @@ export class TddRuntime {
     let vmServiceUrl = this.vmServiceUrl;
     if (this.startAppParams) {
       await this.daemon.start().catch(() => undefined);
-      const app = await this.daemon.startApp(this.startAppParams);
-      this.app = app;
-      vmServiceUrl = app.wsUri;
+      const source = new FlutterDaemonEndpointSource({ controller: this.daemon, ...this.startAppParams });
+      const endpoint = await source.acquire();
+      this.app = source.lastApp;
+      vmServiceUrl = endpoint.url;
     }
     if (!vmServiceUrl) throw new Error('Cannot reconnect: no VM service URL is available.');
 
@@ -211,11 +215,19 @@ export class TddRuntime {
     }
 
     this.driver = this.driverFactory();
+    await this.verifyManagedEndpoint(vmServiceUrl);
     await this.driver.connect(vmServiceUrl);
     this.driverConnections += 1;
     this.markUpdated();
     this.persistStatus();
     return this.snapshot();
+  }
+
+  private async verifyManagedEndpoint(vmServiceUrl: string): Promise<void> {
+    if (!(this.driver instanceof FliwrightDriver)) return;
+    await new VmServiceEndpointResolver([
+      explicitEndpointSource(vmServiceUrl, { source: 'flutter-daemon', scope: 'execution-worker' }),
+    ], { persistWorkspaceCache: false }).acquire();
   }
 
   private async runCycleWithEscalation(

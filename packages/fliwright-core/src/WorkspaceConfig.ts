@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -9,6 +9,13 @@ export interface FliwrightWorkspaceConfig {
   vmServiceUrl?: string;
   vmServiceUpdatedAt?: string;
   vmServiceSource?: string;
+  vmServiceAppId?: string;
+  vmServiceDeviceId?: string;
+  vmServiceLeaseId?: string;
+  vmServiceOwnerId?: string;
+  vmServiceOwnerPid?: number;
+  vmServiceOwnerHeartbeatAt?: string;
+  vmServiceGeneration?: number;
   [key: string]: unknown;
 }
 
@@ -45,18 +52,29 @@ export async function writeWorkspaceConfig(
   };
   const filePath = workspaceConfigPath(cwd);
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
+  await rename(temporaryPath, filePath);
   return next;
 }
 
 export async function writeWorkspaceVmServiceUrl(
   vmServiceUrl: string,
-  options: { cwd?: string; source?: string } = {},
+  options: {
+    cwd?: string;
+    source?: string;
+    appId?: string;
+    deviceId?: string;
+    leaseId?: string;
+  } = {},
 ): Promise<FliwrightWorkspaceConfig> {
   return writeWorkspaceConfig({
     vmServiceUrl,
     vmServiceSource: options.source ?? 'unknown',
     vmServiceUpdatedAt: new Date().toISOString(),
+    ...(options.appId ? { vmServiceAppId: options.appId } : {}),
+    ...(options.deviceId ? { vmServiceDeviceId: options.deviceId } : {}),
+    ...(options.leaseId ? { vmServiceLeaseId: options.leaseId } : {}),
   }, options.cwd);
 }
 
@@ -67,6 +85,9 @@ export async function clearWorkspaceVmServiceUrl(
     vmServiceUrl: undefined,
     vmServiceSource: options.source ?? 'unknown',
     vmServiceUpdatedAt: new Date().toISOString(),
+    vmServiceAppId: undefined,
+    vmServiceDeviceId: undefined,
+    vmServiceLeaseId: undefined,
   }, options.cwd);
 }
 
@@ -77,6 +98,13 @@ function normalizeWorkspaceConfig(value: unknown): FliwrightWorkspaceConfig {
     vmServiceUrl,
     vmServiceUpdatedAt,
     vmServiceSource,
+    vmServiceAppId,
+    vmServiceDeviceId,
+    vmServiceLeaseId,
+    vmServiceOwnerId,
+    vmServiceOwnerPid,
+    vmServiceOwnerHeartbeatAt,
+    vmServiceGeneration,
     ...rest
   } = value as Record<string, unknown>;
   return {
@@ -85,5 +113,12 @@ function normalizeWorkspaceConfig(value: unknown): FliwrightWorkspaceConfig {
     ...(typeof vmServiceUrl === 'string' ? { vmServiceUrl } : {}),
     ...(typeof vmServiceUpdatedAt === 'string' ? { vmServiceUpdatedAt } : {}),
     ...(typeof vmServiceSource === 'string' ? { vmServiceSource } : {}),
+    ...(typeof vmServiceAppId === 'string' ? { vmServiceAppId } : {}),
+    ...(typeof vmServiceDeviceId === 'string' ? { vmServiceDeviceId } : {}),
+    ...(typeof vmServiceLeaseId === 'string' ? { vmServiceLeaseId } : {}),
+    ...(typeof vmServiceOwnerId === 'string' ? { vmServiceOwnerId } : {}),
+    ...(typeof vmServiceOwnerPid === 'number' ? { vmServiceOwnerPid } : {}),
+    ...(typeof vmServiceOwnerHeartbeatAt === 'string' ? { vmServiceOwnerHeartbeatAt } : {}),
+    ...(typeof vmServiceGeneration === 'number' ? { vmServiceGeneration } : {}),
   };
 }

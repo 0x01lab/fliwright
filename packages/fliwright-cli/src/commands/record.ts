@@ -32,7 +32,7 @@ export interface RecorderLike {
 }
 
 export interface RecordDeps {
-  resolveVmUrl?: (options: { cliFlag?: string; configUrl?: string }) => Promise<string | null>;
+  resolveVmUrl?: (options: { cliFlag?: string; configUrl?: string; verify?: boolean }) => Promise<string | null>;
   createRecorder?: (vmUrl: string) => Promise<RecorderLike>;
   /** External stop signal. When it resolves, recording stops. Used for testing. */
   stopSignal?: Promise<void>;
@@ -43,7 +43,7 @@ export async function recordCommand(
   deps: RecordDeps = {},
 ): Promise<RecordResult> {
   const resolver = deps.resolveVmUrl ?? resolveVmUrl;
-  const vmUrl = await resolver({ cliFlag: options.vmUrl });
+  const vmUrl = await resolver({ cliFlag: options.vmUrl, verify: true });
 
   if (!vmUrl) {
     throw new Error(

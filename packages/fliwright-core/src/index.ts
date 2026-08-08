@@ -194,6 +194,28 @@ export {
   writeWorkspaceVmServiceUrl,
 } from './WorkspaceConfig.js';
 export type { FliwrightWorkspaceConfig } from './WorkspaceConfig.js';
+export {
+  VmServiceEndpointResolver,
+  VmServiceUnavailableError,
+  WorkspaceEndpointOwner,
+  explicitEndpointSource,
+  normalizeVmServiceUrl,
+  verifyVmServiceEndpoint,
+  workspaceEndpointSource,
+} from './VmServiceEndpoint.js';
+export type {
+  VmServiceAcquisitionRequest,
+  VmServiceEndpoint,
+  VmServiceEndpointHealth,
+  VmServiceEndpointKind,
+  VmServiceEndpointLease,
+  VmServiceEndpointScope,
+  VmServiceEndpointSource,
+  VmServiceEndpointVerifier,
+  VmServiceEndpointResolverOptions,
+  WorkspaceEndpointOwnerLease,
+  WorkspaceEndpointOwnerOptions,
+} from './VmServiceEndpoint.js';
 
 export { Page } from './Page.js';
 export type {

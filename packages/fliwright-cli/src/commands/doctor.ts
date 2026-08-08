@@ -118,7 +118,7 @@ async function checkVmService(providedUrl?: string): Promise<{
     };
   }
   const { discoverVmServiceUrl } = await import('../vm-discovery.js');
-  const url = await discoverVmServiceUrl();
+  const url = await discoverVmServiceUrl({ verify: true });
   if (url) {
     return {
       check: {

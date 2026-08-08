@@ -1,4 +1,5 @@
 import { loadConfig } from '../config.js';
+import { normalizeVmServiceUrl as normalizeCoreVmServiceUrl, type VmServiceEndpoint, type VmServiceEndpointSource } from '@fliwright/core';
 
 const SCAN_PORTS = [8181, 9189, 54321];
 const TRAILING_URL_PUNCTUATION = /[),.;\]}]+$/;
@@ -119,30 +120,23 @@ export function extractVmServiceUrls(text: string): string[] {
 }
 
 export function normalizeVmServiceUrl(value: string | null | undefined): string | null {
-  const trimmed = value?.trim();
-  if (!trimmed) return null;
+  return normalizeCoreVmServiceUrl(value);
+}
 
-  try {
-    const url = new URL(cleanRawUrl(trimmed));
-    if (url.protocol === 'http:' || url.protocol === 'https:') {
-      url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
-      appendWebSocketPath(url);
-      url.search = '';
-      url.hash = '';
-      return url.toString();
-    }
-    if (url.protocol === 'ws:' || url.protocol === 'wss:') {
-      if (url.pathname === '' || url.pathname === '/') {
-        appendWebSocketPath(url);
-      }
-      url.hash = '';
-      return url.toString();
-    }
-  } catch {
-    // Fall through to the historical behavior for non-standard inputs.
-  }
-
-  return trimmed;
+/** Adapter used by Core resolver consumers while retaining DAP/log ownership in VS Code. */
+export function vmServiceLogEndpointSource(logText: string): VmServiceEndpointSource {
+  return {
+    name: 'vscode-debug-output',
+    async acquire() {
+      return extractVmServiceUrls(logText).map((url): VmServiceEndpoint => ({
+        url,
+        kind: 'direct-vm',
+        source: 'vscode-debug-output',
+        scope: 'developer-workspace',
+        acquiredAt: new Date().toISOString(),
+      }));
+    },
+  };
 }
 
 function isLikelyVmServiceLogLine(line: string): boolean {
@@ -176,9 +170,4 @@ function expandPossibleVmServiceUrls(raw: string): string[] {
   }
 
   return [raw];
-}
-
-function appendWebSocketPath(url: URL): void {
-  const path = url.pathname.replace(/\/+$/, '');
-  url.pathname = path.endsWith('/ws') ? path : `${path || ''}/ws`;
 }

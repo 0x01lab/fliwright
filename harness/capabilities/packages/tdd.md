@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/tdd"
 path: "packages/fliwright-tdd"
-source_fingerprint: "9b66a120b0304e7780b1c97e07b3dfc535820cd4430863d2c07970c5dd2e32f0"
+source_fingerprint: "d8523102f0ddabdc609160ccc64c99209d5b051583e2ff5ca0bf05f1bd9c5591"
 generated: true
 ---
 
@@ -63,6 +63,8 @@ Own persistent TDD execution, baseline reset, focused reruns, red-first generati
 - `DevAssistRuntime`
 - `DevAssistStatus`
 - `FlutterDaemonController`
+- `FlutterDaemonEndpointSource`
+- `FlutterDaemonEndpointSourceOptions`
 - `focusAndRerun`
 - `generateRedFirstTest`
 - `GenerateRedFirstTestResult`
@@ -152,6 +154,7 @@ Own persistent TDD execution, baseline reset, focused reruns, red-first generati
 - `packages/fliwright-tdd/src/baseline/StorageResetAdapter.ts`
 - `packages/fliwright-tdd/src/daemon/DaemonTransport.ts`
 - `packages/fliwright-tdd/src/daemon/FlutterDaemonController.ts`
+- `packages/fliwright-tdd/src/daemon/FlutterDaemonEndpointSource.ts`
 - `packages/fliwright-tdd/src/daemon/ReloadStrategy.ts`
 - `packages/fliwright-tdd/src/daemon/SubprocessDaemonTransport.ts`
 - `packages/fliwright-tdd/src/devassist/DevAssistCoordinator.ts`

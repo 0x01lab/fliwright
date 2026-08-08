@@ -29,7 +29,7 @@ export interface RunOptions {
 }
 
 export interface RunDeps {
-  resolveVmUrl?: (options: { cliFlag?: string; configUrl?: string; cwd?: string }) => Promise<string | null>;
+  resolveVmUrl?: (options: { cliFlag?: string; configUrl?: string; cwd?: string; verify?: boolean }) => Promise<string | null>;
   onVmResolved?: (url: string) => void;
 }
 
@@ -48,6 +48,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
     cliFlag: options.vmUrl,
     configUrl: config.vmServiceUrl,
     cwd,
+    verify: true,
   });
 
   if (!vmUrl) {

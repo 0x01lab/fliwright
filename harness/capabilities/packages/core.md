@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "9df634c2561c2a7eb8a5df7de1ba63b1c4b299073ed7febe4698907f290f0292"
+source_fingerprint: "f0b594c7a2bdd9ac537b69822e0eb10de6a3b3367234150a11ac8c0f672a0450"
 generated: true
 ---
 
@@ -157,6 +157,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ensureFliwrightRunsRoot`
 - `EnsureFliwrightRunsRootOptions`
 - `EventAggregator`
+- `explicitEndpointSource`
 - `FailureCollector`
 - `FailureContext`
 - `FakerGenerator`
@@ -306,6 +307,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `NormalizedRequestMatcher`
 - `normalizeLogError`
 - `normalizeMockEndpointConfig`
+- `normalizeVmServiceUrl`
 - `Page`
 - `PageNavigationOptions`
 - `PageViewport`
@@ -428,8 +430,20 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `validateFlow`
 - `validateJsonSchema`
 - `validateSelectorQuery`
+- `verifyVmServiceEndpoint`
+- `VmServiceAcquisitionRequest`
 - `VMServiceConnector`
+- `VmServiceEndpoint`
+- `VmServiceEndpointHealth`
+- `VmServiceEndpointKind`
+- `VmServiceEndpointLease`
+- `VmServiceEndpointResolver`
+- `VmServiceEndpointResolverOptions`
+- `VmServiceEndpointScope`
+- `VmServiceEndpointSource`
+- `VmServiceEndpointVerifier`
 - `VMServiceEvent`
+- `VmServiceUnavailableError`
 - `WaitForMockCallOptions`
 - `WebSocketMockCall`
 - `WebSocketMockManager`
@@ -441,6 +455,10 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `WidgetMatch`
 - `WidgetSnapshot`
 - `workspaceConfigPath`
+- `WorkspaceEndpointOwner`
+- `WorkspaceEndpointOwnerLease`
+- `WorkspaceEndpointOwnerOptions`
+- `workspaceEndpointSource`
 - `wrapAgentError`
 - `writeWorkspaceConfig`
 - `writeWorkspaceVmServiceUrl`
@@ -481,6 +499,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/ToolMockServer.ts`
 - `packages/fliwright-core/src/TraceCollector.ts`
 - `packages/fliwright-core/src/VMServiceConnector.ts`
+- `packages/fliwright-core/src/VmServiceEndpoint.ts`
 - `packages/fliwright-core/src/WebSocketMockManager.ts`
 - `packages/fliwright-core/src/WorkspaceConfig.ts`
 - `packages/fliwright-core/src/agent/AgentRepair.ts`
