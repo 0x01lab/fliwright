@@ -183,6 +183,116 @@ describe('FlowRuntime', () => {
     }
   });
 
+  it('fails a manual checkpoint when the resume condition throws', async () => {
+    const { recorder, flow } = createFlow();
+
+    await expect(flow.manual('Wait for verification page', {
+      resumeWhen: () => {
+        throw new Error('VM service is unavailable');
+      },
+    })).rejects.toMatchObject({
+      name: 'FliwrightAgentError',
+      failure: { message: 'VM service is unavailable' },
+    });
+
+    expect(recorder.toJSON().nodes[0]).toMatchObject({
+      status: 'failed',
+      error: { message: 'VM service is unavailable' },
+    });
+  });
+
+  it('aborts a manual checkpoint when a resume condition stops responding', async () => {
+    vi.useFakeTimers();
+    try {
+      const { recorder, flow } = createFlow();
+      let outcome: 'rejected' | undefined;
+
+      void flow.manual('Wait for verification code', {
+        timeoutMs: 100,
+        resumeWhen: () => new Promise<boolean>(() => {}),
+      }).catch(() => {
+        outcome = 'rejected';
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+
+      expect(outcome).toBe('rejected');
+      expect(recorder.toJSON().nodes[0]).toMatchObject({
+        status: 'failed',
+        error: { message: 'Manual checkpoint aborted: Wait for verification code' },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('requires consecutive successful resume checks before continuing', async () => {
+    vi.useFakeTimers();
+    try {
+      const { recorder, flow } = createFlow();
+      let checks = 0;
+
+      const wait = flow.manual('Wait for verification fields', {
+        timeoutMs: 1_000,
+        pollIntervalMs: 50,
+        resumeWhenStableChecks: 2,
+        resumeWhen: () => {
+          checks += 1;
+          return checks >= 2;
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(recorder.toJSON().nodes[0]).toMatchObject({ status: 'running' });
+      await vi.advanceTimersByTimeAsync(50);
+      await wait;
+
+      expect(checks).toBeGreaterThanOrEqual(3);
+      expect(recorder.toJSON().nodes[0]).toMatchObject({ status: 'passed' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('waits for human confirmation before polling the app resume condition', async () => {
+    vi.useFakeTimers();
+    try {
+      const { recorder, flow } = createFlow();
+      let confirmHuman: (() => void) | undefined;
+      const confirmation = new Promise<void>((resolve) => {
+        confirmHuman = resolve;
+      });
+      const confirm = vi.fn(() => confirmation);
+      const resumeWhen = vi.fn(() => true);
+
+      const wait = flow.manual('Enter verification code', {
+        timeoutMs: 1_000,
+        pollIntervalMs: 50,
+        resumeWhenStableChecks: 1,
+        requireConfirmationBeforeResume: true,
+        confirm,
+        resumeWhen,
+      });
+
+      await Promise.resolve();
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(resumeWhen).not.toHaveBeenCalled();
+
+      confirmHuman!();
+      await vi.advanceTimersByTimeAsync(0);
+      await wait;
+
+      expect(resumeWhen).toHaveBeenCalledTimes(1);
+      expect(recorder.toJSON().nodes[0]).toMatchObject({
+        status: 'passed',
+        metadata: { completion: 'confirmThenResumeWhen' },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('waits for a manual continue file when no confirm callback is provided', async () => {
     const manualDir = await mkdtemp(join(tmpdir(), 'fliwright-manual-'));
     const previousManualDir = process.env.FLIWRIGHT_MANUAL_DIR;

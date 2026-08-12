@@ -29,6 +29,10 @@ export interface FlowManualOptions {
   message?: string;
   timeoutMs?: number;
   pollIntervalMs?: number;
+  /** Number of consecutive successful resume checks required before continuing. */
+  resumeWhenStableChecks?: number;
+  /** Require a human confirmation before polling `resumeWhen`. */
+  requireConfirmationBeforeResume?: boolean;
   metadata?: Record<string, unknown>;
   resumeWhen?: () => boolean | Promise<boolean>;
   confirm?: (prompt: string, options: { signal: AbortSignal }) => void | Promise<void>;
@@ -102,13 +106,17 @@ export class FlowRuntime {
 
   async manual(title: string, options: FlowManualOptions = {}): Promise<void> {
     const message = options.message ?? title;
+    const resumeWhenStableChecks = normalizeStableChecks(options.resumeWhenStableChecks);
     const node = this.options.recorder.startNode('manual', title, {
       metadata: {
         ...(options.metadata ?? {}),
         message,
         ...(options.timeoutMs != null ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.pollIntervalMs != null ? { pollIntervalMs: options.pollIntervalMs } : {}),
-        completion: options.resumeWhen ? 'resumeWhen' : options.confirm ? 'confirm' : 'manual-file',
+        ...(options.resumeWhen ? { resumeWhenStableChecks } : {}),
+        completion: options.resumeWhen
+          ? options.requireConfirmationBeforeResume ? 'confirmThenResumeWhen' : 'resumeWhen'
+          : options.confirm ? 'confirm' : 'manual-file',
       },
     });
     const controller = new AbortController();
@@ -210,25 +218,80 @@ export class FlowRuntime {
 
 async function waitForManualCompletion(prompt: string, options: FlowManualOptions, signal: AbortSignal): Promise<void> {
   if (options.resumeWhen) {
+    if (options.requireConfirmationBeforeResume) {
+      await waitForManualOperation(
+        () => (options.confirm ?? defaultManualConfirm)(prompt, { signal }),
+        signal,
+        prompt,
+      );
+    }
     await waitForManualResumeCondition(prompt, options.resumeWhen, {
       signal,
       pollIntervalMs: options.pollIntervalMs ?? 500,
+      stableChecks: normalizeStableChecks(options.resumeWhenStableChecks),
     });
     return;
   }
-  await (options.confirm ?? defaultManualConfirm)(prompt, { signal });
+  await waitForManualOperation(
+    () => (options.confirm ?? defaultManualConfirm)(prompt, { signal }),
+    signal,
+    prompt,
+  );
 }
 
 async function waitForManualResumeCondition(
   prompt: string,
   resumeWhen: () => boolean | Promise<boolean>,
-  options: { signal: AbortSignal; pollIntervalMs: number },
+  options: { signal: AbortSignal; pollIntervalMs: number; stableChecks: number },
 ): Promise<void> {
+  let successfulChecks = 0;
   while (!options.signal.aborted) {
-    if (await resumeWhen()) return;
-    await delay(options.pollIntervalMs);
+    if (await waitForManualOperation(resumeWhen, options.signal, prompt)) {
+      successfulChecks += 1;
+      if (successfulChecks >= options.stableChecks) return;
+    } else {
+      successfulChecks = 0;
+    }
+    await waitForManualOperation(() => delay(options.pollIntervalMs), options.signal, prompt);
   }
-  throw new Error(`Manual checkpoint aborted: ${prompt}`);
+  throw manualAbortError(prompt);
+}
+
+async function waitForManualOperation<T>(
+  operation: () => T | Promise<T>,
+  signal: AbortSignal,
+  prompt: string,
+): Promise<T> {
+  if (signal.aborted) throw manualAbortError(prompt);
+
+  let result: Promise<T>;
+  try {
+    result = Promise.resolve(operation());
+  } catch (error) {
+    throw error;
+  }
+  if (signal.aborted) throw manualAbortError(prompt);
+
+  let removeAbortListener: (() => void) | undefined;
+  const abort = new Promise<never>((_resolve, reject) => {
+    const onAbort = () => reject(manualAbortError(prompt));
+    signal.addEventListener('abort', onAbort, { once: true });
+    removeAbortListener = () => signal.removeEventListener('abort', onAbort);
+  });
+  try {
+    return await Promise.race([result, abort]);
+  } finally {
+    removeAbortListener?.();
+  }
+}
+
+function manualAbortError(prompt: string): Error {
+  return new Error(`Manual checkpoint aborted: ${prompt}`);
+}
+
+function normalizeStableChecks(value: number | undefined): number {
+  if (value == null || !Number.isFinite(value)) return 1;
+  return Math.max(1, Math.floor(value));
 }
 
 export function createAgentFailure(

@@ -59,3 +59,13 @@ only the one linked level-1 document that matches the work; do not preload
 
 Each linked document may route to a narrower leaf document. Follow that route
 instead of reading sibling files or a whole directory.
+
+## Feature Documentation
+
+AI-consumable implementation documentation lives in `docs/features/`.
+
+- **Start here:** [docs/features/index.md](./docs/features/index.md) for package and pipeline routing.
+- **Package APIs:** each package has a `README.md` and detailed API pages under `docs/features/<package>/`.
+- **Cross-cutting behavior:** top-level pipeline pages trace implemented integrations, including [VM Service endpoint acquisition](./docs/features/vm-service-endpoint-pipeline.md).
+
+Regenerate affected feature documentation with `/document-features` after significant stable source changes.
