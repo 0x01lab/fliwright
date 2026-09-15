@@ -26,6 +26,7 @@ import 'extensions/settle_extension.dart';
 import 'extensions/source_map.dart';
 import 'extensions/snapshot.dart';
 import 'extensions/storage_reset.dart';
+import 'extensions/test_bootstrap.dart';
 import 'extensions/type_extension.dart';
 import 'ref_registry.dart';
 
@@ -58,6 +59,7 @@ class FliwrightBridge {
     _modules.clear();
     FliwrightAppInstance.reset();
     StorageResetExtension.reset();
+    FliwrightTestBootstrap.reset();
     RefRegistry.disposeAll();
     FliwrightHttpOverrides.uninstall();
   }
@@ -99,6 +101,7 @@ class FliwrightBridge {
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
     StorageResetExtension.register(_registry);
+    FliwrightTestBootstrap.register(_registry);
     _registerModules();
 
     final mockRuleStore = MockRuleStore(
@@ -155,6 +158,7 @@ class FliwrightBridge {
     RiverpodExtension.register(_registry);
     RouterNavigateExtension.register(_registry);
     StorageResetExtension.register(_registry);
+    FliwrightTestBootstrap.register(_registry);
     _registerModules();
 
     final mockRuleStore = MockRuleStore(
@@ -224,6 +228,7 @@ class FliwrightBridge {
           'storageReset': true,
           'keyboardState': true,
           'keyboardDismiss': true,
+          'testBootstrap': true,
           'modules': _modules.values
               .where((module) => module.isAvailable)
               .map((module) => module.describe())

@@ -2,6 +2,28 @@ import { describe, expect, it, vi } from 'vitest';
 import { BaselineManager } from '../../src/baseline/BaselineManager.js';
 
 describe('BaselineManager', () => {
+  it('preserves VS Code mock routes when the driver supports foreign-route clearing', async () => {
+    const clear = vi.fn(async () => {});
+    const clearForeignRoutes = vi.fn(async () => {});
+    const driver = {
+      page: { resetToHome: vi.fn(async () => {}) },
+      mock: {
+        clear,
+        clearForeignRoutes,
+        clearCalls: vi.fn(async () => {}),
+      },
+    };
+    const manager = new BaselineManager(driver);
+
+    await manager.reset({
+      homeRoute: '/home',
+      resetCategories: ['mock'],
+    });
+
+    expect(clearForeignRoutes).toHaveBeenCalledOnce();
+    expect(clear).not.toHaveBeenCalled();
+  });
+
   it('runs built-in navigation and mock adapters and reports unsupported categories', async () => {
     const driver = {
       page: { resetToHome: vi.fn(async () => {}) },

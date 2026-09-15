@@ -80,6 +80,57 @@ describe('VMServiceConnector', () => {
     await expect(responsePromise).resolves.toEqual({ type: 'Success' });
   });
 
+  it('refreshes the cached isolate after its exit event', async () => {
+    const initialRequest = connector.sendRequest('ext.fliwright.mock.listRoutes');
+    await resolveMainIsolate(mockWS);
+    const initialExtensionRequest = JSON.parse(mockWS.sent[1]);
+    mockWS.emit('message', JSON.stringify({
+      jsonrpc: '2.0',
+      id: initialExtensionRequest.id,
+      result: { routes: [] },
+    }));
+    await expect(initialRequest).resolves.toEqual({ routes: [] });
+
+    mockWS.emit('message', JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'streamNotify',
+      params: {
+        streamId: 'Isolate',
+        event: {
+          kind: 'IsolateExit',
+          isolate: { id: 'isolates/main' },
+        },
+      },
+    }));
+
+    const nextRequest = connector.sendRequest('ext.fliwright.mock.listRoutes');
+    await Promise.resolve();
+    const isolateRefresh = JSON.parse(mockWS.sent[2]);
+    expect(isolateRefresh).toMatchObject({ method: 'getVM' });
+    mockWS.emit('message', JSON.stringify({
+      jsonrpc: '2.0',
+      id: isolateRefresh.id,
+      result: {
+        isolates: [{ id: 'isolates/restarted-main', name: 'main', isSystemIsolate: false }],
+      },
+    }));
+    await vi.waitFor(() => expect(mockWS.sent).toHaveLength(4));
+
+    const restartedExtensionRequest = JSON.parse(mockWS.sent[3]);
+    expect(restartedExtensionRequest).toMatchObject({
+      method: 'ext.fliwright.mock.listRoutes',
+      params: { isolateId: 'isolates/restarted-main' },
+    });
+    mockWS.emit('message', JSON.stringify({
+      jsonrpc: '2.0',
+      id: restartedExtensionRequest.id,
+      result: { routes: [{ id: 'persisted', path: '/api/session', method: 'GET' }] },
+    }));
+    await expect(nextRequest).resolves.toEqual({
+      routes: [{ id: 'persisted', path: '/api/session', method: 'GET' }],
+    });
+  });
+
   it('handles event stream notifications', async () => {
     const onEvent = vi.fn();
     connector.onEvent(onEvent);

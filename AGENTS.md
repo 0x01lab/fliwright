@@ -21,6 +21,10 @@ only the one linked level-1 document that matches the work; do not preload
   files, local VM-service URLs, device configuration, or secrets.
 - Keep fixtures deterministic. Add a regression test for selector, protocol, MCP
   tool, or code-generation changes.
+- Reusable automation environments use named, composed `TestScenario` declarations.
+  Authenticated business tests seed app-owned auth state through `auth.seedLoggedIn`,
+  never real login, CAPTCHA bypasses, or generic Riverpod auth overrides; see
+  `harness/memory/ledger/2026-08-15-composable-test-scenarios.md`.
 - Do not add compatibility paths for behavior that the current design replaces,
   unless backward compatibility is explicitly requested.
 - `docs/features/` is generated implementation reference. Do not edit it by hand;

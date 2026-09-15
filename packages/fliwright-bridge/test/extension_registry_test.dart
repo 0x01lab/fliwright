@@ -95,6 +95,26 @@ void main() {
       final methods = FliwrightBridge.registry.registeredMethods;
       expect(methods, contains('ext.fliwright.ping'));
       expect(methods, contains('ext.fliwright.handshake'));
+      expect(methods, contains('ext.fliwright.testBootstrap.status'));
+      expect(methods, contains('ext.fliwright.testBootstrap.release'));
+    });
+
+    test('test bootstrap waits until the controller releases it', () async {
+      await FliwrightBridge.init();
+      final waiting = FliwrightTestBootstrap.awaitScenario();
+
+      final status = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.testBootstrap.status',
+        {},
+      );
+      expect(status['waiting'], isTrue);
+
+      final released = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.testBootstrap.release',
+        {},
+      );
+      expect(released['released'], isTrue);
+      await waiting;
     });
 
     test(

@@ -1,7 +1,7 @@
 ---
 package: "fliwright_bridge"
 path: "packages/fliwright-bridge"
-source_fingerprint: "57529773a7c4110baaf1af6c491acb114f2f3ec0e049a0372d2ada5cf182169f"
+source_fingerprint: "1e3fae8247ec348304c63e0919c946b021f7f45b7e4364ebfa6be1a13c0a880b"
 generated: true
 ---
 
@@ -75,6 +75,8 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `ext.fliwright.startRecording`
 - `ext.fliwright.stopRecording`
 - `ext.fliwright.storage.reset`
+- `ext.fliwright.testBootstrap.release`
+- `ext.fliwright.testBootstrap.status`
 - `ext.fliwright.type`
 - `ext.fliwright.websocket.clearCalls`
 - `ext.fliwright.websocket.clearRules`
@@ -111,6 +113,7 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `snapshot`
 - `source_map`
 - `storage_reset`
+- `test_bootstrap`
 - `type_extension`
 - `websocket_mock`
 
@@ -137,6 +140,7 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `FliwrightFormControl`
 - `FliwrightFormOption`
 - `FliwrightHttpOverrides`
+- `FliwrightTestBootstrap`
 - `FormExtractExtension`
 - `GestureExtension`
 - `HiveMockRuleStorage`
@@ -207,6 +211,7 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `packages/fliwright-bridge/lib/src/extensions/snapshot.dart`
 - `packages/fliwright-bridge/lib/src/extensions/source_map.dart`
 - `packages/fliwright-bridge/lib/src/extensions/storage_reset.dart`
+- `packages/fliwright-bridge/lib/src/extensions/test_bootstrap.dart`
 - `packages/fliwright-bridge/lib/src/extensions/type_extension.dart`
 - `packages/fliwright-bridge/lib/src/extensions/websocket_mock.dart`
 - `packages/fliwright-bridge/lib/src/form_control.dart`

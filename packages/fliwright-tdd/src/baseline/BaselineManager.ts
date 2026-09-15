@@ -9,6 +9,7 @@ export interface ResetContext {
     };
     mock: {
       clear(): Promise<void>;
+      clearForeignRoutes?(): Promise<void>;
       clearCalls(): Promise<void>;
       loadRules?(mockDir?: string): Promise<void>;
       listRules?(): Array<{
@@ -65,7 +66,11 @@ export class BaselineManager {
     this.registerAdapter({
       category: 'mock',
       reset: async ({ driver: runtimeDriver, scenario }) => {
-        await runtimeDriver.mock.clear();
+        if (runtimeDriver.mock.clearForeignRoutes) {
+          await runtimeDriver.mock.clearForeignRoutes();
+        } else {
+          await runtimeDriver.mock.clear();
+        }
         await runtimeDriver.mock.clearCalls();
         if (scenario.mockProfile) {
           const profileResult = await applyMockProfile(runtimeDriver.mock, scenario.mockProfile, scenario.mockDir);

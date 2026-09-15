@@ -160,6 +160,23 @@ export type {
   AuthStatus,
   SeedLoggedInInput,
 } from './AppInstance.js';
+export { ScenarioCoordinator, ScenarioPreparationError, ScenarioResolutionError, ScenarioResolver } from './Scenario.js';
+export type {
+  ResolvedScenario,
+  ScenarioApplicationReport,
+  ScenarioAppLayer,
+  ScenarioAuthLayer,
+  ScenarioDriver,
+  ScenarioExecutionMode,
+  ScenarioLayer,
+  ScenarioMocksLayer,
+  ScenarioNavigationLayer,
+  ScenarioReadyCheck,
+  ScenarioStartupIsolation,
+  ScenarioStateLayer,
+  ScenarioStorageLayer,
+  TestScenario,
+} from './Scenario.js';
 export { DesignQaClient } from './DesignQaClient.js';
 export type {
   DesignQaCaptureCommandResult,

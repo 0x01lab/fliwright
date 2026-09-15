@@ -42,6 +42,35 @@ describe('createFliwrightTest driverProvider', () => {
   });
 });
 
+describe('createFliwrightTest scenarios', () => {
+  const driver = {
+    ...makeStubDriver(),
+    app: {
+      invoke: vi.fn(async (_capability: string, method: string) => (
+        method === 'getStatus' ? { isAuthenticated: false } : undefined
+      )),
+    },
+  };
+  const test = createFliwrightTest({
+    vmServiceUrl: 'ws://placeholder/ws',
+    requireAssertions: false,
+    mode: 'script',
+    runsRoot: mkdtempSync(join(tmpdir(), 'fliwright-vitest-scenario-')),
+    scenarios: {
+      guest: {
+        name: 'guest',
+        layers: [{ kind: 'auth', state: 'guest' }],
+        ready: [{ kind: 'auth', state: 'guest' }],
+      },
+    },
+  }, { driverProvider: async () => driver });
+
+  test.scenario('guest')('applies a named scenario before the test body', async () => {
+    expect(driver.app.invoke).toHaveBeenCalledWith('auth', 'clearSession');
+    expect(driver.app.invoke).toHaveBeenCalledWith('auth', 'getStatus');
+  });
+});
+
 describe('extendFliwrightTest', () => {
   const base = createFliwrightTest(
     {

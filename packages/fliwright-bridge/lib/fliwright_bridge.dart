@@ -20,6 +20,7 @@ export 'src/extensions/snap.dart';
 export 'src/extensions/source_map.dart';
 export 'src/extensions/snapshot.dart';
 export 'src/extensions/storage_reset.dart';
+export 'src/extensions/test_bootstrap.dart';
 export 'src/extensions/websocket_mock.dart';
 export 'src/form_control.dart';
 export 'src/ref_registry.dart';

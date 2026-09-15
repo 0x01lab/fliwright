@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/vitest"
 path: "packages/fliwright-vitest"
-source_fingerprint: "2c9e026923e1c7f15462f364456d04b1301a5ace752219b3400f5b3a2e538e00"
+source_fingerprint: "da93e1ec7aa99f89bbf6710863ff86ffc611889cd36b83808aa4f5df3c80973b"
 generated: true
 ---
 
@@ -43,12 +43,15 @@ Adapt the core runtime to Vitest fixtures, hooks, configuration, reporting, and 
 - `expect`
 - `extendFliwrightTest`
 - `FliwrightConfig`
+- `FliwrightFixtures`
 - `FliwrightLogConfig`
 - `FliwrightLogFormat`
 - `FliwrightLogOutput`
 - `FliwrightProjectFixtures`
 - `FliwrightTest`
 - `resolveRunsRoot`
+- `ScenarioEnabledFliwrightTest`
+- `ScenarioTest`
 - `script`
 - `test`
 

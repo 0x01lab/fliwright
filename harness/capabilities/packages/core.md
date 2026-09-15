@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "f0b594c7a2bdd9ac537b69822e0eb10de6a3b3367234150a11ac8c0f672a0450"
+source_fingerprint: "a0f326149754ec816b5ebf631b4ab4236000da79be787612cf14898184ac4719"
 generated: true
 ---
 
@@ -351,6 +351,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `RepairResult`
 - `ResetToHomeOptions`
 - `resolveAiConfig`
+- `ResolvedScenario`
 - `ResolvedSelector`
 - `resolveFliwrightRunsRoot`
 - `ResolveFliwrightRunsRootOptions`
@@ -358,6 +359,22 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `SafeRepairAction`
 - `sanitizeFlowFileId`
 - `sanitizeProjectPathName`
+- `ScenarioAppLayer`
+- `ScenarioApplicationReport`
+- `ScenarioAuthLayer`
+- `ScenarioCoordinator`
+- `ScenarioDriver`
+- `ScenarioExecutionMode`
+- `ScenarioLayer`
+- `ScenarioMocksLayer`
+- `ScenarioNavigationLayer`
+- `ScenarioPreparationError`
+- `ScenarioReadyCheck`
+- `ScenarioResolutionError`
+- `ScenarioResolver`
+- `ScenarioStartupIsolation`
+- `ScenarioStateLayer`
+- `ScenarioStorageLayer`
 - `SeedLoggedInInput`
 - `SelectController`
 - `Selector`
@@ -386,6 +403,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `StructuredLogger`
 - `summarizeTimeline`
 - `TestResult`
+- `TestScenario`
 - `TIMELINE_ARTIFACT_KIND_AI`
 - `TIMELINE_ARTIFACT_KIND_DIAGNOSTICS`
 - `TIMELINE_ARTIFACT_KIND_LOG`
@@ -487,6 +505,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/Protocol.ts`
 - `packages/fliwright-core/src/RecordedSelectorResolver.ts`
 - `packages/fliwright-core/src/RecorderController.ts`
+- `packages/fliwright-core/src/Scenario.ts`
 - `packages/fliwright-core/src/SelectRecipes.ts`
 - `packages/fliwright-core/src/Selector.ts`
 - `packages/fliwright-core/src/SelectorResolver.ts`

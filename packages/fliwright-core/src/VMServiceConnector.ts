@@ -31,13 +31,14 @@ export class VMServiceConnector {
   }
 
   async connect(url: string): Promise<void> {
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       this.ws = new WebSocket(url);
       this.ws.on('open', () => resolve());
       this.ws.on('error', (err: Error) => reject(err));
       this.ws.on('message', (data: any) => this.handleMessage(data.toString()));
       this.ws.on('close', () => this.rejectAllPending(new Error('WebSocket connection closed')));
     });
+    await this.listenToStreams(['Isolate']);
   }
 
   async sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
@@ -142,6 +143,7 @@ export class VMServiceConnector {
     }
     if (msg.method === 'streamNotify' && msg.params) {
       const params = msg.params as any;
+      this.handleIsolateLifecycleEvent(params.streamId, params.event);
       // Dart VM Service Extension events use extensionKind / extensionData
       // (not kind / data).  Fall back to kind / data for backward-compat and
       // test mocks that use the simpler format.
@@ -164,6 +166,18 @@ export class VMServiceConnector {
   private rejectAllPending(error: Error): void {
     for (const { reject } of this.pendingRequests.values()) { reject(error); }
     this.pendingRequests.clear();
+  }
+
+  private handleIsolateLifecycleEvent(streamId: unknown, event: unknown): void {
+    if (streamId !== 'Isolate' || !event || typeof event !== 'object') return;
+    const isolateEvent = event as {
+      kind?: unknown;
+      isolate?: { id?: unknown };
+    };
+    if (isolateEvent.kind !== 'IsolateExit') return;
+    if (isolateEvent.isolate?.id === this.mainIsolateId) {
+      this.mainIsolateId = null;
+    }
   }
 
   private recordDiagnostic(event: VMServiceEvent): void {

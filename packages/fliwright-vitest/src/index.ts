@@ -35,8 +35,10 @@ import {
   isActionMethod,
   createExpect,
   resolveAiConfig,
+  ScenarioCoordinator,
+  ScenarioResolver,
 } from '@fliwright/core';
-import type { AiRuntimeConfig, AgentPolicy, FailureContext, FliwrightLogger, FliwrightLogLevel, FliwrightLogEvent, FliwrightPlugin, HealingReport, Locator, LogSink, Page, TimelineRunMode, VMServiceEvent, TraceMode } from '@fliwright/core';
+import type { AiRuntimeConfig, AgentPolicy, FailureContext, FliwrightLogger, FliwrightLogLevel, FliwrightLogEvent, FliwrightPlugin, HealingReport, Locator, LogSink, Page, ScenarioExecutionMode, TestScenario, TimelineRunMode, VMServiceEvent, TraceMode } from '@fliwright/core';
 import type { TestAPI } from 'vitest';
 
 export type FliwrightLogFormat = 'pretty' | 'compact' | 'jsonl' | 'silent';
@@ -62,6 +64,10 @@ export interface FliwrightConfig {
   timelineDir?: string;
   runsRoot?: string;
   log?: FliwrightLogConfig;
+  /** Named, composable environment declarations used by `test.scenario(name)`. */
+  scenarios?: Record<string, TestScenario>;
+  /** Attach to an already running app, or prepare a waiting test-only app before its first frame. */
+  scenarioMode?: ScenarioExecutionMode;
 }
 
 export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUrl: string }): FliwrightConfig {
@@ -117,7 +123,7 @@ interface FliwrightTimelineContext {
   timelinePath?: string;
 }
 
-interface FliwrightFixtures {
+export interface FliwrightFixtures {
   driver: FliwrightDriver;
   page: Page;
   aiRuntime: AiRuntime;
@@ -131,6 +137,16 @@ interface FliwrightFixtures {
 
 export type FliwrightTest = TestAPI<FliwrightFixtures>;
 
+export type ScenarioTest = (
+  name: string,
+  handler: (fixtures: FliwrightFixtures) => unknown | Promise<unknown>,
+  timeout?: number,
+) => void;
+
+export interface ScenarioEnabledFliwrightTest extends FliwrightTest {
+  scenario(name: string): ScenarioTest;
+}
+
 export type FliwrightProjectFixtures = Record<
   string,
   (fixtures: FliwrightFixtures, use: (value: unknown) => Promise<void>) => Promise<void>
@@ -141,7 +157,10 @@ export interface CreateFliwrightTestOptions {
   driverProvider?: () => Promise<FliwrightDriver>;
 }
 
-export function createFliwrightTest(config: FliwrightConfig, options?: CreateFliwrightTestOptions) {
+export function createFliwrightTest(
+  config: FliwrightConfig,
+  options?: CreateFliwrightTestOptions,
+): ScenarioEnabledFliwrightTest {
   const resolveDriver = options?.driverProvider
     ? () => options.driverProvider!()
     : () => getSharedDriver(config);
@@ -331,7 +350,31 @@ export function createFliwrightTest(config: FliwrightConfig, options?: CreateFli
     },
   });
 
-  return fliwrightTest;
+  const scenarioTest = fliwrightTest as ScenarioEnabledFliwrightTest;
+  scenarioTest.scenario = (scenarioName: string): ScenarioTest => {
+    const scenarios = config.scenarios;
+    if (!scenarios) {
+      throw new Error(`Test scenario '${scenarioName}' was requested, but defineConfig({ scenarios }) is missing.`);
+    }
+    const scenario = new ScenarioResolver(scenarios).resolve(scenarioName);
+    return (name, handler, timeout) => scenarioTest(name, async ({
+      driver,
+      page,
+      aiRuntime,
+      flow,
+      mock,
+      agent,
+      assert,
+      timeline,
+      logger,
+    }) => {
+      await new ScenarioCoordinator(driver).apply(scenario, {
+        mode: config.scenarioMode ?? 'attach',
+      });
+      await handler({ driver, page, aiRuntime, flow, mock, agent, assert, timeline, logger });
+    }, timeout);
+  };
+  return scenarioTest;
 }
 
 export function extendFliwrightTest<TProjectFixtures extends Record<string, unknown>>(

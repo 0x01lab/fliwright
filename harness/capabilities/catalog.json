@@ -105,6 +105,7 @@
         "packages/fliwright-core/src/Protocol.ts",
         "packages/fliwright-core/src/RecordedSelectorResolver.ts",
         "packages/fliwright-core/src/RecorderController.ts",
+        "packages/fliwright-core/src/Scenario.ts",
         "packages/fliwright-core/src/SelectRecipes.ts",
         "packages/fliwright-core/src/Selector.ts",
         "packages/fliwright-core/src/SelectorResolver.ts",
@@ -493,6 +494,7 @@
         "RepairResult",
         "ResetToHomeOptions",
         "resolveAiConfig",
+        "ResolvedScenario",
         "ResolvedSelector",
         "resolveFliwrightRunsRoot",
         "ResolveFliwrightRunsRootOptions",
@@ -500,6 +502,22 @@
         "SafeRepairAction",
         "sanitizeFlowFileId",
         "sanitizeProjectPathName",
+        "ScenarioAppLayer",
+        "ScenarioApplicationReport",
+        "ScenarioAuthLayer",
+        "ScenarioCoordinator",
+        "ScenarioDriver",
+        "ScenarioExecutionMode",
+        "ScenarioLayer",
+        "ScenarioMocksLayer",
+        "ScenarioNavigationLayer",
+        "ScenarioPreparationError",
+        "ScenarioReadyCheck",
+        "ScenarioResolutionError",
+        "ScenarioResolver",
+        "ScenarioStartupIsolation",
+        "ScenarioStateLayer",
+        "ScenarioStorageLayer",
         "SeedLoggedInInput",
         "SelectController",
         "Selector",
@@ -528,6 +546,7 @@
         "StructuredLogger",
         "summarizeTimeline",
         "TestResult",
+        "TestScenario",
         "TIMELINE_ARTIFACT_KIND_AI",
         "TIMELINE_ARTIFACT_KIND_DIAGNOSTICS",
         "TIMELINE_ARTIFACT_KIND_LOG",
@@ -609,7 +628,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "f0b594c7a2bdd9ac537b69822e0eb10de6a3b3367234150a11ac8c0f672a0450"
+      "sourceFingerprint": "a0f326149754ec816b5ebf631b4ab4236000da79be787612cf14898184ac4719"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -1011,12 +1030,15 @@
         "expect",
         "extendFliwrightTest",
         "FliwrightConfig",
+        "FliwrightFixtures",
         "FliwrightLogConfig",
         "FliwrightLogFormat",
         "FliwrightLogOutput",
         "FliwrightProjectFixtures",
         "FliwrightTest",
         "resolveRunsRoot",
+        "ScenarioEnabledFliwrightTest",
+        "ScenarioTest",
         "script",
         "test"
       ],
@@ -1024,7 +1046,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "2c9e026923e1c7f15462f364456d04b1301a5ace752219b3400f5b3a2e538e00"
+      "sourceFingerprint": "da93e1ec7aa99f89bbf6710863ff86ffc611889cd36b83808aa4f5df3c80973b"
     },
     {
       "name": "fliwright_bridge",
@@ -1077,6 +1099,7 @@
         "packages/fliwright-bridge/lib/src/extensions/snapshot.dart",
         "packages/fliwright-bridge/lib/src/extensions/source_map.dart",
         "packages/fliwright-bridge/lib/src/extensions/storage_reset.dart",
+        "packages/fliwright-bridge/lib/src/extensions/test_bootstrap.dart",
         "packages/fliwright-bridge/lib/src/extensions/type_extension.dart",
         "packages/fliwright-bridge/lib/src/extensions/websocket_mock.dart",
         "packages/fliwright-bridge/lib/src/form_control.dart",
@@ -1102,6 +1125,7 @@
         "FliwrightFormControl",
         "FliwrightFormOption",
         "FliwrightHttpOverrides",
+        "FliwrightTestBootstrap",
         "FormExtractExtension",
         "GestureExtension",
         "HiveMockRuleStorage",
@@ -1167,6 +1191,7 @@
         "snapshot",
         "source_map",
         "storage_reset",
+        "test_bootstrap",
         "type_extension",
         "websocket_mock"
       ],
@@ -1216,6 +1241,8 @@
         "ext.fliwright.startRecording",
         "ext.fliwright.stopRecording",
         "ext.fliwright.storage.reset",
+        "ext.fliwright.testBootstrap.release",
+        "ext.fliwright.testBootstrap.status",
         "ext.fliwright.type",
         "ext.fliwright.websocket.clearCalls",
         "ext.fliwright.websocket.clearRules",
@@ -1224,7 +1251,7 @@
         "ext.fliwright.websocket.push",
         "ext.fliwright.websocket.setRules"
       ],
-      "sourceFingerprint": "57529773a7c4110baaf1af6c491acb114f2f3ec0e049a0372d2ada5cf182169f"
+      "sourceFingerprint": "1e3fae8247ec348304c63e0919c946b021f7f45b7e4364ebfa6be1a13c0a880b"
     },
     {
       "name": "fliwright_bridge_riverpod",
