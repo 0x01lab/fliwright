@@ -15,8 +15,6 @@ environment:
 
 dependencies:
   dio: ^5.0.0
-  fliwright_design_qa:
-    path: ../fliwright-design-qa
   flutter:
     sdk: flutter
   hive_ce: ^2.15.1

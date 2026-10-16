@@ -1,7 +1,7 @@
 ---
 package: "fliwright_design_qa"
 path: "packages/fliwright-design-qa"
-source_fingerprint: "5f147ebbc4d1bce2e802a0e49ab32ee5fe5a9675ca014eb09e78bde21e89cd0a"
+source_fingerprint: "71a7ba34be1c71777ac1b1a67c940c74799db8317969a4ad5f7dc15e0b672af7"
 generated: true
 ---
 
@@ -15,7 +15,7 @@ Run inside debug/profile Flutter applications, provide the optional QR pairing U
 
 ### May Depend On
 
-- None
+- `fliwright_bridge`
 
 ### Must Not Own
 
@@ -57,6 +57,7 @@ Run inside debug/profile Flutter applications, provide the optional QR pairing U
 - `DesignQaShakeDetector`
 - `DesignQaShakeTriggerBinding`
 - `DesignQaWebRtcTransport`
+- `FliwrightDesignQaExtension`
 
 ## Source Anchors
 
@@ -66,6 +67,7 @@ Run inside debug/profile Flutter applications, provide the optional QR pairing U
 - `packages/fliwright-design-qa/lib/src/design_qa_controller.dart`
 - `packages/fliwright-design-qa/lib/src/design_qa_pairing_page.dart`
 - `packages/fliwright-design-qa/lib/src/design_qa_sdk.dart`
+- `packages/fliwright-design-qa/lib/src/fliwright_bridge_extension.dart`
 - `packages/fliwright-design-qa/lib/src/pairing.dart`
 - `packages/fliwright-design-qa/lib/src/peerjs_keep_alive.dart`
 - `packages/fliwright-design-qa/lib/src/peerjs_signaling.dart`

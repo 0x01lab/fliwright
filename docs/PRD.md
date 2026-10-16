@@ -1,9 +1,9 @@
 # Fliwright 产品需求文档 (PRD)
 
-**版本**：v1.1  
-**日期**：2026年6月1日  
+**版本**：v1.2
+**日期**：2026年9月15日
 **作者**：项目团队  
-**状态**：已更新（同步代码实现状态）
+**状态**：Developer Preview 规划（实现状态以 `harness/capabilities` 与 `docs/features` 为准）
 
 ---
 
@@ -12,10 +12,15 @@
 ### 1.1 背景与机遇
 在 2026 年，AI 辅助编码（Cursor、GitHub Copilot、Claude Code 等）使代码生成门槛大幅降低。程序员的角色已从"写代码"转变为"把控 AI 生成代码的质量"。传统的 Flutter 端到端测试工具（如已废弃的 `flutter_driver`、官方的 `integration_test` 和社区的 Patrol）在 AI 时代暴露出严重短板：编写繁琐、对 AI Agent 亲和度低、缺乏智能自愈能力、难以无缝融入 AI 研发闭环。
 
-Fliwright 是一款针对 Flutter 生态的下一代自动化测试框架，定位为"AI 时代质量把控工作站"。它提供类 Playwright 的声明式 API、零侵入架构、智能自愈引擎、可复用的表单助手，并原生集成 MCP 协议，让 AI Agent 能够直接调用测试、理解失败并自动修复问题。
+Fliwright 是一款针对 Flutter 生态的白盒 E2E 自动化框架。它提供类
+Playwright 的 TypeScript API、测试专用 Bridge、可复现的 CLI、结构化失败
+工件，并可通过 MCP 适配 Codex、Claude Code 等 AI Agent。CLI 是人类、脚本
+和 CI 的主产品入口；MCP 是可选的 Agent 协议适配层。
 
 ### 1.2 产品愿景
-成为 Flutter 领域 AI 驱动的端到端测试基础设施，让 AI 生成的代码在秒级内得到可靠验证，实现"代码生成 → 自动化测试 → 失败反馈 → 自动修复"的完整闭环。
+成为 Flutter 领域可靠、可诊断、Agent 友好的白盒端到端测试基础设施。
+基础产品不依赖 AI，AI 诊断、TDD、Flow/Figma 与 Design QA 作为可选或 Labs
+能力演进。
 
 ### 1.3 文档范围
 本文档详细描述 Fliwright 的核心功能、技术架构、模块设计、可行性分析及商业价值，并标注各功能的实际实现状态。为后续开发提供蓝图。
@@ -25,11 +30,15 @@ Fliwright 是一款针对 Flutter 生态的下一代自动化测试框架，定�
 ## 2. 产品概述
 
 ### 2.1 产品定义
-Fliwright 是一个面向 Flutter 应用的跨语言（TypeScript/JavaScript + Dart）测试框架，通过远程控制 Dart VM Service 实现对 Flutter 应用的零侵入操作，提供录制、AI 生成用例、智能断言、内置 Mock 环境、失败自愈等能力，并可作为 MCP Server 与 AI 编码工具深度集成。
+Fliwright 是一个面向 Flutter 应用的跨语言（TypeScript/JavaScript + Dart）
+测试框架。它通过测试专用 Dart Bridge 与 VM Service 控制应用，因此是
+**低业务侵入的白盒方案，而不是无需插桩的黑盒方案**。基础能力包括测试
+执行、录制、断言、场景准备、Mock 与失败工件；MCP、AI、Figma 等属于适配
+或高级能力。
 
 ### 2.2 核心差异化优势
-- **AI 原生架构**：所有功能封装在 SDK (`@fliwright/core`) 中，CLI、VS Code 插件、Electron 壳仅作为轻量封装，AI Agent 可通过编程接口直接调用。
-- **零侵入**：通过编译期条件注入测试入口，不污染业务代码。
+- **Agent 友好架构**：稳定行为由 core/CLI 定义，VS Code 与 MCP 作为 adapters；基础测试不依赖 AI。
+- **低业务侵入**：通过独立测试入口初始化 Bridge，不要求修改业务 Widget；仍属于需要插桩的白盒方案。
 - **智能自愈引擎**：测试因 UI 微调失败时，自动通过多维特征匹配找到目标组件并继续执行，同时生成修复建议。
 - **声明式沙箱**：支持网络 Mock、状态注入，无需修改业务逻辑。
 - **表单助手**：可复用模块，自动识别表单语义并生成合规假数据，支持自定义 Skill 和 AI 生成的 JSON 规则。
@@ -58,18 +67,18 @@ Fliwright 是一个面向 Flutter 应用的跨语言（TypeScript/JavaScript + D
   - 双语言代码生成：`CodeGenerator`（TypeScript）+ `DartCodeGenerator`（Dart）
   - `AssertionSuggester`：基于操作模式识别，自动推荐断言插入点
 
-### 3.2 AI 生成测试用例 — ✅ 已实现
-- **描述**：基于 Flutter 源码，AI 自动生成覆盖边界条件的测试用例。
+### 3.2 AI 生成测试用例 — ✅ 已实现（Labs）
+- **描述**：基于 Flutter 源码或交互规格生成测试骨架；该能力是可选的 Agent/Labs 工作流，不是执行基础测试的前置条件。
 - **输入**：Flutter Dart 源码文件。
-- **技术实现**：通过 MCP 工具 `fliwright_generate_test` 解析 Flutter 源码，提取 Widget 语义（按钮、输入框、AppBar 等），自动生成符合 Fliwright API 规范的测试脚本。
+- **技术实现**：生成逻辑由共享的 core/TDD 能力承担；MCP `development` profile 中的 `fliwright_generate_test` 是 Agent adapter，不在默认 `core` profile 内。
 - **已实现能力**：
   - Dart 源码解析与 Widget 提取
   - 语义类型推断（从 `keyboardType`、`hintText` 等属性推断字段类型）
   - 自动选择器生成
-  - MCP 工具集成
+  - 可选 MCP specialist 工具集成
 
-### 3.3 测试失败上下文传递给 AI Agent — ✅ 已实现
-- **描述**：测试失败时，结构化打包错误信息并通过 MCP 协议反馈给 AI 编码工具。
+### 3.3 测试失败上下文与 Agent 诊断 — ✅ 已实现
+- **描述**：测试失败时，生成可归档、可机器读取的结构化上下文。CLI/CI 可直接消费工件，AI Agent 可选择通过 MCP resource 或 specialist 工具读取。
 - **反馈内容**：
   - 失败时的屏幕截图（支持自定义像素比）
   - Widget 树 JSON 快照（优先使用 `ext.fliwright.snapshot`，回退到 `ext.fliwright.inspect`）
@@ -77,8 +86,9 @@ Fliwright 是一个面向 Flutter 应用的跨语言（TypeScript/JavaScript + D
   - 自愈引擎的修复建议（原始选择器 → 建议选择器、置信度、各维度评分）
 - **已实现组件**：
   - `FailureCollector`：结构化失败上下文收集器，并行采集截图/Widget树/源码
-  - `@fliwright/vitest`：自动在测试失败时写入 MCP 失败上下文 JSON 文件
-  - MCP 工具 `fliwright_get_failure`：供 AI Agent 查询失败详情
+  - `@fliwright/vitest`：自动在测试失败时写入结构化失败上下文和运行工件
+  - CLI `fliwright artifacts`：供人类、CI 和其他工具查看或导出工件
+  - MCP `test_report` resource 与 `development` profile 的 `fliwright_get_failure`：供 AI Agent 按需读取
 
 ### 3.4 Mock 环境搭建 (Fliwright Sandbox) — 🔄 部分实现
 - **描述**：为 Flutter 应用提供多层 Mock 能力。
@@ -140,7 +150,7 @@ Fliwright 是一个面向 Flutter 应用的跨语言（TypeScript/JavaScript + D
   2. 运行失败时，拉取当前屏幕所有可交互组件，进行模糊匹配打分
   3. 使用 `MultiDimensionalHealingStrategy` 多维评分：位置相似度、上下文相似度、文本相似度
   4. 得分超过阈值则重定向操作，生成 `HealingReport`
-  5. 通过 MCP 通知 AI 更新测试选择器
+  5. 将建议写入结构化报告；CLI/CI 可直接消费，可选 MCP adapter 可将其提供给 AI Agent
 - **可扩展架构**：
   - `HealingStrategy` 接口：可注册自定义匹配策略
   - `FinderStrategy` 接口：可注册自定义查找策略
@@ -171,15 +181,15 @@ Fliwright 是一个面向 Flutter 应用的跨语言（TypeScript/JavaScript + D
 
 | 客户端 | 状态 | 说明 |
 |--------|------|------|
-| **CLI** | ✅ 已实现 | `fliwright run/init/doctor/record` 四个命令 |
-| **MCP Server** | ✅ 已实现 | 6 个工具 + 1 个资源端点 |
+| **CLI** | ✅ 已实现 | 主产品入口；覆盖 run/init/doctor/record，以及 app、scenario、mock、artifacts、mcp、flow、tdd 命令组 |
+| **MCP Server** | ✅ 已实现 | 默认 `core` profile 正好 8 个意图级工具；`development`、`tdd`、`flow`、`full` 为显式选择的 specialist profiles |
 | **Vitest 集成** | ✅ 已实现 | `@fliwright/vitest` 开箱即用 |
-| **VS Code 插件** | 🔄 部分实现 | 6 个侧栏视图 + 27 个命令 + CodeLens 已实现，待发布验证 |
-| **Electron 桌面应用** | 📋 规划中 | V2.0 范围 |
+| **VS Code 插件** | 🔄 部分实现 | 8 个侧栏视图 + 80 个命令，待 Marketplace 与真实用户验证 |
+| **Electron 桌面应用** | 非目标 | Developer Preview 不新增独立桌面壳 |
 
 **VS Code 插件已实现能力**：
-- 6 个侧栏视图：设备连接管理、Mock API 管理、表单规则管理、测试发现、运行结果、状态注入
-- 27 个命令：VM Service 连接/发现、MCP 配置说明、Mock 配置加载/应用/停止、表单规则分析/填充、测试运行、失败上下文查看、录制/插入、状态 Provider 读取/覆盖
+- 8 个侧栏视图：设备、Mock API、WebSocket Mock、表单、Flow、脚本、测试、状态
+- 80 个命令：VM Service、Mock、表单、测试、录制、Flow、状态、Timeline 与 TDD 等工作流
 - 自动扫描 `.fliwright/mocks/api/*.json` 和 `.fliwright/forms/*.json`
 - 14 个可配置项（路径、URL、Runner、失败上下文、表单行为、CodeLens 开关等）
 - TypeScript 测试文件 CodeLens：运行当前 Fliwright 测试、带失败上下文运行、录制后续交互
@@ -197,15 +207,18 @@ Fliwright 是一个面向 Flutter 应用的跨语言（TypeScript/JavaScript + D
 - `fliwright init`：在当前 Flutter 项目中初始化 Fliwright
 - `fliwright doctor`：检查环境配置
 - `fliwright record`：录制交互并生成测试代码，支持 `--lang ts|dart` 双语言输出
+- `fliwright app`：查询连接状态、观察页面、执行意图级交互、截图
+- `fliwright scenario`：列出、应用和重置命名的确定性测试场景
+- `fliwright mock`：列出、查看、应用、清理 Mock 规则并查询调用记录
+- `fliwright artifacts`：查看或导出结构化运行工件
+- `fliwright mcp`：生成 MCP 主机配置、诊断 MCP 可执行文件或启动 MCP adapter
 
-**MCP Server 工具列表**：
-- `fliwright_run`：执行测试文件，返回详细结果
-- `fliwright_get_failure`：获取失败上下文（Widget 树 + 截图 + 源码定位）
-- `fliwright_generate_test`：从 Flutter 源码自动生成测试
-- `fliwright_record`：录制用户交互并生成测试代码
-- `fliwright_mock_list`：列出已加载的 Mock endpoint、规则和当前激活规则
-- `fliwright_mock_switch`：切换指定 endpoint 的激活 Mock 规则
-- 资源端点：`test_report` (`fliwright://test-report/latest`) 测试执行报告
+**MCP Server 产品约束**：
+- MCP 是 `@fliwright/core` 与 CLI capability 的 Agent adapter，不独立拥有测试语义。
+- `core` profile 默认只暴露以下 8 个工具：`fliwright_status`、`fliwright_connect`、`fliwright_observe`、`fliwright_interact`、`fliwright_run`、`fliwright_scenario`、`fliwright_mock`、`fliwright_record`。
+- `development`、`tdd`、`flow`、`full` profiles 控制 specialist 工具暴露面；细粒度工具不会污染默认 agent 上下文。
+- 测试报告等只读数据优先通过 resource/resource template 暴露。
+- 完整实现清单以 `harness/capabilities/packages/mcp.md` 为准。
 
 VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-extension-design.md`。
 
@@ -216,8 +229,8 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 - **性能** ✅：断言轮询间隔默认 100ms，超时默认 5000ms，均可配置。
 - **可靠性** ✅：自愈引擎多维评分机制，支持可配置的置信度阈值。
 - **可扩展性** ✅：插件注册系统支持 StateAdapter、MockAdapter、FinderStrategy、HealingStrategy 等扩展点；Skill 注册表支持自定义表单策略。
-- **兼容性** 🔄：支持 Flutter 3.x+，Dart VM Service 依赖 Debug/Profile 模式。已验证 iOS/Android，Web/Desktop 平台待验证。
-- **安全性** ✅：测试入口和 Mock 服务器在 Release 模式下完全移除，不引入生产风险。
+- **兼容性** 🔄：Developer Preview 支持 Node.js 20+、Vitest 4.1.11、Dart 3.5+；Dart VM Service 依赖 Debug/Profile 模式。平台支持以 release gate 实测矩阵为准。
+- **安全性** ✅：Bridge 初始化在 Release 模式下直接返回，不注册 VM Service 扩展或启动 Mock；仍要求通过独立测试入口保障 tree shaking。
 
 ---
 
@@ -227,19 +240,19 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 
 | 层级 | 工具 | 规模 | 说明 |
 |------|------|------|------|
-| 单元测试 | Vitest | 58 个测试文件 | 覆盖所有 TS 包核心逻辑 |
-| 集成测试 | Vitest | 含 8 个 `*-integration.test.ts` | Mock Manager、Form Helper、Self-Healing、Failure Context 等端到端流水线 |
-| E2E 测试 | Vitest + Flutter | 5 个测试文件 | 需要运行中的 Flutter VM Service，验证真实设备交互 |
+| 单元/包集成测试 | Vitest | 约 187 个测试文件 | 覆盖所有 TypeScript 包核心逻辑与 adapter 契约 |
+| Dart 包测试 | flutter_test / test | 约 34 个测试文件 | 覆盖 Bridge、Riverpod 与 Design QA |
+| E2E 测试 | Vitest + Flutter | 8 个测试文件 | 需要运行中的 Flutter VM Service；CI 真实闭环仍是发布门槛 |
 
 ### 5.2 各包测试覆盖
 
 | 包 | 测试文件数 | 关键测试 |
 |----|-----------|---------|
-| `fliwright-core` | 31 | Driver、Page、Locator、Assertion、SelfHealing、FormHelper、MockManager、Recorder |
-| `fliwright-cli` | 7 | run、init、doctor、record、config、vm-discovery |
-| `fliwright-mcp` | 9 | 所有 4 个 MCP 工具 + server + multi-tool workflow |
-| `fliwright-vscode` | 6 | TreeProviders、SandboxService、MockConfigService、FormHelperService、VmServiceDiscovery |
-| `fliwright-vitest` | 1 | 集成测试 |
+| `fliwright-core` | 80 | Driver、Page、Locator、Assertion、Scenario、SelfHealing、FormHelper、MockManager、Recorder |
+| `fliwright-cli` | 13 | run、init、doctor、record、app、scenario、mock、artifacts、mcp、flow、tdd、config、vm-discovery |
+| `fliwright-mcp` | 26 | intent tools、specialist profiles、package entry、server 与资源契约 |
+| `fliwright-vscode` | 45 | TreeProviders、runner、viewer、编辑器与状态工作流 |
+| `fliwright-vitest` | 3 | fixtures、Scenario 与 lifecycle 集成 |
 | `fliwright-plugin-riverpod` | 3 | Adapter + Plugin + Driver 集成 |
 
 ### 5.3 AI 可消费文档
@@ -288,7 +301,7 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 +-----------------------------------------------------------------------+
 |                    Flutter 设备 (Debug/Profile)                        |
 |  +------------------------------------------------------------------+ |
-|  | test_driver/fliwright_app.dart (编译期注入，零侵入)                 | |
+|  | test_driver/fliwright_app.dart (测试专用白盒入口)                  | |
 |  |   - FliwrightBridge.init()                                       | |
 |  |     - ext.fliwright.gesture / click / type                       | |
 |  |     - ext.fliwright.scroll* / screenshot                         | |
@@ -306,7 +319,7 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 ### 6.2 关键模块设计
 
 #### 6.2.1 Dart 端桥接器 (`fliwright_bridge`) — ✅ 已实现
-- **零侵入启动**：通过 `test_driver/fliwright_app.dart` 包装原始 `main.dart`，编译时条件注入。
+- **测试入口启动**：通过 `test_driver/fliwright_app.dart` 包装原始 `main.dart`，避免在业务入口常驻测试初始化。
 - **VM Service 扩展注册**：利用 `dart:developer` 的 `registerExtension` 注册自定义方法：
   - `ext.fliwright.gesture`：在指定坐标仿真手势（点击、长按、拖拽）
   - `ext.fliwright.scrollIntoView`：滚动到目标组件
@@ -337,7 +350,7 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 - **核心能力**：
   - `createFliwrightTest(config)`：创建 Vitest test fixture，自动管理 Driver 连接和断开
   - 共享 Driver 实例，多个测试用例复用同一连接
-  - 自动在测试失败时写入 MCP 失败上下文 JSON
+  - 自动在测试失败时写入结构化失败上下文 JSON，供 CLI 工件和可选 MCP adapter 消费
   - `defineConfig()` 辅助函数配置 vmServiceUrl、timeout、screenshot 模式
   - 环境变量支持：`FLIWRIGHT_VM_URL`、`FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH`
   - 自定义 `expect()` 函数集成自愈引擎
@@ -460,21 +473,21 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
   - Mock 文件应使用脱敏数据或合成数据。
   - 插件应用 Mock 或表单规则前应展示待应用规则名称，避免隐式改变调试环境。
 
-### 6.3 交互流程示例：失败自愈与 AI 闭环
+### 6.3 交互流程示例：失败自愈与可选 Agent 闭环
 1. AI Agent 生成代码 → 触发 `fliwright run`。
 2. `expect(page.locator('text=确认支付')).toBeVisible()` 失败（按钮文案改为"去结算"）。
 3. 自愈引擎启动，多维评分匹配到新按钮（位置 + 上下文 + 文本相似度），得分超过阈值，测试通过。
 4. `FailureCollector` 在失败时已并行采集截图、Widget 树快照、源码定位。
 5. 自愈引擎生成 `HealingReport`（原始选择器 → 建议选择器、置信度、各维度评分）。
-6. `@fliwright/vitest` 将结构化失败上下文写入 MCP JSON 文件。
-7. MCP Server 通过 `fliwright_get_failure` 工具将反馈发送给 AI Agent。
-8. AI Agent 自动更新测试脚本中的选择器。
+6. `@fliwright/vitest` 将结构化失败上下文写入运行工件，CLI/CI 可直接读取。
+7. 如果使用 Agent，MCP Server 可通过 `test_report` resource 或 `development` profile 的 `fliwright_get_failure` 返回证据。
+8. AI Agent 根据证据提出或应用选择器修改；该步骤不影响非 AI 的确定性测试流程。
 
 ### 6.4 与 Patrol 的对比
 | 特性 | Patrol | Fliwright | 实现状态 |
 |------|--------|-----------|----------|
 | 测试语言 | Dart | TypeScript + Dart 双语言 | ✅ |
-| 侵入性 | 需引入库和配置 | 零侵入（编译期包装） | ✅ |
+| 侵入性 | 需引入库和配置 | 测试入口插桩、无需改业务 Widget | ✅ |
 | AI 亲和度 | 低（Finder 难写） | 高（MCP 协议、结构化反馈） | ✅ |
 | 自愈能力 | 无 | 多维模糊匹配自愈 | ✅ |
 | Mock 环境 | 需手工编码 | 声明式网络 Mock + 状态注入 | 🔄 (网络+状态 ✅, 原生 ❌) |
@@ -492,7 +505,7 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 
 ### 7.1 技术可行性 — ✅ 已验证
 - **Dart VM Service 协议**：已成功实现 WebSocket 连接、扩展注册、事件流监听。
-- **零侵入模式**：已通过 `test_driver/fliwright_app.dart` 验证。
+- **测试入口模式**：已通过 `test_driver/fliwright_app.dart` 验证。
 - **跨语言控制**：Node.js ↔ Dart VM Service 通信链路已打通。
 - **自愈引擎**：多维评分匹配策略已实现，准确率待大规模验证。
 - **表单助手**：语义识别 + Faker 引擎 + JSON 规则加载已完成。
@@ -500,7 +513,7 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 
 ### 7.2 资源可行性
 - 开发团队需具备 Dart/Flutter、TypeScript 能力。
-- MVP 阶段已完成，当前处于 V1.0 收尾阶段。
+- MVP 阶段已完成，当前处于 Developer Preview 发布验证阶段。
 
 ---
 
@@ -508,7 +521,7 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 
 ### 8.1 解决的核心痛点
 - **测试编写与维护成本高** ✅：AI 生成代码导致 UI 频繁变更，Fliwright 的自愈和自动等待已降低维护成本。
-- **AI 工作流脱节** ✅：通过 MCP 打通闭环，AI Agent 可直接运行测试、获取结构化失败反馈、自动修复。
+- **AI 工作流脱节** ✅：CLI 与结构化工件提供稳定执行合同，可选 MCP adapter 让 AI Agent 运行测试、读取失败证据并参与修复。
 - **表单测试低效** ✅：表单助手将表单填写过程智能化、配置化。
 
 ### 8.2 市场定位与商业化潜力
@@ -537,27 +550,30 @@ VS Code 插件的详细设计见：`docs/superpowers/specs/2026-05-31-vscode-ext
 - ✅ 实现基础 HTTP Mock 服务器。
 - ✅ 实现自愈引擎核心功能。
 - ✅ 实现表单助手核心层与 JSON 规则加载。
-- ✅ 实现 MCP Server 四个核心工具。
-- ✅ 实现 CLI 四个命令。
+- ✅ 实现 MCP Server，并将默认 `core` profile 收敛为 8 个意图级工具。
+- ✅ 实现 CLI 主入口及 app/scenario/mock/artifacts/mcp 等命令组。
 - ✅ 实现 Vitest 集成包。
 - ✅ 实现 Riverpod 插件。
 - ✅ 实现录制器 + 双语言代码生成 + 断言建议。
 - ✅ 实现 GoRouter 路由导航集成。
 - ✅ 实现 FailureCollector 结构化失败上下文。
 
-### 10.2 V1.0 阶段（当前）— 🔄 进行中
+### 10.2 Developer Preview 阶段（当前）— 🔄 进行中
 - ✅ 录制器核心逻辑
 - ✅ 集成表单助手核心层与 TS 适配器
 - ✅ 自愈引擎基本功能
-- ✅ MCP Server 对接 Cursor/Claude Code
-- 🔄 **VS Code 插件**（核心功能已实现：6 视图 + 27 命令 + CodeLens，待 VSIX 打包发布和 Marketplace 上架）
+- ✅ MCP Server 对接 Codex、Cursor、Claude Code 等 MCP host；默认 profile 已收敛为 8 个工具
+- ✅ CLI-first 产品面：核心能力均有可脚本化命令与 JSON 输出
+- ✅ 真实 generated Flutter desktop E2E smoke 与 registry consumer 校验
+- 🔄 **VS Code 插件**（核心功能已实现，待 VSIX 打包发布、Marketplace 上架和真实用户验证）
+- 📋 **外部项目验证**：至少三个独立 Flutter 应用完成安装、首个测试和反馈闭环
 - 📋 **性能帧率断言** (`performanceJankRateLessThan`)
 - 📋 **路由断言** (`toContainRoute`)
 
 ### 10.3 V2.0 及以后
 - 高级性能监控与异常断言
 - 表单助手 Skill 市场
-- Electron 可视化 Trace Viewer
+- 独立桌面壳暂不纳入 Developer Preview；优先完善 VS Code 与 CLI 工件查看
 - 支持 Dart 侧集成测试适配器 (`DartIntegrationAdapter`)，让现有 Dart 测试直接复用表单助手和 Mock 能力
 - 原生硬件层 Mock（GPS、相机等，集成 Patrol 内核）
 - Web/Desktop 平台验证与适配
@@ -594,6 +610,10 @@ fliwright/
 ---
 
 ## 12. 结论
-Fliwright 已完成 MVP 阶段全部功能和 V1.0 阶段大部分功能。核心架构（零侵入桥接、自愈引擎、表单助手、MCP 集成、Vitest 集成、插件系统）均已实现并通过测试验证。VS Code 插件已实现核心功能（6 视图 + 27 命令 + CodeLens），待 VSIX 打包发布、Marketplace 上架和真实用户验证。下一步重点为 VS Code 插件发布、性能断言完善，随后进入 V2.0 规划（Skill 市场、Trace Viewer、原生硬件 Mock）。
+Fliwright 已具备 Flutter 白盒 E2E 的技术内核，但仍处于 Developer
+Preview 发布准备阶段。当前重点不是继续扩张功能，而是完成 registry-only
+安装、真实 Flutter CI smoke、CLI/MCP 单一实现来源、兼容矩阵和外部项目
+验证。Core 能力稳定后，再逐步提升 Labs 中的 TDD、AI、Flow/Figma 与
+Design QA。
 
 ---

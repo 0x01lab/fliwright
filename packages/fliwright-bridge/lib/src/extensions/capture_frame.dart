@@ -2,16 +2,20 @@ import '../bridge.dart';
 
 class CaptureFrameExtension {
   static void register(ExtensionRegistry registry) {
-    registry.register('ext.fliwright.captureFrame', _captureFrame);
+    registry.register(
+      'ext.fliwright.captureFrame',
+      (params) => _captureFrame(registry, params),
+    );
   }
 
   static Future<Map<String, dynamic>> _captureFrame(
+    ExtensionRegistry registry,
     Map<String, String> params,
   ) async {
     final includeScreenshot = (params['screenshot'] ?? 'true') != 'false';
     final includeSnapshot = (params['snapshot'] ?? 'true') != 'false';
     final includeDiagnostics = (params['diagnostics'] ?? 'true') != 'false';
-    final context = await _invokeOrEmpty('ext.fliwright.context', {});
+    final context = await _invokeOrEmpty(registry, 'ext.fliwright.context', {});
     final result = <String, dynamic>{
       'success': true,
       'frameId': 'frame-${DateTime.now().microsecondsSinceEpoch}',
@@ -20,7 +24,7 @@ class CaptureFrameExtension {
     };
 
     if (includeScreenshot) {
-      final screenshot = await _invokeOrEmpty('ext.fliwright.screenshot', {
+      final screenshot = await _invokeOrEmpty(registry, 'ext.fliwright.screenshot', {
         'pixelRatio': params['pixelRatio'] ?? '1.0',
         'waitForFrame': 'false',
       });
@@ -37,7 +41,7 @@ class CaptureFrameExtension {
     }
 
     if (includeSnapshot) {
-      result['snap'] = await _invokeOrEmpty('ext.fliwright.snap', {
+      result['snap'] = await _invokeOrEmpty(registry, 'ext.fliwright.snap', {
         'includeRects': params['includeRects'] ?? 'true',
         'includeProperties': params['includeProperties'] ?? 'false',
       });
@@ -57,11 +61,12 @@ class CaptureFrameExtension {
   }
 
   static Future<Map<String, dynamic>> _invokeOrEmpty(
+    ExtensionRegistry registry,
     String method,
     Map<String, String> params,
   ) async {
     try {
-      return await FliwrightBridge.registry.invoke(method, params);
+      return await registry.invoke(method, params);
     } catch (error) {
       return {'success': false, 'error': error.toString()};
     }

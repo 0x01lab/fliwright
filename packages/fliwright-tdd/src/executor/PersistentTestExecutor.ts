@@ -44,7 +44,7 @@ export class PersistentTestExecutor {
     await this.applyRuntimeEnv(opts);
     try {
       this.reporter = new ResultReporter();
-      this.vitest = await startVitest([], {
+      this.vitest = await startVitest('test', [], {
         config: opts.configRoot,
         watch: true,
         reporters: [this.reporter],

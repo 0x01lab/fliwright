@@ -47,6 +47,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm package:check
 
   dart:
     name: Dart and Flutter quality
@@ -64,6 +65,7 @@ jobs:
           for project in \
             packages/fliwright-bridge \
             packages/fliwright-bridge-riverpod \
+            packages/fliwright-design-qa \
             examples/form_demo \
             examples/go_router_demo \
             examples/riverpod_demo; do
@@ -71,6 +73,36 @@ jobs:
               cd "$project"
               flutter pub get
               flutter analyze .
-              flutter test
+              flutter test --concurrency=1
             )
           done
+
+      - name: Validate publishable Dart packages
+        run: |
+          for project in \
+            packages/fliwright-bridge \
+            packages/fliwright-bridge-riverpod \
+            packages/fliwright-design-qa; do
+            (cd "$project" && flutter pub publish --dry-run)
+          done
+
+  e2e:
+    name: Generated Flutter E2E smoke
+    runs-on: macos-latest
+    needs: [typescript, dart]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fliwright/core build
+      - run: pnpm --filter @fliwright/vitest build
+      - run: pnpm --filter @fliwright/cli build
+      - run: pnpm --filter @fliwright/e2e-tests test

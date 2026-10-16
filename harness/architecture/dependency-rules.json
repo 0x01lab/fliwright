@@ -64,7 +64,7 @@
       "capabilities": ["Flutter app instrumentation", "VM service extensions"],
       "responsibility": "Run inside Flutter applications and expose ext.fliwright.* VM-service methods for inspection, control, capture, recording, and mocks.",
       "doesNotOwn": ["TypeScript orchestration", "CLI or MCP transport", "editor UX"],
-      "mayDependOn": ["fliwright_design_qa"]
+      "mayDependOn": []
     },
     "fliwright_bridge_riverpod": {
       "path": "packages/fliwright-bridge-riverpod",
@@ -78,7 +78,7 @@
       "capabilities": ["Design QA capture SDK", "shake-triggered screenshot workflow", "QR pairing UI"],
       "responsibility": "Run inside debug/profile Flutter applications, provide the optional QR pairing UI, and send clean shake-triggered screenshots to a paired Figma Design QA plugin over the Design QA protocol.",
       "doesNotOwn": ["Figma plugin UI", "signaling service deployment", "GitLab issue creation", "generic VM-service automation"],
-      "mayDependOn": []
+      "mayDependOn": ["fliwright_bridge"]
     }
   },
   "dartExamples": {

@@ -96,9 +96,10 @@ final controller = DesignQaController(
 );
 ```
 
-Apps that already use `fliwright_bridge` can register VM-service methods from
-a debug startup task. `FliwrightDesignQaExtension` is exported by
-`fliwright_bridge`, so host apps do not need to import this package directly:
+Apps that already use `fliwright_bridge` can register the optional Design QA
+VM-service methods from a debug startup task. Import
+`fliwright_design_qa` for `FliwrightDesignQaExtension`; the base bridge no
+longer carries Design QA's WebRTC, scanner, or Figma-related dependencies:
 
 ```dart
 final controller = FliwrightDesignQaExtension.registerDefault(

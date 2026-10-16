@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/mcp"
 path: "packages/fliwright-mcp"
-source_fingerprint: "df6b7248f08611356170d359ebdb15d374b008501330b48362719d4554e7cbec"
+source_fingerprint: "d89d154046d5210e9246ea3a2f65629ad5d1d6250d94fd1b5d1a1ea811869381"
 generated: true
 ---
 
@@ -39,6 +39,13 @@ Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabi
 
 - `fliwright-mcp`
 
+## Public Exports
+
+- `createFliwrightServer`
+- `CreateFliwrightServerOptions`
+- `FliwrightMcpToolProfile`
+- `resolveMcpToolProfile`
+
 ## MCP Tools
 
 - `fliwright_action`
@@ -65,6 +72,8 @@ Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabi
 - `fliwright_generate_test`
 - `fliwright_get_failure`
 - `fliwright_hot_reload_and_snap`
+- `fliwright_interact`
+- `fliwright_mock`
 - `fliwright_mock_clear_calls`
 - `fliwright_mock_list`
 - `fliwright_mock_status`
@@ -73,6 +82,7 @@ Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabi
 - `fliwright_observe`
 - `fliwright_record`
 - `fliwright_run`
+- `fliwright_scenario`
 - `fliwright_screenshot`
 - `fliwright_snap`
 - `fliwright_source_map`
@@ -108,11 +118,14 @@ Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabi
 - `generateTest`
 - `getFailure`
 - `hotReloadAndSnap`
+- `interact`
+- `mock`
 - `mockTools`
 - `navigate`
 - `observe`
 - `record`
 - `runTest`
+- `scenario`
 - `screenshot`
 - `snap`
 - `sourceMap`
@@ -124,6 +137,7 @@ Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabi
 
 ## Source Anchors
 
+- `packages/fliwright-mcp/src/cli.ts`
 - `packages/fliwright-mcp/src/index.ts`
 - `packages/fliwright-mcp/src/resources/testReport.ts`
 - `packages/fliwright-mcp/src/server.ts`
@@ -140,11 +154,14 @@ Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabi
 - `packages/fliwright-mcp/src/tools/generateTest.ts`
 - `packages/fliwright-mcp/src/tools/getFailure.ts`
 - `packages/fliwright-mcp/src/tools/hotReloadAndSnap.ts`
+- `packages/fliwright-mcp/src/tools/interact.ts`
+- `packages/fliwright-mcp/src/tools/mock.ts`
 - `packages/fliwright-mcp/src/tools/mockTools.ts`
 - `packages/fliwright-mcp/src/tools/navigate.ts`
 - `packages/fliwright-mcp/src/tools/observe.ts`
 - `packages/fliwright-mcp/src/tools/record.ts`
 - `packages/fliwright-mcp/src/tools/runTest.ts`
+- `packages/fliwright-mcp/src/tools/scenario.ts`
 - `packages/fliwright-mcp/src/tools/screenshot.ts`
 - `packages/fliwright-mcp/src/tools/snap.ts`
 - `packages/fliwright-mcp/src/tools/sourceMap.ts`

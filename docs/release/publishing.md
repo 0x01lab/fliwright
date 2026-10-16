@@ -1,7 +1,7 @@
 # Publishing Fliwright
 
-This guide covers the public release paths for the Fliwright VS Code extension
-and Flutter/Dart packages.
+This guide covers the public release paths for the Fliwright npm packages,
+Flutter/Dart packages, and VS Code extension.
 
 ## Release assets
 
@@ -59,10 +59,11 @@ Packages prepared for pub.dev:
 
 - `packages/fliwright-bridge`
 - `packages/fliwright-bridge-riverpod`
+- `packages/fliwright-design-qa` (Labs; published independently)
 
 Publish order matters. Publish `fliwright_bridge` first, then
-`fliwright_bridge_riverpod`, because the Riverpod adapter depends on
-`fliwright_bridge: ^0.1.0`.
+`fliwright_bridge_riverpod` and `fliwright_design_qa`, because both optional
+packages depend on `fliwright_bridge: ^0.1.0`.
 
 Before the first release:
 
@@ -74,6 +75,9 @@ dart pub publish --dry-run
 
 cd ../fliwright-bridge-riverpod
 dart pub publish --dry-run
+
+cd ../fliwright-design-qa
+dart pub publish --dry-run
 ```
 
 2. Publish each package manually once:
@@ -84,6 +88,9 @@ dart pub publish
 
 cd ../fliwright-bridge-riverpod
 dart pub publish
+
+cd ../fliwright-design-qa
+dart pub publish
 ```
 
 3. In each package page on pub.dev, configure automated publishing for this
@@ -93,6 +100,7 @@ dart pub publish
 ```text
 fliwright_bridge-v{{version}}
 fliwright_bridge_riverpod-v{{version}}
+fliwright_design_qa-v{{version}}
 ```
 
 Automated publish tags:
@@ -103,12 +111,38 @@ git push origin fliwright_bridge-v0.1.0
 
 git tag fliwright_bridge_riverpod-v0.1.0
 git push origin fliwright_bridge_riverpod-v0.1.0
+
+git tag fliwright_design_qa-v0.1.0
+git push origin fliwright_design_qa-v0.1.0
 ```
 
 The `publish-pub.yml` workflow is tag-only because pub.dev rejects automated
 publishing from non-tag GitHub Actions events. It installs Flutter, uses GitHub
 OIDC (`id-token: write`) for pub.dev, runs `flutter analyze .`, `flutter test`,
 a dry run, and then `flutter pub publish --force`.
+
+## npm
+
+The public TypeScript packages are published by `.github/workflows/publish-npm.yml`
+from a matching `npm-v<version>` tag. The workflow verifies that all six public
+package versions match, runs lint, tests, builds, tarball checks, clean npm/pnpm
+consumer imports, publishes in dependency order with npm provenance, and then
+installs the exact published versions from the npm registry in a retrying clean
+consumer smoke test. The publish step skips an exact package/version that is
+already present, so rerunning a failed tag workflow is safe after a partial
+publish.
+
+Before tagging, run:
+
+```bash
+pnpm lint
+pnpm test
+pnpm build
+pnpm package:check
+```
+
+The CLI is the primary install surface. `@fliwright/mcp` is optional and is
+started through `fliwright mcp serve` or the `fliwright-mcp` binary.
 
 ## Release copy
 

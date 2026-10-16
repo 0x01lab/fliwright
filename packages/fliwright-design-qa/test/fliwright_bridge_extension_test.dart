@@ -94,6 +94,7 @@ void main() {
       router: _RouterWithNavigatorKey(
         _RouterDelegateWithNavigatorKey(navigatorKey),
       ),
+      mockStorage: _MemoryMockStorage(),
     );
     final registry = ExtensionRegistry();
     FliwrightDesignQaExtension(
@@ -209,4 +210,12 @@ class _FakeScreenshotProvider implements DesignQaScreenshotProvider {
       ),
     );
   }
+}
+
+class _MemoryMockStorage implements MockRuleStorage {
+  @override
+  Future<String?> load() async => null;
+
+  @override
+  Future<void> save(String json) async {}
 }

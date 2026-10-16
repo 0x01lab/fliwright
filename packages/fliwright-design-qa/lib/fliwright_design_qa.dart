@@ -5,6 +5,7 @@ export 'src/capture_success_indicator.dart';
 export 'src/design_qa_controller.dart';
 export 'src/design_qa_pairing_page.dart';
 export 'src/design_qa_sdk.dart';
+export 'src/fliwright_bridge_extension.dart';
 export 'src/pairing.dart';
 export 'src/peerjs_signaling.dart';
 export 'src/platform_transport.dart';

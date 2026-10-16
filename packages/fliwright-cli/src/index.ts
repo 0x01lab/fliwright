@@ -23,6 +23,27 @@ import {
 import type { FlowReviewArtifactInput, FlowReviewComparisonInput } from '@fliwright/core';
 import { tddCycleCommand, tddStatusCommand, tddSyncCommand } from './commands/tdd.js';
 import type { PackageManager } from './commands/init.js';
+import {
+  appInteractCommand,
+  appObserveCommand,
+  appScreenshotCommand,
+  appStatusCommand,
+} from './commands/app.js';
+import {
+  scenarioApplyCommand,
+  scenarioListCommand,
+  scenarioResetCommand,
+} from './commands/scenario.js';
+import {
+  mockApplyCommand,
+  mockCallsCommand,
+  mockClearCommand,
+  mockListCommand,
+  mockStatusCommand,
+} from './commands/mock-management.js';
+import { artifactsExportCommand, artifactsShowCommand } from './commands/artifacts.js';
+import { mcpConfigCommand, mcpDoctorCommand, mcpServeCommand, type McpProfile } from './commands/mcp.js';
+import type { ActionName, NavigationAction } from './capabilities/interaction.js';
 
 export function createProgram(): Command {
   const program = new Command();
@@ -126,6 +147,250 @@ export function createProgram(): Command {
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exit(1);
+      }
+    });
+
+  const app = program
+    .command('app')
+    .description('Observe and interact with a running Flutter app');
+
+  app
+    .command('status')
+    .description('Check the running app connection and bridge handshake')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(() => appStatusCommand({ vmUrl: opts.vmUrl, cwd: opts.cwd })));
+
+  app
+    .command('observe')
+    .description('Return concise actionable widgets from the current screen')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--intent <text>', 'Optional interaction intent')
+    .option('--roles <roles>', 'Comma-separated semantic roles')
+    .option('--limit <count>', 'Maximum candidates', '20')
+    .option('--diagnostics', 'Include lightweight diagnostics')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(() => appObserveCommand({
+      vmUrl: opts.vmUrl,
+      cwd: opts.cwd,
+      intent: opts.intent,
+      roles: opts.roles,
+      limit: Number(opts.limit),
+      includeDiagnostics: opts.diagnostics,
+    })));
+
+  app
+    .command('interact')
+    .description('Perform one intent-level app interaction')
+    .argument('<operation>', 'tap, type, navigate, wait, drag, or action')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--ref <ref>', 'Snapshot reference')
+    .option('--key <key>', 'Widget key fallback')
+    .option('--text <text>', 'Visible text fallback')
+    .option('--type <type>', 'Widget type fallback')
+    .option('--value <value>', 'Text or option value')
+    .option('--no-replace', 'Append instead of replacing text')
+    .option('--path <path>', 'Navigation route')
+    .option('--home-route <route>', 'Home route for resetToHome')
+    .option('--navigation-action <action>', 'goto, resetRouteStack, or resetToHome')
+    .option('--timeout <ms>', 'Wait timeout')
+    .option('--delta-x <pixels>', 'Horizontal drag delta')
+    .option('--delta-y <pixels>', 'Vertical drag delta')
+    .option('--steps <count>', 'Drag interpolation steps')
+    .option('--x <pixels>', 'Raw drag start X')
+    .option('--y <pixels>', 'Raw drag start Y')
+    .option('--action <name>', 'Extended action name')
+    .option('--keyboard-key <key>', 'Key for pressKey')
+    .option('--checked <boolean>', 'State for setCheckbox')
+    .option('--snapshot', 'Include a post-action snapshot')
+    .option('--json', 'Print stable JSON output')
+    .action(async (operation, opts) => runJsonCommand(() => appInteractCommand({
+      operation,
+      vmUrl: opts.vmUrl,
+      cwd: opts.cwd,
+      ref: opts.ref,
+      key: opts.key,
+      text: opts.text,
+      type: opts.type,
+      value: opts.value,
+      replace: opts.replace,
+      path: opts.path,
+      homeRoute: opts.homeRoute,
+      navigationAction: opts.navigationAction as NavigationAction | undefined,
+      timeout: optionalNumber(opts.timeout),
+      deltaX: optionalNumber(opts.deltaX),
+      deltaY: optionalNumber(opts.deltaY),
+      steps: optionalNumber(opts.steps),
+      x: optionalNumber(opts.x),
+      y: optionalNumber(opts.y),
+      action: opts.action as ActionName | undefined,
+      keyboardKey: opts.keyboardKey,
+      checked: optionalBoolean(opts.checked),
+      includeSnapshot: opts.snapshot,
+    })));
+
+  app
+    .command('screenshot')
+    .description('Capture the running app to a PNG artifact')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--output <file>', 'PNG output path')
+    .option('--pixel-ratio <ratio>', 'Screenshot pixel ratio')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(() => appScreenshotCommand({
+      vmUrl: opts.vmUrl,
+      cwd: opts.cwd,
+      output: opts.output,
+      pixelRatio: optionalNumber(opts.pixelRatio),
+    })));
+
+  const scenario = program
+    .command('scenario')
+    .description('List, apply, and reset deterministic app scenarios');
+
+  scenario
+    .command('list')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(() => scenarioListCommand({ cwd: opts.cwd })));
+
+  scenario
+    .command('apply')
+    .argument('<name>', 'Scenario name from fliwright.config.ts')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--mode <mode>', 'attach or managed-start')
+    .option('--json', 'Print stable JSON output')
+    .action(async (name, opts) => runJsonCommand(() => scenarioApplyCommand({
+      name,
+      vmUrl: opts.vmUrl,
+      cwd: opts.cwd,
+      mode: opts.mode,
+    })));
+
+  scenario
+    .command('reset')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--home-route <route>', 'Route to restore', '/')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(() => scenarioResetCommand({
+      vmUrl: opts.vmUrl,
+      cwd: opts.cwd,
+      homeRoute: opts.homeRoute,
+    })));
+
+  const mock = program
+    .command('mock')
+    .description('Manage deterministic HTTP mock rules');
+
+  mock
+    .command('start')
+    .option('--host <host>', 'Host to bind', '127.0.0.1')
+    .option('--port <port>', 'Port to bind')
+    .option('--mock-dir <dir>', 'Mock directory')
+    .action(async (opts) => runJsonCommand(() => mockStartCommand({
+      host: opts.host,
+      port: optionalNumber(opts.port),
+      mockDir: opts.mockDir,
+    })));
+
+  mock
+    .command('list')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--mock-dir <dir>', 'Mock directory')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(() => mockListCommand(opts)));
+
+  mock
+    .command('status')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--mock-dir <dir>', 'Mock directory')
+    .option('--endpoint <path>', 'Filter endpoint')
+    .option('--method <method>', 'Filter HTTP method')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(() => mockStatusCommand(opts)));
+
+  mock
+    .command('apply')
+    .argument('<endpoint>', 'Endpoint path')
+    .argument('<rule-name>', 'Rule scenario name')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--mock-dir <dir>', 'Mock directory')
+    .option('--method <method>', 'HTTP method')
+    .option('--json', 'Print stable JSON output')
+    .action(async (endpoint, ruleName, opts) => runJsonCommand(() => mockApplyCommand({
+      ...opts,
+      endpoint,
+      ruleName,
+    })));
+
+  mock
+    .command('clear')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(() => mockClearCommand(opts)));
+
+  mock
+    .command('calls')
+    .option('--vm-url <url>', 'Dart VM Service URL')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--endpoint <path>', 'Filter endpoint')
+    .option('--method <method>', 'Filter HTTP method')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(() => mockCallsCommand(opts)));
+
+  const artifacts = program
+    .command('artifacts')
+    .description('Inspect and export structured Fliwright run artifacts');
+
+  artifacts
+    .command('show')
+    .argument('[run-id]', 'Run id; defaults to latest')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--runs-root <dir>', 'Runs root override')
+    .option('--json', 'Print stable JSON output')
+    .action(async (runId, opts) => runJsonCommand(() => artifactsShowCommand({ ...opts, runId })));
+
+  artifacts
+    .command('export')
+    .argument('[run-id]', 'Run id; defaults to latest')
+    .requiredOption('--output <dir>', 'New export destination')
+    .option('--cwd <dir>', 'Workspace root')
+    .option('--runs-root <dir>', 'Runs root override')
+    .option('--json', 'Print stable JSON output')
+    .action(async (runId, opts) => runJsonCommand(() => artifactsExportCommand({ ...opts, runId })));
+
+  const mcp = program
+    .command('mcp')
+    .description('Configure or launch the optional MCP adapter');
+
+  mcp
+    .command('config')
+    .option('--profile <profile>', 'core, development, tdd, flow, or full', 'core')
+    .option('--json', 'Print stable JSON output')
+    .action(async (opts) => runJsonCommand(async () => mcpConfigCommand({ profile: opts.profile as McpProfile })));
+
+  mcp
+    .command('doctor')
+    .option('--json', 'Print stable JSON output')
+    .action(async () => runJsonCommand(() => mcpDoctorCommand()));
+
+  mcp
+    .command('serve')
+    .option('--profile <profile>', 'core, development, tdd, flow, or full', 'core')
+    .option('--cwd <dir>', 'Workspace root')
+    .action(async (opts) => {
+      try {
+        process.exitCode = await mcpServeCommand({ profile: opts.profile as McpProfile, cwd: opts.cwd });
+      } catch (error) {
+        exitWithError(error);
       }
     });
 
@@ -625,6 +890,28 @@ function isPackageManager(value: string): value is PackageManager {
 
 function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
+}
+
+async function runJsonCommand(operation: () => Promise<unknown>): Promise<void> {
+  try {
+    printJson(await operation());
+  } catch (error) {
+    exitWithError(error);
+  }
+}
+
+function optionalNumber(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`Expected a number, got: ${value}`);
+  return parsed;
+}
+
+function optionalBoolean(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new Error(`Expected true or false, got: ${value}`);
 }
 
 function printValidation(validation: Awaited<ReturnType<typeof flowValidateCommand>>['validation']): void {

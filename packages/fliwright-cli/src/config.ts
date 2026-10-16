@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { createJiti } from 'jiti';
+import type { ScenarioExecutionMode, TestScenario } from '@fliwright/core';
 
 export interface FliwrightCliConfig {
   vmServiceUrl?: string;
@@ -9,6 +10,8 @@ export interface FliwrightCliConfig {
   testDir: string;
   reporter: 'pretty' | 'json' | 'junit' | 'ai-json';
   runsRoot?: string;
+  scenarios?: Record<string, TestScenario>;
+  scenarioMode?: ScenarioExecutionMode;
 }
 
 const DEFAULTS: FliwrightCliConfig = {

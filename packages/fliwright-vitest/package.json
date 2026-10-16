@@ -1,9 +1,27 @@
 {
   "name": "@fliwright/vitest",
   "version": "0.1.0",
+  "description": "Vitest fixtures and lifecycle integration for Fliwright Flutter E2E tests.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0x01lab/fliwright.git",
+    "directory": "packages/fliwright-vitest"
+  },
+  "bugs": { "url": "https://github.com/0x01lab/fliwright/issues" },
+  "homepage": "https://github.com/0x01lab/fliwright#readme",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public" },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -11,7 +29,7 @@
   },
   "dependencies": {
     "@fliwright/core": "workspace:*",
-    "vitest": "5.0.0-beta.5"
+    "vitest": "4.1.11"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",

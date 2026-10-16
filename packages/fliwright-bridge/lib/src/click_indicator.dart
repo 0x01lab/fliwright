@@ -120,14 +120,14 @@ class _ClickRipplePainter extends CustomPainter {
     final opacity = 1 - progress;
 
     final fill = Paint()
-      ..color = ClickIndicator.color.withOpacity(0.16 * opacity)
+      ..color = ClickIndicator.color.withValues(alpha: 0.16 * opacity)
       ..style = PaintingStyle.fill;
     final stroke = Paint()
-      ..color = ClickIndicator.color.withOpacity(0.85 * opacity)
+      ..color = ClickIndicator.color.withValues(alpha: 0.85 * opacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     final dot = Paint()
-      ..color = ClickIndicator.color.withOpacity(0.95 * opacity)
+      ..color = ClickIndicator.color.withValues(alpha: 0.95 * opacity)
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(center, radius, fill);

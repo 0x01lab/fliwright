@@ -75,10 +75,10 @@ class FliwrightBridge {
     dynamic router,
     MockRuleStorage? mockStorage,
   }) async {
+    if (_rejectReleaseMode()) return;
     _router = router;
     if (_initialized) return;
     _initialized = true;
-    _warnIfReleaseMode();
 
     _registerPingAndHandshake();
 
@@ -132,10 +132,10 @@ class FliwrightBridge {
     dynamic router,
     MockRuleStorage? mockStorage,
   }) async {
+    if (_rejectReleaseMode()) return;
     _router = router;
     if (_initialized) return;
     _initialized = true;
-    _warnIfReleaseMode();
 
     _registerPingAndHandshake();
 
@@ -238,18 +238,23 @@ class FliwrightBridge {
     });
   }
 
-  static void _warnIfReleaseMode() {
-    if (!kReleaseMode) return;
+  static bool _rejectReleaseMode() {
+    if (!kReleaseMode) return false;
     debugPrint(
-      '[fliwright] Warning: FliwrightBridge was initialized in release mode. '
+      '[fliwright] FliwrightBridge is disabled in release mode. '
       'Guard setup with kReleaseMode so release builds can tree-shake it.',
     );
+    return true;
   }
 
   static Future<MockRuleStorage?> _resolveMockStorage(
     MockRuleStorage? storage,
   ) async {
     if (storage != null) return storage;
+    // flutter_test has no path-provider application directory. Avoid starting
+    // Hive's plugin-backed initialization there; callers can still inject a
+    // deterministic MockRuleStorage explicitly when persistence is under test.
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return null;
     try {
       return await HiveMockRuleStorage.open();
     } catch (error) {

@@ -9,6 +9,6 @@ export default defineConfig({
   test: {
     include: ['.fliwright/tests/**/*.test.ts'],
     pool: 'forks',
-    poolOptions: { forks: { singleFork: true } },
+    singleFork: true,
   },
 });

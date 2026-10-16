@@ -20,11 +20,12 @@
     "package.json": {
       "devDependencies": {
         "typescript": "^5.5.0",
-        "vitest": "5.0.0-beta.5",
+        "vitest": "4.1.11",
         "vite": "^8.1.0"
       }
     },
     "packages/fliwright-core/package.json": {
+      "engines": { "node": ">=20" },
       "dependencies": {
         "@faker-js/faker": "^10.4.0",
         "randexp": "^0.5.3",
@@ -34,15 +35,16 @@
         "@types/node": "^25.9.1",
         "@types/ws": "^8.5.10",
         "typescript": "^5.5.0",
-        "vitest": "5.0.0-beta.5",
+        "vitest": "4.1.11",
         "zod": "^3.25.76",
         "zod-to-json-schema": "^3.25.2"
       }
     },
     "packages/fliwright-vitest/package.json": {
+      "engines": { "node": ">=20" },
       "dependencies": {
         "@fliwright/core": "workspace:*",
-        "vitest": "5.0.0-beta.5"
+        "vitest": "4.1.11"
       },
       "devDependencies": {
         "@types/node": "^25.9.1",
@@ -50,25 +52,28 @@
       }
     },
     "packages/fliwright-plugin-riverpod/package.json": {
+      "engines": { "node": ">=20" },
       "dependencies": {
         "@fliwright/core": "workspace:*"
       },
       "devDependencies": {
         "typescript": "^5.5.0",
-        "vitest": "5.0.0-beta.5"
+        "vitest": "4.1.11"
       }
     },
     "packages/fliwright-tdd/package.json": {
+      "engines": { "node": ">=20" },
       "dependencies": {
         "@fliwright/core": "workspace:*",
         "@fliwright/vitest": "workspace:*",
-        "vitest": "5.0.0-beta.5"
+        "vitest": "4.1.11"
       },
       "devDependencies": {
         "typescript": "^5.5.0"
       }
     },
     "packages/fliwright-cli/package.json": {
+      "engines": { "node": ">=20" },
       "dependencies": {
         "@fliwright/core": "workspace:*",
         "@fliwright/tdd": "workspace:*",
@@ -78,7 +83,7 @@
       },
       "peerDependencies": {
         "@fliwright/vitest": "workspace:*",
-        "vitest": "5.0.0-beta.5"
+        "vitest": "4.1.11"
       },
       "peerDependenciesMeta": {
         "@fliwright/vitest": {
@@ -88,16 +93,17 @@
       "devDependencies": {
         "@types/node": "^25.9.1",
         "typescript": "^5.5.0",
-        "vitest": "5.0.0-beta.5"
+        "vitest": "4.1.11"
       }
     },
     "packages/fliwright-mcp/package.json": {
+      "engines": { "node": ">=20" },
       "dependencies": {
         "@fliwright/cli": "workspace:*",
         "@fliwright/core": "workspace:*",
         "@fliwright/tdd": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.12.0",
-        "vitest": "5.0.0-beta.5",
+        "vitest": "4.1.11",
         "zod": "^3.25.0"
       },
       "devDependencies": {
@@ -139,7 +145,7 @@
         "tailwind-merge": "^3.6.0",
         "tailwindcss": "^4.3.1",
         "typescript": "^5.5.0",
-        "vitest": "5.0.0-beta.5"
+        "vitest": "4.1.11"
       }
     },
     "e2e/package.json": {
@@ -149,7 +155,7 @@
       },
       "devDependencies": {
         "typescript": "^5.5.0",
-        "vitest": "5.0.0-beta.5"
+        "vitest": "4.1.11"
       }
     }
   },
@@ -157,7 +163,6 @@
     "packages/fliwright-bridge/pubspec.yaml": {
       "dependencies": {
         "dio": "^5.0.0",
-        "fliwright_design_qa": "path:../fliwright-design-qa",
         "flutter": "sdk:flutter",
         "hive_ce": "^2.15.1",
         "hive_ce_flutter": "^2.3.3"
@@ -179,11 +184,16 @@
       }
     },
     "packages/fliwright-design-qa/pubspec.yaml": {
+      "environment": {
+        "flutter": ">=3.24.0"
+      },
       "dependencies": {
         "crypto": "^3.0.0",
+        "fliwright_bridge": "^0.1.0",
         "flutter": "sdk:flutter",
-        "flutter_webrtc": "^1.5.2",
-        "mobile_scanner": "^7.2.0",
+        "flutter_webrtc": "'>=1.5.2 <1.6.0'",
+        "mobile_scanner": "'>=7.2.0 <7.3.0'",
+        "objective_c": "'>=9.5.0 <9.6.0'",
         "web_socket_channel": "^3.0.3"
       },
       "dev_dependencies": {

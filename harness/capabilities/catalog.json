@@ -25,12 +25,18 @@
       "sourceFiles": [
         "packages/fliwright-cli/src/capabilities/form.ts",
         "packages/fliwright-cli/src/capabilities/interaction.ts",
+        "packages/fliwright-cli/src/capabilities/session.ts",
+        "packages/fliwright-cli/src/commands/app.ts",
+        "packages/fliwright-cli/src/commands/artifacts.ts",
         "packages/fliwright-cli/src/commands/doctor.ts",
         "packages/fliwright-cli/src/commands/flow.ts",
         "packages/fliwright-cli/src/commands/init.ts",
+        "packages/fliwright-cli/src/commands/mcp.ts",
+        "packages/fliwright-cli/src/commands/mock-management.ts",
         "packages/fliwright-cli/src/commands/mock.ts",
         "packages/fliwright-cli/src/commands/record.ts",
         "packages/fliwright-cli/src/commands/run.ts",
+        "packages/fliwright-cli/src/commands/scenario.ts",
         "packages/fliwright-cli/src/commands/tdd.ts",
         "packages/fliwright-cli/src/config.ts",
         "packages/fliwright-cli/src/index.ts",
@@ -51,19 +57,25 @@
         "fliwright"
       ],
       "cliCommands": [
+        "app",
+        "artifacts",
         "doctor",
         "flow",
         "init",
+        "mcp",
+        "mock-management",
         "mock",
         "record",
         "run",
+        "scenario",
         "tdd"
       ],
       "cliCapabilities": [
         "form",
-        "interaction"
+        "interaction",
+        "session"
       ],
-      "sourceFingerprint": "f4834218282e718efc18ec4c1594c5d4f5975c93fa963ad9dbdaaf9e4514d77d"
+      "sourceFingerprint": "cc3c8e79a7cb52d76304c0497175dba42f9ecc52e7fbb0ed45a105b6b092b4b8"
     },
     {
       "name": "@fliwright/core",
@@ -628,7 +640,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "a0f326149754ec816b5ebf631b4ab4236000da79be787612cf14898184ac4719"
+      "sourceFingerprint": "7c24f96d65d5b2caa48fe3cb634044f2749b0097003603792a41cc95a50aeb8e"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -662,7 +674,7 @@
       "publicExports": [],
       "packageEntrypoints": [],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "0419d9c6022e5ab7e4abd9915dca5474fca66c563862b994138db5064953f44f"
+      "sourceFingerprint": "01675222c4bedaec2215849526d976638c282bcae8fd86e80a86f209aa8d7176"
     },
     {
       "name": "@fliwright/mcp",
@@ -685,6 +697,7 @@
         "MCP tool contracts"
       ],
       "sourceFiles": [
+        "packages/fliwright-mcp/src/cli.ts",
         "packages/fliwright-mcp/src/index.ts",
         "packages/fliwright-mcp/src/resources/testReport.ts",
         "packages/fliwright-mcp/src/server.ts",
@@ -701,11 +714,14 @@
         "packages/fliwright-mcp/src/tools/generateTest.ts",
         "packages/fliwright-mcp/src/tools/getFailure.ts",
         "packages/fliwright-mcp/src/tools/hotReloadAndSnap.ts",
+        "packages/fliwright-mcp/src/tools/interact.ts",
+        "packages/fliwright-mcp/src/tools/mock.ts",
         "packages/fliwright-mcp/src/tools/mockTools.ts",
         "packages/fliwright-mcp/src/tools/navigate.ts",
         "packages/fliwright-mcp/src/tools/observe.ts",
         "packages/fliwright-mcp/src/tools/record.ts",
         "packages/fliwright-mcp/src/tools/runTest.ts",
+        "packages/fliwright-mcp/src/tools/scenario.ts",
         "packages/fliwright-mcp/src/tools/screenshot.ts",
         "packages/fliwright-mcp/src/tools/snap.ts",
         "packages/fliwright-mcp/src/tools/sourceMap.ts",
@@ -716,7 +732,12 @@
         "packages/fliwright-mcp/src/tools/wait.ts",
         "packages/fliwright-mcp/src/types.ts"
       ],
-      "publicExports": [],
+      "publicExports": [
+        "createFliwrightServer",
+        "CreateFliwrightServerOptions",
+        "FliwrightMcpToolProfile",
+        "resolveMcpToolProfile"
+      ],
       "packageEntrypoints": [
         "."
       ],
@@ -736,11 +757,14 @@
         "generateTest",
         "getFailure",
         "hotReloadAndSnap",
+        "interact",
+        "mock",
         "mockTools",
         "navigate",
         "observe",
         "record",
         "runTest",
+        "scenario",
         "screenshot",
         "snap",
         "sourceMap",
@@ -775,6 +799,8 @@
         "fliwright_generate_test",
         "fliwright_get_failure",
         "fliwright_hot_reload_and_snap",
+        "fliwright_interact",
+        "fliwright_mock",
         "fliwright_mock_clear_calls",
         "fliwright_mock_list",
         "fliwright_mock_status",
@@ -783,6 +809,7 @@
         "fliwright_observe",
         "fliwright_record",
         "fliwright_run",
+        "fliwright_scenario",
         "fliwright_screenshot",
         "fliwright_snap",
         "fliwright_source_map",
@@ -804,7 +831,7 @@
         "fliwright_type",
         "fliwright_wait"
       ],
-      "sourceFingerprint": "df6b7248f08611356170d359ebdb15d374b008501330b48362719d4554e7cbec"
+      "sourceFingerprint": "d89d154046d5210e9246ea3a2f65629ad5d1d6250d94fd1b5d1a1ea811869381"
     },
     {
       "name": "@fliwright/plugin-riverpod",
@@ -835,7 +862,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "715afe8b250c8bd4edd48978566a66a29a2d2dbaf2e4a20000ed4103c0f589be"
+      "sourceFingerprint": "7184992ea76f1fd9061935e3a8c20614bd212ee037196596bb6a07386a64f559"
     },
     {
       "name": "@fliwright/tdd",
@@ -996,7 +1023,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "d8523102f0ddabdc609160ccc64c99209d5b051583e2ff5ca0bf05f1bd9c5591"
+      "sourceFingerprint": "e9d325d53d17c73c7ec836b55b9736aebe5870153876de05d3b406ded58818f4"
     },
     {
       "name": "@fliwright/vitest",
@@ -1046,7 +1073,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "da93e1ec7aa99f89bbf6710863ff86ffc611889cd36b83808aa4f5df3c80973b"
+      "sourceFingerprint": "31ecfaf093518fe8cc9f4d159691512189984d4bbcab2c94c43bb8601951e0fb"
     },
     {
       "name": "fliwright_bridge",
@@ -1058,9 +1085,7 @@
         "CLI or MCP transport",
         "editor UX"
       ],
-      "mayDependOn": [
-        "fliwright_design_qa"
-      ],
+      "mayDependOn": [],
       "ownedCapabilities": [
         "Flutter app instrumentation",
         "VM service extensions"
@@ -1076,7 +1101,6 @@
         "packages/fliwright-bridge/lib/src/extensions/app_instance.dart",
         "packages/fliwright-bridge/lib/src/extensions/capture_frame.dart",
         "packages/fliwright-bridge/lib/src/extensions/context.dart",
-        "packages/fliwright-bridge/lib/src/extensions/design_qa.dart",
         "packages/fliwright-bridge/lib/src/extensions/diagnostics.dart",
         "packages/fliwright-bridge/lib/src/extensions/dio_mock_extension.dart",
         "packages/fliwright-bridge/lib/src/extensions/dio_mock_interceptor.dart",
@@ -1120,7 +1144,6 @@
         "FliwrightAppInstance",
         "FliwrightAuthCapability",
         "FliwrightBridge",
-        "FliwrightDesignQaExtension",
         "FliwrightDioMockInterceptor",
         "FliwrightFormControl",
         "FliwrightFormOption",
@@ -1168,7 +1191,6 @@
         "app_instance",
         "capture_frame",
         "context",
-        "design_qa",
         "diagnostics",
         "dio_mock_extension",
         "dio_mock_interceptor",
@@ -1251,7 +1273,7 @@
         "ext.fliwright.websocket.push",
         "ext.fliwright.websocket.setRules"
       ],
-      "sourceFingerprint": "1e3fae8247ec348304c63e0919c946b021f7f45b7e4364ebfa6be1a13c0a880b"
+      "sourceFingerprint": "b5665937a29aa1bf1ef72dc47a39a982612f90cdec3eb87bf53206a97b719521"
     },
     {
       "name": "fliwright_bridge_riverpod",
@@ -1276,7 +1298,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-bridge-riverpod/lib/fliwright_bridge_riverpod.dart"
       ],
-      "sourceFingerprint": "223f23af21f9d38a1482fc5fe29c88389189d9a12061dac5cb711334ad0759f9"
+      "sourceFingerprint": "baf629b27d60e5597e44b08ac80ac3cc67f5bc91286f7b5aa1de7878a9424b9a"
     },
     {
       "name": "fliwright_design_qa",
@@ -1289,7 +1311,9 @@
         "GitLab issue creation",
         "generic VM-service automation"
       ],
-      "mayDependOn": [],
+      "mayDependOn": [
+        "fliwright_bridge"
+      ],
       "ownedCapabilities": [
         "Design QA capture SDK",
         "shake-triggered screenshot workflow",
@@ -1302,6 +1326,7 @@
         "packages/fliwright-design-qa/lib/src/design_qa_controller.dart",
         "packages/fliwright-design-qa/lib/src/design_qa_pairing_page.dart",
         "packages/fliwright-design-qa/lib/src/design_qa_sdk.dart",
+        "packages/fliwright-design-qa/lib/src/fliwright_bridge_extension.dart",
         "packages/fliwright-design-qa/lib/src/pairing.dart",
         "packages/fliwright-design-qa/lib/src/peerjs_keep_alive.dart",
         "packages/fliwright-design-qa/lib/src/peerjs_signaling.dart",
@@ -1335,12 +1360,13 @@
         "DesignQaSdkConfig",
         "DesignQaShakeDetector",
         "DesignQaShakeTriggerBinding",
-        "DesignQaWebRtcTransport"
+        "DesignQaWebRtcTransport",
+        "FliwrightDesignQaExtension"
       ],
       "dartLibraryEntrypoints": [
         "packages/fliwright-design-qa/lib/fliwright_design_qa.dart"
       ],
-      "sourceFingerprint": "5f147ebbc4d1bce2e802a0e49ab32ee5fe5a9675ca014eb09e78bde21e89cd0a"
+      "sourceFingerprint": "71a7ba34be1c71777ac1b1a67c940c74799db8317969a4ad5f7dc15e0b672af7"
     },
     {
       "name": "fliwright-vscode",
@@ -1541,7 +1567,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "adc54eb662382df42ca9f69fbd5254b14ee88d359c506f50fbed2b6ea6e0b10a"
+      "sourceFingerprint": "2a49a001e7cf324a7f70f6961861a33a806287a59773156ac17cef32bc325bbd"
     }
   ]
 }

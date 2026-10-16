@@ -25,6 +25,18 @@ describe('defineConfig', () => {
     expect(config.testDir).toBe('e2e');
     expect(config.screenshot).toBe('file');
   });
+
+  it('preserves named scenarios for CLI and MCP consumers', () => {
+    const config = defineConfig({
+      scenarioMode: 'attach',
+      scenarios: {
+        guest: { name: 'guest', layers: [{ kind: 'auth', state: 'guest' }] },
+      },
+    });
+
+    expect(config.scenarioMode).toBe('attach');
+    expect(config.scenarios?.guest?.name).toBe('guest');
+  });
 });
 
 describe('loadConfig', () => {

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:fliwright_design_qa/fliwright_design_qa.dart';
+import 'package:fliwright_bridge/fliwright_bridge.dart';
 
-import '../bridge.dart';
+import 'design_qa_controller.dart';
+import 'design_qa_pairing_page.dart';
+import 'pairing.dart';
+import 'signaling_config.dart';
+import 'transport.dart';
+
 
 typedef DesignQaPairingPageBuilder = Widget Function(
     DesignQaController controller);

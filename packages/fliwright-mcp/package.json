@@ -1,11 +1,29 @@
 {
   "name": "@fliwright/mcp",
   "version": "0.1.0",
+  "description": "Optional MCP adapter for agent-driven Fliwright Flutter automation.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0x01lab/fliwright.git",
+    "directory": "packages/fliwright-mcp"
+  },
+  "bugs": { "url": "https://github.com/0x01lab/fliwright/issues" },
+  "homepage": "https://github.com/0x01lab/fliwright#readme",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public" },
   "bin": {
-    "fliwright-mcp": "dist/index.js"
+    "fliwright-mcp": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc",
@@ -17,7 +35,7 @@
     "@fliwright/core": "workspace:*",
     "@fliwright/tdd": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "vitest": "5.0.0-beta.5",
+    "vitest": "4.1.11",
     "zod": "^3.25.0"
   },
   "devDependencies": {

@@ -28,12 +28,16 @@ describe('createFliwrightServer', () => {
   it('uses the compact core tool profile by default', () => {
     const tools = toolNames();
 
-    expect(tools).toHaveLength(15);
-    expect(tools).toContain('fliwright_debug_snapshot');
-    expect(tools).toContain('fliwright_run');
-    expect(tools).not.toContain('fliwright_action');
-    expect(tools).not.toContain('fliwright_flow_list');
-    expect(tools).not.toContain('fliwright_tdd_start');
+    expect(tools).toEqual([
+      'fliwright_connect',
+      'fliwright_interact',
+      'fliwright_mock',
+      'fliwright_observe',
+      'fliwright_record',
+      'fliwright_run',
+      'fliwright_scenario',
+      'fliwright_status',
+    ]);
   });
 
   it('adds only the selected specialist tool family', () => {
@@ -41,6 +45,7 @@ describe('createFliwrightServer', () => {
     const tddTools = toolNames('tdd');
     const flowTools = toolNames('flow');
 
+    expect(developmentTools).toContain('fliwright_interact');
     expect(developmentTools).toContain('fliwright_action');
     expect(developmentTools).not.toContain('fliwright_tdd_start');
     expect(developmentTools).not.toContain('fliwright_flow_list');
@@ -56,7 +61,7 @@ describe('createFliwrightServer', () => {
   it('keeps the complete legacy tool surface behind the full profile', () => {
     const tools = toolNames('full');
 
-    expect(tools).toHaveLength(52);
+    expect(tools).toHaveLength(55);
     expect(tools).toContain('fliwright_action');
     expect(tools).toContain('fliwright_flow_review_run');
     expect(tools).toContain('fliwright_tdd_cycle');

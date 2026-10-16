@@ -32,6 +32,9 @@ import { registerAgentDiagnoseTool } from './tools/agentDiagnose.js';
 import { registerTddTools } from './tools/tdd.js';
 import { registerDevAssistTool } from './tools/devassist.js';
 import { registerDebugSnapshotTool } from './tools/debugSnapshot.js';
+import { registerInteractTool } from './tools/interact.js';
+import { registerMockTool } from './tools/mock.js';
+import { registerScenarioTool } from './tools/scenario.js';
 
 export type FliwrightMcpToolProfile = 'core' | 'development' | 'tdd' | 'flow' | 'full';
 
@@ -67,25 +70,28 @@ export function createFliwrightServer(options: CreateFliwrightServerOptions = {}
   const profile = resolveMcpToolProfile(options.toolProfile ?? process.env.FLIWRIGHT_MCP_TOOL_PROFILE);
 
   registerRunTestTool(server, state);
-  registerGetFailureTool(server, state);
-  registerGenerateTestTool(server, state);
   registerTestReportResource(server, state);
 
   registerStatusTool(server, state);
   registerConnectTool(server, state);
-  registerScreenshotTool(server, state);
-  registerSnapTool(server, state);
-  registerFindTool(server, state);
   registerObserveTool(server, state);
-  registerNavigateTool(server, state);
-  registerTapTool(server, state);
-  registerTypeTool(server, state);
-  registerDragTool(server, state);
-  registerWaitTool(server, state);
-  registerDebugSnapshotTool(server, state);
+  registerInteractTool(server, state);
+  registerScenarioTool(server, state);
+  registerMockTool(server, state);
+  registerRecordTool(server, state);
 
   if (profile === 'development' || profile === 'full') {
-    registerRecordTool(server, state);
+    registerGetFailureTool(server, state);
+    registerGenerateTestTool(server, state);
+    registerScreenshotTool(server, state);
+    registerSnapTool(server, state);
+    registerFindTool(server, state);
+    registerNavigateTool(server, state);
+    registerTapTool(server, state);
+    registerTypeTool(server, state);
+    registerDragTool(server, state);
+    registerWaitTool(server, state);
+    registerDebugSnapshotTool(server, state);
     registerMockListTool(server, state);
     registerMockSwitchTool(server, state);
     registerMockStatusTool(server, state);

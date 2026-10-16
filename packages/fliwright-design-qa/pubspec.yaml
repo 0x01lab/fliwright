@@ -12,13 +12,16 @@ topics:
 
 environment:
   sdk: ^3.5.0
+  flutter: '>=3.24.0'
 
 dependencies:
   crypto: ^3.0.0
+  fliwright_bridge: ^0.1.0
   flutter:
     sdk: flutter
-  flutter_webrtc: ^1.5.2
-  mobile_scanner: ^7.2.0
+  flutter_webrtc: '>=1.5.2 <1.6.0'
+  mobile_scanner: '>=7.2.0 <7.3.0'
+  objective_c: '>=9.5.0 <9.6.0'
   web_socket_channel: ^3.0.3
 
 flutter:

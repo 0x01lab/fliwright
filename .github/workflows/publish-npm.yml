@@ -1,0 +1,66 @@
+name: Publish npm packages
+
+on:
+  push:
+    tags:
+      - 'npm-v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches public package versions
+        shell: bash
+        run: |
+          expected="npm-v$(node -p "require('./packages/fliwright-cli/package.json').version")"
+          test "${GITHUB_REF_NAME}" = "${expected}"
+          for manifest in packages/fliwright-{core,vitest,cli,mcp,tdd,plugin-riverpod}/package.json; do
+            test "$(node -p "require('./${manifest}').version")" = "${GITHUB_REF_NAME#npm-v}"
+          done
+
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm package:check
+
+      - name: Publish in dependency order with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#npm-v}"
+          publish_if_missing() {
+            package_name="$1"
+            if npm view "${package_name}@${version}" version --silent >/dev/null 2>&1; then
+              echo "${package_name}@${version} already exists; skipping publish."
+            else
+              pnpm --filter "${package_name}" publish --no-git-checks
+            fi
+          }
+          publish_if_missing @fliwright/core
+          publish_if_missing @fliwright/vitest
+          publish_if_missing @fliwright/plugin-riverpod
+          publish_if_missing @fliwright/tdd
+          publish_if_missing @fliwright/cli
+          publish_if_missing @fliwright/mcp
+
+      - name: Verify published registry consumer
+        env:
+          FLIWRIGHT_REGISTRY_VERSION: ${{ github.ref_name }}
+        run: node scripts/verify-registry-consumer.mjs

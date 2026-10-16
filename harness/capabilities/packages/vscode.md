@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "adc54eb662382df42ca9f69fbd5254b14ee88d359c506f50fbed2b6ea6e0b10a"
+source_fingerprint: "2a49a001e7cf324a7f70f6961861a33a806287a59773156ac17cef32bc325bbd"
 generated: true
 ---
 

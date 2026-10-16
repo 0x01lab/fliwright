@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
-import 'package:flutter/services.dart';
 
 import '../actionability_gate.dart';
 import '../bridge.dart';
@@ -1468,9 +1467,9 @@ class InspectExtension {
     if (node == null) return const ExtractedSemantics();
     final data = node.getSemanticsData();
     return ExtractedSemantics(
-      identifier: node.identifier?.isEmpty == true ? null : node.identifier,
-      label: node.label?.isEmpty == true ? null : node.label,
-      hint: node.hint?.isEmpty == true ? null : node.hint,
+      identifier: node.identifier.isEmpty ? null : node.identifier,
+      label: node.label.isEmpty ? null : node.label,
+      hint: node.hint.isEmpty ? null : node.hint,
       role: _roleFromSemanticsNode(node),
       checked: SemanticsCompat.hasFlag(data, SemanticsFlag.hasCheckedState)
           ? SemanticsCompat.hasFlag(data, SemanticsFlag.isChecked)

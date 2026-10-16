@@ -15,8 +15,8 @@ importers:
         specifier: ^8.1.0
         version: 8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)
       vitest:
-        specifier: 5.0.0-beta.5
-        version: 5.0.0-beta.5(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.0.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
 
   e2e:
     dependencies:
@@ -31,8 +31,8 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
       vitest:
-        specifier: 5.0.0-beta.5
-        version: 5.0.0-beta.5(@types/node@26.0.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.0.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/fliwright-cli:
     dependencies:
@@ -62,8 +62,8 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
       vitest:
-        specifier: 5.0.0-beta.5
-        version: 5.0.0-beta.5(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/fliwright-core:
     dependencies:
@@ -87,8 +87,8 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
       vitest:
-        specifier: 5.0.0-beta.5
-        version: 5.0.0-beta.5(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -111,8 +111,8 @@ importers:
         specifier: ^1.12.0
         version: 1.29.0(zod@3.25.76)
       vitest:
-        specifier: 5.0.0-beta.5
-        version: 5.0.0-beta.5(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -134,8 +134,8 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
       vitest:
-        specifier: 5.0.0-beta.5
-        version: 5.0.0-beta.5(@types/node@25.9.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.0.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/fliwright-tdd:
     dependencies:
@@ -146,8 +146,8 @@ importers:
         specifier: workspace:*
         version: link:../fliwright-vitest
       vitest:
-        specifier: 5.0.0-beta.5
-        version: 5.0.0-beta.5(@types/node@25.9.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.0.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
     devDependencies:
       typescript:
         specifier: ^5.5.0
@@ -159,8 +159,8 @@ importers:
         specifier: workspace:*
         version: link:../fliwright-core
       vitest:
-        specifier: 5.0.0-beta.5
-        version: 5.0.0-beta.5(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
     devDependencies:
       '@types/node':
         specifier: ^25.9.1
@@ -254,8 +254,8 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
       vitest:
-        specifier: 5.0.0-beta.5
-        version: 5.0.0-beta.5(@types/node@26.0.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.0.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
 
 packages:
 
@@ -1075,6 +1075,9 @@ packages:
     resolution: {integrity: sha512-LtoMMhxAlorcGhmFYI+LhPgbPZCkgP6ra1YL604EeF6U98pLlQ3iWIGMdWSC+vWmPBWBNgmDBAhnAobLROJmwg==}
     engines: {node: '>=18'}
 
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
   '@tailwindcss/cli@4.3.1':
     resolution: {integrity: sha512-ZWPy20rF+TBfTImxDMG3Wr75Y3RpaPlo9lc+oJbInlMyjT+XPkTVKVIL5RZ7JirXuIahcfHoLNFRmDorKi+JQQ==}
     hasBin: true
@@ -1246,8 +1249,11 @@ packages:
     resolution: {integrity: sha512-jIXhD0eWQ1JA6ln/5Dltyx22UxWNrw0hZmhy2rlv6m6KgF7kplHx3g0fzi09lNmTJQRR91OlemYp3xFnvDK9og==}
     engines: {node: '>=20.0.0'}
 
-  '@vitest/mocker@5.0.0-beta.5':
-    resolution: {integrity: sha512-NZCB4PeGl+YqWBxk4lAsH1oS8EvBG3b/hDaOCgEmsoZSda5q9jUxU8P46HyczFp34tcnxp92KVlNDiKcDAE59w==}
+  '@vitest/expect@4.1.11':
+    resolution: {integrity: sha512-VX2x5vNJXET47KAFzwERI+KRMtTTCSWTfSMKsW7JsUsXV4psq++e3DvZpuTDOpHcxytiDs6p2nhVb2tVDiiUYw==}
+
+  '@vitest/mocker@4.1.11':
+    resolution: {integrity: sha512-2XJVD55d1o5AZous5CCGKS74g/riOj9odEt2bQpCVZeblHyHdnMeFl4jl0XjU21stf4mbjUkew2eXQZt65g5CQ==}
     peerDependencies:
       msw: ^2.4.9
       vite: ^6.0.0 || ^7.0.0 || ^8.0.0
@@ -1257,14 +1263,20 @@ packages:
       vite:
         optional: true
 
-  '@vitest/pretty-format@5.0.0-beta.5':
-    resolution: {integrity: sha512-eFj80bS7sN1aOOV7Ibi/sDYhhzs1fj2S8+/Y2mjOw2POpSW/6Esjj7FIdj0cD2/cdsKFumEokh+ijVijisd9+w==}
+  '@vitest/pretty-format@4.1.11':
+    resolution: {integrity: sha512-yiZzPbGTS9Sr/JpFl8zHrcIkAofNbFV6k21vIgQN/cY/oxZeXhJv5sc/MBJ5jFKWmWs+oJHw0UXLZjmf931+Vw==}
 
-  '@vitest/spy@5.0.0-beta.5':
-    resolution: {integrity: sha512-AF4gJhHwopexCGrdUnt8Y3+3eVvgMie4tHmlIJi2i3DH6TQlPN2V2/wJfrQAC5ZAgqSM278qmkJCYGC4aOfwSg==}
+  '@vitest/runner@4.1.11':
+    resolution: {integrity: sha512-LztvUgdwMNJMIkj3hQnnxiC2Xy1zNxq928W/xhjCLaNCzqTZOudjwbQf6v9IntZGPw132i2Lq2rgTRZHD3JHNw==}
 
-  '@vitest/utils@5.0.0-beta.5':
-    resolution: {integrity: sha512-M+DZy1Q7v6//AbTYjVy86ChuF4tgSdGySVpH49kSkES16IRL5QRSmtAPdZVQ19S6Eke+NzAqWn1PUZNKljftfg==}
+  '@vitest/snapshot@4.1.11':
+    resolution: {integrity: sha512-pN7ikn1ON7h8ee4gIAp4AzyK+zBtJPzVbqOgu5LCEh4VaJVbPQcgYQYJIMGQPXVeJJq1fnfazis7a5pFNPahog==}
+
+  '@vitest/spy@4.1.11':
+    resolution: {integrity: sha512-apNa/prQy2qCeywhnixOHPRCgGNhvg7T4Dapfl1GahLp/R+uhBm5cPyFoNVyqsNd2h1nJxL6BqqdIjiABL60YA==}
+
+  '@vitest/utils@4.1.11':
+    resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
 
   '@vscode/test-electron@2.5.2':
     resolution: {integrity: sha512-8ukpxv4wYe0iWMRQU18jhzJOHkeGKbnw7xWRX3Zw1WJA4cEKbHcmmLPdPrPtL6rhDcrlCZN+xKRpv09n4gRHYg==}
@@ -2680,9 +2692,8 @@ packages:
     resolution: {integrity: sha512-tXJwSr9355kFJI3lbCkPpUH5cP8/M0GGy2xLO34aZCjMXBaK3SoPnZwr/oWmo1FdCnELcs4npdCIOFtq9W3ruQ==}
     engines: {node: '>=4'}
 
-  tinybench@6.0.2:
-    resolution: {integrity: sha512-FlHoQpcFvCzeXK5kVPvV7IVgW/hs/B36QWTz876iSdeJguBDfdTSRQmYmaHX+fQNt4hp+gEFB2XXw+8hT4/y8A==}
-    engines: {node: '>=20.0.0'}
+  tinybench@2.9.0:
+    resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
 
   tinyexec@1.2.4:
     resolution: {integrity: sha512-SHf/r48b7vOrjve9PxJo3MN5v5yuyjHvdUcrQffT3WXMUfnGmHDVbC4k3sHJaJTgZCwpUplIaAo5ANtMyp3YHg==}
@@ -2831,23 +2842,23 @@ packages:
       yaml:
         optional: true
 
-  vitest@5.0.0-beta.5:
-    resolution: {integrity: sha512-Gi7moR+KBro+LGC1jLGalpv4Ujb83dBLOH9o1f9VnWrvl0tRp4p1njh3Gikcexic0xe4foueQvgImq/hKET+bw==}
-    engines: {node: ^22.12.0 || ^24.0.0 || >=26.0.0}
+  vitest@4.1.11:
+    resolution: {integrity: sha512-fhACrNXUidIbGSBr5FlbuBkO7VWC1ZyLl0DO4CU2DrQoAPxX84Ysxs+HeGQpii5lZWV1Q4gBZTTu49mF+A6Edw==}
+    engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
     hasBin: true
     peerDependencies:
       '@edge-runtime/vm': '*'
       '@opentelemetry/api': ^1.9.0
-      '@types/node': ^22.0.0 || >=24.0.0
-      '@vitest/browser-playwright': 5.0.0-beta.5
-      '@vitest/browser-preview': 5.0.0-beta.5
-      '@vitest/browser-webdriverio': 5.0.0-beta.5
-      '@vitest/coverage-istanbul': 5.0.0-beta.5
-      '@vitest/coverage-v8': 5.0.0-beta.5
-      '@vitest/ui': 5.0.0-beta.5
+      '@types/node': ^20.0.0 || ^22.0.0 || >=24.0.0
+      '@vitest/browser-playwright': 4.1.11
+      '@vitest/browser-preview': 4.1.11
+      '@vitest/browser-webdriverio': 4.1.11
+      '@vitest/coverage-istanbul': 4.1.11
+      '@vitest/coverage-v8': 4.1.11
+      '@vitest/ui': 4.1.11
       happy-dom: '*'
       jsdom: '*'
-      vite: ^6.4.0 || ^7.0.0 || ^8.0.0
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -3669,6 +3680,8 @@ snapshots:
 
   '@sindresorhus/merge-streams@2.3.0': {}
 
+  '@standard-schema/spec@1.1.0': {}
+
   '@tailwindcss/cli@4.3.1':
     dependencies:
       '@parcel/watcher': 2.5.1
@@ -3841,33 +3854,52 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/mocker@5.0.0-beta.5(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))':
+  '@vitest/expect@4.1.11':
     dependencies:
-      '@jridgewell/trace-mapping': 0.3.31
-      '@vitest/spy': 5.0.0-beta.5
+      '@standard-schema/spec': 1.1.0
+      '@types/chai': 5.2.3
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
+      chai: 6.2.2
+      tinyrainbow: 3.1.0
+
+  '@vitest/mocker@4.1.11(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))':
+    dependencies:
+      '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
       vite: 8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)
 
-  '@vitest/mocker@5.0.0-beta.5(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))':
+  '@vitest/mocker@4.1.11(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))':
     dependencies:
-      '@jridgewell/trace-mapping': 0.3.31
-      '@vitest/spy': 5.0.0-beta.5
+      '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
       vite: 8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)
 
-  '@vitest/pretty-format@5.0.0-beta.5':
+  '@vitest/pretty-format@4.1.11':
     dependencies:
       tinyrainbow: 3.1.0
 
-  '@vitest/spy@5.0.0-beta.5': {}
-
-  '@vitest/utils@5.0.0-beta.5':
+  '@vitest/runner@4.1.11':
     dependencies:
-      '@vitest/pretty-format': 5.0.0-beta.5
+      '@vitest/utils': 4.1.11
+      pathe: 2.0.3
+
+  '@vitest/snapshot@4.1.11':
+    dependencies:
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/utils': 4.1.11
+      magic-string: 0.30.21
+      pathe: 2.0.3
+
+  '@vitest/spy@4.1.11': {}
+
+  '@vitest/utils@4.1.11':
+    dependencies:
+      '@vitest/pretty-format': 4.1.11
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
@@ -5379,7 +5411,7 @@ snapshots:
     dependencies:
       editions: 6.22.0
 
-  tinybench@6.0.2: {}
+  tinybench@2.9.0: {}
 
   tinyexec@1.2.4: {}
 
@@ -5484,14 +5516,15 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
 
-  vitest@5.0.0-beta.5(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)):
+  vitest@4.1.11(@types/node@25.9.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)):
     dependencies:
-      '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.0-beta.5(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
-      '@vitest/pretty-format': 5.0.0-beta.5
-      '@vitest/spy': 5.0.0-beta.5
-      '@vitest/utils': 5.0.0-beta.5
-      chai: 6.2.2
+      '@vitest/expect': 4.1.11
+      '@vitest/mocker': 4.1.11(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/runner': 4.1.11
+      '@vitest/snapshot': 4.1.11
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
       es-module-lexer: 2.1.0
       expect-type: 1.3.0
       magic-string: 0.30.21
@@ -5499,7 +5532,7 @@ snapshots:
       pathe: 2.0.3
       picomatch: 4.0.4
       std-env: 4.1.0
-      tinybench: 6.0.2
+      tinybench: 2.9.0
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
@@ -5510,14 +5543,15 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vitest@5.0.0-beta.5(@types/node@25.9.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)):
+  vitest@4.1.11(@types/node@26.0.1)(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)):
     dependencies:
-      '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.0-beta.5(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
-      '@vitest/pretty-format': 5.0.0-beta.5
-      '@vitest/spy': 5.0.0-beta.5
-      '@vitest/utils': 5.0.0-beta.5
-      chai: 6.2.2
+      '@vitest/expect': 4.1.11
+      '@vitest/mocker': 4.1.11(vite@8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0))
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/runner': 4.1.11
+      '@vitest/snapshot': 4.1.11
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
       es-module-lexer: 2.1.0
       expect-type: 1.3.0
       magic-string: 0.30.21
@@ -5525,25 +5559,26 @@ snapshots:
       pathe: 2.0.3
       picomatch: 4.0.4
       std-env: 4.1.0
-      tinybench: 6.0.2
+      tinybench: 2.9.0
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vite: 8.1.0(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 25.9.1
+      '@types/node': 26.0.1
     transitivePeerDependencies:
       - msw
 
-  vitest@5.0.0-beta.5(@types/node@26.0.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)):
+  vitest@4.1.11(@types/node@26.0.1)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)):
     dependencies:
-      '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.0-beta.5(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
-      '@vitest/pretty-format': 5.0.0-beta.5
-      '@vitest/spy': 5.0.0-beta.5
-      '@vitest/utils': 5.0.0-beta.5
-      chai: 6.2.2
+      '@vitest/expect': 4.1.11
+      '@vitest/mocker': 4.1.11(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0))
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/runner': 4.1.11
+      '@vitest/snapshot': 4.1.11
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
       es-module-lexer: 2.1.0
       expect-type: 1.3.0
       magic-string: 0.30.21
@@ -5551,7 +5586,7 @@ snapshots:
       pathe: 2.0.3
       picomatch: 4.0.4
       std-env: 4.1.0
-      tinybench: 6.0.2
+      tinybench: 2.9.0
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0

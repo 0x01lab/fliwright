@@ -33,5 +33,7 @@ TypeScript runtime using the Flutter VM Service URL.
 - Runtime network mock support for Dio and HTTP overrides.
 - Riverpod state extension primitives used by `fliwright_bridge_riverpod`.
 
-Only enable the bridge in trusted debug or test builds. It is designed for
-local automation and E2E testing, not production runtime control.
+Only enable the bridge in trusted debug or test builds. Calls to initialize it
+are inert in release mode, but applications should still guard the test
+entrypoint so tree shaking can remove it. It is designed for local automation
+and E2E testing, not production runtime control.

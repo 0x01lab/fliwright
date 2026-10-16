@@ -1,9 +1,21 @@
 {
   "name": "@fliwright/tdd",
   "version": "0.1.0",
+  "description": "Experimental persistent red-green-refactor workflows for Fliwright.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0x01lab/fliwright.git",
+    "directory": "packages/fliwright-tdd"
+  },
+  "bugs": { "url": "https://github.com/0x01lab/fliwright/issues" },
+  "homepage": "https://github.com/0x01lab/fliwright#readme",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public", "tag": "next" },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -14,7 +26,7 @@
   "dependencies": {
     "@fliwright/core": "workspace:*",
     "@fliwright/vitest": "workspace:*",
-    "vitest": "5.0.0-beta.5"
+    "vitest": "4.1.11"
   },
   "devDependencies": {
     "typescript": "^5.5.0"

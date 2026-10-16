@@ -77,7 +77,7 @@ class SemanticsCompat {
     final name = flag.name;
     try {
       // Direct boolean field access: isButton, isLink, isHeader, etc.
-      final value = (collection as dynamic).isButton;
+      (collection as dynamic).isButton;
       // If we got here, the collection object exists.
       // Map flag name to the corresponding boolean field.
       return _flagToBoolField(collection, name);

@@ -7,7 +7,7 @@ const NODE_DEV_DEPENDENCIES: Record<string, string> = {
   '@fliwright/vitest': '^0.1.0',
   '@types/node': '^20.0.0',
   typescript: '^5.5.0',
-  vitest: '^2.0.0',
+  vitest: '4.1.11',
 };
 
 const DEFAULT_SCRIPTS: Record<string, string> = {

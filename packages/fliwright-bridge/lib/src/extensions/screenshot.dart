@@ -52,6 +52,23 @@ class ScreenshotExtension {
   static Future<Map<String, dynamic>> _captureRenderView(
     double pixelRatio,
   ) async {
+    final rootBoundary = _findRepaintBoundary(WidgetsBinding.instance.rootElement?.findRenderObject());
+    if (rootBoundary != null && rootBoundary.hasSize) {
+      final image = await rootBoundary.toImage(pixelRatio: pixelRatio);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final width = rootBoundary.size.width;
+      final height = rootBoundary.size.height;
+      image.dispose();
+      if (byteData == null) return {'success': false, 'error': 'Failed to encode screenshot'};
+      return {
+        'success': true,
+        'format': 'png',
+        'screenshot': base64Encode(byteData.buffer.asUint8List()),
+        'width': width,
+        'height': height,
+        'pixelRatio': pixelRatio,
+      };
+    }
     final renderViews = RendererBinding.instance.renderViews;
     if (renderViews.isEmpty) {
       return {'success': false, 'error': 'No render view available'};
@@ -81,11 +98,21 @@ class ScreenshotExtension {
       return {'success': false, 'error': 'Render view has invalid pixel ratio'};
     }
 
-    final bounds = renderView.paintBounds;
-    final image = await layer.toImage(
-      bounds,
-      pixelRatio: pixelRatio / viewPixelRatio,
-    );
+    final physicalWidth = (width * viewPixelRatio).ceil();
+    final physicalHeight = (height * viewPixelRatio).ceil();
+    final outputWidth = (width * pixelRatio).ceil();
+    final outputHeight = (height * pixelRatio).ceil();
+    final scene = layer.buildScene(ui.SceneBuilder());
+    late final ui.Image physicalImage;
+    try {
+      physicalImage = await scene.toImage(physicalWidth, physicalHeight);
+    } finally {
+      scene.dispose();
+    }
+    final image = pixelRatio == viewPixelRatio
+        ? physicalImage
+        : await _resizeImage(physicalImage, outputWidth, outputHeight);
+    if (!identical(image, physicalImage)) physicalImage.dispose();
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
 
@@ -101,6 +128,35 @@ class ScreenshotExtension {
       'height': height,
       'pixelRatio': pixelRatio,
     };
+  }
+
+  static RenderRepaintBoundary? _findRepaintBoundary(RenderObject? root) {
+    if (root == null) return null;
+    if (root is RenderRepaintBoundary) return root;
+    RenderRepaintBoundary? found;
+    root.visitChildren((child) {
+      found ??= _findRepaintBoundary(child);
+    });
+    return found;
+  }
+
+  static Future<ui.Image> _resizeImage(
+    ui.Image source,
+    int width,
+    int height,
+  ) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    canvas.drawImageRect(
+      source,
+      Rect.fromLTWH(0, 0, source.width.toDouble(), source.height.toDouble()),
+      Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+      ui.Paint(),
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(width, height);
+    picture.dispose();
+    return image;
   }
 
   /// Captures a full-page screenshot by scrolling through scrollable content

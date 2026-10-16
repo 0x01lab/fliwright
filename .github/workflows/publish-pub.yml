@@ -5,6 +5,7 @@ on:
     tags:
       - 'fliwright_bridge-v*'
       - 'fliwright_bridge_riverpod-v*'
+      - 'fliwright_design_qa-v*'
 
 permissions:
   id-token: write
@@ -29,6 +30,8 @@ jobs:
         run: |
           if [[ "${GITHUB_REF_NAME}" == fliwright_bridge_riverpod-v* ]]; then
             pkg="fliwright-bridge-riverpod"
+          elif [[ "${GITHUB_REF_NAME}" == fliwright_design_qa-v* ]]; then
+            pkg="fliwright-design-qa"
           elif [[ "${GITHUB_REF_NAME}" == fliwright_bridge-v* ]]; then
             pkg="fliwright-bridge"
           else
@@ -40,6 +43,17 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ steps.package.outputs.dir }}
         run: flutter pub get
+
+      - name: Verify tag matches package version
+        working-directory: ${{ steps.package.outputs.dir }}
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME##*-v}"
+          package_version="$(awk '/^version:[[:space:]]*/ { print $2; exit }' pubspec.yaml)"
+          if [[ -z "${package_version}" || "${tag_version}" != "${package_version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match ${package_version:-unknown} in pubspec.yaml." >&2
+            exit 1
+          fi
 
       - name: Analyze
         working-directory: ${{ steps.package.outputs.dir }}

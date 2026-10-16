@@ -1,0 +1,3 @@
+dependency_overrides:
+  fliwright_bridge:
+    path: ../fliwright-bridge
