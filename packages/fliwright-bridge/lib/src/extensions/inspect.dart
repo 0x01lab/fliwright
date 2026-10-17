@@ -9,6 +9,7 @@ import '../bridge.dart';
 import '../ref_registry.dart';
 import '../semantics_compat.dart';
 import '../soft_keyboard.dart';
+import '../selector_tree_evaluator.dart';
 
 class InspectExtension {
   static void register(ExtensionRegistry registry) {
@@ -940,97 +941,19 @@ class InspectExtension {
   }
 
   static List<Element> _evaluateSelector(
-    Element root,
-    ParsedSelectorAst selector,
-  ) {
-    final kind = selector.kind;
-    switch (kind) {
-      case 'descendant':
-        final parents = _evaluateSelector(root, selector.child('of'));
-        final matching = selector.child('matching');
-        final result = <Element>[];
-        for (final parent in parents) {
-          _walkTreeCollect(parent, (element) {
-            if (element == parent && selector.boolValue('matchRoot') != true) {
-              return false;
-            }
-            return _matchesAst(element, matching);
-          }, result);
-        }
-        return _dedupeElements(result);
-      case 'ancestor':
-        final children = _evaluateSelector(root, selector.child('of'));
-        final matching = selector.child('matching');
-        final result = <Element>[];
-        for (final child in children) {
-          child.visitAncestorElements((ancestor) {
-            if (_matchesAst(ancestor, matching)) result.add(ancestor);
-            return true;
-          });
-        }
-        return _dedupeElements(result);
-      case 'and':
-        return _allElements(root)
-            .where(
-              (element) => selector
-                  .children('selectors')
-                  .every((child) => _matchesAst(element, child)),
-            )
-            .toList();
-      case 'or':
-        return _dedupeElements(
-          selector
-              .children('selectors')
-              .expand((child) => _evaluateSelector(root, child))
-              .toList(),
-        );
-      case 'nth':
-        final candidates = _evaluateSelector(root, selector.child('selector'));
-        final index = selector.intValue('index') ?? -1;
-        if (index < 0 || index >= candidates.length) return <Element>[];
-        return <Element>[candidates[index]];
-      case 'last':
-        final candidates = _evaluateSelector(root, selector.child('selector'));
-        if (candidates.isEmpty) return <Element>[];
-        return <Element>[candidates.last];
-      case 'filter':
-        final candidates = _evaluateSelector(root, selector.child('selector'));
-        final filter = selector.value['filter'];
-        if (filter is! Map<String, dynamic>) return candidates;
-        return candidates
-            .where((element) => _passesFilter(element, filter))
-            .toList();
-      case 'containing':
-        final parents = _evaluateSelector(root, selector.child('parent'));
-        final descAst = selector.child('descendant');
-        final result = <Element>[];
-        for (final parent in parents) {
-          bool hasMatch = false;
-          _walkTreeCollect(parent, (element) {
-            if (identical(element, parent)) return false;
-            if (_matchesAst(element, descAst)) {
-              hasMatch = true;
-              return false;
-            }
-            return true;
-          }, []);
-          if (hasMatch) result.add(parent);
-        }
-        return _dedupeElements(result);
-      case 'fallback':
-        final primary = _evaluateSelector(root, selector.child('primary'));
-        if (primary.isNotEmpty) return primary;
-        return _evaluateSelector(root, selector.child('fallback'));
-      default:
-        final result = <Element>[];
-        _walkTreeCollect(
-          root,
-          (element) => _matchesAst(element, selector),
-          result,
-        );
-        return result;
-    }
-  }
+          Element root, ParsedSelectorAst selector) =>
+      SelectorTreeEvaluator(
+              matchesLeaf: _matchesAst, passesFilter: _passesFilter)
+          .evaluate(root, selector);
+
+  /// Shared synchronous query evaluator for live resolve and before-dispatch capture.
+  static List<Element> evaluateQuery(Element root, Map<String, dynamic> query,
+          {SelectorEvaluationBudget? budget}) =>
+      SelectorTreeEvaluator(
+              matchesLeaf: _matchesAst,
+              passesFilter: _passesFilter,
+              budget: budget)
+          .evaluate(root, ParsedSelectorAst(_queryToAst(query)));
 
   static bool _matchesAst(Element element, ParsedSelectorAst selector) {
     final widget = element.widget;
@@ -1721,32 +1644,6 @@ class InspectExtension {
     return found;
   }
 
-  static List<Element> _allElements(Element root) {
-    final result = <Element>[];
-    _walkTreeCollect(root, (_) => true, result);
-    return result;
-  }
-
-  static void _walkTreeCollect(
-    Element root,
-    bool Function(Element) predicate,
-    List<Element> result,
-  ) {
-    if (predicate(root)) result.add(root);
-    root.debugVisitOnstageChildren((Element child) {
-      _walkTreeCollect(child, predicate, result);
-    });
-  }
-
-  static List<Element> _dedupeElements(List<Element> elements) {
-    final seen = <int>{};
-    final result = <Element>[];
-    for (final element in elements) {
-      if (seen.add(element.hashCode)) result.add(element);
-    }
-    return result;
-  }
-
   static bool _matchString(
     String? actual,
     String? expected,
@@ -2188,48 +2085,4 @@ class ParsedSelector {
   final String field;
   final String value;
   ParsedSelector({required this.field, required this.value});
-}
-
-class ParsedSelectorAst {
-  final Map<String, dynamic> value;
-
-  ParsedSelectorAst(this.value);
-
-  String get kind => value['kind'] as String? ?? '';
-
-  String? stringValue(String key) {
-    final raw = value[key];
-    return raw is String && raw.isNotEmpty ? raw : null;
-  }
-
-  bool? boolValue(String key) {
-    final raw = value[key];
-    return raw is bool ? raw : null;
-  }
-
-  int? intValue(String key) {
-    final raw = value[key];
-    if (raw is int) return raw;
-    if (raw is num) return raw.toInt();
-    return null;
-  }
-
-  ParsedSelectorAst child(String key) {
-    final raw = value[key];
-    if (raw is! Map<String, dynamic>) {
-      throw ArgumentError('Selector child "$key" must be an object');
-    }
-    return ParsedSelectorAst(raw);
-  }
-
-  List<ParsedSelectorAst> children(String key) {
-    final raw = value[key];
-    if (raw is! List) {
-      throw ArgumentError('Selector children "$key" must be a list');
-    }
-    return raw
-        .whereType<Map<String, dynamic>>()
-        .map(ParsedSelectorAst.new)
-        .toList();
-  }
 }

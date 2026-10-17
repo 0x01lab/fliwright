@@ -17,6 +17,7 @@ import 'extensions/mock_rule_store.dart';
 import 'extensions/mock_server.dart';
 import 'extensions/query.dart';
 import 'extensions/recording.dart';
+import 'extensions/recording_binding.dart';
 import 'extensions/riverpod.dart';
 import 'extensions/router_navigate.dart';
 import 'extensions/screenshot.dart';
@@ -201,9 +202,9 @@ class FliwrightBridge {
       final clientVersion = int.tryParse(params['protocolVersion'] ?? '0') ?? 0;
       return {
         'status': 'ok',
-        'protocolVersion': 1,
+        'protocolVersion': 2,
         'clientVersion': clientVersion,
-        'compatible': clientVersion <= 1,
+        'compatible': clientVersion <= 2,
         'initialized': _initialized,
         'debugMode': kDebugMode,
         'profileMode': kProfileMode,
@@ -212,6 +213,10 @@ class FliwrightBridge {
         'bridgeCapabilities': {
           'recordingPointerEvents': true,
           'recordingTextInput': true,
+          'recordingProtocolVersion': 2,
+          'recordingBeforeDispatchTarget':
+              FliwrightRecordingBinding.isInstalled,
+          'recordingFocusedInputController': true,
           'screenshotWaitForFrame': true,
           'rootRenderViewScreenshot': true,
           'recordingScreenshotSampler': true,

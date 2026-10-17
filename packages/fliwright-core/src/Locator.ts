@@ -254,6 +254,8 @@ export class Locator {
 
   async drag(deltaX: number, deltaY: number, options?: {
     steps?: number;
+    /** Total pointer-down to pointer-up duration in milliseconds. */
+    duration?: number;
     alignment?: AlignmentOption;
     timeout?: number;
   }): Promise<void> {
@@ -261,6 +263,7 @@ export class Locator {
       deltaX,
       deltaY,
       steps: options?.steps,
+      duration: options?.duration,
       alignment: options?.alignment ?? 'center',
       timeout: options?.timeout,
     });
@@ -338,6 +341,8 @@ export class Locator {
     charDelay?: number;
     timeout?: number;
     checkStable?: boolean;
+    /** Masks the input in process records while preserving the value sent to the app. */
+    sensitive?: boolean;
   }): Promise<void> {
     const response = await this.sendAction('fill', {
       text,
@@ -345,6 +350,7 @@ export class Locator {
       replaceAll: true,
       timeout: options?.timeout,
       checkStable: options?.checkStable,
+      sensitive: options?.sensitive,
     });
     this.assertSuccessResponse(response, 'fill');
   }
@@ -475,11 +481,28 @@ export class Locator {
   }
 
   private async sendAction(action: string, params: Record<string, unknown>): Promise<ActionResponse> {
-    return (await this.sendRequest('ext.fliwright.action', {
+    const request = {
       action,
       ...this.targetWireParams(),
       ...stringifyDefined(params),
-    })) as ActionResponse;
+    };
+    const execute = async () => (await this.sendRequest('ext.fliwright.action', request)) as ActionResponse;
+    const response = this.assertionTimeline?.runSession
+      ? await this.assertionTimeline.runSession.perform({
+        kind: 'action',
+        title: `${action} ${this.selectorString}`,
+        metadata: { action, selector: this.selectorString },
+        ...(params.sensitive === true && typeof params.text === 'string' ? { sensitiveValues: [params.text] } : {}),
+      }, async () => {
+        const value = await execute();
+        // Treat a bridge-level failure as an operation failure even when the
+        // transport returned a normal response.
+        this.assertSuccessResponse(value, action);
+        return value;
+      })
+      : await execute();
+    if (!this.assertionTimeline?.runSession) this.assertSuccessResponse(response, action);
+    return response;
   }
 
   private targetWireParams(): Record<string, unknown> {

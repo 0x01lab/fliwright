@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { createJiti } from 'jiti';
-import type { ScenarioExecutionMode, TestScenario } from '@fliwright/core';
+import { mergeFliwrightConfig, readFliwrightEnvironment } from '@fliwright/core';
+import type { FliwrightPathsConfig, FliwrightProjectConfig, FliwrightRecordingConfig, ResolvedFliwrightConfig, ScenarioExecutionMode, TestScenario } from '@fliwright/core';
 
 export interface FliwrightCliConfig {
   vmServiceUrl?: string;
@@ -10,6 +11,8 @@ export interface FliwrightCliConfig {
   testDir: string;
   reporter: 'pretty' | 'json' | 'junit' | 'ai-json';
   runsRoot?: string;
+  recording?: Partial<FliwrightRecordingConfig>;
+  paths?: Partial<FliwrightPathsConfig>;
   scenarios?: Record<string, TestScenario>;
   scenarioMode?: ScenarioExecutionMode;
 }
@@ -17,12 +20,16 @@ export interface FliwrightCliConfig {
 const DEFAULTS: FliwrightCliConfig = {
   timeout: 30000,
   screenshot: 'file',
-  testDir: 'tests',
+  testDir: '.fliwright/tests',
   reporter: 'pretty',
+  recording: { mode: 'standard' },
 };
 
 export function defineConfig(overrides: Partial<FliwrightCliConfig> = {}): FliwrightCliConfig {
-  return { ...DEFAULTS, ...overrides };
+  const shared = mergeFliwrightConfig({ project: { ...overrides,
+    paths: { ...overrides.paths, ...(overrides.testDir ? { tests: overrides.testDir } : {}) },
+  } });
+  return { ...DEFAULTS, ...overrides, ...shared, testDir: shared.paths.tests };
 }
 
 export async function loadConfig(projectDir: string): Promise<FliwrightCliConfig> {
@@ -31,11 +38,22 @@ export async function loadConfig(projectDir: string): Promise<FliwrightCliConfig
   try {
     await stat(configPath);
   } catch {
-    return { ...DEFAULTS };
+    return defineConfig();
   }
 
-  const jiti = createJiti(import.meta.url);
+  const jiti = createJiti(import.meta.url, { moduleCache: false, fsCache: false });
   const raw = await jiti.import(configPath) as Record<string, unknown>;
   const loaded = (raw.default ?? raw) as Partial<FliwrightCliConfig>;
-  return { ...DEFAULTS, ...loaded };
+  return defineConfig(loaded);
+}
+
+/** Resolve serializable settings consistently for commands and external integrations. */
+export async function resolveProjectConfig(
+  projectDir: string,
+  explicit: Partial<FliwrightProjectConfig> = {},
+  environment: Record<string, string | undefined> = process.env,
+): Promise<FliwrightCliConfig & ResolvedFliwrightConfig> {
+  const project = await loadConfig(projectDir);
+  const shared = mergeFliwrightConfig({ project, environment: readFliwrightEnvironment(environment), explicit });
+  return { ...project, ...shared, testDir: shared.paths.tests };
 }

@@ -7,7 +7,7 @@ import type { TestSpecification, Vitest } from 'vitest/node';
  * Vitest 5 replaces changeNamePattern/changeFilenamePattern with specification-scoped
  * filters plus rerunTestSpecifications.
  */
-export async function focusAndRerun(vitest: Vitest, file: string, testName?: string): Promise<void> {
+export async function focusAndRerun(vitest: Vitest, file: string, testName?: string): ReturnType<Vitest['rerunTestSpecifications']> {
   const specifications = await resolveSpecifications(vitest, file);
   if (specifications.length === 0) {
     throw new Error(`No Vitest specifications found for ${file}`);
@@ -19,7 +19,7 @@ export async function focusAndRerun(vitest: Vitest, file: string, testName?: str
       const pattern = new RegExp(testName);
       for (const spec of specifications) spec.testNamePattern = pattern;
     }
-    await vitest.rerunTestSpecifications(specifications);
+    return await vitest.rerunTestSpecifications(specifications);
   } finally {
     specifications.forEach((spec, index) => {
       spec.testNamePattern = savedPatterns[index];
@@ -34,23 +34,18 @@ async function resolveSpecifications(vitest: Vitest, file: string): Promise<Test
   specifications = (await vitest.globTestSpecifications([file])).filter(
     (spec) => spec.moduleId === file,
   );
-  if (specifications.length > 0 || !isGeneratedCandidate(file)) return specifications;
+  if (specifications.length > 0) return specifications;
 
   const candidate = resolve(file);
   if (!(await isFile(candidate))) return [];
 
-  // Generated candidates are deliberately excluded from normal project discovery.
-  // A focused rerun creates a specification for this exact, validated file only.
+  // When a persistent watcher has cleared its module cache between reruns,
+  // create a specification directly for the exact file. Generated candidates
+  // are deliberately excluded from normal project discovery, and ordinary
+  // files use this only as a race-safe fallback.
   return vitest.projects
     .filter((project) => isWithinProject(project.config.root, candidate))
     .map((project) => project.createSpecification(candidate));
-}
-
-function isGeneratedCandidate(file: string): boolean {
-  const segments = relative(process.cwd(), resolve(file)).split(sep);
-  return segments.includes('.fliwright')
-    && segments[segments.indexOf('.fliwright') + 1] === 'generated'
-    && /\.test\.[cm]?[jt]sx?$/.test(file);
 }
 
 function isWithinProject(root: string, file: string): boolean {

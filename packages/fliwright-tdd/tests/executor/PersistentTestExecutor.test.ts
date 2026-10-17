@@ -1,6 +1,6 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, writeFile, rm, realpath, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import { defaultArtifactsRoot, PersistentTestExecutor } from '../../src/executor/PersistentTestExecutor.js';
@@ -72,64 +72,69 @@ describe('PersistentTestExecutor.rerun', () => {
         status: 'green',
         testName: 'generated candidate passes',
       });
-      expect(candidate.timelinePath).toBeUndefined();
+      expect(candidate.timelinePath).toMatch(/tests\/[^/]+\/attempts\/attempt-0\/timeline.json$/);
       expect(await readdir(resolve(fixtureRoot, '.fliwright/tests'))).toEqual(['sample.test.ts']);
     } finally {
       await executor.dispose();
     }
   }, 30_000);
 
-  it('reads TDD failure details from the MCP failure sidecar when present', async () => {
-    const artifactsRoot = await mkdtemp(resolve(tmpdir(), 'fliwright-tdd-'));
+  it('reads the current attempt evidence from actual Fliwright fixtures across reruns', async () => {
+    const project = await realpath(await mkdtemp(resolve(tmpdir(), 'fliwright-tdd-canonical-')));
+    const artifactsRoot = resolve(project, 'artifacts');
+    const testDir = resolve(project, '.fliwright/tests');
+    const testFile = resolve(testDir, 'failure.test.ts');
+    const configFile = resolve(project, 'vitest.config.mjs');
+    const fixtureApi = resolve(__dirname, '../../../fliwright-vitest/src/index.ts');
+    await mkdir(testDir, { recursive: true });
+    await writeFile(configFile, `export default { root: ${JSON.stringify(project)}, test: { include: ['.fliwright/tests/*.test.ts'] } };`);
+    await writeFile(testFile, `
+      import { createFliwrightTest } from ${JSON.stringify(fixtureApi)};
+      const driver = {
+        sendRequest: async (method) => {
+          if (method === 'ext.fliwright.screenshot') return { success: true, screenshot: Buffer.from('failure-frame').toString('base64') };
+          if (method === 'ext.fliwright.snap') return { widgets: [{ type: 'Root' }] };
+          if (method === 'ext.fliwright.captureFrame') return { diagnostics: [] };
+          return { success: true };
+        }, healing: { getReports: () => [] }, dispose: async () => {},
+      };
+      const test = createFliwrightTest({ vmServiceUrl: 'ws://unused', requireAssertions: false, log: { format: 'silent' } }, { driverProvider: async () => driver });
+      test('beta fails', async ({ page }) => { throw new Error('current attempt error'); });
+    `);
     const executor = new PersistentTestExecutor();
-
-    await executor.boot({
-      configRoot: resolve(__dirname, '../../spike/fixture-project/vitest.config.ts'),
-      artifactsRoot,
-      vmServiceUrl: 'ws://runtime/ws',
-      driverProvider: async () => ({}),
-    });
-
     try {
-      await writeFile(resolve(artifactsRoot, 'failures.json'), JSON.stringify([
-        {
-          testName: 'beta fails',
-          assertion: { matcher: 'toBe', expected: '3', actual: '2', timeout: 5000 },
-          widgetTree: { type: 'Root' },
-          source: { file: '/app/lib/login.dart', line: 12, snippet: 'expect failed' },
-          screenshot: { mimeType: 'image/png', base64: 'abc123' },
-          timestamp: new Date().toISOString(),
-        },
-      ]), 'utf8');
-      const runDir = resolve(artifactsRoot, 'runs', 'run-beta-fails');
-      await mkdir(runDir, { recursive: true });
-      await writeFile(resolve(runDir, 'timeline.json'), JSON.stringify({
-        version: 1,
-        runId: 'run-beta-fails',
-        testName: 'beta fails',
-        mode: 'test',
-        status: 'failed',
-        startedAt: new Date().toISOString(),
-        nodes: [],
-        agentVisibleFailures: [{ timelineNodeId: 'node-1' }],
-      }), 'utf8');
-
-      const failing = await executor.rerun(resolve(__dirname, '../../spike/fixture-project/.fliwright/tests/sample.test.ts'), 'beta fails');
-
-      expect(failing.status).toBe('red');
-      expect(failing.failureDetails).toMatchObject({
-        assertion: { matcher: 'toBe', expected: '3', actual: '2', timeout: 5000 },
-        source: { file: '/app/lib/login.dart', line: 12 },
-        artifacts: {
-          failureContextPath: resolve(artifactsRoot, 'failures.json'),
-          screenshotBase64: 'abc123',
-          widgetTree: { type: 'Root' },
-          timelinePath: resolve(runDir, 'timeline.json'),
-          timelineNodeId: 'node-1',
-        },
+      await executor.boot({ configRoot: configFile, artifactsRoot, driverProvider: async () => ({}) });
+      const first = await executor.rerun(testFile, 'beta fails');
+      expect(first.status).toBe('red');
+      expect(first.failureDetails, JSON.stringify(first)).toMatchObject({
+        assertion: { actual: 'current attempt error' },
+        artifacts: { screenshotBase64: Buffer.from('failure-frame').toString('base64'), widgetTree: { widgets: [{ type: 'Root' }] } },
       });
+      expect(first.timelinePath).toMatch(/tests\/[^/]+\/attempts\/attempt-0\/timeline.json$/);
+      const second = await executor.rerun(testFile, 'beta fails');
+      expect(second.failureDetails?.assertion?.actual).toBe('current attempt error');
+      expect(second.timelinePath).not.toBe(first.timelinePath);
     } finally {
       await executor.dispose();
+      await rm(project, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
+  }, 30_000);
+
+  it('boots without executing tests before an explicit focused rerun', async () => {
+    const project = await realpath(await mkdtemp(resolve(tmpdir(), 'fliwright-tdd-no-boot-run-')));
+    const marker = resolve(project, 'executed');
+    const testFile = resolve(project, 'boot.test.ts');
+    const config = resolve(project, 'vitest.config.mjs');
+    await writeFile(config, `export default { root: ${JSON.stringify(project)}, test: { include: ['boot.test.ts'] } };`);
+    await writeFile(testFile, `import { test } from 'vitest'; import { writeFileSync } from 'node:fs';
+      test('explicit only', () => writeFileSync(${JSON.stringify(marker)}, 'ran'));`);
+    const executor = new PersistentTestExecutor();
+    try {
+      await executor.boot({ configRoot: config, artifactsRoot: resolve(project, 'artifacts'), driverProvider: async () => ({}) });
+      await expect(stat(marker)).rejects.toThrow();
+      const result = await executor.rerun(testFile, 'explicit only');
+      expect(result.status, JSON.stringify(result)).toBe('green');
+      expect((await stat(marker)).isFile()).toBe(true);
+    } finally { await executor.dispose(); await rm(project, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
   }, 30_000);
 });

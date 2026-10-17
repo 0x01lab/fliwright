@@ -3,6 +3,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createFliwrightTest, extendFliwrightTest } from '../src/index.js';
+import type { FliwrightFixtures } from '../src/index.js';
+import type { Page } from '@fliwright/core';
 
 function makeStubDriver() {
   return {
@@ -69,6 +71,17 @@ describe('createFliwrightTest scenarios', () => {
     expect(driver.app.invoke).toHaveBeenCalledWith('auth', 'clearSession');
     expect(driver.app.invoke).toHaveBeenCalledWith('auth', 'getStatus');
   });
+
+  const extended = extendFliwrightTest<{ project: string }>(test, {
+    project: async ({}, use) => { await use('project'); },
+  });
+  const nested = extendFliwrightTest<{ label: string }, FliwrightFixtures & { project: string }>(extended, {
+    label: async ({ project }, use) => { await use(`${project}:nested`); },
+  });
+  nested.scenario('guest')('retains typed project fixtures through nested scenario extensions', async ({ project, label }) => {
+    expect(project.toUpperCase()).toBe('PROJECT');
+    expect(label).toBe('project:nested');
+  });
 });
 
 describe('extendFliwrightTest', () => {
@@ -82,7 +95,7 @@ describe('extendFliwrightTest', () => {
     { driverProvider: async () => makeStubDriver() },
   );
 
-  const test = extendFliwrightTest(base, {
+  const test = extendFliwrightTest<{ app: { page: Page; openHome(): Promise<string> } }>(base, {
     app: async ({ page, logger }, use) => {
       await use({
         page,

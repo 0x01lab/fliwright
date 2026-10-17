@@ -4,6 +4,8 @@ import { MockManager } from '../src/MockManager.js';
 import { RecorderController } from '../src/RecorderController.js';
 import type { FliwrightPlugin, PluginContext } from '../src/interfaces/Plugin.js';
 import type { StateAdapter } from '../src/interfaces/StateAdapter.js';
+import { once, getEventListeners } from 'node:events';
+import { WebSocketServer } from 'ws';
 
 function createMockWSForDriver() {
   const listeners: Record<string, Array<(...args: any[]) => void>> = {};
@@ -16,6 +18,56 @@ function createMockWSForDriver() {
 }
 
 describe('FliwrightDriver', () => {
+  it('terminates a real WebSocket on cancellation without waiting for a hung plugin or close handshake', async () => {
+    const server = new WebSocketServer({ port: 0 });
+    await once(server, 'listening');
+    const address = server.address();
+    if (typeof address !== 'object' || !address) throw new Error('Missing test server address.');
+    let peerClosed!: Promise<unknown>;
+    server.on('connection', (socket) => {
+      peerClosed = once(socket, 'close');
+      socket.on('message', (raw) => {
+        const request = JSON.parse(raw.toString());
+        if (request.method === 'getVersion') return;
+        socket.send(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: request.method === 'getVM'
+          ? { isolates: [{ id: 'isolates/main' }] } : {} }));
+      });
+    });
+    const controller = new AbortController();
+    const driver = new FliwrightDriver({ plugins: [{ name: 'hung', onDispose: () => new Promise(() => {}) }] });
+    try {
+      await driver.connect(`ws://127.0.0.1:${address.port}`);
+      const pending = expect(driver.sendRequest('getVersion')).rejects.toThrow('disconnected');
+      const disposal = expect(driver.dispose({ signal: controller.signal })).rejects.toThrow('cleanup budget');
+      controller.abort(new Error('cleanup budget'));
+      await Promise.all([pending, disposal, peerClosed]);
+      expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      await expect(driver.sendRequest('getVersion')).rejects.toThrow('Not connected');
+    } finally {
+      for (const client of server.clients) client.terminate();
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
+  it('releases its VM connection and mock server when plugin disposal exceeds the caller deadline', async () => {
+    const controller = new AbortController();
+    const onDispose = vi.fn(() => new Promise<void>(() => {}));
+    const driver = new FliwrightDriver({ plugins: [{ name: 'hung-cleanup', onDispose }] });
+    const socket = createMockWSForDriver();
+    const close = vi.spyOn(socket, 'close');
+    await driver.attachMockConnector(socket);
+    await driver.mock.startServer();
+    const pending = expect(driver.sendRequest('getVersion')).rejects.toThrow('disconnected');
+    const disposal = driver.dispose({ signal: controller.signal });
+    const rejected = expect(disposal).rejects.toThrow('cleanup deadline');
+    controller.abort(new Error('cleanup deadline'));
+    await rejected;
+    await pending;
+    expect(close).toHaveBeenCalledOnce();
+    expect(driver.mock.controllerUrl).toBeNull();
+    expect(onDispose).toHaveBeenCalledOnce();
+  });
+
   it('initializes plugins on connect', async () => {
     const onInit = vi.fn();
     const plugin: FliwrightPlugin = { name: 'test', onInit };

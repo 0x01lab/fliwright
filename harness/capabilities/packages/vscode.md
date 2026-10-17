@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "2a49a001e7cf324a7f70f6961861a33a806287a59773156ac17cef32bc325bbd"
+source_fingerprint: "3c27e75fbc70e65c8fba1775b77661e50fc36ec8427a2c5c15ffe96214990b91"
 generated: true
 ---
 
@@ -47,6 +47,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.clearWebSocketMockCalls`
 - `fliwright.clearWebSocketMockRules`
 - `fliwright.configureMcp`
+- `fliwright.confirmRecordingCheckpoints`
 - `fliwright.connect`
 - `fliwright.copyMockEndpoint`
 - `fliwright.copyMockRuleJson`
@@ -64,9 +65,11 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.fillForm`
 - `fliwright.fillFormWithRules`
 - `fliwright.generateFlowTest`
+- `fliwright.importDartVerification`
 - `fliwright.insertFormFieldSelector`
 - `fliwright.insertRecordedTest`
 - `fliwright.inspectWebSocketMockCall`
+- `fliwright.openExportedRun`
 - `fliwright.openFailure`
 - `fliwright.openFlow`
 - `fliwright.openFlowJson`
@@ -82,6 +85,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.openWebSocketMockProfile`
 - `fliwright.overrideStateProvider`
 - `fliwright.readStateProvider`
+- `fliwright.recordAfterTest`
 - `fliwright.refreshFlows`
 - `fliwright.refreshStateProviders`
 - `fliwright.refreshTddLoop`
@@ -106,6 +110,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.takeScreenshot`
 - `fliwright.tddTakeOver`
 - `fliwright.unwatchStateProvider`
+- `fliwright.verifyRecording`
 - `fliwright.viewScriptRun`
 - `fliwright.viewTestRun`
 - `fliwright.watchStateProvider`
@@ -139,7 +144,9 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/json.ts`
 - `packages/fliwright-vscode/src/recording/RecorderService.ts`
 - `packages/fliwright-vscode/src/recording/RecordingPersistenceService.ts`
+- `packages/fliwright-vscode/src/recording/recordAfterTest.ts`
 - `packages/fliwright-vscode/src/runner/FliwrightCodeLensProvider.ts`
+- `packages/fliwright-vscode/src/runner/ProjectTestRunner.ts`
 - `packages/fliwright-vscode/src/runner/TestDiscoveryService.ts`
 - `packages/fliwright-vscode/src/runner/TestRunner.ts`
 - `packages/fliwright-vscode/src/runner/VitestRunner.ts`

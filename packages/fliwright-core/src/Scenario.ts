@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { StateAdapter } from './interfaces/StateAdapter.js';
 
 export type ScenarioStartupIsolation = 'required' | 'optional';
@@ -97,6 +98,20 @@ export interface ScenarioDriver {
     currentRoute?(): Promise<string>;
   };
   sendRequest?(method: string, params?: Record<string, unknown>): Promise<unknown>;
+}
+
+/** Return a stable identity for the resolved scenario used by a recording. */
+export function fingerprintScenario(scenario: TestScenario | ResolvedScenario): string {
+  // Hash the same JSON declaration that can cross a runner process boundary.
+  const transported: unknown = JSON.parse(JSON.stringify(scenario));
+  return createHash('sha256').update(stableScenarioJson(transported)).digest('hex');
+}
+
+function stableScenarioJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'undefined';
+  if (Array.isArray(value)) return `[${value.map((item) => stableScenarioJson(item)).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableScenarioJson(record[key])}`).join(',')}}`;
 }
 
 export class ScenarioResolutionError extends Error {

@@ -1,5 +1,6 @@
 import type * as vscode from 'vscode';
-import type { FliwrightFlowDocument, FormAnalyzeResult, RecordingFrame, SelectorQuery } from '@fliwright/core';
+import type { FliwrightFlowDocument, FormAnalyzeResult, RecordingFrame, SelectorQuery, RunError } from '@fliwright/core';
+import type { GenerateRecordingAutomationOptions, RecordingResult, RecordingReadinessResult, RecordingCheckpointCandidate, ResolvedSelector } from '@fliwright/core';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 
@@ -280,6 +281,9 @@ export interface TestCaseResult {
 }
 
 export interface RunResult {
+  /** Canonical run identity supplied by an integrated runner. */
+  runId?: string;
+  runnerErrors?: RunError[];
   passed: boolean;
   totalTests: number;
   passedTests: number;
@@ -341,7 +345,14 @@ export interface RecordingSession {
   testName?: string;
   recordingId?: string;
   recordingDir?: string;
+  /** Runtime base for the frame references, separate from the portable manifest. */
+  artifactDirectory?: string;
   flowFile?: string;
+  recording?: RecordingResult;
+  recordedSelectors?: Array<[number, ResolvedSelector]>;
+  generationOptions?: GenerateRecordingAutomationOptions;
+  readiness?: RecordingReadinessResult;
+  checkpoints?: RecordingCheckpointCandidate[];
 }
 
 export interface StateProviderEntry {

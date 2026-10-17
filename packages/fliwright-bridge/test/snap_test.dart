@@ -49,6 +49,78 @@ void main() {
     expect(registryEntry.role, 'button');
   });
 
+  testWidgets('snap skips unused name probes when refs already have labels',
+      (tester) async {
+    var nameReads = 0;
+    final registry = ExtensionRegistry();
+    SnapExtension.register(registry);
+    await tester.pumpWidget(MaterialApp(
+      home: _NamedSnapshotFixture(
+        onNameRead: () => nameReads++,
+        child: const Center(child: Text('Readable label')),
+      ),
+    ));
+
+    final result = await registry.invoke('ext.fliwright.snap', {});
+
+    expect(result['snapshot'], contains('Readable label'));
+    expect(nameReads, 0,
+        reason: 'Only candidates lacking a label need dynamic name lookup.');
+  });
+
+  testWidgets('snap retains name fallback for an unlabelled interactive target',
+      (tester) async {
+    final registry = ExtensionRegistry();
+    SnapExtension.register(registry);
+    await tester.pumpWidget(MaterialApp(
+      home: _NamedSnapshotFixture(
+        onNameRead: () {},
+        child: GestureDetector(
+          onTap: () {},
+          child: const SizedBox(width: 100, height: 40),
+        ),
+      ),
+    ));
+
+    final result = await registry.invoke('ext.fliwright.snap', {});
+    final refs = (result['refs'] as List).cast<Map<String, dynamic>>();
+    expect(
+        refs,
+        contains(isA<Map<String, dynamic>>()
+            .having((ref) => ref['role'], 'role', 'button')
+            .having((ref) => ref['label'], 'label', 'Fallback target')));
+  });
+
+  testWidgets(
+      'snap shares ancestor name lookup only within the current snapshot',
+      (tester) async {
+    var nameReads = 0;
+    final registry = ExtensionRegistry();
+    SnapExtension.register(registry);
+    await tester.pumpWidget(MaterialApp(
+      home: _NamedSnapshotFixture(
+        onNameRead: () => nameReads++,
+        child: Column(children: [
+          for (var index = 0; index < 2; index++)
+            GestureDetector(
+              onTap: () {},
+              child: const SizedBox(width: 100, height: 40),
+            ),
+        ]),
+      ),
+    ));
+
+    for (var snapshot = 1; snapshot <= 2; snapshot++) {
+      final result = await registry.invoke('ext.fliwright.snap', {});
+      final refs = (result['refs'] as List).cast<Map<String, dynamic>>();
+      expect(refs.where((ref) => ref['label'] == 'Fallback target').length,
+          greaterThanOrEqualTo(2));
+      expect(nameReads, snapshot,
+          reason:
+              'Sibling targets share lookup, but later snapshots read fresh names.');
+    }
+  });
+
   testWidgets('snap can omit rects from response', (tester) async {
     final registry = ExtensionRegistry();
     SnapExtension.register(registry);
@@ -572,4 +644,19 @@ Widget _snapFixture() {
       child: const SizedBox(width: 100, height: 40),
     ),
   );
+}
+
+class _NamedSnapshotFixture extends StatelessWidget {
+  const _NamedSnapshotFixture({required this.onNameRead, required this.child});
+
+  final VoidCallback onNameRead;
+  final Widget child;
+
+  String get name {
+    onNameRead();
+    return 'Fallback target';
+  }
+
+  @override
+  Widget build(BuildContext context) => child;
 }

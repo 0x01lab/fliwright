@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
-import { FLIWRIGHT_FLOWS_DIR, type FliwrightFlowDocument } from '@fliwright/core';
+import type { FliwrightFlowDocument } from '@fliwright/core';
+import { loadWorkspaceConfig, resolveWorkspacePath } from '../config.js';
 import type { FlowFileEntry, FlowTreeNode } from '../types.js';
 
 export class FlowsTreeProvider implements vscode.TreeDataProvider<FlowTreeNode> {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<FlowTreeNode | undefined>();
   readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
   private flows: FlowFileEntry[] | undefined;
+  private flowsPath: string | undefined;
 
   refresh(): void {
     this.flows = undefined;
@@ -47,7 +49,8 @@ export class FlowsTreeProvider implements vscode.TreeDataProvider<FlowTreeNode> 
       if (!root) {
         return [{ kind: 'empty', label: 'Open a workspace to discover flows' }];
       }
-      this.flows = await discoverFlows(root);
+      this.flowsPath = (await loadWorkspaceConfig(root)).paths.flows;
+      this.flows = await discoverFlows(root, this.flowsPath);
     }
 
     return this.flows.length > 0
@@ -55,7 +58,7 @@ export class FlowsTreeProvider implements vscode.TreeDataProvider<FlowTreeNode> 
       : [{
         kind: 'empty',
         label: 'No Fliwright flows',
-        description: `${FLIWRIGHT_FLOWS_DIR}/*.flow.json`,
+        description: `${this.flowsPath}/*.flow.json`,
         command: {
           command: 'fliwright.createFlow',
           title: 'Create Flow',
@@ -64,8 +67,8 @@ export class FlowsTreeProvider implements vscode.TreeDataProvider<FlowTreeNode> 
   }
 }
 
-async function discoverFlows(workspaceRoot: vscode.Uri): Promise<FlowFileEntry[]> {
-  const flowsRoot = vscode.Uri.joinPath(workspaceRoot, ...FLIWRIGHT_FLOWS_DIR.split('/'));
+async function discoverFlows(workspaceRoot: vscode.Uri, flowsPath: string): Promise<FlowFileEntry[]> {
+  const flowsRoot = resolveWorkspacePath(workspaceRoot, flowsPath);
   let entries: [string, unknown][];
   try {
     entries = await vscode.workspace.fs.readDirectory(flowsRoot) as [string, unknown][];

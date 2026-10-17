@@ -169,6 +169,7 @@ export class MockRuntime {
     body: () => T | Promise<T>,
   ): Promise<T> {
     const node = this.recorder?.startNode(kind, title, { metadata });
+    await this.recorder?.flushProgress();
     try {
       const value = await body();
       if (node) this.recorder?.passNode(node.id);
@@ -177,6 +178,8 @@ export class MockRuntime {
       const failure = createMockFailure(error, title, node?.id);
       if (node) this.recorder?.failNode(node.id, failure);
       throw new FliwrightAgentError(failure, { cause: error });
+    } finally {
+      await this.recorder?.flushProgress();
     }
   }
 }

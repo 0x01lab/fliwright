@@ -275,7 +275,7 @@ describe('FlowRuntime', () => {
         resumeWhen,
       });
 
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
       expect(confirm).toHaveBeenCalledTimes(1);
       expect(resumeWhen).not.toHaveBeenCalled();
 

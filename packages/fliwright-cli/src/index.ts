@@ -59,9 +59,10 @@ export function createProgram(): Command {
     .option('--test <pattern>', 'Test file or glob pattern')
     .option('--test-name <pattern>', 'Run only tests matching this name')
     .option('--vm-url <url>', 'Dart VM Service WebSocket URL')
-    .option('--reporter <format>', 'Output format: pretty, json, ai-json, junit', 'pretty')
-    .option('--timeout <ms>', 'Per-test timeout in milliseconds', '30000')
-    .option('--screenshot <mode>', 'Screenshot mode: file, base64, off', 'file')
+    .option('--reporter <format>', 'Output format: pretty, json, ai-json, junit')
+    .option('--timeout <ms>', 'Per-test timeout in milliseconds')
+    .option('--screenshot <mode>', 'Screenshot mode: file, base64, off')
+    .option('--recording-mode <mode>', 'Process recording mode: standard, full, off')
     .option('--output <file>', 'Write the AI run report JSON to this file')
     .action(async (opts) => {
       const result = await runCommand({
@@ -69,8 +70,9 @@ export function createProgram(): Command {
         testName: opts.testName,
         vmUrl: opts.vmUrl,
         reporter: opts.reporter as 'pretty' | 'json' | 'ai-json' | 'junit',
-        timeout: Number(opts.timeout),
+        timeout: opts.timeout === undefined ? undefined : Number(opts.timeout),
         screenshot: opts.screenshot as 'file' | 'base64' | 'off',
+        recordingMode: opts.recordingMode as 'standard' | 'full' | 'off',
         output: opts.output,
       });
 
@@ -111,6 +113,12 @@ export function createProgram(): Command {
     .option('--output <file>', 'Output file path')
     .option('--flow-output <file>', 'Write the editable recording flow JSON to this file')
     .option('--lang <lang>', 'Output language: ts, dart', 'ts')
+    .option('--dart-app-entrypoint <uri>', 'Dart app test entrypoint package URI compatible with integration_test')
+    .option('--dart-verification <file>', 'Independent Dart compilation and Flutter replay evidence (JSON)')
+    .option('--mode <mode>', 'Automation kind: script, test', 'script')
+    .option('--scenario <name>', 'Deterministic named scenario required for test mode')
+    .option('--assertions <file>', 'Confirmed assertion manifest (JSON) for test mode')
+    .option('--verify', 'Replay the recording before promoting it to a verified test')
     .option('--name <name>', 'Test name', 'recorded test')
     .option('--home-route <route>', 'Route to navigate to before each generated TS test', '/')
     .option('--no-reset-home', 'Do not generate a beforeEach hook that navigates to the home route')
@@ -121,8 +129,14 @@ export function createProgram(): Command {
           output: opts.output,
           flowOutput: opts.flowOutput,
           lang: opts.lang as 'ts' | 'dart',
+          dartAppEntrypoint: opts.dartAppEntrypoint,
+          dartVerificationFile: opts.dartVerification,
+          mode: opts.mode as 'script' | 'test',
+          scenario: opts.scenario,
+          assertions: opts.assertions,
+          verify: opts.verify,
           testName: opts.name,
-          resetToHomeBeforeEach: opts.resetHome,
+          resetToHomeBeforeEach: opts.lang === 'dart' ? undefined : opts.resetHome,
           homeRoute: opts.homeRoute,
         });
       } catch (error) {
@@ -364,6 +378,7 @@ export function createProgram(): Command {
     .requiredOption('--output <dir>', 'New export destination')
     .option('--cwd <dir>', 'Workspace root')
     .option('--runs-root <dir>', 'Runs root override')
+    .option('--allow-partial', 'Export a partial run and list missing files')
     .option('--json', 'Print stable JSON output')
     .action(async (runId, opts) => runJsonCommand(() => artifactsExportCommand({ ...opts, runId })));
 

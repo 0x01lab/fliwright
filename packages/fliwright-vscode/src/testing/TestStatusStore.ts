@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { isAbsolute, join, relative } from 'node:path';
+import { join } from 'node:path';
 import type { RunResult, TestCaseResult } from '../types.js';
 import { testNodeId } from './types.js';
+import { relPathForTestCase } from './relPath.js';
 import type { RunArtifactIndexEntry } from './RunArtifactStore.js';
 import { TIMELINE_FILE_NAME } from '../viewer/timelineConstants.js';
 
@@ -128,26 +129,6 @@ function splitName(name: string): { ancestors: string[]; title: string } {
   const parts = name.split(' > ').map((s) => s.trim()).filter(Boolean);
   if (parts.length === 0) return { ancestors: [], title: name };
   return { ancestors: parts.slice(0, -1), title: parts[parts.length - 1] };
-}
-
-function relPathForTestCase(
-  workspaceRoot: { fsPath: string },
-  fallbackRelPath: string,
-  tc: TestCaseResult,
-): string {
-  if (!tc.filePath) return fallbackRelPath;
-  if (!isAbsolute(tc.filePath) && !tc.filePath.includes('/') && fallbackRelPath.endsWith(`/${tc.filePath}`)) {
-    return fallbackRelPath;
-  }
-  return normalizeRelPath(
-    isAbsolute(tc.filePath)
-      ? relative(workspaceRoot.fsPath, tc.filePath)
-      : tc.filePath,
-  );
-}
-
-function normalizeRelPath(value: string): string {
-  return value.replace(/\\/g, '/');
 }
 
 function safeName(value: string): string {

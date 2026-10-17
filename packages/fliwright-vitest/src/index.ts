@@ -4,22 +4,20 @@ import {
   beforeAll,
   beforeEach as vitestBeforeEach,
   describe,
+  expect as vitestExpect,
   test as vitestTest,
 } from 'vitest';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { dirname, join, resolve } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import {
   AgentRuntime,
   AssertRuntime,
   AiRuntime,
-  AssertionError,
   Assertion,
-  FailureCollector,
   FileLogSink,
   FliwrightDriver,
   FlowRuntime,
-  FliwrightAgentError,
   JsonlLogSink,
   MockRuntime,
   PassiveAgent,
@@ -27,19 +25,30 @@ import {
   PrettyLogFormatter,
   readWorkspaceConfigSync,
   resolveFliwrightRunsRoot,
-  TraceCollector,
-  TraceStore,
   StructuredLogger,
   TimelineArtifactStore,
-  TimelineRecorder,
-  isActionMethod,
+  RunArtifactStore,
+  EvidenceCapture,
   createExpect,
   resolveAiConfig,
   ScenarioCoordinator,
   ScenarioResolver,
+  fingerprintScenario,
+  DEFAULT_FLIWRIGHT_CONFIG,
+  EndpointLeaseManager,
+  mergeFliwrightConfig,
+  readFliwrightEnvironment,
 } from '@fliwright/core';
-import type { AiRuntimeConfig, AgentPolicy, FailureContext, FliwrightLogger, FliwrightLogLevel, FliwrightLogEvent, FliwrightPlugin, HealingReport, Locator, LogSink, Page, ScenarioExecutionMode, TestScenario, TimelineRunMode, VMServiceEvent, TraceMode } from '@fliwright/core';
+import type { AiRuntimeConfig, AgentPolicy, EvidenceRequest, EvidenceResult, FliwrightLogger, FliwrightLogLevel, FliwrightLogEvent, FliwrightPlugin, FliwrightRecordingConfig, Locator, LogSink, Page, RecordingMode, ScenarioExecutionMode, TestScenario, TimelineRunMode, TimelineRecorder, TimelineNode } from '@fliwright/core';
 import type { TestAPI } from 'vitest';
+import { requireAttemptContext } from './AttemptContext.js';
+import { getTaskEndpointLease, setTaskEndpointLease, finishTaskEndpointLeasePhase } from './TaskEndpointLease.js';
+import { withTaskPreparation } from './TestRegistration.js';
+export { FliwrightRunner, createFliwrightRunner } from './runner.js';
+export type { FliwrightRunnerOptions, FliwrightRunnerConstructor } from './runner.js';
+export { fliwrightPreset } from './preset.js';
+export { FliwrightRecoveryReporter } from './RecoveryReporter.js';
+export type { FliwrightVitestPresetOptions } from './preset.js';
 
 export type FliwrightLogFormat = 'pretty' | 'compact' | 'jsonl' | 'silent';
 export type FliwrightLogOutput = 'stderr' | 'stdout' | 'file' | 'jsonl-file';
@@ -68,12 +77,14 @@ export interface FliwrightConfig {
   scenarios?: Record<string, TestScenario>;
   /** Attach to an already running app, or prepare a waiting test-only app before its first frame. */
   scenarioMode?: ScenarioExecutionMode;
+  recording?: Partial<FliwrightRecordingConfig>;
 }
 
 export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUrl: string }): FliwrightConfig {
   return {
     timeout: 5000,
     screenshot: 'file',
+    recording: { ...DEFAULT_FLIWRIGHT_CONFIG.recording, ...overrides.recording },
     ...overrides,
   };
 }
@@ -90,20 +101,15 @@ export function resolveRunsRoot(config: { runsRoot?: string; projectRoot?: strin
   });
 }
 
-let sharedDriver: FliwrightDriver | null = null;
-let sharedDriverKey = '';
+const sharedDrivers = new Map<string, Promise<FliwrightDriver>>();
+const endpointLeases = new EndpointLeaseManager();
 let nextPluginId = 1;
 const pluginIds = new WeakMap<FliwrightPlugin, number>();
-
-// Run-level trace ID, generated once per Vitest process
-const runId = TraceStore.generateRunId();
 
 interface FliwrightTestContext {
   driver: FliwrightDriver;
   testName: string;
   timeline?: FliwrightTimelineContext;
-  traceCollector?: TraceCollector;
-  originalSendRequest?: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 }
 
 const testContext = new AsyncLocalStorage<FliwrightTestContext>();
@@ -117,10 +123,12 @@ type FliwrightHook = (context: FliwrightHookContext, suite: unknown) => unknown 
 
 interface FliwrightTimelineContext {
   recorder: TimelineRecorder;
+  driver?: FliwrightDriver;
   artifactStore: TimelineArtifactStore;
   runId: string;
   logger: FliwrightLogger;
   timelinePath?: string;
+  runSession?: import('@fliwright/core').RunSession;
 }
 
 export interface FliwrightFixtures {
@@ -137,15 +145,17 @@ export interface FliwrightFixtures {
 
 export type FliwrightTest = TestAPI<FliwrightFixtures>;
 
-export type ScenarioTest = (
+export type ScenarioTest<TFixtures extends FliwrightFixtures = FliwrightFixtures> = (
   name: string,
-  handler: (fixtures: FliwrightFixtures) => unknown | Promise<unknown>,
+  handler: (fixtures: TFixtures) => unknown | Promise<unknown>,
   timeout?: number,
 ) => void;
 
-export interface ScenarioEnabledFliwrightTest extends FliwrightTest {
-  scenario(name: string): ScenarioTest;
+export interface ScenarioEnabledFliwrightTest<TFixtures extends FliwrightFixtures = FliwrightFixtures> extends TestAPI<TFixtures> {
+  scenario(name: string): ScenarioTest<TFixtures>;
 }
+
+const scenarioConfigs = new WeakMap<object, () => FliwrightConfig>();
 
 export type FliwrightProjectFixtures = Record<
   string,
@@ -153,7 +163,7 @@ export type FliwrightProjectFixtures = Record<
 >;
 
 export interface CreateFliwrightTestOptions {
-  /** When set, fixtures use this driver instead of lazily creating sharedDriver. */
+  /** When set, fixtures use this driver instead of the worker's endpoint-specific cache. */
   driverProvider?: () => Promise<FliwrightDriver>;
 }
 
@@ -161,163 +171,150 @@ export function createFliwrightTest(
   config: FliwrightConfig,
   options?: CreateFliwrightTestOptions,
 ): ScenarioEnabledFliwrightTest {
+  // Persistent Vitest workers reuse fixture modules across reruns. Resolve
+  // process settings at fixture use so a new run does not retain the old root.
+  const resolveConfig = (): FliwrightConfig => ({ ...config,
+    ...mergeFliwrightConfig({ environment: readFliwrightEnvironment(process.env), explicit: config }),
+  });
   const resolveDriver = options?.driverProvider
     ? () => options.driverProvider!()
-    : () => getSharedDriver(config);
-  const fliwrightTest = vitestTest.extend<FliwrightFixtures>({
+    : () => getSharedDriver(resolveConfig());
+  const fliwrightTest = vitestTest.extend<FliwrightFixtures & { _fliwrightEndpointLease: undefined }>({
+    _fliwrightEndpointLease: [async ({ task }, use) => {
+      await requireAttemptContext(task).beforeFixtures?.();
+      const endpoint = resolveConfig().vmServiceUrl.trim();
+      if (endpoint && getTaskEndpointLease(task)) {
+        // A retry retains ownership but starts a fresh fixture lifecycle.
+        setTaskEndpointLease(task, getTaskEndpointLease(task)!);
+      }
+      try { await use(undefined); }
+      finally {
+        // Dynamic skip bypasses onAfterRunTask. Normal tasks retain ownership
+        // through runner evidence/finalization and all retries.
+        try {
+          // Vitest 4.1 sets pending before unwinding an aroundEach skip;
+          // that field is present at runtime but omitted from TaskResult.
+          const pendingSkip = (task.result as { pending?: boolean } | undefined)?.pending === true;
+          if ((task.result?.state === 'skip' || pendingSkip) && !requireAttemptContext(task).runnerEntered) {
+            await requireAttemptContext(task).onSetupSkipped?.();
+          }
+        } finally { await finishTaskEndpointLeasePhase(task, 'cleanupComplete'); }
+      }
+    }, { auto: true }],
     timeline: async ({ task }, use) => {
+      const config = resolveConfig();
       const testName = getTestName(task);
-      const testRunId = `${process.env.FLIWRIGHT_RUN_ID ?? runId}-${safeName(testName)}`;
+      const attempt = requireAttemptContext(task);
       const cwd = config.timelineDir ?? process.cwd();
       const runsRoot = resolveRunsRoot({ runsRoot: config.runsRoot, projectRoot: cwd });
-      const artifactStore = new TimelineArtifactStore({
-        cwd,
-        runsRoot,
-        runId: testRunId,
-      });
+      const store = new RunArtifactStore({ runsRoot, runId: attempt.runId });
       const logger = createRunLogger(config, {
-        runId: testRunId,
-        testName,
-        mode: config.mode ?? 'test',
-        runDir: artifactStore.runDir,
+        runId: attempt.runId, testName, mode: config.mode ?? 'test',
+        runDir: store.attemptDir(task.id, attempt.attemptId),
       });
-      const recorder = new TimelineRecorder({
-        runId: testRunId,
-        testName,
-        mode: config.mode ?? 'test',
-        logger,
-      });
-      const timeline: FliwrightTimelineContext = { recorder, artifactStore, runId: testRunId, logger };
+      await attempt.configure({ runsRoot, mode: config.mode ?? 'test', logger, recordingMode: config.recording?.mode,
+        testFinalizationBudgetMs: config.recording?.testFinalizationBudgetMs });
+      if (config.vmServiceUrl.trim()) {
+        const lease = getTaskEndpointLease(task);
+        attempt.session.configureEndpointLease(lease ? {
+          run: (endpoint, execute) => lease.run(() => endpointLeases.run(endpoint, execute)),
+        } : endpointLeases, config.vmServiceUrl);
+      }
+      const timeline: FliwrightTimelineContext = { recorder: attempt.recorder,
+        artifactStore: attempt.artifactStore, runId: attempt.runId, logger, runSession: attempt.session };
+      attempt.onFailure = async (error, node, signal) => {
+        await writeFailureProjection(timeline, error, node, config, signal);
+        if (!signal.aborted) attempt.failureContextPath = 'failures.json';
+      };
+      if (config.agentPolicy?.passive === true && (config.agentPolicy.onFailure ?? 'diagnose') === 'diagnose') {
+        attempt.beforeFinish = (signal) => diagnoseTimelineFailures(timeline, config, resolveDriver, signal,
+          () => Math.max(1, attempt.finalization.remainingMs - attempt.persistenceReserveMs));
+      }
       const ctx = testContext.getStore();
       if (ctx) ctx.timeline = timeline;
 
-      let failed = false;
-      try {
-        logger.info(`${config.mode === 'script' ? 'Script' : 'Test'} started`);
-        await use(timeline);
-        await diagnoseTimelineFailures(timeline, config, resolveDriver);
-        if (config.requireAssertions && !timeline.recorder.toJSON().nodes.some((node) => node.kind === 'assertion')) {
-          throw new FliwrightAgentError({
-            code: 'assertion_failed',
-            title: testName,
-            message: 'Test mode requires at least one timeline assertion, but none were recorded.',
-            recoveryHints: [
-              { kind: 'manual', description: 'Add at least one expect(...).to* assertion or disable requireAssertions.' },
-            ],
-          });
+      const assertionCallsBefore = vitestExpect.getState().assertionCalls ?? 0;
+      attempt.validate = () => {
+        const required = config.requireAssertions ?? config.recording?.requireAssertions
+          ?? (config.mode !== 'script' && DEFAULT_FLIWRIGHT_CONFIG.recording.requireAssertions);
+        if (required && !timeline.recorder.toJSON().nodes.some((node) => node.kind === 'assertion')
+          && (vitestExpect.getState().assertionCalls ?? 0) <= assertionCallsBefore
+          && task.context.expect.getState().assertionCalls === 0) {
+          return new Error('Test mode requires at least one executed assertion, but none were recorded. Add an assertion or use script mode.');
         }
-      } catch (error) {
-        failed = true;
-        captureTimelineFailure(timeline, error, testName);
-        logger.error(`${config.mode === 'script' ? 'Script' : 'Test'} failed`, error);
-        throw error;
-      } finally {
-        const status = failed || timeline.recorder.toJSON().status === 'failed' ? 'failed' : 'passed';
-        const data = timeline.recorder.complete(status);
-        timeline.timelinePath = await timeline.artifactStore.writeTimeline(data);
-        if (status === 'passed') logger.success(`${config.mode === 'script' ? 'Script' : 'Test'} passed`);
-      }
+        return undefined;
+      };
+      logger.info(`${config.mode === 'script' ? 'Script' : 'Test'} started`);
+      await use(timeline);
     },
     driver: async ({ task, timeline }, use) => {
       const driver = await resolveDriver();
+      timeline.driver = driver;
       const testName = getTestName(task);
       const previous = currentTestContext;
       const ctx: FliwrightTestContext = { driver, testName, timeline };
       currentTestContext = ctx;
+      let useFailed = false;
       try {
         await testContext.run(ctx, async () => {
           await use(driver);
         });
-      } finally {
-        currentTestContext = previous;
-      }
-    },
-    page: async ({ task, timeline }, use) => {
-      const driver = await resolveDriver();
-      const testName = getTestName(task);
-
-      // ── Trace collection setup ──────────────────────────────
-      const traceMode = parseTraceMode(process.env.FLIWRIGHT_TRACE);
-      const traceDir = process.env.FLIWRIGHT_TRACE_DIR;
-      let collector: TraceCollector | undefined;
-      let origSendRequest: ((method: string, params?: Record<string, unknown>) => Promise<unknown>) | undefined;
-
-      if (traceMode !== 'off' && traceDir) {
-        try {
-          const traceLayout = process.env.FLIWRIGHT_TRACE_LAYOUT === 'run' ? 'run' : 'legacy';
-          collector = await (TraceCollector.create as unknown as (
-            traceRoot: string,
-            testName: string,
-            runId: string,
-            sendRequest: typeof driver.sendRequest,
-            mode: TraceMode,
-            options?: { layout?: 'legacy' | 'run' },
-          ) => Promise<TraceCollector>)(
-            traceLayout === 'run' ? timeline.artifactStore.runDir : traceDir,
-            testName,
-            timeline.runId,
-            driver.sendRequest.bind(driver),
-            traceMode,
-            { layout: traceLayout },
-          );
-          // Shadow driver.sendRequest with traced version
-          origSendRequest = driver.sendRequest.bind(driver);
-          const capturedCollector = collector;
-          const capturedOrigSend = origSendRequest;
-          (driver as any).sendRequest = async (method: string, params?: Record<string, unknown>) => {
-            const start = Date.now();
-            let error: unknown;
-            let result: unknown;
-            try {
-              result = await capturedOrigSend(method, params);
-            } catch (e) {
-              error = e;
-              throw e;
-            } finally {
-              if (isActionMethod(method)) {
-                await capturedCollector.onAction(method, params ?? {}, Date.now() - start, result, error);
-              }
-            }
-            return result;
-          };
-        } catch {
-          // Trace setup failure should not prevent test from running
-        }
-      }
-
-      // Reset lazy Page so it picks up the shadowed sendRequest
-      (driver as any)._page = null;
-
-      const ctx: FliwrightTestContext = { driver, testName, timeline, traceCollector: collector, originalSendRequest: origSendRequest };
-      const previous = currentTestContext;
-      currentTestContext = ctx;
-
-      try {
-        await testContext.run(ctx, async () => {
-          const page = new FliwrightPage(
-            (method, params) => driver.sendRequest(method, params),
-            {
-              recorder: timeline.recorder,
-              artifactStore: timeline.artifactStore,
-            },
-          );
-          await use(page);
-        });
-        await collector?.complete('passed');
-        attachTraceArtifact(timeline, collector);
       } catch (error) {
-        await collector?.complete('failed');
-        attachTraceArtifact(timeline, collector);
-        await writeMcpFailureContext(error, driver, testName, config.timeout ?? 5000, config.screenshot ?? 'file');
+        useFailed = true;
         throw error;
       } finally {
-        // Restore original sendRequest
-        if (origSendRequest) (driver as any).sendRequest = origSendRequest;
+        currentTestContext = previous;
+        if (options?.driverProvider) {
+          const attempt = requireAttemptContext(task);
+          try {
+            // Calling dispose even after an earlier stage exhausts its budget
+            // still initiates transport cleanup; only the wait is bounded.
+            if (attempt.finalization.remainingMs <= attempt.persistenceReserveMs) {
+              const controller = new AbortController();
+              controller.abort(new Error('Driver cleanup exceeded the test finalization budget.'));
+              void driver.dispose({ signal: controller.signal }).catch((error: unknown) => attempt.recordEvidenceIssue(error));
+            }
+            await attempt.finalization.run('Driver cleanup', (signal) => driver.dispose({ signal }), attempt.persistenceReserveMs);
+          } catch (error) {
+            attempt.recordEvidenceIssue(error);
+            if (!useFailed && task.result?.state !== 'fail') throw error;
+          }
+        }
+      }
+    },
+    page: async ({ task, timeline, driver }, use) => {
+      const config = resolveConfig();
+      timeline.driver = driver;
+      const testName = getTestName(task);
+
+      const ctx: FliwrightTestContext = { driver, testName, timeline };
+      const previous = currentTestContext;
+      currentTestContext = ctx;
+      try {
+        await testContext.run(ctx, async () => {
+          const page = new FliwrightPage((method, params) => driver.sendRequest(method, params), {
+            recorder: timeline.recorder, artifactStore: timeline.artifactStore, runSession: timeline.runSession,
+          });
+          configureRunSessionEvidence(timeline, page, config, () => requireAttemptContext(task).finalizationSignal);
+          const recordingMode = config.recording?.mode ?? parseRecordingMode(process.env.FLIWRIGHT_RECORDING_MODE) ?? 'standard';
+          if (recordingMode !== 'off') await captureTestLifecycleScreenshot(timeline, page, 'start');
+          try {
+            await use(page);
+          } finally {
+            if (recordingMode !== 'off' && (config.recording?.testFinalScreenshots ?? DEFAULT_FLIWRIGHT_CONFIG.recording.testFinalScreenshots)) {
+              await requireAttemptContext(task).finalizeStep('Final screenshot', async (signal) => {
+                if (!signal.aborted) await captureTestLifecycleScreenshot(timeline, page, 'finish', signal);
+              });
+            }
+          }
+        });
+      } finally {
         currentTestContext = previous;
       }
     },
-    aiRuntime: async ({ task, timeline }, use) => {
-      const driver = await resolveDriver();
+    aiRuntime: async ({ task, timeline, driver }, use) => {
+      const config = resolveConfig();
+      timeline.driver = driver;
       const testName = getTestName(task);
       const runtime = new AiRuntime(resolveAiConfig(config.ai), {
         page: driver.page,
@@ -329,7 +326,8 @@ export function createFliwrightTest(
       await use(runtime);
     },
     flow: async ({ page, timeline }, use) => {
-      await use(new FlowRuntime({ recorder: timeline.recorder, artifactStore: timeline.artifactStore, page }));
+      await use(new FlowRuntime({ recorder: timeline.recorder, artifactStore: timeline.artifactStore, page,
+        runSession: timeline.runSession }));
     },
     mock: async ({ driver, timeline }, use) => {
       await use(new MockRuntime(driver.mock, timeline.recorder));
@@ -350,54 +348,132 @@ export function createFliwrightTest(
     },
   });
 
-  const scenarioTest = fliwrightTest as ScenarioEnabledFliwrightTest;
-  scenarioTest.scenario = (scenarioName: string): ScenarioTest => {
+  return withScenarioSupport(fliwrightTest as unknown as TestAPI<FliwrightFixtures>, resolveConfig);
+}
+
+function withScenarioSupport<TFixtures extends FliwrightFixtures>(
+  test: TestAPI<TFixtures>, resolveConfig: () => FliwrightConfig,
+): ScenarioEnabledFliwrightTest<TFixtures> {
+  const prepare = async (task: import('vitest').RunnerTestCase, signal: AbortSignal): Promise<void> => {
+    const config = resolveConfig();
+    requireAttemptContext(task).configureRecordingPolicy({ recordingMode: config.recording?.mode,
+      testFinalizationBudgetMs: config.recording?.testFinalizationBudgetMs });
+    const endpoint = config.vmServiceUrl.trim();
+    if (endpoint && !getTaskEndpointLease(task)) {
+      const lease = await endpointLeases.acquire(endpoint, { signal: AbortSignal.any([signal, task.context.signal]) });
+      if (signal.aborted) {
+        await lease.release();
+        signal.throwIfAborted();
+      }
+      setTaskEndpointLease(task, lease);
+    }
+  };
+  const scenarioTest = withTaskPreparation(test, prepare) as ScenarioEnabledFliwrightTest<TFixtures>;
+  scenarioConfigs.set(scenarioTest, resolveConfig);
+  scenarioTest.scenario = (scenarioName: string): ScenarioTest<TFixtures> => {
+    const config = resolveConfig();
     const scenarios = config.scenarios;
     if (!scenarios) {
       throw new Error(`Test scenario '${scenarioName}' was requested, but defineConfig({ scenarios }) is missing.`);
     }
     const scenario = new ScenarioResolver(scenarios).resolve(scenarioName);
-    return (name, handler, timeout) => scenarioTest(name, async ({
-      driver,
-      page,
-      aiRuntime,
-      flow,
-      mock,
-      agent,
-      assert,
-      timeline,
-      logger,
-    }) => {
-      await new ScenarioCoordinator(driver).apply(scenario, {
-        mode: config.scenarioMode ?? 'attach',
-      });
-      await handler({ driver, page, aiRuntime, flow, mock, agent, assert, timeline, logger });
-    }, timeout);
+    // The automatic fixture adds preparation without wrapping the handler, so
+    // Vitest still discovers and lazily injects its project fixture dependencies.
+    const prepared = scenarioTest.extend({
+      _fliwrightScenario: [async ({ driver, timeline }, use) => {
+        const scenarioNode = timeline.recorder.startNode('step', `Scenario: ${scenarioName}`);
+        await timeline.recorder.flushProgress();
+        await new ScenarioCoordinator(driver).apply(scenario, {
+          mode: config.scenarioMode ?? 'attach',
+        });
+        timeline.recorder.passNode(scenarioNode.id, {
+          scenarioName, scenarioFingerprint: fingerprintScenario(scenario),
+        });
+        await timeline.recorder.flushProgress();
+        await use(undefined);
+      }, { auto: true }],
+    }) as unknown as TestAPI<TFixtures>;
+    return (name, handler, timeout) => { prepared(name, handler, timeout); };
   };
   return scenarioTest;
 }
 
-export function extendFliwrightTest<TProjectFixtures extends Record<string, unknown>>(
-  base: FliwrightTest,
+export function extendFliwrightTest<
+  TProjectFixtures extends Record<string, unknown>,
+  TBaseFixtures extends FliwrightFixtures = FliwrightFixtures,
+>(
+  base: TestAPI<TBaseFixtures>,
   fixtures: {
     [K in keyof TProjectFixtures]: (
-      fixtures: Omit<TProjectFixtures, K> & FliwrightFixtures,
+      fixtures: Omit<TProjectFixtures, K> & TBaseFixtures,
       use: (value: TProjectFixtures[K]) => Promise<void>,
     ) => Promise<void>;
   },
-): TestAPI<FliwrightFixtures & TProjectFixtures> {
-  return base.extend<TProjectFixtures>(fixtures as never) as unknown as TestAPI<FliwrightFixtures & TProjectFixtures>;
+): ScenarioEnabledFliwrightTest<TBaseFixtures & TProjectFixtures> {
+  const resolveConfig = scenarioConfigs.get(base);
+  if (!resolveConfig) throw new Error('extendFliwrightTest requires a base from createFliwrightTest or extendFliwrightTest.');
+  const extended = base.extend<TProjectFixtures>(fixtures as never) as unknown as TestAPI<TBaseFixtures & TProjectFixtures>;
+  return withScenarioSupport(extended, resolveConfig);
 }
 
-function attachTraceArtifact(timeline: FliwrightTimelineContext, collector: TraceCollector | undefined): void {
-  if (!collector) return;
-  const firstNode = timeline.recorder.toJSON().nodes[0];
-  if (!firstNode) return;
-  const artifactRef = (collector as TraceCollector & {
-    artifactRef?: (baseDir?: string) => { kind: string; path: string; mimeType?: string; metadata?: Record<string, unknown> };
-  }).artifactRef;
-  if (!artifactRef) return;
-  timeline.recorder.addArtifacts(firstNode.id, [artifactRef.call(collector, timeline.artifactStore.runDir)]);
+function configureRunSessionEvidence(timeline: FliwrightTimelineContext, page: Page, config: FliwrightConfig,
+  getFinalizationSignal: () => AbortSignal | undefined): void {
+  const session = timeline.runSession;
+  if (!session) return;
+  const mode: RecordingMode = config.recording?.mode ?? parseRecordingMode(process.env.FLIWRIGHT_RECORDING_MODE) ?? 'standard';
+  const budget = config.recording?.failureCaptureBudgetMs ?? DEFAULT_FLIWRIGHT_CONFIG.recording.failureCaptureBudgetMs;
+  const capture = new EvidenceCapture({ totalBudgetMs: budget, channelTimeoutMs: budget / 3 });
+  session.configureRecording({
+    mode,
+    captureEvidence: async (request: EvidenceRequest): Promise<EvidenceResult> => {
+      if (mode === 'off' && request.reason !== 'explicit') return { status: 'disabled' };
+      const signal = getFinalizationSignal();
+      const suffix = `${request.operationId ?? 'checkpoint'}-${request.reason}`;
+      const sources = {
+        screenshot: async () => {
+          const screenshot = await page.screenshot();
+          signal?.throwIfAborted();
+          return timeline.artifactStore.writeScreenshot(suffix, screenshot);
+        },
+        snapshot: async () => {
+          const snapshot = await page.snapshot();
+          signal?.throwIfAborted();
+          return timeline.artifactStore.writeSnapshot(suffix, snapshot);
+        },
+        diagnostics: async () => {
+          const frame = await page.captureFrame({ screenshot: false, snapshot: false, diagnostics: true });
+          signal?.throwIfAborted();
+          return timeline.artifactStore.writeDiagnostics(suffix, frame.diagnostics ?? frame);
+        },
+      };
+      const result = await capture.capture(request.reason === 'failure' ? suffix : `${suffix}-${request.kind}`,
+        request.reason === 'failure' ? sources : { [request.kind]: sources[request.kind] }, { signal });
+      const channel = result.channels[request.kind];
+      const artifact = channel.value as { path: string } | undefined;
+      return { status: channel.status, ...(artifact ? { artifactPaths: [artifact.path] } : {}),
+        ...(channel.error ? { error: channel.error } : {}) };
+    },
+  });
+}
+
+async function captureTestLifecycleScreenshot(
+  timeline: FliwrightTimelineContext,
+  page: Page,
+  reason: 'start' | 'finish',
+  signal?: AbortSignal,
+): Promise<void> {
+  const node = timeline.recorder.startNode('step', `Test ${reason} screenshot`, {
+    metadata: { lifecycle: reason },
+  });
+  await timeline.recorder.flushProgress();
+  if (signal?.aborted) return;
+  const result = await timeline.runSession?.checkpoint({ kind: 'screenshot', reason })
+    ?? { status: 'disabled' as const };
+  if (signal?.aborted) return;
+  const artifacts = result.artifactPaths?.map((path) => ({ kind: 'screenshot', path, mimeType: 'image/png' })) ?? [];
+  if (artifacts.length) timeline.recorder.addArtifacts(node.id, artifacts);
+  timeline.recorder.passNode(node.id, { evidenceStatus: result.status });
+  await timeline.recorder.flushProgress();
 }
 
 export function createFliwrightScript(config: FliwrightConfig) {
@@ -426,7 +502,7 @@ export function expect(locator: Locator, title?: string): Assertion {
     locator,
     false,
     undefined,
-    context.driver.healing,
+    process.env.FLIWRIGHT_RECORDING_REPLAY === '1' ? undefined : context.driver.healing,
     context.testName,
     (method, params) => context.driver.sendRequest(method, params),
     locatorTimeline?.recorder
@@ -437,94 +513,50 @@ export function expect(locator: Locator, title?: string): Assertion {
         recorder: context.timeline.recorder,
         artifactStore: context.timeline.artifactStore,
         page: context.driver.page,
+        runSession: context.timeline.runSession,
       }
       : { title },
   );
 }
 
-// ── MCP Failure Context (unchanged) ──────────────────────────
-
-interface McpFailureEntry {
-  testName: string;
-  assertion: FailureContext['assertion'];
-  widgetTree: object;
-  diagnostics?: VMServiceEvent[];
-  source: FailureContext['source'];
-  screenshot?: {
-    mimeType: 'image/png';
-    base64: string;
-  };
-  healingSuggestion?: McpHealingSuggestion;
-  timestamp: string;
-}
-
-interface McpHealingSuggestion {
-  originalSelector: string;
-  suggestedSelector: string;
-  confidence: number;
-  scores: HealingReport['scores'];
-}
-
-async function writeMcpFailureContext(
-  error: unknown,
-  driver: FliwrightDriver,
-  testName: string,
-  timeout: number,
-  screenshotMode: 'file' | 'base64' | 'off',
+/** Project the same saved evidence to the CLI/MCP report; never recapture it. */
+async function writeFailureProjection(
+  timeline: FliwrightTimelineContext, error: unknown, node: TimelineNode, config: FliwrightConfig, signal: AbortSignal,
 ): Promise<void> {
-  const outputPath = process.env.FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH;
-  if (!outputPath) return;
-
-  const failure = await collectFailureEntry(error, driver, testName, timeout, screenshotMode);
-  await appendFailureEntry(outputPath, failure);
-}
-
-async function collectFailureEntry(
-  error: unknown,
-  driver: FliwrightDriver,
-  testName: string,
-  timeout: number,
-  screenshotMode: 'file' | 'base64' | 'off',
-): Promise<McpFailureEntry> {
-  if (error instanceof AssertionError) {
-    const collector = new FailureCollector((method, params) => driver.sendRequest(method, params));
-    const context = await collector.collect(error, timeout);
-    return {
-      testName,
-      assertion: context.assertion,
-      widgetTree: context.widgetTree,
-      diagnostics: collectDiagnostics(driver),
-      source: context.source,
-      screenshot: serializeScreenshot(context.screenshot, screenshotMode),
-      healingSuggestion: latestHealingSuggestion(driver, testName),
-      timestamp: context.timestamp,
-    };
-  }
-
-  const message = error instanceof Error ? error.message : String(error);
-  const [screenshot, widgetTree] = await Promise.all([
-    takeScreenshot(driver, screenshotMode),
-    collectWidgetTree(driver),
-  ]);
-  return {
-    testName,
-    assertion: {
-      matcher: 'unknown',
-      expected: 'pass',
-      actual: message,
-      timeout,
-    },
-    widgetTree,
-    diagnostics: collectDiagnostics(driver),
-    source: {
-      file: '<unknown>',
-      line: 0,
-      snippet: message,
-    },
-    screenshot,
-    healingSuggestion: latestHealingSuggestion(driver, testName),
-    timestamp: new Date().toISOString(),
+  const outputPath = join(timeline.artifactStore.runDir, 'failures.json');
+  const readArtifact = async (kind: string): Promise<Buffer | undefined> => {
+    const artifact = node.artifacts?.find((item) => item.kind === kind);
+    return artifact ? readFile(join(timeline.artifactStore.runDir, artifact.path)).catch(() => undefined) : undefined;
   };
+  const [snapshot, diagnostics] = await Promise.all([readArtifact('snapshot'), readArtifact('diagnostics')]);
+  if (signal.aborted) return;
+  const screenshot = node.artifacts?.find((artifact) => artifact.kind === 'screenshot');
+  const original = error as { message?: string; stack?: string; stacks?: Array<{ file: string; line: number }> };
+  const lines = original.stack?.split('\n') ?? [];
+  const frame = lines.find((line) => line.includes('.test.') || line.includes('.script.')) ?? lines[1] ?? '';
+  const parsed = frame.match(/\(?((?:file:\/\/\/|\/|[A-Za-z]:\\)[^\n()]+):(\d+):(\d+)\)?$/);
+  const source = original.stacks?.[0] ?? (parsed ? { file: parsed[1], line: Number(parsed[2]) } : undefined);
+  let healingSuggestion: Record<string, unknown> | undefined;
+  try {
+    const report = timeline.driver?.healing.getReports(timeline.recorder.testName).at(-1);
+    if (report) healingSuggestion = { originalSelector: report.originalSelector, suggestedSelector: report.suggestedSelector,
+      confidence: report.confidence, scores: report.scores };
+  } catch { /* Keep the original failure when no healing report is available. */ }
+  const entry = {
+    testName: timeline.recorder.testName,
+    ...(healingSuggestion ? { healingSuggestion } : {}),
+    assertion: { matcher: 'unknown', expected: 'pass', actual: original.message ?? String(error), timeout: config.timeout ?? 5000 },
+    widgetTree: snapshot ? JSON.parse(snapshot.toString()) : { error: 'Evidence unavailable' },
+    ...(diagnostics ? { diagnostics: JSON.parse(diagnostics.toString()) } : {}),
+    source: { file: source?.file ?? '<unknown>', line: source?.line ?? 0, snippet: original.message ?? String(error) },
+    ...(screenshot && config.screenshot !== 'off' ? { screenshot: { mimeType: 'image/png', path: screenshot.path } } : {}),
+    timestamp: node.startedAt,
+  };
+  await mkdir(dirname(outputPath), { recursive: true });
+  const entries = await readFile(outputPath, 'utf8').then((text) => JSON.parse(text) as unknown[]).catch((): unknown[] => []);
+  if (signal.aborted) return;
+  entries.push(timeline.runSession?.redactReport(entry) ?? entry);
+  await writeFile(outputPath, JSON.stringify(entries, null, 2), { signal });
 }
 
 async function getSharedDriver(config: FliwrightConfig): Promise<FliwrightDriver> {
@@ -535,20 +567,26 @@ async function getSharedDriver(config: FliwrightConfig): Promise<FliwrightDriver
     );
   }
   const key = sharedDriverCacheKey(vmServiceUrl, config.plugins);
-  if (!sharedDriver || sharedDriverKey !== key) {
-    if (sharedDriver) {
-      const previousDriver = sharedDriver;
-      sharedDriver = null;
-      sharedDriverKey = '';
-      await previousDriver.dispose();
-    }
-    const nextDriver = new FliwrightDriver({ plugins: config.plugins });
-    await nextDriver.connect(vmServiceUrl);
-    await listenToDiagnostics(nextDriver);
-    sharedDriver = nextDriver;
-    sharedDriverKey = key;
+  let pending = sharedDrivers.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const driver = new FliwrightDriver({ plugins: config.plugins });
+      try {
+        await driver.connect(vmServiceUrl);
+        await listenToDiagnostics(driver);
+        return driver;
+      } catch (error) {
+        await driver.dispose().catch(() => undefined);
+        throw error;
+      }
+    })();
+    sharedDrivers.set(key, pending);
   }
-  return sharedDriver;
+  try { return await pending; }
+  catch (error) {
+    if (sharedDrivers.get(key) === pending) sharedDrivers.delete(key);
+    throw error;
+  }
 }
 
 function sharedDriverCacheKey(vmServiceUrl: string, plugins: FliwrightPlugin[] | undefined): string {
@@ -574,53 +612,6 @@ async function listenToDiagnostics(driver: FliwrightDriver): Promise<void> {
   }
 }
 
-function serializeScreenshot(
-  screenshot: FailureContext['screenshot'],
-  screenshotMode: 'file' | 'base64' | 'off',
-): McpFailureEntry['screenshot'] | undefined {
-  if (!screenshot || screenshotMode === 'off') return undefined;
-  return {
-    mimeType: 'image/png',
-    base64: screenshot.toString('base64'),
-  };
-}
-
-async function takeScreenshot(
-  driver: FliwrightDriver,
-  screenshotMode: 'file' | 'base64' | 'off',
-): Promise<McpFailureEntry['screenshot'] | undefined> {
-  if (screenshotMode === 'off') return undefined;
-  try {
-    return {
-      mimeType: 'image/png',
-      base64: (await driver.page.screenshot()).toString('base64'),
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-async function collectWidgetTree(driver: FliwrightDriver): Promise<object> {
-  try {
-    return await driver.sendRequest('ext.fliwright.snapshot', {}) as object;
-  } catch {
-    try {
-      return await driver.sendRequest('ext.fliwright.inspect', { selector: '' }) as object;
-    } catch {
-      return { error: 'Failed to collect widget tree' };
-    }
-  }
-}
-
-function collectDiagnostics(driver: FliwrightDriver): VMServiceEvent[] | undefined {
-  try {
-    const events = driver.getDiagnostics({ limit: 50 });
-    return events.length > 0 ? events : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function testConfigFromEnv(): FliwrightConfig {
   return {
     vmServiceUrl: toWebSocketUrl(
@@ -640,9 +631,9 @@ function parseScreenshotMode(value: string | undefined): 'file' | 'base64' | 'of
   return 'file';
 }
 
-function parseTraceMode(value: string | undefined): TraceMode {
-  if (value === 'full' || value === 'on-failure') return value;
-  return 'off';
+function parseRecordingMode(value: string | undefined): RecordingMode | undefined {
+  if (value === 'standard' || value === 'full' || value === 'off') return value;
+  return undefined;
 }
 
 function parsePositiveInt(value: string | undefined): number | undefined {
@@ -784,58 +775,18 @@ function toWebSocketUrl(url: string): string {
   return converted.endsWith('/ws') ? converted : converted.replace(/\/?$/, '/ws');
 }
 
-function latestHealingSuggestion(
-  driver: FliwrightDriver,
-  testName: string,
-): McpHealingSuggestion | undefined {
-  const report = driver.healing.getReports(testName).at(-1);
-  if (!report) return undefined;
-
-  return {
-    originalSelector: report.originalSelector,
-    suggestedSelector: report.suggestedSelector,
-    confidence: report.confidence,
-    scores: report.scores,
-  };
-}
-
-async function appendFailureEntry(outputPath: string, entry: McpFailureEntry): Promise<void> {
-  await mkdir(dirname(outputPath), { recursive: true });
-  let entries: McpFailureEntry[] = [];
-  try {
-    entries = JSON.parse(await readFile(outputPath, 'utf8')) as McpFailureEntry[];
-  } catch {
-    entries = [];
-  }
-  entries.push(entry);
-  await writeFile(outputPath, JSON.stringify(entries, null, 2));
-}
-
 function getTestName(task: unknown): string {
   const candidate = task as { name?: unknown };
   if (typeof candidate.name === 'string') return candidate.name;
   return '<unknown>';
 }
 
-function captureTimelineFailure(timeline: FliwrightTimelineContext, error: unknown, testName: string): void {
-  if (error instanceof FliwrightAgentError) return;
-  const node = timeline.recorder.startNode('failure', testName);
-  timeline.recorder.failNode(node.id, {
-    code: 'unknown',
-    title: testName,
-    message: error instanceof Error ? error.message : String(error),
-    timelineNodeId: node.id,
-    recoveryHints: [
-      { kind: 'observe', description: 'Inspect timeline artifacts and failure context for this run.' },
-      { kind: 'manual', description: 'Review the thrown error and app state at failure time.' },
-    ],
-  });
-}
-
 async function diagnoseTimelineFailures(
   timeline: FliwrightTimelineContext,
   config: FliwrightConfig,
   resolveDriver: () => Promise<FliwrightDriver>,
+  signal: AbortSignal,
+  remainingMs: () => number,
 ): Promise<void> {
   if (config.agentPolicy?.passive !== true || (config.agentPolicy.onFailure ?? 'diagnose') !== 'diagnose') return;
 
@@ -844,17 +795,17 @@ async function diagnoseTimelineFailures(
 
   try {
     const driver = await resolveDriver();
-    const aiRuntime = new AiRuntime(resolveAiConfig(config.ai), {
-      page: driver.page,
-      driver,
-      testName: timeline.recorder.testName,
-      runId: timeline.runId,
-      cwd: process.cwd(),
-    });
-    const agent = new PassiveAgent({ aiRuntime, recorder: timeline.recorder, passive: true });
+    if (signal.aborted) return;
     const data = timeline.recorder.toJSON();
 
     for (const failure of failures) {
+      if (signal.aborted) return;
+      const aiRuntime = new AiRuntime({ ...resolveAiConfig(config.ai),
+        timeoutMs: Math.min(config.ai?.timeoutMs ?? Infinity, remainingMs()),
+      }, {
+        page: driver.page, driver, testName: timeline.recorder.testName, runId: timeline.runId, cwd: process.cwd(),
+      });
+      const agent = new PassiveAgent({ aiRuntime, recorder: timeline.recorder, passive: true, signal });
       const currentNode = data.nodes.find((node) => node.id === failure.timelineNodeId);
       await agent.diagnose(failure, {
         currentNode,
@@ -866,9 +817,6 @@ async function diagnoseTimelineFailures(
     timeline.logger.warn('Passive AI diagnosis failed; preserving the original failure.', {
       error: error instanceof Error ? error.message : String(error),
     });
+    throw error;
   }
-}
-
-function safeName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'test';
 }

@@ -225,6 +225,25 @@ export interface ResolvedSelector {
   query: SelectorQuery;
   ambiguous: boolean;
   matchCount: number;
+  stability?: RecordingSelectorStability;
+}
+
+export type RecordingSelectorStability = 'key' | 'semantics' | 'label' | 'ancestor' | 'positional';
+
+export interface RecordingSelectorCandidate {
+  query: SelectorQuery;
+  matchCount: number;
+  matchesTarget: boolean;
+  stability: RecordingSelectorStability;
+}
+
+export interface RecordedTarget extends Partial<WidgetInfo> {
+  targetId: string;
+  status: 'resolved' | 'unresolved';
+  candidates: RecordingSelectorCandidate[];
+  issue?: string;
+  route?: string | null;
+  ancestorPath?: { type: string; key?: string }[];
 }
 
 export interface HealingReport {
@@ -437,14 +456,27 @@ export interface FailureContext {
 }
 
 export interface RawInputEvent {
-  type: 'pointerEvent' | 'textInput';
-  kind?: 'down' | 'move' | 'up';
+  type: 'pointerEvent' | 'textInput' | 'focus' | 'route';
+  focused?: boolean;
+  route?: string;
+  kind?: 'down' | 'move' | 'up' | 'cancel';
   pointer?: number;
   position?: { x: number; y: number };
   timestamp: number;
   buttons?: number;
   text?: string;
+  /** The text is a mask; replay must supply a value through an input parameter. */
+  sensitive?: true;
   action?: 'replace';
+  version?: 2;
+  sessionId?: string;
+  sequence?: number;
+  elapsedUs?: number;
+  frameId?: string;
+  targetId?: string;
+  focusSessionId?: string;
+  viewport?: { width: number; height: number; pixelRatio: number };
+  target?: RecordedTarget;
 }
 
 export interface RecordedOperation {
@@ -452,16 +484,26 @@ export interface RecordedOperation {
   position: { x: number; y: number };
   delta?: { x: number; y: number };
   text?: string;
+  /** The text is a mask; replay must supply a value through an input parameter. */
+  sensitive?: true;
   action?: 'replace';
+  /** Focus session used to coalesce IME updates into one final fill value. */
+  focusSessionId?: string;
   duration?: number;
+  /** Long-press hold or drag pointer-down to pointer-up duration in milliseconds. */
+  durationMs?: number;
   timestamp: number;
   status?: 'included' | 'ignored';
   ignoreReason?: 'duplicate' | 'mergedIntoType' | 'nonActionable' | 'duringTransition' | 'noEffect';
   confidence?: number;
+  /** Widget information frozen by the bridge before pointer dispatch. */
+  recordedTarget?: RecordedTarget;
 }
 
 export interface RecordingScreenshot {
-  base64: string;
+  /** Relative to the recording artifact directory; binary data stays on disk. */
+  path: string;
+  byteLength: number;
   format: 'png';
   width?: number;
   height?: number;
@@ -479,8 +521,11 @@ export interface RecordingFrame {
   position: { x: number; y: number };
   delta?: { x: number; y: number };
   text?: string;
+  /** The text is a mask; replay must supply a value through an input parameter. */
+  sensitive?: true;
   action?: 'replace';
   duration?: number;
+  durationMs?: number;
   selector?: string;
   operationStatus?: RecordedOperation['status'];
   ignoreReason?: RecordedOperation['ignoreReason'];
@@ -491,13 +536,18 @@ export interface RecordingFrame {
 }
 
 export interface CodegenOptions {
+  checkpoints?: readonly import('./RecordingCheckpoints.js').RecordingCheckpointCandidate[];
   testName?: string;
   imports?: string;
   lang?: 'ts' | 'dart';
+  /** Package URI of an app-owned main() compatible with IntegrationTestWidgetsFlutterBinding. */
+  dartAppEntrypoint?: string;
   resetToHomeBeforeEach?: boolean;
   homeRoute?: string;
   timeline?: boolean;
   mode?: 'script' | 'test';
+  /** Named environment applied before a generated regression test. */
+  scenarioName?: string;
   recordingFrames?: readonly RecordingFrame[];
   assertionSuggestions?: readonly AssertionSuggestion[];
 }

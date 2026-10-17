@@ -32,6 +32,7 @@ export class TimelineNodeLifecycle {
 
   async run<T>(options: TimelineNodeRunOptions<T>): Promise<T> {
     const node = this.recorder?.startNode(options.kind, options.title, options.start);
+    await this.recorder?.flushProgress();
     try {
       const value = await options.body();
       if (node) this.recorder?.passNode(node.id, options.successMetadata?.());
@@ -41,6 +42,8 @@ export class TimelineNodeLifecycle {
       if (node && result.artifacts?.length) this.recorder?.addArtifacts(node.id, result.artifacts);
       if (node) this.recorder?.failNode(node.id, result.failure, result.metadata);
       throw (options.wrapError ?? wrapTimelineError)(error, result.failure);
+    } finally {
+      await this.recorder?.flushProgress();
     }
   }
 }

@@ -82,7 +82,7 @@ async function writeTimeline(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'fliwright-mcp-timeline-'));
   const path = join(dir, 'timeline.json');
   await writeFile(path, JSON.stringify({
-    version: 1,
+    version: 2,
     runId: 'run-1',
     testName: 'timeline test',
     mode: 'test',

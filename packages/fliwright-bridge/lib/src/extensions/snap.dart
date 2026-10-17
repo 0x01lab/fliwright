@@ -29,9 +29,10 @@ class SnapExtension {
     final groupId = 'snapshot-${DateTime.now().microsecondsSinceEpoch}';
     final refs = <Map<String, dynamic>>[];
     final buffer = StringBuffer();
+    final names = <Element, String?>{};
 
     _walkOnstage(root, 0, maxDepth, (element, depth) {
-      final candidate = _candidateFor(element);
+      final candidate = _candidateFor(element, names);
       if (candidate == null) return;
 
       final rect = candidate.rect;
@@ -102,8 +103,15 @@ class SnapExtension {
     });
   }
 
-  static _SnapCandidate? _candidateFor(Element element) {
-    final info = InspectExtension.extractWidgetInfo(element);
+  static _SnapCandidate? _candidateFor(
+    Element element,
+    Map<Element, String?> names,
+  ) {
+    // Most elements are not snapshot candidates, and most candidates already
+    // have text/semantics/key labels. Dynamic name lookup can throw for every
+    // widget and ancestor, so defer it until it is actually the label fallback.
+    final info =
+        InspectExtension.extractWidgetInfo(element, includeName: false);
     if (info == null) return null;
 
     final rect = _SnapRect.fromJson(info['rect']);
@@ -114,7 +122,7 @@ class SnapExtension {
     final role = _roleFor(widget, info);
     if (role == null) return null;
 
-    final label = _labelFor(info);
+    final label = _labelFor(info) ?? _fallbackName(element, names);
     if (label == null || label.isEmpty) return null;
 
     return _SnapCandidate(
@@ -130,6 +138,23 @@ class SnapExtension {
         info['properties'] as Map? ?? const <String, dynamic>{},
       ),
     );
+  }
+
+  static String? _fallbackName(Element element, Map<Element, String?> names) {
+    String? readName(Element target) => names.putIfAbsent(
+          target,
+          () => InspectExtension.extractName(target.widget),
+        );
+
+    var name = readName(element);
+    if (name != null) return name;
+    element.visitAncestorElements((ancestor) {
+      name = readName(ancestor);
+      return name == null &&
+          ancestor.widget is! Scaffold &&
+          ancestor.widget is! WidgetsApp;
+    });
+    return name;
   }
 
   static String? _roleFor(Widget widget, Map<String, dynamic> info) {

@@ -16,7 +16,8 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { FlowCleanPlan, FliwrightFlowDocument, FliwrightFlowNode, RecordingFrame } from '@fliwright/core';
+import type { FlowCleanPlan, FliwrightFlowDocument, FliwrightFlowNode, RecordingCheckpointCandidate, SelectorQuery } from '@fliwright/core';
+import type { RecordingCanvasFrame as RecordingFrame } from './types.js';
 import type { FliwrightFlowEdge } from '@fliwright/core';
 import type { CanvasToExtensionMessage, ExtensionToCanvasMessage, RecordingCanvasSession } from './types.js';
 import {
@@ -68,6 +69,7 @@ function RecordingCanvasApp(): JSX.Element {
   const [draftFlow, setDraftFlow] = useState<FliwrightFlowDocument | undefined>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [checkpointDrafts, setCheckpointDrafts] = useState<RecordingCheckpointCandidate[]>([]);
   const [cleanState, setCleanState] = useState<{
     pending: boolean;
     requestId?: string;
@@ -84,6 +86,7 @@ function RecordingCanvasApp(): JSX.Element {
           frames: event.data.session.frames ?? [],
         });
         setDraftFlow(event.data.session.flow);
+        setCheckpointDrafts(event.data.session.checkpoints ?? []);
       }
       if (event.data.type === 'flowCleanResult') {
         const message = event.data;
@@ -108,6 +111,7 @@ function RecordingCanvasApp(): JSX.Element {
   }, []);
 
   const frameById = useMemo(() => new Map(session.frames.map((frame) => [frame.id, frame])), [session.frames]);
+  const checkpointChangesPending = JSON.stringify(checkpointDrafts) !== JSON.stringify(session.checkpoints ?? []);
 
   const nodes = useMemo<Array<Node<RecordingNodeData | FlowNodeData>>>(() => {
     if (draftFlow) {
@@ -246,17 +250,22 @@ function RecordingCanvasApp(): JSX.Element {
     setSelectedEdgeId(id);
     setSelectedId(null);
   }, []);
+  const reviewCheckpoints = useCallback(() => {
+    vscode.postMessage({ type: 'reviewRecordingCheckpoints', checkpoints: checkpointDrafts });
+  }, [checkpointDrafts]);
 
   return (
     <ReactFlowProvider>
       <div className="relative h-screen w-full overflow-hidden bg-background">
         <Toolbar
           session={session}
+          checkpointChangesPending={checkpointChangesPending}
           hasFlow={Boolean(draftFlow)}
           onStart={startRecording}
           onStop={stopRecording}
           onInsertTest={insertTest}
           onOpenSavedRecording={openSavedRecording}
+          onReviewCheckpoints={reviewCheckpoints}
           onAddNote={() => addDraftNode('note')}
           onAddDecision={() => addDraftNode('decision')}
           onAddFigma={() => addDraftNode('figma')}
@@ -278,7 +287,13 @@ function RecordingCanvasApp(): JSX.Element {
               onMoveFlowNode={moveDraftNode}
             />
           </div>
-          {draftFlow ? (
+          {session.status === 'preview' && checkpointDrafts.length > 0 ? (
+            <CheckpointSidebar
+              checkpoints={checkpointDrafts}
+              onChange={setCheckpointDrafts}
+              onApply={reviewCheckpoints}
+            />
+          ) : draftFlow ? (
             <FlowSidebar
               flow={draftFlow}
               selectedId={selectedId}
@@ -344,6 +359,7 @@ function FlowViewport({
 
   return (
     <ReactFlow
+      onlyRenderVisibleElements
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -374,12 +390,14 @@ function FlowViewport({
 
 function Toolbar({
   session,
+  checkpointChangesPending,
   hasFlow,
   cleanState,
   onStart,
   onStop,
   onInsertTest,
   onOpenSavedRecording,
+  onReviewCheckpoints,
   onAddNote,
   onAddDecision,
   onAddFigma,
@@ -387,12 +405,14 @@ function Toolbar({
   onApplyClean,
 }: {
   session: RecordingCanvasSession;
+  checkpointChangesPending: boolean;
   hasFlow: boolean;
   cleanState: { pending: boolean; plan?: FlowCleanPlan; error?: string; applied?: boolean };
   onStart(): void;
   onStop(): void;
   onInsertTest(): void;
   onOpenSavedRecording(): void;
+  onReviewCheckpoints(): void;
   onAddNote(): void;
   onAddDecision(): void;
   onAddFigma(): void;
@@ -411,9 +431,10 @@ function Toolbar({
             <span>{session.rawEventCount} raw events</span>
             <span>{session.operationCount} operations</span>
             <span>{session.frames.length} frames</span>
+            {session.readiness ? <span>{session.readiness.automationKind} · {checkpointChangesPending ? 'checkpoint edits pending' : session.readiness.readiness}</span> : null}
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           {isPreview || hasFlow ? (
             <>
               <Button variant="outline" size="sm" onClick={onAddNote}><StickyNote /> Note</Button>
@@ -429,13 +450,18 @@ function Toolbar({
             <Button size="sm" onClick={onStart}><Circle /> Start Recording</Button>
           )}
           {isPreview ? (
-            <Button size="sm" onClick={onInsertTest}><Plus /> Insert Test</Button>
+            <>
+              {session.checkpoints?.length ? <Button variant="outline" size="sm" onClick={onReviewCheckpoints}>Review checkpoints</Button> : null}
+              <Button variant="outline" size="sm" disabled={checkpointChangesPending || !session.generationOptions?.scenarioName} onClick={() => vscode.postMessage({ type: 'verifyRecording' })}>Verify replay</Button>
+              <Button size="sm" disabled={checkpointChangesPending || !session.readiness || session.readiness.readiness === 'draft'} onClick={onInsertTest}><Plus /> Save {session.readiness?.automationKind ?? 'automation'}</Button>
+            </>
           ) : null}
           {canOpenSavedRecording ? (
             <Button variant="outline" size="sm" onClick={onOpenSavedRecording}><FolderOpen /> Open Saved Recording</Button>
           ) : null}
         </div>
       </div>
+      {session.readiness?.issues.length ? <div className="mt-2 text-xs text-muted-foreground">{session.readiness.issues.join('; ')}</div> : null}
       {cleanState.pending || cleanState.plan || cleanState.error ? (
         <div className={cn(
           'mt-2 rounded-md border px-2 py-1.5 text-[11px]',
@@ -490,6 +516,159 @@ function OperationsSidebar({
       </ScrollArea>
     </aside>
   );
+}
+
+function CheckpointSidebar({
+  checkpoints,
+  onChange,
+  onApply,
+}: {
+  checkpoints: RecordingCheckpointCandidate[];
+  onChange(next: RecordingCheckpointCandidate[]): void;
+  onApply(): void;
+}): JSX.Element {
+  const update = (id: string, patch: Partial<RecordingCheckpointCandidate>) => {
+    onChange(checkpoints.map((candidate) => candidate.id === id ? { ...candidate, ...patch } : candidate));
+  };
+  const updateBoundary = (id: string, value: string) => {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      update(id, { afterOperationIndex: undefined });
+      return;
+    }
+    const actionNumber = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(actionNumber) && actionNumber >= 0) {
+      update(id, { afterOperationIndex: actionNumber === 0 ? -1 : actionNumber - 1 });
+    }
+  };
+  return (
+    <aside className="flex w-[340px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-background">
+      <div className="flex items-center justify-between border-b border-border px-2.5 py-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Checkpoint review · {checkpoints.length}</div>
+        <Button size="sm" className="h-7 px-2 text-[11px]" onClick={onApply}>Apply review</Button>
+      </div>
+      <ScrollArea className="flex-1">
+        <div className="space-y-2 p-2">
+          {checkpoints.map((candidate) => (
+            <div key={candidate.id} className="space-y-2 rounded-md border border-border p-2 text-[11px]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-semibold text-foreground">{candidate.id}</span>
+                <label className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={candidate.confirmed}
+                    onChange={(event) => update(candidate.id, { confirmed: event.currentTarget.checked })}
+                  />
+                  Confirm
+                </label>
+              </div>
+              <Field label="Checkpoint id">
+                <input
+                  className={INSPECTOR_INPUT_CLASS}
+                  value={candidate.id}
+                  onChange={(event) => update(candidate.id, { id: event.currentTarget.value })}
+                />
+              </Field>
+              <Field label="Matcher">
+                <select
+                  className={INSPECTOR_INPUT_CLASS}
+                  value={candidate.matcher}
+                  onChange={(event) => update(candidate.id, { matcher: event.currentTarget.value })}
+                >
+                  <option value="toHaveText">toHaveText</option>
+                  <option value="toContainText">toContainText</option>
+                  <option value="toBeVisible">toBeVisible</option>
+                  <option value="toBeEnabled">toBeEnabled</option>
+                  <option value="toBeDisabled">toBeDisabled</option>
+                  <option value="toBeChecked">toBeChecked</option>
+                </select>
+              </Field>
+              <Field label="Expected">
+                <input
+                  className={INSPECTOR_INPUT_CLASS}
+                  value={expectedInput(candidate.expected)}
+                  onChange={(event) => update(candidate.id, { expected: parseExpected(event.currentTarget.value, candidate.matcher) })}
+                />
+              </Field>
+              <CheckpointQueryEditor
+                query={candidate.query}
+                onApply={(query) => update(candidate.id, { query })}
+              />
+              <Field label="After action number (0 = before first, blank = end)">
+                <input
+                  className={INSPECTOR_INPUT_CLASS}
+                  type="number"
+                  min={0}
+                  value={candidate.afterOperationIndex == null ? '' : candidate.afterOperationIndex + 1}
+                  onChange={(event) => updateBoundary(candidate.id, event.currentTarget.value)}
+                />
+              </Field>
+              <div className="truncate font-mono text-[10px] text-muted-foreground" title={`${candidate.source}: ${JSON.stringify(candidate.query)}`}>
+                {candidate.source} · {JSON.stringify(candidate.query)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+    </aside>
+  );
+}
+
+function CheckpointQueryEditor({
+  query,
+  onApply,
+}: {
+  query?: SelectorQuery;
+  onApply(query?: SelectorQuery): void;
+}): JSX.Element {
+  const [value, setValue] = useState(query === undefined ? '' : JSON.stringify(query, null, 2));
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    setValue(query === undefined ? '' : JSON.stringify(query, null, 2));
+    setError(undefined);
+  }, [query]);
+  const apply = () => {
+    if (!value.trim()) {
+      setError(undefined);
+      onApply(undefined);
+      return;
+    }
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Target query must be a JSON object.');
+      }
+      onApply(parsed as SelectorQuery);
+      setError(undefined);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+  return (
+    <div className="space-y-2 rounded-md border border-border/70 bg-muted/20 p-2">
+      <div className="text-[10px] font-semibold uppercase text-muted-foreground">Target query</div>
+      <textarea
+        className={`${INSPECTOR_INPUT_CLASS} min-h-28 resize-y font-mono`}
+        aria-label="Target query JSON"
+        value={value}
+        onChange={(event) => setValue(event.currentTarget.value)}
+        spellCheck={false}
+      />
+      {error ? <div role="alert" className="text-[10px] text-destructive">{error}</div> : null}
+      <Button variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={apply}>Apply target query</Button>
+    </div>
+  );
+}
+
+function expectedInput(value: unknown): string {
+  return typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value);
+}
+
+function parseExpected(value: string, matcher: string): unknown {
+  if (['toBeVisible', 'toBeEnabled', 'toBeDisabled', 'toBeChecked'].includes(matcher)) {
+    return value.trim().toLowerCase() === 'true';
+  }
+  return value;
 }
 
 function FlowSidebar({
@@ -784,7 +963,7 @@ function rowMeta(frame: RecordingFrame): string {
 function FlowNodeCard({ data }: NodeProps<Node<FlowNodeData>>): JSX.Element {
   const node = data.flowNode;
   const frame = data.frame;
-  const imageSrc = frame?.screenshot ? `data:image/${frame.screenshot.format};base64,${frame.screenshot.base64}` : undefined;
+  const imageSrc = frame?.screenshot?.uri;
   const color = flowNodeColor(node);
 
   return (
@@ -797,7 +976,7 @@ function FlowNodeCard({ data }: NodeProps<Node<FlowNodeData>>): JSX.Element {
       </div>
       {imageSrc ? (
         <div className="bg-muted" style={{ aspectRatio: frame ? screenshotAspectRatio(frame) : '9 / 16' }}>
-          <img src={imageSrc} alt={node.title} className="h-full w-full object-cover" draggable={false} />
+          <img src={imageSrc} alt={node.title} className="h-full w-full object-cover" draggable={false} loading="lazy" />
         </div>
       ) : null}
       <div className="space-y-1.5 px-2.5 py-2 text-[11px] text-muted-foreground">
@@ -862,7 +1041,7 @@ function figmaBindingFromUrl(
 
 function RecordingFrameNode({ data }: NodeProps<Node<RecordingNodeData>>): JSX.Element {
   const frame = data.frame;
-  const imageSrc = frame.screenshot ? `data:image/${frame.screenshot.format};base64,${frame.screenshot.base64}` : undefined;
+  const imageSrc = frame.screenshot?.uri;
   const color = kindColor(frame.kind);
   const start = markerPercent(frame);
   const end = markerEndPercent(frame);
@@ -883,7 +1062,7 @@ function RecordingFrameNode({ data }: NodeProps<Node<RecordingNodeData>>): JSX.E
       </div>
       <div className="screen-wrap" style={{ aspectRatio: screenshotAspectRatio(frame) }}>
         {imageSrc ? (
-          <img src={imageSrc} alt={`Frame ${frame.index + 1}`} draggable={false} />
+          <img src={imageSrc} alt={`Frame ${frame.index + 1}`} draggable={false} loading="lazy" />
         ) : (
           <div className="screen-placeholder">
             {frame.status === 'error' ? 'Screenshot failed' : 'Capturing screen'}

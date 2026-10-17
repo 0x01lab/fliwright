@@ -16,12 +16,14 @@ export interface TraceStep {
   action: string;
   selector: string;
   argument?: string;
-  status: 'pass' | 'fail';
+  status: 'pass' | 'fail' | 'running' | 'skipped' | 'interrupted';
   durationMs: number;
   screenshotFile?: string;
   widgetTree?: object;
   error?: string;
   timestamp: string;
+  /** Shared RunSession operation identity when the trace is a projection. */
+  operationId?: string;
 }
 
 export interface TraceMeta {
@@ -29,7 +31,7 @@ export interface TraceMeta {
   runId: string;
   startedAt: string;
   completedAt?: string;
-  status: 'running' | 'passed' | 'failed';
+  status: 'running' | 'passed' | 'failed' | 'skipped' | 'interrupted';
   totalSteps: number;
   traceVersion: 1;
 }
@@ -55,6 +57,8 @@ export interface TraceCollectorOptions {
 export class TraceCollector {
   private steps: TraceStep[] = [];
   private completed = false;
+  private finalStatus: TraceMeta['status'] = 'running';
+  private completedAt?: string;
   private readonly layout: TraceLayout;
   private readonly traceFilePath: string;
 
@@ -102,13 +106,18 @@ export class TraceCollector {
     method: string,
     params: Record<string, unknown>,
     durationMs: number,
-    _result: unknown,
+    result: unknown,
     error?: unknown,
+    operationId?: string,
   ): Promise<void> {
     if (this.completed) return;
 
     const index = this.steps.length;
-    const isFail = error != null;
+    const bridgeResult = result !== null && typeof result === 'object'
+      ? result as { success?: unknown; error?: unknown } : undefined;
+    const actionError = error ?? (bridgeResult?.success === false || bridgeResult?.error != null
+      ? bridgeResult.error ?? 'Bridge action failed' : undefined);
+    const isFail = actionError != null;
     const { action, selector, argument } = parseActionCall(method, params);
 
     const step: TraceStep = {
@@ -119,15 +128,20 @@ export class TraceCollector {
       status: isFail ? 'fail' : 'pass',
       durationMs,
       timestamp: new Date().toISOString(),
+      ...(operationId ? { operationId } : {}),
     };
 
     if (isFail) {
-      step.error = error instanceof Error ? error.message : String(error);
+      const message = actionError instanceof Error ? actionError.message : String(actionError);
+      step.error = isSensitive(params) && typeof params.text === 'string' && params.text.length > 0
+        ? message.split(params.text).join('<masked>') : message;
     }
 
     // Capture screenshot: full mode → always, on-failure → only on fail
-    const shouldScreenshot =
-      this.mode === 'full' || (this.mode === 'on-failure' && isFail);
+    // RunSession owns action evidence. A trace projection keeps the same
+    // operation fact and must not issue a second screenshot request.
+    const shouldScreenshot = !operationId &&
+      (this.mode === 'full' || (this.mode === 'on-failure' && isFail));
 
     if (shouldScreenshot) {
       try {
@@ -143,7 +157,7 @@ export class TraceCollector {
     }
 
     // Capture widget tree only on failure
-    if (isFail) {
+    if (isFail && !operationId) {
       try {
         step.widgetTree = await this.captureWidgetTree() ?? undefined;
       } catch {
@@ -158,12 +172,11 @@ export class TraceCollector {
   /**
    * Finalise the trace with the overall test status.
    */
-  async complete(status: 'passed' | 'failed'): Promise<void> {
+  async complete(status: Exclude<TraceMeta['status'], 'running'>): Promise<void> {
     if (this.completed) return;
     this.completed = true;
-    this.meta.status = status;
-    this.meta.completedAt = new Date().toISOString();
-    this.meta.totalSteps = this.steps.length;
+    this.finalStatus = status;
+    this.completedAt = new Date().toISOString();
     await this.writeTraceFile();
   }
 
@@ -182,17 +195,6 @@ export class TraceCollector {
 
   // ── Private helpers ───────────────────────────────────────
 
-  private get meta(): TraceMeta {
-    return {
-      testName: this.testName,
-      runId: this.runId,
-      startedAt: this._startedAt,
-      status: 'running',
-      totalSteps: 0,
-      traceVersion: 1,
-    };
-  }
-
   private _startedAt: string = new Date().toISOString();
 
   private buildData(): TraceData {
@@ -200,8 +202,8 @@ export class TraceCollector {
       testName: this.testName,
       runId: this.runId,
       startedAt: this._startedAt,
-      completedAt: this.completed ? new Date().toISOString() : undefined,
-      status: this.completed ? (this.steps.some(s => s.status === 'fail') ? 'failed' : 'passed') : 'running',
+      completedAt: this.completedAt,
+      status: this.finalStatus,
       totalSteps: this.steps.length,
       traceVersion: 1,
     };
@@ -258,7 +260,7 @@ function parseActionCall(
 ): { action: string; selector: string; argument?: string } {
   if (method === 'ext.fliwright.action') {
     const action = String(params.action ?? 'unknown');
-    const selector = extractSelector(params);
+    const selector = extractSelector(params, action);
     const argument = extractArgument(action, params);
     return { action, selector, argument };
   }
@@ -284,9 +286,10 @@ function parseActionCall(
   return { action: shortMethod, selector: '', argument: undefined };
 }
 
-function extractSelector(params: Record<string, unknown>): string {
+function extractSelector(params: Record<string, unknown>, action: string): string {
+  if (typeof params.selector === 'string') return params.selector;
   // Common selector params from Locator.sendAction
-  if (params.text) return `text=${params.text}`;
+  if (params.text && action !== 'fill' && action !== 'type') return `text=${params.text}`;
   if (params.textContains) return `textContains=${params.textContains}`;
   if (params.key) return `key=${params.key}`;
   if (params.type) return `byType=${params.type}`;
@@ -299,8 +302,13 @@ function extractSelector(params: Record<string, unknown>): string {
   return '';
 }
 
+function isSensitive(params: Record<string, unknown>): boolean {
+  return params.sensitive === true || params.sensitive === 'true';
+}
+
 function extractArgument(action: string, params: Record<string, unknown>): string | undefined {
   if (action === 'type' || action === 'fill') {
+    if (isSensitive(params)) return '<masked>';
     return typeof params.text === 'string' ? params.text : undefined;
   }
   if (action === 'pressKey') {

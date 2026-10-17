@@ -34,6 +34,7 @@ export class AgentRepair {
     const node = this.options.recorder?.startNode('ai-call', `Repair: ${action.kind}`, {
       metadata: { mode: 'runtime-repair', proposal: redactProposal(action) },
     });
+    await this.options.recorder?.flushProgress();
     const rejection = this.validate(action, stepId);
     if (rejection) {
       if (node) {
@@ -42,6 +43,7 @@ export class AgentRepair {
           reason: rejection,
         });
       }
+      await this.options.recorder?.flushProgress();
       return { accepted: false, action, reason: rejection };
     }
 
@@ -63,6 +65,8 @@ export class AgentRepair {
         });
       }
       return { accepted: false, action, reason };
+    } finally {
+      await this.options.recorder?.flushProgress();
     }
   }
 

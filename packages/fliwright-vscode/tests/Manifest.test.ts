@@ -6,6 +6,10 @@ import { describe, expect, it } from 'vitest';
 const manifest = JSON.parse(readFileSync(join(fileURLToPath(new URL('..', import.meta.url)), 'package.json'), 'utf8'));
 
 describe('VS Code manifest', () => {
+  it('uses the shared recording configuration without an independent Trace mode setting', () => {
+    expect(manifest.contributes.configuration.properties).not.toHaveProperty('fliwright.traceMode');
+  });
+
   it('uses the same extension identity in development and packaged VSIX builds', () => {
     expect(manifest.publisher).toBe('fliwright');
     expect(manifest.name).toBe('fliwright-vscode');
@@ -43,6 +47,7 @@ describe('VS Code manifest', () => {
       'fliwright.startRecording',
       'fliwright.stopRecording',
       'fliwright.insertRecordedTest',
+      'fliwright.importDartVerification',
       'fliwright.stopSandbox',
       'fliwright.reloadMocks',
       'fliwright.reloadWebSocketMocks',

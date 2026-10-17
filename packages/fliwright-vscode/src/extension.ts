@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { FliwrightFlowDocument, FormAnalyzeResult, FormFillResult } from '@fliwright/core';
+import type { FliwrightFlowDocument, FormAnalyzeResult, FormFillResult, RecordingCheckpointCandidate } from '@fliwright/core';
+import { resolveProjectConfig } from '@fliwright/cli';
 import {
   clearWorkspaceVmServiceUrl,
   buildFlowReviewBundle,
@@ -12,21 +13,24 @@ import {
   sanitizeFlowFileId,
   setConnectorDebugLog,
   VmServiceEndpointResolver,
+  prepareRecordingCheckpoints,
+  confirmRecordingCheckpoint,
   explicitEndpointSource,
   writeWorkspaceVmServiceUrl,
 } from '@fliwright/core';
-import { getWorkspaceRoot, loadConfig, resolveWorkspacePath } from './config.js';
-import { FailureContextStore } from './failure/FailureContextStore.js';
+import { getWorkspaceRoot, loadConfig, loadWorkspaceConfig, resolveWorkspacePath } from './config.js';
 import { FlowFileService } from './flows/FlowFileService.js';
 import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug, dataSetLabels } from './form/FormHelperService.js';
 import { FormRuleService } from './form/FormRuleService.js';
-import { RecorderService, resolveRecordingTestName } from './recording/RecorderService.js';
+import { RecorderService, recordingEditorViewType, resolveRecordingTestName } from './recording/RecorderService.js';
+import { recordAfterPassingTest } from './recording/recordAfterTest.js';
 import { FliwrightCodeLensProvider } from './runner/FliwrightCodeLensProvider.js';
 import { TestDiscoveryService } from './runner/TestDiscoveryService.js';
-import { resolveVitestCli, VitestRunner } from './runner/VitestRunner.js';
+import { resolveVitestCli } from './runner/VitestRunner.js';
+import { ProjectTestRunner } from './runner/ProjectTestRunner.js';
 import { ScriptDiscoveryService } from './scripts/ScriptDiscoveryService.js';
 import { ScriptRunner } from './scripts/ScriptRunner.js';
-import { createVitestScriptConfig } from './scripts/VitestScriptConfig.js';
+import { createVitestScriptConfig, usesVitestScript } from './scripts/VitestScriptConfig.js';
 import { ScreenshotPreviewPanel, ScreenshotService } from './screenshot/ScreenshotService.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
 import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
@@ -58,7 +62,6 @@ import { ViewerPanel } from './viewer/ViewerPanel.js';
 import { RunViewerService } from './runviewer/RunViewerService.js';
 import { FileTddLoopStatusSource, TddLoopController } from './tddloop/index.js';
 import { TraceStore } from '@fliwright/core';
-import type { TraceMode } from '@fliwright/core';
 
 let output: vscode.OutputChannel;
 const LAST_VM_SERVICE_URL_KEY = 'fliwright.vmServiceUrl.lastSuccess';
@@ -83,11 +86,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   formHelperService.setDebugLogger((message) => output.appendLine(message));
   const testDiscoveryService = new TestDiscoveryService();
   const scriptDiscoveryService = new ScriptDiscoveryService();
-  const runner = new VitestRunner();
+  const runner = new ProjectTestRunner(() => loadConfig().runner);
   const scriptRunner = new ScriptRunner();
   const screenshotService = new ScreenshotService();
   const screenshotPreviewPanel = new ScreenshotPreviewPanel();
-  const failureStore = new FailureContextStore();
   const flowFileService = new FlowFileService();
   const recorderService = new RecorderService();
   const stateService = new StateInjectionService();
@@ -155,6 +157,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         output.appendLine(`Failed to clean recording flow: ${message}`);
         vscode.window.showWarningMessage(message);
         throw error;
+      }
+    },
+    onReviewRecordingCheckpoints: async (checkpoints: RecordingCheckpointCandidate[]) => {
+      try {
+        const root = requireWorkspaceRoot();
+        const current = recorderService.getSession();
+        let scenarioName = current.generationOptions?.scenarioName;
+        if (!scenarioName) {
+          const project = await resolveProjectConfig(root.fsPath);
+          scenarioName = await vscode.window.showQuickPick(Object.keys(project.scenarios ?? {}), {
+            title: 'Choose the deterministic scenario for this test',
+          });
+        }
+        if (!scenarioName) return;
+        const reviewed = await recorderService.reviewAutomation(root, {
+          ...current.generationOptions,
+          mode: 'test',
+          scenarioName,
+          checkpoints,
+        });
+        updateRecordingViews(reviewed);
+        recordingPanel.open(reviewed);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        output.appendLine(`Failed to review recording checkpoints: ${message}`);
+        vscode.window.showWarningMessage(message);
       }
     },
   });
@@ -872,21 +900,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await runScript(node);
     }),
     vscode.commands.registerCommand('fliwright.openFailure', async (node?: FailureTreeEntry) => {
-      // Failure surfacing now resolves from the latest run via the failure
-      // store on disk (the in-memory runsTree.failuresList is gone). Without a
-      // tree node, surface the latest failure context file directly.
-      let failure = node?.kind === 'failure' ? node.failure : undefined;
+      const failure = node?.kind === 'failure' ? node.failure : undefined;
       if (!failure) {
-        const root = getWorkspaceRoot();
-        if (root) {
-          try {
-            const dir = resolveWorkspacePath(root, loadConfig().failureContextDir);
-            const latest = await failureStore.loadLatest(dir);
-            failure = latest[0];
-          } catch { /* ignore — nothing to surface */ }
-        }
+        await viewerPanel.openLatest({ failedOnly: true });
+        return;
       }
-      if (!failure) return;
 
       // Open visual editor if source file is available, otherwise fall back to FailurePanel
       if (failure.source?.file) {
@@ -904,6 +922,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.openRunViewer', async () => {
       await viewerPanel.openWithPicker();
+    }),
+    vscode.commands.registerCommand('fliwright.openExportedRun', async () => {
+      await viewerPanel.openExportedRun();
     }),
     vscode.commands.registerCommand('fliwright.showLastRun', async () => {
       await viewerPanel.openLatest();
@@ -957,6 +978,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.window.showInformationMessage(`Created flow: ${created.uri.fsPath}`);
       });
     }),
+    vscode.commands.registerCommand('fliwright.recordAfterTest', async (node: { uri?: vscode.Uri }) => {
+      await recordAfterPassingTest(() => runTests(node), async () => vscode.commands.executeCommand('fliwright.startRecording'));
+    }),
     vscode.commands.registerCommand('fliwright.startRecording', async () => {
       await runCommand('Start Recording', async () => {
         const testName = await resolveRecordingTestName(recorderService.getSession());
@@ -1003,14 +1027,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           // Open visual editor if target file is available, otherwise fall back to RecordingPanel
           if (recording.targetFile) {
             const uri = vscode.Uri.file(recording.targetFile);
-            await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+            await vscode.commands.executeCommand('vscode.openWith', uri, recordingEditorViewType(recording.targetFile));
           } else {
             recordingPanel.open(recording);
           }
           session.setConnectedIdle();
           output.appendLine(`Recorded ${recording.operationCount} operation(s).`);
-          vscode.window.showInformationMessage(`Recorded ${recording.operationCount} operation(s).`, 'Insert Test').then((selection) => {
-            if (selection === 'Insert Test') void vscode.commands.executeCommand('fliwright.insertRecordedTest');
+          vscode.window.showInformationMessage(`Recorded ${recording.operationCount} operation(s).`, 'Review Recording').then((selection) => {
+            if (selection === 'Review Recording') recordingPanel.open(recorderService.getSession());
           });
         } catch (error) {
           output.appendLine(`[debug] stop FAILED: ${error instanceof Error ? error.message : String(error)}`);
@@ -1020,15 +1044,66 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
       });
     }),
+    vscode.commands.registerCommand('fliwright.confirmRecordingCheckpoints', async () => {
+      await runCommand('Confirm Recording Checkpoints', async () => {
+        const root = requireWorkspaceRoot();
+        const chosen = await vscode.window.showOpenDialog({ title: 'Open observed recording checkpoints',
+          canSelectMany: false, filters: { 'Recording checkpoints': ['json'] },
+        });
+        if (!chosen?.[0]) return;
+        const input = JSON.parse(fs.readFileSync(chosen[0].fsPath, 'utf8'));
+        const current = recorderService.getSession();
+        const prepared = prepareRecordingCheckpoints(Array.isArray(input) ? input : input.assertions, current.operationCount);
+        if (prepared.issues.length) throw new Error(prepared.issues.join('; '));
+        if (prepared.candidates.length === 0) throw new Error('No observed checkpoints found.');
+        const confirmed = await vscode.window.showQuickPick(prepared.candidates.map((candidate) => ({
+          label: candidate.id, description: `${candidate.matcher} ${JSON.stringify(candidate.expected) ?? ''}`,
+          detail: `${candidate.source}: ${JSON.stringify(candidate.query)}${candidate.reason ? ' — ' + candidate.reason : ''}`, candidate,
+        })), { title: 'Confirm checkpoints against the recorded evidence', canPickMany: true });
+        if (!confirmed) return;
+        const project = await resolveProjectConfig(root.fsPath);
+        const scenarioName = await vscode.window.showQuickPick(Object.keys(project.scenarios ?? {}), {
+          title: 'Choose the deterministic scenario for this test',
+        });
+        if (!scenarioName) return;
+        const ids = new Set(confirmed.map((item) => item.candidate.id));
+        const reviewed = await recorderService.reviewAutomation(root, { mode: 'test', scenarioName,
+          checkpoints: prepared.candidates.map((candidate) => confirmRecordingCheckpoint(candidate, {
+            id: candidate.id, confirmed: ids.has(candidate.id),
+          })),
+        });
+        updateRecordingViews(reviewed);
+        recordingPanel.open(reviewed);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.verifyRecording', async () => {
+      await runCommand('Verify Recording Replay', async () => {
+        if (!session.currentUrl) throw new Error('Connect to the app before replay verification.');
+        const verified = await recorderService.verifyRecording(requireWorkspaceRoot(), session.currentUrl);
+        updateRecordingViews(verified);
+        recordingPanel.open(verified);
+      });
+    }),
+    vscode.commands.registerCommand('fliwright.importDartVerification', async () => {
+      await runCommand('Import Dart Verification', async () => {
+        const chosen = await vscode.window.showOpenDialog({ title: 'Import Dart Compilation and Replay Evidence',
+          canSelectMany: false, filters: { 'Dart verification': ['json'] },
+        });
+        if (!chosen?.[0]) return;
+        const reviewed = await recorderService.importDartVerification(requireWorkspaceRoot(), chosen[0]);
+        updateRecordingViews(reviewed);
+        recordingPanel.open(reviewed);
+      });
+    }),
     vscode.commands.registerCommand('fliwright.insertRecordedTest', async () => {
       await runCommand('Insert Recorded Test', async () => {
         const root = requireWorkspaceRoot();
         const target = await vscode.window.showQuickPick([
-          { label: 'Save as New Test File', action: 'save' as const },
+          { label: 'Save as New Automation File', action: 'save' as const },
           { label: 'Insert at Active Editor Cursor', action: 'insert' as const },
         ], {
-          title: 'Insert Recorded Test',
-          placeHolder: 'Choose where to put the generated test',
+          title: 'Save Recorded Automation',
+          placeHolder: 'Choose where to put the generated automation',
         });
         if (!target) return;
 
@@ -1040,12 +1115,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           return;
         }
 
-        const defaultUri = resolveWorkspacePath(root, `tests/recorded-${Date.now()}.test.ts`);
-        const uri = await vscode.window.showSaveDialog({
-          title: 'Save Recorded Test',
-          defaultUri,
-          filters: { 'TypeScript Test': ['ts'] },
-        });
+        const uri = await vscode.window.showSaveDialog(await recorderService.getGeneratedCodeSaveOptions(root));
         if (!uri) return;
 
         const saved = await recorderService.saveGeneratedCode(root, uri);
@@ -1118,7 +1188,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (!node || node.kind !== 'flowFile') throw new Error('Select a flow to generate.');
         const root = requireWorkspaceRoot();
         const flow = await readFlowDocument(node.uri);
-        const defaultUri = resolveWorkspacePath(root, `.fliwright/tests/${sanitizeFlowFileId(flow.title ?? flow.id)}.test.ts`);
+        const config = await loadWorkspaceConfig(root);
+        const defaultUri = vscode.Uri.joinPath(resolveWorkspacePath(root, config.paths.tests), `${sanitizeFlowFileId(flow.title ?? flow.id)}.test.ts`);
         const uri = await vscode.window.showSaveDialog({
           title: 'Generate Test from Flow',
           defaultUri,
@@ -1370,7 +1441,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // When recording completes, open visual editor instead of RecordingPanel
     if (options.openTargetEditor !== false && recording.status === 'preview' && recording.targetFile) {
       const uri = vscode.Uri.file(recording.targetFile);
-      void vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
+      void vscode.commands.executeCommand('vscode.openWith', uri, recordingEditorViewType(recording.targetFile));
     }
   }
 
@@ -1554,11 +1625,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   async function runTests(
     node: { uri?: vscode.Uri; fileUri?: vscode.Uri } | undefined,
     opts: { workspace?: boolean; testNamePattern?: string } = {},
-  ): Promise<void> {
+  ): Promise<RunResult | undefined> {
     if (runningPromise) {
       void vscode.window.showWarningMessage('A Fliwright run is already in progress.');
       return;
     }
+    let completed: RunResult | undefined;
     runningPromise = (async () => {
       const commandLabel = opts.workspace ? 'Run Workspace Tests' : 'Run Test';
       await runCommand(commandLabel, async () => {
@@ -1572,10 +1644,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           : undefined;
         const failureContextDir = resolveWorkspacePath(root, loadConfig().failureContextDir);
 
-        // Trace configuration. Prefer the per-project runs root when available
-        // (migrated layout) so artifacts land alongside the run result.json.
-        const traceMode = getTraceMode();
-        const traceDir = runsRoot ? vscode.Uri.file(runsRoot) : undefined;
+        const recordingMode = (await loadWorkspaceConfig(root)).recording.mode;
         const runId = runArtifactStore.generateBaseRunId();
         const abortController = new AbortController();
         runningAbortController = abortController;
@@ -1593,8 +1662,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
               runId,
               vmServiceUrl: session.currentUrl,
               failureContextDir,
-              traceMode,
-              traceDir: traceMode !== 'off' ? traceDir : undefined,
               signal: abortController.signal,
             })
           ));
@@ -1605,7 +1672,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           testsTree.setRunning(undefined);
           session.finishRunning(previousSessionState);
         }
-        const failures = await failureStore.loadLatest(failureContextDir, result);
 
         // Record the run into the per-project status store so the Tests panel
         // can join statuses onto tree nodes by id. Workspace runs use each
@@ -1614,7 +1680,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (runsRoot) {
           try {
             await runArtifactStore.recordTestRun(root, result, relPath ?? 'tests', {
-              baseRunId: runId,
+              baseRunId: result.runId ?? runId,
               ranAt: Date.now(),
             });
           } catch (err) {
@@ -1623,6 +1689,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
 
         statusBar.setRunResult(result);
+        completed = result;
         testsTree.refresh();
         output.appendLine(`Run complete: ${result.passedTests}/${result.totalTests} passed, ${result.failedTests} failed.`);
 
@@ -1630,22 +1697,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // should prune whole runs, not trace data independently.
 
         if (result.failedTests > 0) {
-          const actions = traceMode !== 'off' ? ['View Trace', 'Open Failure'] : ['Open Failure'];
+          const actions = recordingMode !== 'off' ? ['View Trace', 'Open Failure'] : ['Open Failure'];
           vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, ...actions).then(async (selection) => {
             if (selection === 'View Trace') {
               await viewerPanel.openLatest();
-            } else if (selection === 'Open Failure' && failures[0]) {
-              const failure = failures[0];
-              if (failure.source?.file) {
-                const uri = vscode.Uri.file(failure.source.file);
-                await vscode.commands.executeCommand('vscode.openWith', uri, 'fliwright.testEditor');
-              } else {
-                failurePanel.open(failure);
-              }
+            } else if (selection === 'Open Failure') {
+              await viewerPanel.openLatest({ failedOnly: true });
             }
           });
         } else {
-          const actions = traceMode !== 'off' ? ['View Trace'] : [];
+          const actions = recordingMode !== 'off' ? ['View Trace'] : [];
           vscode.window.showInformationMessage(`Fliwright tests passed: ${result.passedTests}/${result.totalTests}`, ...actions).then(async (selection) => {
             if (selection === 'View Trace') {
               await viewerPanel.openLatest();
@@ -1657,6 +1718,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       runningPromise = undefined;
     });
     await runningPromise;
+    return completed;
   }
 
   async function runScript(node?: ScriptFileEntry): Promise<void> {
@@ -1673,8 +1735,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
 
       const runId = runArtifactStore.generateBaseRunId();
-      const traceMode = getTraceMode();
-      const scriptTraceDir = runsRoot;
       output.show(true);
       output.appendLine(`Running script: ${script.uri.fsPath}`);
       output.appendLine(`VM Service: ${session.currentUrl ?? '(none)'}`);
@@ -1686,8 +1746,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           vmServiceUrl: session.currentUrl,
           runsRoot,
           runId,
-          traceMode,
-          traceDir: traceMode !== 'off' && scriptTraceDir ? vscode.Uri.file(scriptTraceDir) : undefined,
           onOutput: appendScriptOutput,
         });
       } finally {
@@ -1708,9 +1766,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   async function pickScript(root: vscode.Uri): Promise<ScriptFileEntry | undefined> {
+    const config = await loadWorkspaceConfig(root);
     const scripts = await scriptDiscoveryService.discover(root);
     if (scripts.length === 0) {
-      vscode.window.showInformationMessage('No Fliwright scripts found under .fliwright/scripts.');
+      vscode.window.showInformationMessage(`No Fliwright scripts found matching ${config.scriptGlob}.`);
       return undefined;
     }
     const picked = await vscode.window.showQuickPick(scripts.map((script) => ({
@@ -1720,7 +1779,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       script,
     })), {
       title: 'Run Fliwright Script',
-      placeHolder: 'Select a script from .fliwright/scripts',
+      placeHolder: `Select a script matching ${config.scriptGlob}`,
     });
     return picked?.script;
   }
@@ -1730,13 +1789,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (line.length === 0) continue;
       output.appendLine(`[script ${stream}] ${line}`);
     }
-  }
-
-  function getTraceMode(): TraceMode {
-    const config = vscode.workspace.getConfiguration('fliwright');
-    const value = config.get<string>('traceMode', 'on-failure');
-    if (value === 'full' || value === 'off') return value;
-    return 'on-failure';
   }
 
   function markActiveWatches(providers: StateProviderEntry[]): StateProviderEntry[] {
@@ -2281,7 +2333,7 @@ function isViewAlreadyRegisteredError(error: unknown, viewId: string): boolean {
 export async function terminalScriptCommand(root: vscode.Uri, script: ScriptFileEntry): Promise<string> {
   const relativeScript = path.relative(root.fsPath, script.uri.fsPath);
   const source = await fs.promises.readFile(script.uri.fsPath, 'utf8');
-  if (usesFliwrightVitest(source)) {
+  if (usesVitestScript(script.uri.fsPath, source)) {
     const config = await createVitestScriptConfig(relativeScript, root.fsPath);
     return [
       'node',
@@ -2293,11 +2345,6 @@ export async function terminalScriptCommand(root: vscode.Uri, script: ScriptFile
     ].join(' ');
   }
   return ['node', shellQuote(relativeScript)].join(' ');
-}
-
-function usesFliwrightVitest(source: string): boolean {
-  return /from\s+['"]@fliwright\/vitest['"]/.test(source) ||
-    /import\s*\(\s*['"]@fliwright\/vitest['"]\s*\)/.test(source);
 }
 
 function shellQuote(value: string): string {

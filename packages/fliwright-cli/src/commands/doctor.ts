@@ -1,8 +1,11 @@
 import { execFile } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { FliwrightDriver } from '@fliwright/core';
+import { resolveProjectConfig } from '../config.js';
+import { resolveVmUrl } from '../vm-discovery.js';
 
 export interface CheckResult {
   name: string;
@@ -25,7 +28,9 @@ export async function doctorCommand(
   checks.push(await checkPackageInstalled('@fliwright/core'));
   checks.push(await checkPackageInstalled('@fliwright/vitest'));
   checks.push(await checkConfigFile(projectDir));
-  const vmService = await checkVmService(options.vmServiceUrl);
+  checks.push(...await checkRecordingConfiguration(projectDir));
+  checks.push(await checkVitestPreset(projectDir));
+  const vmService = await checkVmService(projectDir, options.vmServiceUrl);
   checks.push(vmService.check);
   checks.push(...await checkRuntimeDiagnostics(vmService.url));
 
@@ -103,74 +108,102 @@ async function checkConfigFile(projectDir: string): Promise<CheckResult> {
   }
 }
 
-async function checkVmService(providedUrl?: string): Promise<{
-  check: CheckResult;
-  url?: string;
-}> {
-  if (providedUrl) {
-    return {
-      check: {
-        name: 'VM Service',
-        passed: true,
-        message: `provided at ${providedUrl}`,
-      },
-      url: providedUrl,
-    };
+async function checkRecordingConfiguration(projectDir: string): Promise<CheckResult[]> {
+  try {
+    const config = await resolveProjectConfig(projectDir);
+    const names = Object.keys(config.scenarios ?? {});
+    const environment = ['FLIWRIGHT_CONFIG', 'FLIWRIGHT_RECORDING_MODE', 'FLIWRIGHT_RUNS_ROOT',
+      'FLIWRIGHT_SCENARIOS', 'FLIWRIGHT_SCENARIO_MODE'].filter((key) => process.env[key]);
+    return [{
+      name: 'Recording configuration', passed: true,
+      message: `mode=${config.recording.mode}, runsRoot=${config.runsRoot ?? 'project default'}, scenarios=${names.join(',') || '(none)'}, source=${environment.length ? `environment (${environment.join(',')}) > ` : ''}fliwright.config.ts/defaults`,
+    }, {
+      name: 'Automation paths', passed: true,
+      message: Object.entries(config.paths).map(([key, value]) => `${key}=${value}`).join(', '),
+    }];
+  } catch (error) {
+    return [{ name: 'Recording configuration', passed: false, message: messageOf(error) }];
   }
-  const { discoverVmServiceUrl } = await import('../vm-discovery.js');
-  const url = await discoverVmServiceUrl({ verify: true });
-  if (url) {
-    return {
-      check: {
-        name: 'VM Service',
-        passed: true,
-        message: `detected at ${url}`,
-      },
-      url,
-    };
-  }
-  return {
-    check: {
-      name: 'VM Service',
-      passed: false,
-      message: 'no Flutter app detected (run `flutter run` to start one)',
-    },
-  };
 }
 
-async function checkRuntimeDiagnostics(vmServiceUrl?: string): Promise<CheckResult[]> {
-  if (!vmServiceUrl) {
-    return [
-      skippedRuntimeCheck('Bridge extensions'),
-      skippedRuntimeCheck('Mock server'),
-      skippedRuntimeCheck('Riverpod observer'),
-    ];
+/** Resolve the real config in a bounded subprocess; never collect or execute project tests. */
+async function checkVitestPreset(projectDir: string): Promise<CheckResult> {
+  try {
+    const script = `
+      import { resolveConfig } from ${JSON.stringify(import.meta.resolve('vitest/node'))};
+      const { vitestConfig, viteConfig } = await resolveConfig({ root: ${JSON.stringify(projectDir)} });
+      const result = { runner: vitestConfig.runner, include: vitestConfig.include,
+        env: vitestConfig.env, configFile: viteConfig.configFile };
+      process.stdout.write('\\nFLIWRIGHT_DOCTOR_CONFIG=' + JSON.stringify(result) + '\\n');
+    `;
+    const output = await execAsync(process.execPath, ['--input-type=module', '--eval', script], projectDir);
+    const line = output.split('\n').find((entry) => entry.startsWith('FLIWRIGHT_DOCTOR_CONFIG='));
+    if (!line) throw new Error('Vitest did not return its resolved configuration.');
+    const config = JSON.parse(line.slice('FLIWRIGHT_DOCTOR_CONFIG='.length)) as {
+      runner?: string; include: string[]; env?: Record<string, string>; configFile?: string;
+    };
+    const expectedRunner = fileURLToPath(import.meta.resolve('@fliwright/vitest/runner'));
+    const passed = config.runner === expectedRunner && Boolean(config.env?.FLIWRIGHT_CONFIG);
+    return {
+      name: 'Vitest recording preset', passed,
+      message: passed
+        ? `resolved ${config.configFile}: runner=${config.runner}, include=${config.include.join(', ')}`
+        : `Recording lifecycle is not verified for runner=${config.runner ?? '(default)'}. Configure fliwrightPreset(); custom runners must explicitly compose the Fliwright lifecycle and pass runner integration checks.`,
+    };
+  } catch (error) {
+    return { name: 'Vitest recording preset', passed: false, message: messageOf(error) };
   }
+}
 
+async function checkVmService(projectDir: string, providedUrl?: string): Promise<{ check: CheckResult; url?: string }> {
+  try {
+    const config = await resolveProjectConfig(projectDir);
+    const url = await resolveVmUrl({ cliFlag: providedUrl, configUrl: config.vmServiceUrl, cwd: projectDir, verify: true });
+    return { check: {
+      name: 'VM Service', passed: Boolean(url),
+      message: url ? 'reachable (using argument > environment > project config > workspace cache > discovery)'
+        : 'no Flutter app detected (run `flutter run` to start one)',
+    }, url: url ?? undefined };
+  } catch (error) {
+    return { check: { name: 'VM Service', passed: false, message: messageOf(error) } };
+  }
+}
+
+const runtimeCheckNames = ['Bridge extensions', 'Recording target capture', 'Recording focused input',
+  'Evidence screenshot', 'Evidence snapshot', 'Mock server', 'Riverpod observer'];
+
+async function checkRuntimeDiagnostics(vmServiceUrl?: string): Promise<CheckResult[]> {
+  if (!vmServiceUrl) return runtimeCheckNames.map(skippedRuntimeCheck);
   const driver = new FliwrightDriver();
   try {
     await driver.connect(toWebSocketUrl(vmServiceUrl));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     return [
-      {
-        name: 'Bridge extensions',
-        passed: false,
-        message: `could not connect to VM Service: ${message}`,
-      },
-      skippedRuntimeCheck('Mock server'),
-      skippedRuntimeCheck('Riverpod observer'),
-    ];
-  }
-
-  try {
-    return [
-      await checkBridgeExtensions(driver),
+      ...await checkBridgeExtensions(driver),
+      await checkEvidenceChannel(driver, 'screenshot'),
+      await checkEvidenceChannel(driver, 'snapshot'),
       await checkMockServer(driver),
       await checkRiverpodObserver(driver),
     ];
+  } catch (error) {
+    return runtimeCheckNames.map((name) => ({ name, passed: false,
+      message: `could not connect to VM Service: ${messageOf(error)}` }));
   } finally {
     await driver.dispose();
+  }
+}
+
+async function checkEvidenceChannel(driver: FliwrightDriver, channel: 'screenshot' | 'snapshot'): Promise<CheckResult> {
+  try {
+    const response = await driver.sendRequest(channel === 'screenshot' ? 'ext.fliwright.screenshot' : 'ext.fliwright.snap', {}) as {
+      success?: boolean; screenshot?: string; snapshot?: unknown; error?: string;
+    };
+    const available = response.success !== false && (channel === 'screenshot'
+      ? typeof response.screenshot === 'string' && response.screenshot.length > 0
+      : response.snapshot != null);
+    return { name: `Evidence ${channel}`, passed: available,
+      message: available ? 'capture available' : response.error ?? 'capture returned no evidence' };
+  } catch (error) {
+    return { name: `Evidence ${channel}`, passed: false, message: messageOf(error) };
   }
 }
 
@@ -182,31 +215,36 @@ function skippedRuntimeCheck(name: string): CheckResult {
   };
 }
 
-async function checkBridgeExtensions(driver: FliwrightDriver): Promise<CheckResult> {
+async function checkBridgeExtensions(driver: FliwrightDriver): Promise<CheckResult[]> {
   try {
     const ping = await driver.sendRequest('ext.fliwright.ping') as { status?: string };
     const handshake = await driver.sendRequest('ext.fliwright.handshake', {
-      protocolVersion: '1',
+      protocolVersion: '2',
     }) as {
       compatible?: boolean;
       protocolVersion?: number;
       debugMode?: boolean;
       initialized?: boolean;
+      bridgeCapabilities?: Record<string, unknown>;
     };
     const passed = ping.status === 'ok' && handshake.compatible === true;
-    return {
-      name: 'Bridge extensions',
-      passed,
-      message: passed
-        ? `installed (protocol ${handshake.protocolVersion}, debugMode=${handshake.debugMode}, initialized=${handshake.initialized})`
-        : 'bridge ping/handshake did not return compatible status',
-    };
+    const targetCapture = handshake.bridgeCapabilities?.recordingBeforeDispatchTarget === true;
+    const focusedInput = handshake.bridgeCapabilities?.recordingFocusedInputController === true;
+    return [{
+      name: 'Bridge extensions', passed,
+      message: `protocol=${handshake.protocolVersion}, compatible=${handshake.compatible === true}, initialized=${handshake.initialized === true}, debugMode=${handshake.debugMode === true}`,
+    }, {
+      name: 'Recording target capture', passed: passed && targetCapture,
+      message: targetCapture ? 'before-dispatch target freezing available'
+        : 'Install FliwrightRecordingBinding before starting the app to capture targets before dispatch.',
+    }, {
+      name: 'Recording focused input', passed: passed && focusedInput,
+      message: focusedInput ? 'focused controller listener available' : 'bridge does not expose focused input capture',
+    }];
   } catch (error) {
-    return {
-      name: 'Bridge extensions',
-      passed: false,
-      message: error instanceof Error ? error.message : String(error),
-    };
+    return ['Bridge extensions', 'Recording target capture', 'Recording focused input'].map((name) => ({
+      name, passed: false, message: messageOf(error),
+    }));
   }
 }
 
@@ -259,9 +297,9 @@ function toWebSocketUrl(url: string): string {
   return converted.endsWith('/ws') ? converted : converted.replace(/\/?$/, '/ws');
 }
 
-function execAsync(command: string, args: string[]): Promise<string> {
+function execAsync(command: string, args: string[], cwd?: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { timeout: 5000 }, (error, stdout) => {
+    execFile(command, args, { timeout: 5000, cwd }, (error, stdout) => {
       if (error) {
         reject(error);
       } else {
@@ -269,4 +307,8 @@ function execAsync(command: string, args: string[]): Promise<string> {
       }
     });
   });
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

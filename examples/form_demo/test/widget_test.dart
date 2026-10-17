@@ -11,20 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:form_demo/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('form demo renders the registration screen', (WidgetTester tester) async {
+    await tester.pumpWidget(const FormDemoApp());
+    expect(find.text('注册'), findsOneWidget);
+    expect(find.byKey(const Key('submit_button')), findsOneWidget);
   });
 }

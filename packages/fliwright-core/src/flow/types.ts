@@ -64,7 +64,7 @@ export interface FliwrightFlowNode {
   selector?: string;
   recordingFrameId?: string;
   operationIndex?: number;
-  operation?: Pick<RecordedOperation, 'kind' | 'position' | 'delta' | 'text' | 'action' | 'duration' | 'timestamp' | 'status' | 'ignoreReason' | 'confidence'>;
+  operation?: Pick<RecordedOperation, 'kind' | 'position' | 'delta' | 'text' | 'sensitive' | 'action' | 'duration' | 'durationMs' | 'timestamp' | 'status' | 'ignoreReason' | 'confidence'>;
   screenshot?: FliwrightFlowScreenshotRef;
   figma?: FliwrightFigmaBinding;
   decisionRules?: FliwrightFlowDecisionRule[];

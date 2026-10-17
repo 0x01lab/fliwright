@@ -38,9 +38,8 @@ class GestureExtension {
     final position = Offset(x, y);
     final now = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
     final isRightClick = params['button'] == 'right';
-    final kind = isRightClick
-        ? PointerDeviceKind.mouse
-        : PointerDeviceKind.touch;
+    final kind =
+        isRightClick ? PointerDeviceKind.mouse : PointerDeviceKind.touch;
     final buttons = isRightClick ? kSecondaryMouseButton : kPrimaryButton;
 
     ClickIndicator.show(position);
@@ -203,7 +202,12 @@ class GestureExtension {
     double y,
     Map<String, String> params,
   ) async {
-    final duration = int.tryParse(params['duration'] ?? '') ?? 500;
+    final requestedMs = double.tryParse(params['duration'] ?? '');
+    final durationMs =
+        requestedMs != null && requestedMs.isFinite && requestedMs >= 0
+            ? requestedMs
+            : 500.0;
+    final duration = Duration(microseconds: (durationMs * 1000).round());
 
     final pointer = _nextPointer++;
     final view =
@@ -221,13 +225,15 @@ class GestureExtension {
       ),
     );
 
+    // Flutter's recognizer uses a timer, not the up event's timestamp.
+    await Future<void>.delayed(duration);
     GestureBinding.instance.handlePointerEvent(
       PointerUpEvent(
         pointer: pointer,
         position: position,
         kind: PointerDeviceKind.touch,
         viewId: view,
-        timeStamp: now + Duration(milliseconds: duration),
+        timeStamp: now + duration,
       ),
     );
 
@@ -260,6 +266,7 @@ class GestureExtension {
       start: Offset(x, y),
       delta: Offset(deltaX, deltaY),
       steps: steps,
+      duration: _dragDuration(params),
     );
 
     return normalizedSuccess(
@@ -483,6 +490,7 @@ class GestureExtension {
       start: Offset(x, y),
       delta: Offset(deltaX, deltaY),
       steps: steps,
+      duration: _dragDuration(params),
     );
 
     return normalizedSuccess(
@@ -493,12 +501,24 @@ class GestureExtension {
     );
   }
 
+  static Duration? _dragDuration(Map<String, String> params) {
+    if (!params.containsKey('duration')) return null;
+    final milliseconds = double.tryParse(params['duration']!);
+    if (milliseconds == null || !milliseconds.isFinite || milliseconds <= 0) {
+      throw ArgumentError.value(params['duration'], 'duration',
+          'Drag duration must be positive finite milliseconds');
+    }
+    return Duration(microseconds: (milliseconds * 1000).round());
+  }
+
   static Future<void> _performDrag({
     required Offset start,
     required Offset delta,
     required int steps,
+    Duration? duration,
   }) async {
     final safeSteps = max(1, steps);
+    final total = duration ?? Duration(milliseconds: (safeSteps + 1) * 16);
     final pointer = _nextPointer++;
     final view =
         WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
@@ -514,9 +534,12 @@ class GestureExtension {
         timeStamp: now,
       ),
     );
-    await Future<void>.delayed(const Duration(milliseconds: 16));
-
+    var elapsed = Duration.zero;
     for (var i = 1; i <= safeSteps; i++) {
+      final next = Duration(
+          microseconds: (total.inMicroseconds * i / (safeSteps + 1)).round());
+      await Future<void>.delayed(next - elapsed);
+      elapsed = next;
       final t = i / safeSteps;
       GestureBinding.instance.handlePointerEvent(
         PointerMoveEvent(
@@ -526,12 +549,12 @@ class GestureExtension {
           kind: PointerDeviceKind.touch,
           buttons: kPrimaryButton,
           viewId: view,
-          timeStamp: now + Duration(milliseconds: i * 16),
+          timeStamp: now + elapsed,
         ),
       );
-      await Future<void>.delayed(const Duration(milliseconds: 16));
     }
 
+    await Future<void>.delayed(total - elapsed);
     GestureBinding.instance.handlePointerEvent(
       PointerUpEvent(
         pointer: pointer,
@@ -539,7 +562,7 @@ class GestureExtension {
         kind: PointerDeviceKind.touch,
         buttons: kPrimaryButton,
         viewId: view,
-        timeStamp: now + Duration(milliseconds: (safeSteps + 1) * 16),
+        timeStamp: now + total,
       ),
     );
   }

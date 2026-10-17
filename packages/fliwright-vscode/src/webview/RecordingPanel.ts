@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import type { FlowCleanPlan, FliwrightFlowDocument } from '@fliwright/core';
+import type { FlowCleanPlan, FliwrightFlowDocument, RecordingCheckpointCandidate } from '@fliwright/core';
+import { resolveRecordingArtifact } from '@fliwright/core';
 import type { RecordingSession } from '../types.js';
 import type { CanvasToExtensionMessage, ExtensionToCanvasMessage, RecordingCanvasSession } from './recording-canvas/types.js';
 
@@ -11,6 +12,7 @@ export interface RecordingPanelOptions {
     plan: FlowCleanPlan;
     applied: boolean;
   }>;
+  onReviewRecordingCheckpoints?: (checkpoints: RecordingCheckpointCandidate[]) => void | Promise<void>;
 }
 
 export class RecordingPanel {
@@ -43,6 +45,15 @@ export class RecordingPanel {
         }
         if (message.type === 'insertRecordedTest') {
           void vscode.commands.executeCommand('fliwright.insertRecordedTest');
+        }
+        if (message.type === 'confirmRecordingCheckpoints') {
+          void vscode.commands.executeCommand('fliwright.confirmRecordingCheckpoints');
+        }
+        if (message.type === 'reviewRecordingCheckpoints') {
+          void this.options.onReviewRecordingCheckpoints?.(message.checkpoints);
+        }
+        if (message.type === 'verifyRecording') {
+          void vscode.commands.executeCommand('fliwright.verifyRecording');
         }
         if (message.type === 'startRecording') {
           void vscode.commands.executeCommand('fliwright.startRecording');
@@ -79,9 +90,15 @@ export class RecordingPanel {
 
   private postSession(): void {
     if (!this.panel || !this.lastSession) return;
+    this.panel.webview.options = { ...this.panel.webview.options,
+      localResourceRoots: [
+        ...(this.extensionUri ? [this.extensionUri] : []),
+        ...(this.lastSession.artifactDirectory ? [vscode.Uri.file(this.lastSession.artifactDirectory)] : []),
+      ],
+    };
     const message: ExtensionToCanvasMessage = {
       type: 'session',
-      session: toCanvasSession(this.lastSession),
+      session: toCanvasSession(this.lastSession, this.panel.webview),
     };
     void this.panel.webview.postMessage?.(message);
   }
@@ -139,10 +156,19 @@ function resourceUri(webview: vscode.Webview, extensionUri: vscode.Uri | undefin
   return webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, ...relativePath.split('/'))).toString();
 }
 
-function toCanvasSession(session: RecordingSession): RecordingCanvasSession {
+function toCanvasSession(session: RecordingSession, webview: vscode.Webview): RecordingCanvasSession {
   return {
     ...session,
-    frames: session.frames ?? [],
+    frames: (session.frames ?? []).map((frame) => {
+      if (!frame.screenshot || !session.artifactDirectory) return frame;
+      try {
+        const path = resolveRecordingArtifact(session.artifactDirectory, frame.screenshot.path);
+        return { ...frame, screenshot: { ...frame.screenshot, uri: webview.asWebviewUri(vscode.Uri.file(path)).toString() } };
+      } catch (error) {
+        return { ...frame, status: 'error' as const, screenshot: undefined,
+          screenshotError: error instanceof Error ? error.message : String(error) };
+      }
+    }),
   };
 }
 

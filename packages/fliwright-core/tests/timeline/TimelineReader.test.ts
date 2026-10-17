@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { parseTimelineData, summarizeTimeline } from '../../src/timeline/TimelineReader.js';
 
 describe('TimelineReader', () => {
+  it('accepts current runner states and rejects incompatible schemas', () => {
+    const data = { version: 2, runId: 'r', testName: 't', mode: 'test', status: 'interrupted', startedAt: 'x', nodes: [] };
+    expect(parseTimelineData(JSON.stringify(data))).toMatchObject({ status: 'interrupted' });
+    expect(parseTimelineData(JSON.stringify({ ...data, version: 1 }))).toBeUndefined();
+    expect(parseTimelineData(JSON.stringify({ ...data, status: 'unknown' }))).toBeUndefined();
+  });
   it('rejects malformed or node-less timeline data', () => {
     expect(parseTimelineData('{not json}')).toBeUndefined();
     expect(parseTimelineData(JSON.stringify({ runId: 'run-1' }))).toBeUndefined();
@@ -9,7 +15,7 @@ describe('TimelineReader', () => {
 
   it('summarizes timeline nodes, screenshots, and the first visible failure', () => {
     const timeline = parseTimelineData(JSON.stringify({
-      version: 1,
+      version: 2,
       runId: 'run-1',
       testName: 'checkout',
       mode: 'test',

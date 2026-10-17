@@ -7,6 +7,23 @@ import { RunArtifactStore } from '../src/testing/RunArtifactStore.js';
 import type { RunResult } from '../src/types.js';
 
 describe('RunArtifactStore', () => {
+  it('retains canonical runs and their failure evidence when recording a newer test result', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'fliwright-canonical-history-'));
+    const root = vscode.Uri.file('/repos/app');
+    const store = new RunArtifactStore({ homeDir: home });
+    const oldRun = join(await store.ensureRunsDir(root), 'earlier-failure');
+    mkdirSync(join(oldRun, 'tests/failure/attempts/first'), { recursive: true });
+    writeFileSync(join(oldRun, 'run.json'), JSON.stringify({ schemaVersion: 1, runId: 'earlier-failure', status: 'failed' }));
+    writeFileSync(join(oldRun, 'result.json'), JSON.stringify({ passed: false }));
+    const evidence = join(oldRun, 'tests/failure/attempts/first/result.json');
+    writeFileSync(evidence, JSON.stringify({ testOutcome: 'failed' }));
+    await store.recordTestRun(root, { passed: true, totalTests: 1, passedTests: 1, failedTests: 0,
+      duration: 1, results: [{ name: 'later', passed: true, duration: 1 }] }, 'tests/later.test.ts',
+    { baseRunId: 'later-success', ranAt: 2 });
+    expect(existsSync(join(oldRun, 'run.json'))).toBe(true);
+    expect(JSON.parse(readFileSync(evidence, 'utf8'))).toMatchObject({ testOutcome: 'failed' });
+  });
+
   it('records result.json and indexes the matching timeline run id', async () => {
     const home = mkdtempSync(join(tmpdir(), 'fliwright-home-'));
     const root = vscode.Uri.file('/repos/app');

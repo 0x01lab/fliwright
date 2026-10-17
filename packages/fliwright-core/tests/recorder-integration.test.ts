@@ -1,142 +1,85 @@
-/**
- * Integration test: Recorder + EventAggregator + CodeGenerator Pipeline
- *
- * Exercises the full data flow:
- *   RecorderController → EventAggregator → SelectorResolver → CodeGenerator/DartCodeGenerator
- *
- * Uses MockWebSocket so no Flutter app is required.
- */
-import { describe, it, expect } from 'vitest';
+/** Recording v2 over the real connector, aggregator and code generators. */
+import { afterEach, describe, it, expect } from 'vitest';
 import { FliwrightDriver } from '../src/Driver.js';
 import { createProtocolMock } from './helpers/mockVMService.js';
-import type { RawInputEvent, WidgetInfo } from '../src/types.js';
+import { installRecordingProtocol, frozenTarget } from './helpers/recordingProtocol.js';
 
-function createDriverWithMock() {
+const drivers: FliwrightDriver[] = [];
+afterEach(async () => { await Promise.all(drivers.splice(0).map((driver) => driver.dispose())); });
+
+async function harness() {
   const mock = createProtocolMock();
+  const protocol = installRecordingProtocol(mock);
   const driver = new FliwrightDriver();
-  return { mock, driver, init: () => driver.attachMockConnector(mock.ws) };
+  drivers.push(driver);
+  await driver.attachMockConnector(mock.ws);
+  return { mock, protocol, recorder: driver.recorder,
+    emit: (data: Record<string, unknown>) => mock.emitStreamEvent('FliwrightRecording', data),
+  };
 }
 
 describe('Recorder + Codegen Pipeline Integration', () => {
-  it('full recording session: tap → drag → type → generate TS code', async () => {
-    const { mock, driver, init } = createDriverWithMock();
-
-    // hitTest returns widget info for selector resolution
-    const widgets: Record<string, Partial<WidgetInfo>> = {
-      '100,200': { type: 'ElevatedButton', text: 'Login' },
-      '50,300': { type: 'Slider' },
-      '150,400': { type: 'TextField', text: 'Email' },
-    };
-
-    mock.mockExtension('ext.fliwright.hitTest', (params: any) => {
-      const key = `${Math.round(params.x)},${Math.round(params.y)}`;
-      return { widget: widgets[key] ?? { type: 'Widget' } };
-    });
-
-    mock.mockExtension('ext.fliwright.startRecording', () => ({ status: 'ok' }));
-    mock.mockExtension('ext.fliwright.stopRecording', () => ({ status: 'ok' }));
-
-    await init();
-    const recorder = driver.recorder;
-
+  it('records tap, drag and focused text values and generates TS code', async () => {
+    const { mock, protocol, recorder, emit } = await harness();
+    const target = frozenTarget({ match: { key: 'login' } }, { id: 'button', type: 'ElevatedButton' });
     await recorder.start();
+    emit(protocol.pointer('down', 100, 200, 100, 1, { target }));
+    emit(protocol.pointer('up', 100, 200, 200, 1));
+    emit(protocol.pointer('down', 50, 300, 300, 2, { target: frozenTarget({ match: { type: 'Slider' }, position: { nth: 0 } }, { type: 'Slider' }, 'positional') }));
+    emit(protocol.pointer('move', 150, 300, 400, 2));
+    emit(protocol.pointer('up', 150, 300, 500, 2));
+    emit(protocol.pointer('down', 150, 400, 600, 3, { target: frozenTarget({ match: { key: 'email' } }, { id: 'field', type: 'TextField' }) }));
+    emit(protocol.pointer('up', 150, 400, 700, 3));
+    emit(protocol.text('hello', 800, { targetId: 'field', target: frozenTarget({ match: { key: 'email' } }, { id: 'field', type: 'TextField' }) }));
 
-    // Simulate tap: pointer down then up at same position
-    const now = Date.now();
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 100, y: 200 }, timestamp: now, buttons: 1 });
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 100, y: 200 }, timestamp: now + 50, buttons: 0 });
-
-    // Simulate drag: down → move → up with significant delta
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 50, y: 300 }, timestamp: now + 200, buttons: 1 });
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'move', pointer: 0, position: { x: 150, y: 300 }, timestamp: now + 300, buttons: 1 });
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 150, y: 300 }, timestamp: now + 400, buttons: 0 });
-
-    // Simulate text input
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 150, y: 400 }, timestamp: now + 500, buttons: 1 });
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 150, y: 400 }, timestamp: now + 550, buttons: 0 });
-    mock.emitStreamEvent('FliwrightRecording', {
-      type: 'textInput',
-      text: 'hello',
-      timestamp: now + 600,
-    });
-
-    // Stop and generate code
-    const code = await recorder.stop({ testName: 'login flow', lang: 'ts' });
-    const ops = recorder.getOperations();
-
-    // Verify operations were captured
-    expect(ops.length).toBeGreaterThanOrEqual(2);
-
-    // Verify code generation
-    expect(code).toContain("import { test, expect } from '@fliwright/vitest'");
-    expect(code).toContain("test('login flow'");
-    expect(code).toContain('.click()');
-    // Text input should generate type
-    expect(code).toContain(".type('hello')");
-
-    // Verify hitTest was called for selector resolution
-    const hitTestMessages = mock.sentMessages().filter(m => m.method === 'ext.fliwright.hitTest');
-    expect(hitTestMessages.length).toBeGreaterThanOrEqual(2);
+    const result = await recorder.stop({ testName: 'login flow', lang: 'ts' });
+    expect(result.status).toBe('captured');
+    expect(result.operations).toHaveLength(3);
+    expect(result.code).toContain("test('login flow'");
+    expect(result.code).toContain('.click({ waitForAnimations: true })');
+    expect(result.code).toContain(".fill('hello')");
+    expect(mock.sentMessages().filter((message) => message.method === 'ext.fliwright.hitTest')).toHaveLength(0);
   });
 
-  it('onOperation callback fires during recording', async () => {
-    const { mock, driver, init } = createDriverWithMock();
-
-    mock.mockExtension('ext.fliwright.hitTest', () => ({ widget: { type: 'Text', text: 'Click Me' } }));
-    mock.mockExtension('ext.fliwright.startRecording', () => ({ status: 'ok' }));
-    mock.mockExtension('ext.fliwright.stopRecording', () => ({ status: 'ok' }));
-
-    await init();
-
+  it('delivers onOperation before stop', async () => {
+    const { protocol, recorder, emit } = await harness();
     const operations: Array<{ kind: string; index: number }> = [];
-    const recorder = driver.recorder;
-
-    await recorder.start({
-      onOperation: (op, idx) => {
-        operations.push({ kind: op.kind, index: idx });
-      },
-    });
-
-    const now = Date.now();
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 10, y: 20 }, timestamp: now, buttons: 1 });
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 10, y: 20 }, timestamp: now + 50, buttons: 0 });
-
-    // Wait for event processing
-    await new Promise(r => setTimeout(r, 50));
-
+    await recorder.start({ onOperation: (operation, index) => operations.push({ kind: operation.kind, index }) });
+    emit(protocol.pointer('down', 10, 20, 100));
+    emit(protocol.pointer('up', 10, 20, 200));
+    expect(operations).toEqual([{ kind: 'tap', index: 0 }]);
     await recorder.stop();
-
-    expect(operations.length).toBeGreaterThanOrEqual(1);
-    expect(operations[0].kind).toBe('tap');
-    expect(operations[0].index).toBe(0);
   });
 
-  it('generates Dart code when lang is dart', async () => {
-    const { mock, driver, init } = createDriverWithMock();
-
-    mock.mockExtension('ext.fliwright.hitTest', () => ({ widget: { type: 'ElevatedButton', text: 'OK' } }));
-    mock.mockExtension('ext.fliwright.startRecording', () => ({ status: 'ok' }));
-    mock.mockExtension('ext.fliwright.stopRecording', () => ({ status: 'ok' }));
-
-    await init();
-    const recorder = driver.recorder;
-
+  it('generates Dart output from the same captured operations', async () => {
+    const { protocol, recorder, emit } = await harness();
     await recorder.start();
-
-    const now = Date.now();
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'down', pointer: 0, position: { x: 10, y: 20 }, timestamp: now, buttons: 1 });
-    injectPointerEvent(mock, { type: 'pointerEvent', kind: 'up', pointer: 0, position: { x: 10, y: 20 }, timestamp: now + 50, buttons: 0 });
-
-    const code = await recorder.stop({ testName: 'tap test', lang: 'dart' });
-
-    // Dart code should use Dart-style imports and syntax
+    emit(protocol.pointer('down', 10, 20, 100, 1, { target: frozenTarget({ match: { key: 'ok' } }, { type: 'ElevatedButton' }) }));
+    emit(protocol.pointer('up', 10, 20, 200, 1));
+    const { code } = await recorder.stop({ testName: 'tap test', lang: 'dart',
+      dartAppEntrypoint: 'package:form_demo/recording_replay_main.dart' });
     expect(code).toContain("import 'package:flutter_test/flutter_test.dart'");
-    expect(code).toContain('await');
     expect(code).toContain("testWidgets('tap test'");
     expect(code).toContain('tester.tap(');
   });
-});
 
-function injectPointerEvent(mock: ReturnType<typeof createProtocolMock>, event: RawInputEvent) {
-  mock.emitStreamEvent('FliwrightRecording', event as unknown as Record<string, unknown>);
-}
+  it('preserves frozen targets while deduplicating events and declaring initial/trailing gaps', async () => {
+    const { mock, protocol, recorder, emit } = await harness();
+    mock.mockExtension('ext.fliwright.stopRecording', (params) => ({
+      ...protocol.response('ext.fliwright.stopRecording', params) as object, lastSequence: 4,
+    }));
+    mock.mockExtension('ext.fliwright.hitTest', () => { throw new Error('historical hitTest is forbidden'); });
+    await recorder.start({ stopFlushTimeoutMs: 0 });
+    const target = frozenTarget({ match: { key: 'frozen' } }, { id: 'button-1', type: 'ElevatedButton' });
+    emit(protocol.pointer('down', 10, 20, 100, 1, { targetId: 'button-1', target }));
+    const up = protocol.pointer('up', 10, 20, 200, 1, { sequence: 3, targetId: 'button-1', target });
+    emit(up);
+    emit(up);
+    const result = await recorder.stop();
+    expect(result.status).toBe('partial');
+    expect(result.missingSequences).toEqual([2, 4]);
+    expect(result.operations).toHaveLength(1);
+    expect(result.operations[0].recordedTarget).toMatchObject({ id: 'button-1' });
+    expect(mock.sentMessages().filter((message) => message.method === 'ext.fliwright.hitTest')).toHaveLength(0);
+  });
+});

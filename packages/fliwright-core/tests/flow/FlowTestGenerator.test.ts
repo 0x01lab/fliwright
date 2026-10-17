@@ -3,6 +3,23 @@ import { generateFlowTestSkeleton } from '../../src/flow/FlowTestGenerator.js';
 import type { FliwrightFlowDocument } from '../../src/flow/types.js';
 
 describe('generateFlowTestSkeleton', () => {
+  it('preserves recorded pointer timing through an editable flow', async () => {
+    const { buildFlowFromRecording } = await import('../../src/flow/RecordingFlowBuilder.js');
+    const flow = buildFlowFromRecording({
+      operations: [
+        { kind: 'drag', position: { x: 100, y: 200 }, delta: { x: 0, y: -240 }, durationMs: 1281.008, timestamp: 1 },
+        { kind: 'longPress', position: { x: 100, y: 200 }, durationMs: 606.761, timestamp: 2 },
+      ],
+      frames: [
+        { id: 'drag', index: 0, operationIndex: 0, kind: 'drag', status: 'ready', selector: 'key=list', timestamp: 1 },
+        { id: 'hold', index: 1, operationIndex: 1, kind: 'longPress', status: 'ready', selector: 'key=button', timestamp: 2 },
+      ],
+    });
+    const code = generateFlowTestSkeleton(flow);
+    expect(code).toContain('.drag(0, -240, { duration: 1281.008 })');
+    expect(code).toContain('.longPress({ duration: 606.761 })');
+  });
+
   it('generates a Fliwright/Vitest skeleton from flow nodes', () => {
     const flow: FliwrightFlowDocument = {
       version: 1,
@@ -68,5 +85,32 @@ describe('generateFlowTestSkeleton', () => {
     expect(code).toContain("// Implement pending payment state");
     expect(code).toContain("// Decision rules");
     expect(code).toContain("// - Pending: payment.pending -> figma-1");
+  });
+});
+
+describe('sensitive recorded flows', () => {
+  it('preserves masking and parameterized replay through the editable flow', async () => {
+    const { buildFlowFromRecording } = await import('../../src/flow/RecordingFlowBuilder.js');
+    const flow = buildFlowFromRecording({
+      frames: [{ id: 'password', index: 0, operationIndex: 3, kind: 'type', status: 'ready',
+        text: '<masked>', sensitive: true, action: 'replace', selector: 'key=password', timestamp: 1,
+        position: { x: 0, y: 0 } }],
+    });
+    expect(flow.nodes[0].operation).toMatchObject({ text: '<masked>', sensitive: true });
+    const code = generateFlowTestSkeleton(flow, { useFlowSteps: false });
+    expect(code).not.toContain("fill('<masked>')");
+    expect(code).toContain('FLIWRIGHT_INPUT_4');
+    let body!: (fixtures: unknown) => Promise<void>;
+    const env: Record<string, string> = {};
+    new Function('test', 'process', code.replace(/^import .*;\n/, ''))(
+      (_: string, callback: typeof body) => { body = callback; }, { env },
+    );
+    const values: unknown[] = [];
+    const page = { locator: () => ({ fill: async (...value: unknown[]) => { values.push(value); } }) };
+    await expect(body({ page })).rejects.toThrow('FLIWRIGHT_INPUT_4');
+    expect(values).toEqual([]);
+    env.FLIWRIGHT_INPUT_4 = 'replay-parameter';
+    await body({ page });
+    expect(values).toEqual([['replay-parameter', { sensitive: true }]]);
   });
 });

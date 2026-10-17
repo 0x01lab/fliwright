@@ -23,7 +23,9 @@ describe('initCommand', () => {
     await initCommand(tmpDir, { install: false }, { log: (message) => logs.push(message) });
 
     const config = await readFile(join(tmpDir, 'fliwright.config.ts'), 'utf8');
-    const test = await readFile(join(tmpDir, 'tests', 'example.test.ts'), 'utf8');
+    const vitestConfig = await readFile(join(tmpDir, 'vitest.config.ts'), 'utf8');
+    const test = await readFile(join(tmpDir, '.fliwright', 'tests', 'example.test.ts'), 'utf8');
+    const script = await readFile(join(tmpDir, '.fliwright', 'scripts', 'example.script.ts'), 'utf8');
     const tsconfig = await readFile(join(tmpDir, 'tsconfig.json'), 'utf8');
     const pkg = JSON.parse(await readFile(join(tmpDir, 'package.json'), 'utf8')) as {
       type: string;
@@ -33,9 +35,15 @@ describe('initCommand', () => {
     const gitignore = await readFile(join(tmpDir, '.gitignore'), 'utf8');
 
     expect(config).toContain('defineConfig');
+    expect(config).toContain("mode: 'standard'");
+    expect(vitestConfig).toContain("from '@fliwright/vitest/preset'");
+    expect(vitestConfig).toContain('fliwrightPreset(projectConfig)');
+    expect(vitestConfig).toContain("from './fliwright.config.js'");
     expect(test).toContain("from '@fliwright/vitest'");
+    expect(script).toContain("from '@fliwright/vitest'");
     expect(tsconfig).toContain('"moduleResolution": "Node16"');
     expect(tsconfig).toContain('".fliwright/tests/**/*.ts"');
+    expect(tsconfig).toContain('".fliwright/scripts/**/*.ts"');
     expect(pkg.type).toBe('module');
     expect(pkg.scripts['test:fliwright']).toBe('fliwright run');
     expect(pkg.devDependencies['@fliwright/cli']).toBeDefined();

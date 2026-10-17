@@ -16,6 +16,7 @@ import {
   TIMELINE_TRACE_DIR,
   TIMELINE_TRACE_FILE,
 } from '../viewer/timelineConstants.js';
+import type { RunManifest } from '@fliwright/core';
 
 export interface RunSummary {
   runDir: vscode.Uri;
@@ -26,6 +27,15 @@ export interface RunSummary {
   startedAt: string;
   endedAt?: string;
   nodeCount: number;
+  manifest?: RunManifest;
+  attemptCount?: number;
+  testId?: string;
+  attemptId?: string;
+}
+
+export interface RunSelection {
+  testId?: string;
+  attemptId?: string;
 }
 
 export interface LoadedRun {
@@ -101,18 +111,64 @@ export class RunViewerService {
       if (type !== vscode.FileType.Directory) continue;
       const runDir = vscode.Uri.joinPath(runsDir, name);
       const timeline = await this.loadTimeline(runDir);
-      if (!timeline) continue;
-      const summary = summarizeTimeline(timeline);
-      summaries.push({
-        runDir,
-        runId: timeline.runId ?? name,
-        testName: timeline.testName ?? name,
-        mode: timeline.mode,
-        status: timeline.status,
-        startedAt: timeline.startedAt,
-        endedAt: timeline.endedAt,
-        nodeCount: summary.nodeCount,
-      });
+      const manifest = await this.loadManifest(runDir);
+      if (timeline) {
+        const summary = summarizeTimeline(timeline);
+        summaries.push({
+          runDir,
+          runId: timeline.runId ?? name,
+          testName: timeline.testName ?? name,
+          mode: timeline.mode,
+          status: timeline.status,
+          startedAt: timeline.startedAt,
+          endedAt: timeline.endedAt,
+          nodeCount: summary.nodeCount,
+          ...(manifest ? { manifest, attemptCount: manifest.tests.reduce((count, test) => count + test.attempts.length, 0) } : {}),
+        });
+        continue;
+      }
+      // A canonical run directory can contain only run.json and per-test
+      // timeline directories. Keep it visible even before a timeline is
+      // available so multi-test/attempt runs are inspectable in the viewer.
+      if (manifest) {
+        for (const test of manifest.tests) {
+          for (const attempt of test.attempts) {
+            const attemptDir = vscode.Uri.joinPath(runDir, attempt.resultPath, '..');
+            const attemptTimeline = await this.loadTimeline(attemptDir);
+            if (attemptTimeline) {
+              const summary = summarizeTimeline(attemptTimeline);
+              summaries.push({
+                runDir,
+                runId: manifest.runId,
+                testName: attemptTimeline.testName ?? test.testId,
+                mode: attemptTimeline.mode,
+                status: attemptTimeline.status,
+                startedAt: attemptTimeline.startedAt,
+                endedAt: attemptTimeline.endedAt,
+                nodeCount: summary.nodeCount,
+                manifest,
+                attemptCount: test.attempts.length,
+                testId: test.testId,
+                attemptId: attempt.attemptId,
+              });
+            } else {
+              summaries.push({
+                runDir,
+                runId: manifest.runId,
+                testName: test.testId,
+                mode: 'test',
+                status: manifest.status,
+                startedAt: '',
+                nodeCount: 0,
+                manifest,
+                attemptCount: test.attempts.length,
+                testId: test.testId,
+                attemptId: attempt.attemptId,
+              });
+            }
+          }
+        }
+      }
     }
 
     summaries.sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
@@ -123,12 +179,13 @@ export class RunViewerService {
    * Load the timeline + logs for a single run directory.
    * Returns undefined if there is no readable timeline.json.
    */
-  async loadRun(runDir: vscode.Uri): Promise<LoadedRun | undefined> {
-    const timeline = await this.loadTimeline(runDir);
-    if (!timeline) return undefined;
-    const logs = await this.loadLogs(runDir);
-    const trace = await this.loadRunTrace(runDir);
-    return { timeline, logs, ...(trace ? { trace } : {}), runDir };
+  async loadRun(runDir: vscode.Uri, selection: RunSelection = {}): Promise<LoadedRun | undefined> {
+    const resolvedDir = await this.resolveTimelineDir(runDir, selection);
+    const timeline = resolvedDir ? await this.loadTimeline(resolvedDir) : undefined;
+    if (!resolvedDir || !timeline) return undefined;
+    const logs = await this.loadLogs(resolvedDir);
+    const trace = await this.loadRunTrace(resolvedDir);
+    return { timeline, logs, ...(trace ? { trace } : {}), runDir: resolvedDir };
   }
 
   /**
@@ -146,14 +203,37 @@ export class RunViewerService {
     testNodeId: string,
   ): Promise<LoadedRun | undefined> {
     const summaries = await this.listRuns(runsDir); // newest-first
+
+    // Canonical runs carry the stable file/suite/test identity in run.json.
+    // Resolve that identity before considering legacy title-only layouts, so
+    // two files with the same test title cannot select each other's evidence.
+    for (const summary of summaries) {
+      if (!summary.manifest) continue;
+      if (summary.testId !== testNodeId) {
+        const test = summary.manifest.tests.find(test => test.testId === summary.testId);
+        const attempt = test?.attempts.find(attempt => attempt.attemptId === summary.attemptId);
+        if (!attempt || !sourceMatchesNode(await this.readResultJson(
+          vscode.Uri.joinPath(summary.runDir, attempt.resultPath, '..')), testNodeId)) continue;
+      }
+      const loaded = await this.loadRun(summary.runDir, {
+        testId: summary.testId,
+        ...(summary.attemptId ? { attemptId: summary.attemptId } : {}),
+      });
+      if (loaded) return loaded;
+    }
+
     for (const s of summaries) {
+      // A canonical run that did not match the exact test identity must not
+      // fall back to title matching. This is what prevents same-name tests
+      // from being attributed to the wrong source file.
+      if (s.manifest) continue;
       if (timelineSummaryMatchesNode(s, testNodeId)) {
-        return this.loadRun(s.runDir);
+        return this.loadRun(s.runDir, s);
       }
       const resultJson = await this.readResultJson(s.runDir);
       if (!resultJson) continue;
       if (runResultContainsNode(resultJson, testNodeId)) {
-        return this.loadRun(s.runDir);
+        return this.loadRun(s.runDir, s);
       }
     }
     return undefined;
@@ -180,7 +260,10 @@ export class RunViewerService {
   ): Promise<LoadedRun | undefined> {
     const entry = index.get(testNodeId);
     if (entry?.runId) {
-      const loaded = await this.loadRun(vscode.Uri.joinPath(runsDir, entry.runId));
+      // A canonical run contains multiple tests/attempts. Carry the exact
+      // test identity from the index so resolveTimelineDir does not reject a
+      // valid run merely because it has more than one attempt.
+      const loaded = await this.loadRun(vscode.Uri.joinPath(runsDir, entry.runId), { testId: testNodeId });
       if (loaded) return loaded;
       const derivedRunId = deriveTimelineRunId(entry, testNodeId, this.artifacts);
       if (derivedRunId && derivedRunId !== entry.runId) {
@@ -197,32 +280,27 @@ export class RunViewerService {
     return this.findLatestRunForTest(runsDir, testNodeId);
   }
 
-  /**
-   * Scan runs newest-first and return the first script-mode run.
-   *
-   * For v1, relPath matching is best-effort: we accept the newest run whose
-   * timeline.json has `mode === 'script'`. If a script run's testName matches
-   * the script's basename we prefer that; otherwise the newest script run wins.
-   */
+  /** Find the newest canonical attempt belonging to this exact script file. */
   async findLatestRunForScript(
     runsDir: vscode.Uri,
     scriptRelPath: string,
   ): Promise<LoadedRun | undefined> {
-    const summaries = await this.listRuns(runsDir); // newest-first
-    const scriptBasename = scriptRelPath.split('/').pop();
-    let fallback: LoadedRun | undefined;
-    for (const s of summaries) {
-      if (s.mode !== 'script') continue;
-      const loaded = await this.loadRun(s.runDir);
+    const summaries = await this.listRuns(runsDir);
+    const file = scriptRelPath.split('\\').join('/');
+    for (const summary of summaries) {
+      if (summary.mode !== 'script' || !summary.manifest || !summary.testId || !summary.attemptId) continue;
+      const test = summary.manifest.tests.find(test => test.testId === summary.testId);
+      const attempt = test?.attempts.find(attempt => attempt.attemptId === summary.attemptId);
+      if (!attempt) continue;
+      const result = await this.readResultJson(vscode.Uri.joinPath(summary.runDir, attempt.resultPath, '..'));
+      if (result?.testFile !== file) continue;
+      const loaded = await this.loadRun(summary.runDir, {
+        testId: summary.testId, attemptId: summary.attemptId,
+      });
       if (!loaded) continue;
-      // Prefer a script run whose testName matches the script basename.
-      if (scriptBasename && loaded.timeline.testName === scriptBasename) {
-        return loaded;
-      }
-      // First (newest) script run is the fallback.
-      if (!fallback) fallback = loaded;
+      return loaded;
     }
-    return fallback;
+    return undefined;
   }
 
   screenshotUri(runDir: vscode.Uri, relPath: string): vscode.Uri {
@@ -236,6 +314,42 @@ export class RunViewerService {
     } catch {
       return undefined;
     }
+  }
+
+  private async loadManifest(runDir: vscode.Uri): Promise<RunManifest | undefined> {
+    try {
+      const buf = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(runDir, 'run.json'));
+      const parsed = JSON.parse(Buffer.from(buf).toString('utf8')) as RunManifest;
+      if (parsed?.schemaVersion !== 1 || !Array.isArray(parsed.tests)) return undefined;
+      return parsed;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async resolveTimelineDir(runDir: vscode.Uri, selection: RunSelection): Promise<vscode.Uri | undefined> {
+    if (await this.loadTimeline(runDir)) return runDir;
+    const manifest = await this.loadManifest(runDir);
+    if (!manifest) return undefined;
+    let tests = selection.testId
+      ? manifest.tests.filter((test) => test.testId === selection.testId)
+      : manifest.tests;
+    if (selection.testId && tests.length === 0) {
+      tests = [];
+      for (const test of manifest.tests) {
+        const attempts = [];
+        for (const attempt of test.attempts) {
+          const result = await this.readResultJson(vscode.Uri.joinPath(runDir, attempt.resultPath, '..'));
+          if (sourceMatchesNode(result, selection.testId)) attempts.push(attempt);
+        }
+        if (attempts.length) tests.push({ ...test, attempts });
+      }
+    }
+    const attempts = tests.flatMap((test) => test.attempts
+      .filter((attempt) => !selection.attemptId || attempt.attemptId === selection.attemptId)
+      .map((attempt) => vscode.Uri.joinPath(runDir, attempt.resultPath, '..')));
+    if (attempts.length !== 1) return undefined;
+    return (await this.loadTimeline(attempts[0])) ? attempts[0] : undefined;
   }
 
   private async loadTimeline(runDir: vscode.Uri): Promise<TimelineData | undefined> {
@@ -281,6 +395,11 @@ export class RunViewerService {
       return undefined;
     }
   }
+}
+
+function sourceMatchesNode(result: { testFile?: string; testPath?: string[] } | undefined, nodeId: string): boolean {
+  return typeof result?.testFile === 'string' && Array.isArray(result.testPath)
+    && `${result.testFile}::${result.testPath.join('/')}` === nodeId;
 }
 
 function deriveTimelineRunId(

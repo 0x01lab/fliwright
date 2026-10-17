@@ -18,7 +18,7 @@ export type FliwrightLogKind =
 
 export type FliwrightLogMode = 'test' | 'script';
 
-export type FliwrightLogStatus = 'running' | 'passed' | 'failed' | 'skipped';
+export type FliwrightLogStatus = 'running' | 'passed' | 'failed' | 'skipped' | 'interrupted';
 
 export interface FliwrightLogError {
   name?: string;

@@ -9,7 +9,7 @@ describe('defineConfig', () => {
     const config = defineConfig({});
     expect(config.timeout).toBe(30000);
     expect(config.screenshot).toBe('file');
-    expect(config.testDir).toBe('tests');
+    expect(config.testDir).toBe('.fliwright/tests');
     expect(config.reporter).toBe('pretty');
     expect(config.vmServiceUrl).toBeUndefined();
   });
@@ -52,7 +52,7 @@ describe('loadConfig', () => {
 
   it('returns defaults when no config file exists', async () => {
     const config = await loadConfig(tmpDir);
-    expect(config.testDir).toBe('tests');
+    expect(config.testDir).toBe('.fliwright/tests');
     expect(config.reporter).toBe('pretty');
     expect(config.timeout).toBe(30000);
   });
@@ -69,5 +69,13 @@ describe('loadConfig', () => {
     const config = await loadConfig(tmpDir);
     expect(config.testDir).toBe('e2e');
     expect(config.timeout).toBe(60000);
+  });
+
+  it('derives CLI discovery from shared paths and validates recording settings', async () => {
+    await writeFile(join(tmpDir, 'fliwright.config.ts'), `export default { paths: { tests: 'checks' }, recording: { testFinalScreenshots: false } };`);
+    expect(await loadConfig(tmpDir)).toMatchObject({ testDir: 'checks', paths: { tests: 'checks' },
+      recording: { mode: 'standard', testFinalScreenshots: false, failureCaptureBudgetMs: 3000, testFinalizationBudgetMs: 5000 } });
+    await writeFile(join(tmpDir, 'fliwright.config.ts'), `export default { recording: { mode: 'trace' } };`);
+    await expect(loadConfig(tmpDir)).rejects.toThrow();
   });
 });

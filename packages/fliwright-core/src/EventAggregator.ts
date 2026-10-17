@@ -1,110 +1,96 @@
 import type { RawInputEvent, RecordedOperation } from './types.js';
 
-// Dart sends timestamps in microseconds (event.timeStamp.inMicroseconds).
-// 500ms = 500,000µs.  A press held ≥500ms is a longPress.
-const TAP_MAX_DURATION = 500_000;
+// The bridge clock is in microseconds and positions are Flutter logical pixels.
+const LONG_PRESS_DURATION_US = 500_000;
 const TAP_MAX_DISPLACEMENT = 10;
-const TYPE_INPUT_WINDOW = 1_000_000;
 
 export class EventAggregator {
   aggregate(events: RawInputEvent[]): RecordedOperation[] {
-    const pointerEvents = events
-      .filter((e) => e.type === 'pointerEvent')
-      .sort((a, b) => a.timestamp - b.timestamp);
-    const textEvents = events
-      .filter((e) => e.type === 'textInput')
-      .sort((a, b) => a.timestamp - b.timestamp);
-
-    const activePointers = new Map<number, RawInputEvent>();
+    const ordered = [...events].sort((a, b) =>
+      a.sequence !== undefined && b.sequence !== undefined
+        ? a.sequence - b.sequence
+        : a.timestamp - b.timestamp);
+    const gestures = collectGestures(ordered);
     const operations: RecordedOperation[] = [];
+    let editableIndex: number | undefined;
 
-    for (const event of pointerEvents) {
-      const id = event.pointer ?? 0;
-      if (event.kind === 'down') {
-        activePointers.set(id, event);
-        continue;
-      }
-      if (event.kind !== 'up') continue;
-
-      const down = activePointers.get(id);
-      activePointers.delete(id);
-      if (!down?.position || !event.position) continue;
-
-      const duration = event.timestamp - down.timestamp;
-      const displacement = Math.sqrt(
-        (event.position.x - down.position.x) ** 2 +
-        (event.position.y - down.position.y) ** 2,
-      );
-
-      if (displacement > TAP_MAX_DISPLACEMENT) {
-        operations.push({
-          kind: 'drag',
-          position: { x: down.position.x, y: down.position.y },
-          delta: {
-            x: Math.round(event.position.x - down.position.x),
-            y: Math.round(event.position.y - down.position.y),
-          },
-          timestamp: down.timestamp,
-        });
-      } else if (duration >= TAP_MAX_DURATION) {
-        operations.push({
-          kind: 'longPress',
-          position: { x: down.position.x, y: down.position.y },
-          duration,
-          timestamp: down.timestamp,
-        });
-      } else {
-        operations.push({
-          kind: 'tap',
-          position: { x: down.position.x, y: down.position.y },
-          timestamp: down.timestamp,
-        });
+    for (const event of ordered) {
+      if (event.type === 'route') {
+        editableIndex = undefined;
+      } else if (event.type === 'focus') {
+        const current = editableIndex === undefined ? undefined : operations[editableIndex];
+        if (!event.focused || (current?.kind === 'type' && current.focusSessionId !== event.focusSessionId)
+          || (event.targetId && current?.recordedTarget?.targetId !== event.targetId)) {
+          editableIndex = undefined;
+        }
+      } else if (event.type === 'pointerEvent' && event.kind === 'down') {
+        // Every new gesture ends the previous continuous editing segment.
+        editableIndex = undefined;
+        const operation = gestures.get(event);
+        if (operation) {
+          operations.push(operation);
+          if (operation.kind === 'tap') editableIndex = operations.length - 1;
+        }
+      } else if (event.type === 'textInput' && event.text !== undefined) {
+        const previous = editableIndex === undefined ? undefined : operations[editableIndex];
+        const targetId = event.targetId ?? event.target?.targetId;
+        const canMerge = previous && targetId && targetId === previous.recordedTarget?.targetId
+          && event.focusSessionId && (previous.kind === 'tap' || previous.focusSessionId === event.focusSessionId);
+        const operation: RecordedOperation = {
+          kind: 'type',
+          position: canMerge ? previous.position : { x: 0, y: 0 },
+          text: event.sensitive ? '<masked>' : event.text,
+          ...(event.sensitive ? { sensitive: true } : {}),
+          action: 'replace',
+          focusSessionId: event.focusSessionId,
+          timestamp: canMerge ? previous.timestamp : event.timestamp,
+          recordedTarget: canMerge ? previous.recordedTarget : event.target,
+        };
+        if (canMerge) {
+          operations[editableIndex!] = operation;
+        } else {
+          operations.push(operation);
+          editableIndex = operations.length - 1;
+        }
       }
     }
-
-    for (const textEvent of textEvents) {
-      if (!textEvent.text) continue;
-      const opIndex = findEditableOperationForTextInput(operations, textEvent);
-      if (opIndex < 0) {
-        // Standalone text input with no preceding tap — emit as-is.
-        operations.push({
-          kind: 'type',
-          position: { x: 0, y: 0 },
-          text: textEvent.text,
-          action: textEvent.action,
-          timestamp: textEvent.timestamp,
-        });
-        continue;
-      }
-      const op = operations[opIndex];
-      if (op.kind === 'type' && !textEvent.action) {
-        operations[opIndex] = {
-          ...op,
-          text: `${op.text ?? ''}${textEvent.text}`,
-        };
-      } else {
-        operations[opIndex] = {
-          kind: 'type',
-          position: op.position,
-          text: textEvent.text,
-          action: textEvent.action,
-          timestamp: op.timestamp,
-        };
-      }
-    }
-
-    operations.sort((a, b) => a.timestamp - b.timestamp);
     return operations;
   }
 }
 
-function findEditableOperationForTextInput(operations: RecordedOperation[], textEvent: RawInputEvent): number {
-  for (let i = operations.length - 1; i >= 0; i--) {
-    const op = operations[i];
-    if (op.kind !== 'tap' && op.kind !== 'type') continue;
-    if (textEvent.timestamp < op.timestamp) continue;
-    if (textEvent.timestamp > op.timestamp + TYPE_INPUT_WINDOW) continue;
-    return i;
+/** Pair first, then insert at down order, even if dispatch emits text before up. */
+function collectGestures(events: RawInputEvent[]): Map<RawInputEvent, RecordedOperation> {
+  const active = new Map<number, RawInputEvent>();
+  const gestures = new Map<RawInputEvent, RecordedOperation>();
+  for (const event of events) {
+    if (event.type !== 'pointerEvent') continue;
+    const pointer = event.pointer ?? 0;
+    if (event.kind === 'down') {
+      active.set(pointer, event);
+      continue;
+    }
+    if (event.kind === 'cancel') {
+      active.delete(pointer);
+      continue;
+    }
+    if (event.kind !== 'up') continue;
+    const down = active.get(pointer);
+    active.delete(pointer);
+    if (!down?.position || !event.position) continue;
+    const duration = Math.max(0, event.timestamp - down.timestamp);
+    const dx = event.position.x - down.position.x;
+    const dy = event.position.y - down.position.y;
+    const common = { position: { ...down.position }, timestamp: down.timestamp, recordedTarget: down.target };
+    if (Math.hypot(dx, dy) > TAP_MAX_DISPLACEMENT) {
+      gestures.set(down, {
+        ...common, kind: 'drag', delta: { x: Math.round(dx), y: Math.round(dy) },
+        duration, durationMs: duration / 1000,
+      });
+    } else if (duration >= LONG_PRESS_DURATION_US) {
+      gestures.set(down, { ...common, kind: 'longPress', duration, durationMs: duration / 1000 });
+    } else {
+      gestures.set(down, { ...common, kind: 'tap' });
+    }
   }
-  return -1;
+  return gestures;
 }

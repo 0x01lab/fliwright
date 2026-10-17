@@ -3,6 +3,9 @@ export type {
   WidgetInfo,
   KeyedAncestor,
   ResolvedSelector,
+  RecordedTarget,
+  RecordingSelectorCandidate,
+  RecordingSelectorStability,
   WidgetSnapshot,
   AgentFindQuery,
   AgentSnapshotOptions,
@@ -160,7 +163,7 @@ export type {
   AuthStatus,
   SeedLoggedInInput,
 } from './AppInstance.js';
-export { ScenarioCoordinator, ScenarioPreparationError, ScenarioResolutionError, ScenarioResolver } from './Scenario.js';
+export { fingerprintScenario, ScenarioCoordinator, ScenarioPreparationError, ScenarioResolutionError, ScenarioResolver } from './Scenario.js';
 export type {
   ResolvedScenario,
   ScenarioApplicationReport,
@@ -193,6 +196,65 @@ export type {
 } from './DesignQaClient.js';
 export { FliwrightDriver } from './Driver.js';
 export type { DriverOptions } from './Driver.js';
+export { RunSession, getCurrentOperationId } from './RunSession.js';
+export type {
+  EvidenceRequest,
+  EvidenceResult,
+  OperationDescriptor,
+  OperationKind,
+  OperationOutcome,
+  RunSessionOperation,
+  RunSessionOptions,
+  RunSessionResult,
+  RunnerOutcome,
+} from './RunSession.js';
+export {
+  clearRunSessionRegistry,
+  getRunSession,
+  registerRunSession,
+  unregisterRunSession,
+} from './RunSessionRegistry.js';
+export { EvidenceCapture } from './EvidenceCapture.js';
+export type {
+  EvidenceCaptureOptions,
+  EvidenceCaptureResult,
+  EvidenceCaptureSources,
+  EvidenceChannel,
+  EvidenceChannelResult,
+  EvidenceChannelStatus,
+} from './EvidenceCapture.js';
+export { EndpointLeaseManager, normalizeEndpoint, type EndpointLeaseManagerOptions, type EndpointLease } from './EndpointLease.js';
+export { RunArtifactStore } from './RunArtifactStore.js';
+export type { ReadEventsResult, RunArtifactStoreOptions } from './RunArtifactStore.js';
+export { RunProgressJournal, recoverRunProgress } from './RunProgressJournal.js';
+export { restoreRunAttempts } from './RunAttemptRecovery.js';
+export type { RecoverableRunAttempt } from './RunAttemptRecovery.js';
+export type { RunProgressEvent, RecoveredRunProgress } from './RunProgressJournal.js';
+export {
+  evidenceStatusSchema,
+  recordingEventEnvelopeSchema,
+  recordedTargetSchema,
+  recordingSelectorCandidateSchema,
+  recordingHandshakeSchema,
+  recordingStartResponseSchema,
+  recordingStopResponseSchema,
+  runManifestSchema,
+  runStatusSchema,
+} from './RunContracts.js';
+export type { EvidenceStatus, RecordingEventEnvelope, RunError, RunManifest, RunStatus } from './RunContracts.js';
+export {
+  DEFAULT_FLIWRIGHT_CONFIG,
+  fliwrightConfigSchema,
+  mergeFliwrightConfig,
+  readFliwrightEnvironment,
+} from './RecordingConfig.js';
+export type {
+  FliwrightPathsConfig,
+  FliwrightProjectConfig,
+  FliwrightRecordingConfig,
+  RecordingMode,
+  ResolvedFliwrightConfig,
+} from './RecordingConfig.js';
 export { WebSocketMockManager } from './WebSocketMockManager.js';
 export type {
   WebSocketMockCall,
@@ -300,7 +362,41 @@ export { MockRuleStore, normalizeMockEndpointConfig } from './MockRuleStore.js';
 export { ToolMockServer } from './ToolMockServer.js';
 export type { ToolMockRequest, ToolMockResult, ToolMockServerOptions } from './ToolMockServer.js';
 export { RecorderController } from './RecorderController.js';
-export type { RecorderStartOptions } from './RecorderController.js';
+export { captureRecording, openRecordingCapture } from './RecordingCapture.js';
+export { generateRecordingAutomation } from './RecordingAutomation.js';
+export type { GenerateRecordingAutomationOptions, RecordingAutomationResult } from './RecordingAutomation.js';
+export type {
+  RecordingCaptureRecorder, RecordingCaptureResource, RecordingCaptureOptions, RecordingCaptureResult,
+} from './RecordingCapture.js';
+export type { RecorderStartOptions, RecordingCaptureStatus, RecordingResult } from './RecorderController.js';
+export type { RecordingEventCacheStats } from './RecordingEventStore.js';
+export { copyRecordingArtifacts, resolveRecordingArtifact } from './RecordingArtifacts.js';
+export type { RecordingBinaryCacheStats } from './RecordingArtifacts.js';
+export { parseRecordingManifest } from './RecordingManifest.js';
+export type { RecordingManifest } from './RecordingManifest.js';
+export { assessRecordingReadiness, applyDartVerification, invalidateStaleRecordingVerification, parseDartVerificationEvidence } from './RecordingReadiness.js';
+export type {
+  AssessRecordingReadinessOptions,
+  AutomationKind,
+  DartVerificationEvidence,
+  RecordingLanguage,
+  RecordingReadiness,
+  RecordingReadinessResult,
+  RecordingVerificationInputs,
+} from './RecordingReadiness.js';
+export {
+  createRecordingCheckpointCandidate,
+  confirmRecordingCheckpoint,
+  countConfirmedRecordingCheckpoints,
+  recordingCheckpointSchema,
+  prepareRecordingCheckpoints,
+} from './RecordingCheckpoints.js';
+export type {
+  RecordingCheckpointCandidate,
+  RecordingCheckpointConfirmation,
+  RecordingCheckpointEvidence,
+  PreparedRecordingCheckpoints,
+} from './RecordingCheckpoints.js';
 export { SnapshotStore } from './SnapshotStore.js';
 export { SelfHealingEngine } from './SelfHealingEngine.js';
 export { MultiDimensionalHealingStrategy, ngramSimilarity } from './strategies/MultiDimensionalHealingStrategy.js';
@@ -323,6 +419,7 @@ export {
   parseSelectorJson,
 } from './wire-protocol.js';
 export { DartCodeGenerator } from './DartCodeGenerator.js';
+export type { DartCodeGenerationResult } from './DartCodeGenerator.js';
 export { AssertionSuggester } from './AssertionSuggester.js';
 export type { AssertionSuggestion } from './AssertionSuggester.js';
 export type {
@@ -462,3 +559,5 @@ export type {
   TimelineMockResponse,
   WaitForMockCallOptions,
 } from './mocks/types.js';
+
+export { projectRunTrace } from './RunTraceProjection.js';

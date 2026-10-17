@@ -1,9 +1,10 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { isAbsolute, join, relative } from 'node:path';
+import { join } from 'node:path';
 import type * as vscode from 'vscode';
 import { TraceStore } from '@fliwright/core';
 import type { RunResult, TestCaseResult } from '../types.js';
 import { testNodeId } from './types.js';
+import { relPathForTestCase } from './relPath.js';
 import { TIMELINE_FILE_NAME } from '../viewer/timelineConstants.js';
 import {
   ensureProjectRunsRoot,
@@ -182,6 +183,9 @@ function runIdsReferencedByIndex(index: Map<string, RunArtifactIndexEntry>): Set
 }
 
 async function isPrunableTestRunDir(runDir: string): Promise<boolean> {
+  // A canonical run retains historical tests/attempts independently of the
+  // latest-status index. Updating that index must not delete their evidence.
+  if ((await stat(join(runDir, 'run.json')).catch(() => undefined))?.isFile()) return false;
   const timeline = await readJson(join(runDir, TIMELINE_FILE_NAME));
   if (timeline) return timeline.mode !== 'script';
   return Boolean(await readJson(join(runDir, 'result.json')));
@@ -199,26 +203,6 @@ function splitName(name: string): { ancestors: string[]; title: string } {
   const parts = name.split(' > ').map((s) => s.trim()).filter(Boolean);
   if (parts.length === 0) return { ancestors: [], title: name };
   return { ancestors: parts.slice(0, -1), title: parts[parts.length - 1] };
-}
-
-function relPathForTestCase(
-  workspaceRoot: vscode.Uri,
-  fallbackRelPath: string,
-  tc: TestCaseResult,
-): string {
-  if (!tc.filePath) return fallbackRelPath;
-  if (!isAbsolute(tc.filePath) && !tc.filePath.includes('/') && fallbackRelPath.endsWith(`/${tc.filePath}`)) {
-    return fallbackRelPath;
-  }
-  return normalizeRelPath(
-    isAbsolute(tc.filePath)
-      ? relative(workspaceRoot.fsPath, tc.filePath)
-      : tc.filePath,
-  );
-}
-
-function normalizeRelPath(value: string): string {
-  return value.replace(/\\/g, '/');
 }
 
 function safeName(value: string): string {

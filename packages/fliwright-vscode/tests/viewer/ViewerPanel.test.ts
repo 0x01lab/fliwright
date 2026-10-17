@@ -30,6 +30,17 @@ function fakeService(loaded: LoadedRun | undefined): RunViewerService {
 }
 
 describe('ViewerPanel', () => {
+  it('opens the latest failed attempt even when a newer test passed', async () => {
+    const passed = { runDir: Uri.file('/runs/newer-pass'), status: 'passed', testId: 'pass', attemptId: 'a' };
+    const failed = { runDir: Uri.file('/runs/older-failure'), status: 'failed', testId: 'fail', attemptId: 'b' };
+    const service = { getWorkspaceRoot: () => Uri.file('/workspace'), getRunsDir: async () => '/runs',
+      listRuns: async () => [passed, failed] } as unknown as RunViewerService;
+    const panel = new ViewerPanel(Uri.file('/extension'), service);
+    const open = vi.spyOn(panel, 'openForRun').mockResolvedValue();
+    await panel.openLatest({ failedOnly: true });
+    expect(open).toHaveBeenCalledWith(failed.runDir, failed);
+  });
+
   function createPanel(loaded: LoadedRun | undefined = makeLoadedRun()): {
     panel: ViewerPanel;
     getHtml: () => string;
@@ -94,6 +105,18 @@ describe('ViewerPanel', () => {
     );
 
     restore();
+  });
+
+  it('opens a user-selected portable run folder without searching workspace runs', async () => {
+    const { panel, restore } = createPanel(makeLoadedRun());
+    const originalDialog = (window as any).showOpenDialog;
+    (window as any).showOpenDialog = vi.fn(async () => [Uri.file('/portable/moved-run')]);
+    const open = vi.spyOn(panel, 'openRun').mockResolvedValue();
+    try {
+      await panel.openExportedRun();
+      expect((window as any).showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({ canSelectFolders: true, canSelectFiles: false }));
+      expect(open).toHaveBeenCalledWith(Uri.file('/portable/moved-run'));
+    } finally { (window as any).showOpenDialog = originalDialog; restore(); }
   });
 
   it('renders shell HTML loading the React bundle and CSS with a nonce CSP', async () => {

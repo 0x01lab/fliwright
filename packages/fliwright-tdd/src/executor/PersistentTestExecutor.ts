@@ -1,9 +1,11 @@
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { FLIWRIGHT_RUNS_ROOT_ENV } from '@fliwright/core';
+import { FLIWRIGHT_RUNS_ROOT_ENV, RunArtifactStore, parseTimelineData } from '@fliwright/core';
+import type { RunSessionResult } from '@fliwright/core';
+import { fileURLToPath } from 'node:url';
 import { startVitest, type Vitest } from 'vitest/node';
 import { focusAndRerun } from './FocusedRerunRecipe.js';
-import { ResultReporter, type CollectedResult } from './ResultReporter.js';
+import { collectResultsFromModules, ResultReporter, type CollectedResult } from './ResultReporter.js';
 import type { TddFailureArtifacts, TddFailureAssertion, TddFailureSource } from '../diagnostics/TddFailureContext.js';
 
 export interface TestRunOutcome {
@@ -28,11 +30,12 @@ export class PersistentTestExecutor {
   private previousVmServiceUrl?: string;
   private previousVmUrl?: string;
   private previousTddMode?: string;
-  private previousFailureContextPath?: string;
   private previousScreenshotMode?: string;
   private previousFailureTimeoutMs?: string;
   private previousRunsRoot?: string;
-  private failureContextPath?: string;
+  private previousRunId?: string;
+  private artifactsRoot?: string;
+  private rerunCount = 0;
   private runsRoot?: string;
   private envApplied = false;
 
@@ -47,12 +50,19 @@ export class PersistentTestExecutor {
       this.vitest = await startVitest('test', [], {
         config: opts.configRoot,
         watch: true,
+        standalone: true,
         reporters: [this.reporter],
         pool: 'forks',
         maxWorkers: 1,
-      });
+      }, {
+        // macOS FSEvents can deliver a config write from before boot after a
+        // focused run starts, causing Vite to close its active module cache.
+        ...(process.platform === 'darwin' ? { server: { watch: { usePolling: true } } } : {}),
+        plugins: [{ name: 'fliwright-runner', config(config) {
+        const runtimeConfig = config as typeof config & { test?: { runner?: string } };
+        (runtimeConfig.test ??= {}).runner ??= fileURLToPath(import.meta.resolve('@fliwright/vitest/runner'));
+      } }] });
       if (!this.vitest) throw new Error('Failed to start Vitest');
-      await this.vitest.standalone();
     } catch (error) {
       await this.dispose().catch(() => undefined);
       throw error;
@@ -67,24 +77,32 @@ export class PersistentTestExecutor {
   async rerun(file: string, testName?: string): Promise<TestRunOutcome> {
     if (!this.vitest || !this.reporter) throw new Error('PersistentTestExecutor not booted');
 
+    this.rerunCount++;
+    if (this.artifactsRoot) {
+      this.runsRoot = join(this.artifactsRoot, 'runs', `rerun-${this.rerunCount}`);
+      process.env[FLIWRIGHT_RUNS_ROOT_ENV] = this.runsRoot;
+    }
     this.reporter.drain();
-    const nextRun = this.reporter.waitForNextRun();
-    await focusAndRerun(this.vitest, file, testName);
-    const files = await nextRun;
-    const results = this.reporter.collectLatest();
+    // The public API returns the exact run we requested. A reporter's next
+    // event may instead belong to a watcher refresh (or contain no modules).
+    const run = await focusAndRerun(this.vitest, file, testName);
+    const files = run.testModules;
+    const results = collectResultsFromModules(files);
     const picked = this.pickResult(results, testName);
     const resolvedTestName = picked?.testName ?? testName;
-    const timelineArtifacts = resolvedTestName
-      ? await this.readLatestTimelineArtifacts(resolvedTestName)
-      : {};
+    const timelineArtifacts = await this.readTimelineArtifacts(picked);
     const failureDetails = picked?.status === 'red' && resolvedTestName
-      ? await this.readFailureDetails(resolvedTestName)
+      ? await this.readFailureDetails(picked)
       : undefined;
 
     return {
-      status: picked?.status ?? this.statusFromUnhandled(files),
+      status: picked?.status ?? 'red',
       testName: resolvedTestName,
-      failure: picked?.status === 'red' ? { message: picked.message } : undefined,
+      failure: picked?.status === 'red' ? { message: picked.message }
+        : !picked ? { message: run.unhandledErrors.map((error) => {
+          if (error && typeof error === 'object' && 'message' in error) return String(error.message);
+          return JSON.stringify(error);
+        }).join('\n') || 'Focused run returned no matching test result.' } : undefined,
       failureDetails,
       timelinePath: failureDetails?.artifacts?.timelinePath ?? timelineArtifacts.timelinePath,
       timelineNodeId: failureDetails?.artifacts?.timelineNodeId ?? timelineArtifacts.timelineNodeId,
@@ -107,18 +125,14 @@ export class PersistentTestExecutor {
       ?? results.find((result) => result.testName.includes(testName));
   }
 
-  private statusFromUnhandled(files: unknown[]): 'red' | 'green' {
-    return files.length > 0 ? 'red' : 'green';
-  }
-
   private restoreRuntimeEnv(): void {
     restoreEnv('FLIWRIGHT_VM_SERVICE_URL', this.previousVmServiceUrl);
     restoreEnv('FLIWRIGHT_VM_URL', this.previousVmUrl);
     restoreEnv('FLIWRIGHT_TDD_MODE', this.previousTddMode);
-    restoreEnv('FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH', this.previousFailureContextPath);
     restoreEnv('FLIWRIGHT_SCREENSHOT_MODE', this.previousScreenshotMode);
     restoreEnv('FLIWRIGHT_FAILURE_TIMEOUT_MS', this.previousFailureTimeoutMs);
     restoreEnv(FLIWRIGHT_RUNS_ROOT_ENV, this.previousRunsRoot);
+    restoreEnv('FLIWRIGHT_RUN_ID', this.previousRunId);
     this.envApplied = false;
   }
 
@@ -132,11 +146,9 @@ export class PersistentTestExecutor {
       }
 
       const artifactsRoot = opts.artifactsRoot ?? defaultArtifactsRoot(opts.configRoot);
+      this.artifactsRoot = artifactsRoot;
       await mkdir(artifactsRoot, { recursive: true });
-      this.failureContextPath = join(artifactsRoot, 'failures.json');
       this.runsRoot = join(artifactsRoot, 'runs');
-      await writeFile(this.failureContextPath, '[]', 'utf8');
-      process.env.FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH = this.failureContextPath;
       process.env[FLIWRIGHT_RUNS_ROOT_ENV] = this.runsRoot;
       process.env.FLIWRIGHT_SCREENSHOT_MODE = process.env.FLIWRIGHT_SCREENSHOT_MODE ?? 'base64';
       process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS = process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS ?? '5000';
@@ -152,47 +164,50 @@ export class PersistentTestExecutor {
     this.previousVmServiceUrl = process.env.FLIWRIGHT_VM_SERVICE_URL;
     this.previousVmUrl = process.env.FLIWRIGHT_VM_URL;
     this.previousTddMode = process.env.FLIWRIGHT_TDD_MODE;
-    this.previousFailureContextPath = process.env.FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH;
     this.previousScreenshotMode = process.env.FLIWRIGHT_SCREENSHOT_MODE;
     this.previousFailureTimeoutMs = process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS;
     this.previousRunsRoot = process.env[FLIWRIGHT_RUNS_ROOT_ENV];
+    this.previousRunId = process.env.FLIWRIGHT_RUN_ID;
   }
 
-  private async readFailureDetails(testName: string): Promise<TddFailureDetails | undefined> {
-    if (!this.failureContextPath) return undefined;
+  private attemptDirectory(result: CollectedResult | undefined): string | undefined {
+    const identity = result?.runIdentity;
+    if (!this.runsRoot || !identity) return undefined;
+    return new RunArtifactStore({ runsRoot: this.runsRoot, runId: identity.runId })
+      .attemptDir(identity.testId, identity.attemptId);
+  }
+
+  private async readFailureDetails(result: CollectedResult | undefined): Promise<TddFailureDetails | undefined> {
+    const directory = this.attemptDirectory(result);
+    if (!directory) return undefined;
     try {
-      const entries = JSON.parse(await readFile(this.failureContextPath, 'utf8')) as McpFailureEntry[];
-      const entry = [...entries].reverse().find((candidate) => candidate.testName === testName) ?? entries.at(-1);
+      const attempt = JSON.parse(await readFile(join(directory, 'result.json'), 'utf8')) as RunSessionResult;
+      if (!attempt.failureContextPath) return undefined;
+      const failureContextPath = join(directory, attempt.failureContextPath);
+      const entries = JSON.parse(await readFile(failureContextPath, 'utf8')) as McpFailureEntry[];
+      const entry = entries.filter((candidate) => candidate.testName === result?.testName).at(-1);
       if (!entry) return undefined;
+      const screenshotBase64 = entry.screenshot?.path
+        ? (await readFile(join(directory, entry.screenshot.path))).toString('base64') : undefined;
       return {
-        assertion: entry.assertion,
-        source: entry.source,
-        artifacts: {
-          failureContextPath: this.failureContextPath,
-          screenshotBase64: entry.screenshot?.base64,
-          widgetTree: entry.widgetTree,
-          ...await this.readLatestTimelineArtifacts(testName),
-        },
+        assertion: entry.assertion, source: entry.source,
+        artifacts: { failureContextPath, screenshotBase64, widgetTree: entry.widgetTree,
+          ...await this.readTimelineArtifacts(result) },
       };
-    } catch {
-      return undefined;
-    }
+    } catch { return undefined; }
   }
 
-  private async readLatestTimelineArtifacts(testName: string): Promise<Pick<TddFailureArtifacts, 'timelinePath' | 'timelineNodeId'>> {
-    if (!this.runsRoot) return {};
+  private async readTimelineArtifacts(result: CollectedResult | undefined): Promise<Pick<TddFailureArtifacts, 'timelinePath' | 'timelineNodeId'>> {
+    const directory = this.attemptDirectory(result);
+    if (!directory) return {};
     try {
-      const timelinePath = await findLatestTimelinePath(this.runsRoot, testName);
-      if (!timelinePath) return {};
-      const timeline = JSON.parse(await readFile(timelinePath, 'utf8')) as TimelineLike;
-      return {
-        timelinePath,
-        timelineNodeId: timeline.agentVisibleFailures?.[0]?.timelineNodeId,
-      };
-    } catch {
-      return {};
-    }
+      const timelinePath = join(directory, 'timeline.json');
+      const timeline = parseTimelineData(await readFile(timelinePath, 'utf8'));
+      if (!timeline) return {};
+      return { timelinePath, timelineNodeId: timeline.agentVisibleFailures?.[0]?.timelineNodeId };
+    } catch { return {}; }
   }
+
 }
 
 function restoreEnv(name: string, value: string | undefined): void {
@@ -233,43 +248,7 @@ interface McpFailureEntry {
   source?: TddFailureSource;
   screenshot?: {
     mimeType: 'image/png';
-    base64: string;
+    path: string;
   };
   timestamp: string;
-}
-
-interface TimelineLike {
-  testName?: string;
-  agentVisibleFailures?: Array<{ timelineNodeId?: string }>;
-}
-
-async function findLatestTimelinePath(runsRoot: string, testName: string): Promise<string | undefined> {
-  const entries = await readdir(runsRoot, { withFileTypes: true }).catch(() => []);
-  const candidates = await Promise.all(entries
-    .filter((entry) => entry.isDirectory())
-    .map(async (entry) => {
-      const timelinePath = join(runsRoot, entry.name, 'timeline.json');
-      try {
-        const [timeline, stats] = await Promise.all([
-          readTimelineHeader(timelinePath),
-          stat(timelinePath),
-        ]);
-        const matches = timeline.testName === testName || entry.name.endsWith(`-${safeName(testName)}`);
-        return matches ? { path: timelinePath, mtimeMs: stats.mtimeMs } : undefined;
-      } catch {
-        return undefined;
-      }
-    }));
-  return candidates
-    .filter((candidate): candidate is { path: string; mtimeMs: number } => Boolean(candidate))
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)
-    .at(0)?.path;
-}
-
-async function readTimelineHeader(path: string): Promise<TimelineLike> {
-  return JSON.parse(await readFile(path, 'utf8')) as TimelineLike;
-}
-
-function safeName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'test';
 }

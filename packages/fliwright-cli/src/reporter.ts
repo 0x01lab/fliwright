@@ -51,6 +51,7 @@ export interface CliRunArtifacts {
   runId: string;
   outputDir: string;
   reportPath?: string;
+  manifestPath?: string;
   screenshots: string[];
   timelines?: string[];
 }
@@ -70,12 +71,15 @@ export interface TimelineSummary {
 }
 
 export interface CliRunResult {
+  status?: 'running' | 'passed' | 'failed' | 'skipped' | 'interrupted';
   passed: boolean;
   totalTests: number;
   passedTests: number;
   failedTests: number;
   duration: number;
   results: CliTestResult[];
+  /** Errors outside test attempts, including collection, suite hooks and worker/process failures. */
+  runnerErrors?: Array<{ phase: string; message: string; stack?: string; file?: string }>;
   failures?: CliFailureEntry[];
   artifacts?: CliRunArtifacts;
   timelines?: TimelineSummary[];
@@ -102,6 +106,10 @@ export function formatPretty(result: CliRunResult): string {
     if (test.error) {
       lines.push(chalk.gray(`     → ${test.error.split('\n')[0]}`));
     }
+  }
+
+  for (const error of result.runnerErrors ?? []) {
+    lines.push(chalk.red(`  ❌ ${error.phase}: ${error.message}`));
   }
 
   lines.push('');
@@ -141,12 +149,17 @@ export function formatJunit(result: CliRunResult): string {
     const errorMsg = test.error ? escapeXml(test.error.split('\n')[0]) : 'test failed';
     return `  <testcase ${attrs}>\n    <failure message="${errorMsg}" />\n  </testcase>`;
   }).join('\n');
+  const runnerErrors = result.runnerErrors ?? [];
+  const errorCases = runnerErrors.map((error, index) =>
+    `  <testcase name="runner ${index + 1}: ${escapeXml(error.phase)}"><error message="${escapeXml(error.message)}">${escapeXml(error.stack ?? error.message)}</error></testcase>`,
+  ).join('\n');
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<testsuites>',
-    `<testsuite name="fliwright" tests="${result.totalTests}" failures="${result.failedTests}" time="${(result.duration / 1000).toFixed(3)}">`,
+    `<testsuite name="fliwright" tests="${result.totalTests + runnerErrors.length}" failures="${result.failedTests}" errors="${runnerErrors.length}" time="${(result.duration / 1000).toFixed(3)}">`,
     testCases,
+    errorCases,
     '</testsuite>',
     '</testsuites>',
   ].join('\n');

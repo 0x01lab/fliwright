@@ -1,7 +1,7 @@
 ---
 package: "fliwright_bridge"
 path: "packages/fliwright-bridge"
-source_fingerprint: "b5665937a29aa1bf1ef72dc47a39a982612f90cdec3eb87bf53206a97b719521"
+source_fingerprint: "402a5db46cdd94b723e9f0a6ac02839dae858d53325332b87f9f400d85d04895"
 generated: true
 ---
 
@@ -103,6 +103,9 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `mock_server`
 - `query`
 - `recording`
+- `recording_binding`
+- `recording_input`
+- `recording_target`
 - `riverpod`
 - `router_navigate`
 - `screenshot`
@@ -138,7 +141,9 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `FliwrightFormControl`
 - `FliwrightFormOption`
 - `FliwrightHttpOverrides`
+- `FliwrightRecordingBinding`
 - `FliwrightTestBootstrap`
+- `FocusedTextInputSubscription`
 - `FormExtractExtension`
 - `GestureExtension`
 - `HiveMockRuleStorage`
@@ -153,12 +158,16 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `QueryExtension`
 - `QueryRef`
 - `RecordingExtension`
+- `RecordingTargetCapture`
 - `RefEntry`
 - `RefRegistry`
 - `RiverpodExtension`
 - `RouterNavigateExtension`
 - `ScreenshotExtension`
 - `ScrollExtension`
+- `SelectorBudgetExceeded`
+- `SelectorEvaluationBudget`
+- `SelectorTreeEvaluator`
 - `SemanticsCompat`
 - `SettleExtension`
 - `SnapExtension`
@@ -199,6 +208,9 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `packages/fliwright-bridge/lib/src/extensions/mock_server.dart`
 - `packages/fliwright-bridge/lib/src/extensions/query.dart`
 - `packages/fliwright-bridge/lib/src/extensions/recording.dart`
+- `packages/fliwright-bridge/lib/src/extensions/recording_binding.dart`
+- `packages/fliwright-bridge/lib/src/extensions/recording_input.dart`
+- `packages/fliwright-bridge/lib/src/extensions/recording_target.dart`
 - `packages/fliwright-bridge/lib/src/extensions/riverpod.dart`
 - `packages/fliwright-bridge/lib/src/extensions/router_navigate.dart`
 - `packages/fliwright-bridge/lib/src/extensions/screenshot.dart`
@@ -213,5 +225,6 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `packages/fliwright-bridge/lib/src/extensions/websocket_mock.dart`
 - `packages/fliwright-bridge/lib/src/form_control.dart`
 - `packages/fliwright-bridge/lib/src/ref_registry.dart`
+- `packages/fliwright-bridge/lib/src/selector_tree_evaluator.dart`
 - `packages/fliwright-bridge/lib/src/semantics_compat.dart`
 - `packages/fliwright-bridge/lib/src/soft_keyboard.dart`

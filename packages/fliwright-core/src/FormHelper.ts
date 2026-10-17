@@ -17,6 +17,7 @@ import { SkillRegistry } from './SkillRegistry.js';
 import { JsonRuleLoader } from './JsonRuleLoader.js';
 import { Locator } from './Locator.js';
 import { builtInFormActionScripts } from './FormActionScripts.js';
+import type { AssertionTimelineOptions } from './Assertion.js';
 
 type RuleMatchField = FormFieldMeta & { semanticType?: SemanticType };
 type MatchedFormSkill = {
@@ -28,11 +29,22 @@ type MatchedFormSkill = {
 export class FormHelper {
   private sendRequest: SendRequest;
 
-  constructor(sendRequest: SendRequest) {
+  constructor(sendRequest: SendRequest, private readonly assertionTimeline?: AssertionTimelineOptions) {
     this.sendRequest = sendRequest;
   }
 
   async fill(options?: FormHelperOptions): Promise<FormFillResult> {
+    if (this.assertionTimeline?.runSession) {
+      return this.assertionTimeline.runSession.perform({
+        kind: 'action',
+        title: 'Fill form',
+        metadata: { action: 'form.fill' },
+      }, () => this.fillImpl(options));
+    }
+    return this.fillImpl(options);
+  }
+
+  private async fillImpl(options?: FormHelperOptions): Promise<FormFillResult> {
     const fields = await this.extractFields(options?.scope);
     const { inferrer, generator, registry } = this.buildPipeline(options);
 
@@ -79,6 +91,17 @@ export class FormHelper {
   }
 
   async fillFields(fieldHints: string[], options?: FormHelperOptions): Promise<FormFillResult> {
+    if (this.assertionTimeline?.runSession) {
+      return this.assertionTimeline.runSession.perform({
+        kind: 'action',
+        title: `Fill form fields: ${fieldHints.join(', ')}`,
+        metadata: { action: 'form.fillFields', fieldHints: [...fieldHints] },
+      }, () => this.fillFieldsImpl(fieldHints, options));
+    }
+    return this.fillFieldsImpl(fieldHints, options);
+  }
+
+  private async fillFieldsImpl(fieldHints: string[], options?: FormHelperOptions): Promise<FormFillResult> {
     const fields = await this.extractFields(options?.scope);
     const { inferrer, generator, registry } = this.buildPipeline(options);
     const semanticTypes = inferrer.infer(fields);

@@ -1,143 +1,48 @@
-import type {
-  RecordedOperation,
-  ResolvedSelector,
-  SelectorQuery,
-  WidgetInfo,
-} from './types.js';
-import { buildBaseSelector } from './SelectorResolver.js';
-import { serializeSelectorQuery } from './SelectorSerializer.js';
+import type { RecordedOperation, ResolvedSelector, SelectorQuery, RecordingSelectorCandidate } from './types.js';
+import { recordedTargetSchema } from './RunContracts.js';
 
-type SendRequest = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+const priority = { key: 0, semantics: 1, label: 2, ancestor: 3, positional: 4 };
 
-const RESOLVE_LIMIT = 8;
-const NTH_LIMIT = 64;
-const MAX_KEYED_ANCESTORS = 3;
-
-interface ResolveOutcome {
-  count: number;
-  matches: WidgetInfo[];
+/** Selects only candidates validated synchronously in the event's original widget tree. */
+export class RecordedSelectorResolver {
+  async resolveUniqueSelector(operation: RecordedOperation): Promise<ResolvedSelector | undefined> {
+    const parsed = recordedTargetSchema.safeParse(operation.recordedTarget);
+    if (!parsed.success || parsed.data.status !== 'resolved') return undefined;
+    const candidates = parsed.data.candidates
+      .filter((candidate) => candidate.matchesTarget && candidate.matchCount > 0)
+      .sort((a, b) => Number(!isDurable(a)) - Number(!isDurable(b))
+        || priority[a.stability] - priority[b.stability]);
+    const candidate = candidates[0];
+    if (!candidate) return undefined;
+    return {
+      query: candidate.query, matchCount: candidate.matchCount,
+      ambiguous: !isDurable(candidate), stability: candidate.stability,
+    };
+  }
 }
 
-/**
- * Resolves a recorded operation to a SelectorQuery that is unique at record
- * time. Pipeline: hitTest → buildBaseSelector → resolve(count) → adaptive
- * disambiguation (within keyed ancestor → containing descendant text → nth).
- *
- * Uniqueness semantics: count === 1 → unique; count === 0 → unverifiable,
- * keep the base selector (best-effort); count > 1 → disambiguate; a resolve
- * *failure* (exception) → keep the base selector but flag ambiguous.
- */
-export class RecordedSelectorResolver {
-  constructor(private readonly sendRequest: SendRequest) {}
-
-  async resolveUniqueSelector(op: RecordedOperation): Promise<ResolvedSelector> {
-    const widget = await this.hitTest(op);
-    if (!widget?.type) {
-      return { query: { match: { type: 'Widget' } }, ambiguous: true, matchCount: 0 };
-    }
-
-    const base = buildBaseSelector(widget);
-    const initial = await this.countMatches(base);
-
-    // Resolve failed entirely → keep base, flag ambiguous (per spec).
-    if (initial === null) {
-      return { query: base, ambiguous: true, matchCount: 0 };
-    }
-    // Exactly one match → done.
-    if (initial.count === 1) {
-      return { query: base, ambiguous: false, matchCount: 1 };
-    }
-    // Zero matches → unverifiable (e.g. transient state); keep base, not ambiguous.
-    if (initial.count === 0) {
-      return { query: base, ambiguous: false, matchCount: 0 };
-    }
-
-    // count > 1 → try to disambiguate; fall back to nth (ambiguous).
-    const disambiguated = await this.tryDisambiguators(base, widget);
-    if (disambiguated) return disambiguated;
-
-    const nthQuery = await this.nthFallback(base, widget, initial);
-    if (nthQuery === null) {
-      return { query: base, ambiguous: true, matchCount: initial.count };
-    }
-    return { query: nthQuery, ambiguous: true, matchCount: initial.count };
+function isDurable(candidate: RecordingSelectorCandidate): boolean {
+  const query = candidate.query;
+  if (candidate.matchCount !== 1 || hasEphemeralOrPositionalQuery(query)) return false;
+  switch (candidate.stability) {
+    case 'key': return !!query.match?.key;
+    case 'semantics': return !!query.match?.semanticIdentifier;
+    case 'label': return !!(query.match?.type || query.match?.role)
+      && !!(query.match?.text || query.match?.semanticsLabel || query.match?.tooltip || query.containing?.match?.text);
+    case 'ancestor': return !!query.within && hasStableAnchor(query.within)
+      && !!query.match && Object.keys(query.match).length > 0;
+    case 'positional': return false;
   }
+}
 
-  private async hitTest(op: RecordedOperation): Promise<Partial<WidgetInfo> | undefined> {
-    try {
-      const result = (await this.sendRequest('ext.fliwright.hitTest', {
-        x: op.position.x,
-        y: op.position.y,
-      })) as { widget?: Partial<WidgetInfo> };
-      return result.widget;
-    } catch {
-      return undefined;
-    }
-  }
+function hasStableAnchor(query: SelectorQuery): boolean {
+  return !!(query.match?.key || query.match?.semanticIdentifier)
+    || (query.and ?? []).some(hasStableAnchor);
+}
 
-  /** Returns null when the resolve call itself fails (distinguishes failure from count 0). */
-  private async countMatches(query: SelectorQuery, limit = RESOLVE_LIMIT): Promise<ResolveOutcome | null> {
-    try {
-      const res = (await this.sendRequest('ext.fliwright.resolve', {
-        selector: JSON.stringify(query),
-        strict: 'false',
-        visible: 'any',
-        limit: String(limit),
-      })) as { count?: number; matches?: WidgetInfo[]; widgets?: WidgetInfo[] };
-      return { count: res.count ?? 0, matches: res.matches ?? res.widgets ?? [] };
-    } catch {
-      return null;
-    }
-  }
-
-  /** Try within(keyedAncestor) then containing(descendantText); shortest unique wins. */
-  private async tryDisambiguators(
-    base: SelectorQuery,
-    widget: Partial<WidgetInfo>,
-  ): Promise<ResolvedSelector | null> {
-    const candidates: SelectorQuery[] = [];
-
-    for (const ancestor of (widget.keyedAncestors ?? []).slice(0, MAX_KEYED_ANCESTORS)) {
-      candidates.push({ ...base, within: { match: { key: ancestor.key } } });
-    }
-
-    if (widget.descendantText && widget.descendantText.trim()) {
-      candidates.push({ ...base, containing: { match: { text: widget.descendantText.trim() } } });
-    }
-
-    let best: ResolvedSelector | null = null;
-    for (const candidate of candidates) {
-      const outcome = await this.countMatches(candidate);
-      if (outcome !== null && outcome.count === 1) {
-        const resolved: ResolvedSelector = {
-          query: candidate,
-          ambiguous: false,
-          matchCount: 1,
-        };
-        if (
-          best === null ||
-          serializeSelectorQuery(candidate).length < serializeSelectorQuery(best.query).length
-        ) {
-          best = resolved;
-        }
-      }
-    }
-    return best;
-  }
-
-  /** Index the target inside the matched set and return base.nth(index), or null if not found. */
-  private async nthFallback(
-    base: SelectorQuery,
-    widget: Partial<WidgetInfo>,
-    initial: ResolveOutcome,
-  ): Promise<SelectorQuery | null> {
-    let matches = initial.matches;
-    if (matches.length < initial.count) {
-      const refill = await this.countMatches(base, NTH_LIMIT);
-      if (refill) matches = refill.matches;
-    }
-    const foundIndex = matches.findIndex((m) => m.id === widget.id);
-    if (foundIndex < 0) return null;
-    return { ...base, position: { nth: foundIndex } };
-  }
+function hasEphemeralOrPositionalQuery(query: SelectorQuery): boolean {
+  return query.position !== undefined || query.fallback !== undefined || query.match?.id !== undefined
+    || query.match?.type === 'Widget'
+    || [query.within, query.containing, ...(query.and ?? []), ...(query.or ?? [])]
+      .some((child) => child !== undefined && hasEphemeralOrPositionalQuery(child));
 }
