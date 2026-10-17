@@ -19,7 +19,13 @@ coverage/
 .superpowers/
 docs/features
 .worktrees/
+.DS_Store
+
+# Fliwright runtime and test artifacts (keep authored tests, mocks, and forms).
 **/.fliwright/config.json
+**/.fliwright/ai/
+**/.fliwright/leases/
+**/.fliwright/recordings/
 **/.fliwright/runs/
 **/.fliwright/traces/
 **/.fliwright/snapshots/
