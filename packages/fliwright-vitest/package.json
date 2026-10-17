@@ -17,6 +17,19 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./preset": {
+      "types": "./dist/preset.d.ts",
+      "import": "./dist/preset.js"
+    },
+    "./runner": {
+      "types": "./dist/runner.d.ts",
+      "import": "./dist/runner.js"
+    },
+    "./reporter": {
+      "types": "./dist/RecoveryReporter.d.ts",
+      "import": "./dist/RecoveryReporter.js",
+      "default": "./dist/RecoveryReporter.js"
     }
   },
   "files": ["dist", "README.md", "LICENSE"],

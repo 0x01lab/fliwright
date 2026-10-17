@@ -4,85 +4,64 @@
  * Exercises CLI command functions using real Core components
  * via dependency injection, with MockWebSocket replacing real Flutter VM.
  */
-import { describe, it, expect } from 'vitest';
-import { recordCommand, type RecordDeps, type RecorderLike } from '../src/commands/record.js';
-import { FliwrightDriver } from '@fliwright/core';
-import type { CodegenOptions, RecordedOperation, WidgetInfo } from '@fliwright/core';
+import { afterEach, beforeEach, describe, it, expect } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { recordCommand, type RecordDeps } from '../src/commands/record.js';
+import { FliwrightDriver, CodeGenerator } from '@fliwright/core';
+import type { RecordingCaptureResource, RecordedOperation } from '@fliwright/core';
 import { createProtocolMock } from '../../fliwright-core/tests/helpers/mockVMService.js';
+import { installRecordingProtocol } from '../../fliwright-core/tests/helpers/recordingProtocol.js';
 
-function createMockRecorder(ops: RecordedOperation[]): RecorderLike {
+function createMockCapture(operations: RecordedOperation[]): RecordingCaptureResource {
+  const selectors = new Map(operations.map((_, index) => [index, {
+    query: { match: { text: 'Widget' } }, ambiguous: false, matchCount: 1,
+  }]));
   return {
-    start: async () => {},
-    stop: async (options?: CodegenOptions) => {
-      // Generate minimal code based on operations
-      const testName = options?.testName ?? 'recorded test';
-      const lines: string[] = [];
-      lines.push(`import { test, expect } from '@fliwright/vitest';`);
-      lines.push('');
-      lines.push(`test('${testName}', async ({ page }) => {`);
-      for (const op of ops) {
-        if (op.kind === 'tap') {
-          lines.push(`  await page.locator({ text: 'Widget' }).click();`);
-        } else if (op.kind === 'type') {
-          lines.push(`  await page.locator({ text: 'Widget' }).type('${op.text ?? ''}');`);
-        }
-      }
-      lines.push('});');
-      return lines.join('\n');
+    recorder: {
+      start: async () => {},
+      stop: async (options) => ({
+        status: 'captured', code: new CodeGenerator().generate(operations, selectors, options),
+        operations, frames: [], issues: [], receivedSequences: [], missingSequences: [],
+      }),
+      getSelectors: () => selectors,
+      getArtifactDirectory: () => undefined,
     },
-    getOperations: () => ops,
+    dispose: async () => {},
   };
 }
 
 describe('CLI + Core Integration', () => {
+  let cwd: string;
+  beforeEach(async () => { cwd = await mkdtemp(join(tmpdir(), 'fliwright-cli-core-')); });
+  afterEach(async () => { await rm(cwd, { recursive: true, force: true }); });
   it('recordCommand uses real RecorderController via DI', async () => {
     const mock = createProtocolMock();
-    mock.mockExtension('ext.fliwright.startRecording', () => ({ status: 'ok' }));
-    mock.mockExtension('ext.fliwright.stopRecording', () => ({ status: 'ok' }));
+    const protocol = installRecordingProtocol(mock);
     mock.mockExtension('ext.fliwright.hitTest', () => ({ widget: { type: 'Text', text: 'Button' } }));
 
     const deps: RecordDeps = {
       resolveVmUrl: async () => 'ws://mock:8181/ws',
-      createRecorder: async (vmUrl: string) => {
+      openCapture: async (vmUrl: string) => {
         const driver = new FliwrightDriver();
         await driver.attachMockConnector(mock.ws);
-        return driver.recorder;
+        return { recorder: driver.recorder, dispose: () => driver.dispose() };
       },
-      stopSignal: (async () => {
-        // Simulate brief recording
-        await new Promise(r => setTimeout(r, 100));
-
-        // Inject a tap event
-        const now = Date.now();
-        mock.emitStreamEvent('FliwrightRecording', {
-          type: 'pointerEvent',
-          kind: 'down',
-          pointer: 0,
-          position: { x: 100, y: 200 },
-          timestamp: now,
-          buttons: 1,
-        });
-        mock.emitStreamEvent('FliwrightRecording', {
-          type: 'pointerEvent',
-          kind: 'up',
-          pointer: 0,
-          position: { x: 100, y: 200 },
-          timestamp: now + 50,
-          buttons: 0,
-        });
-
-        await new Promise(r => setTimeout(r, 50));
-      })(),
+      waitForStop: async () => {
+        mock.emitStreamEvent('FliwrightRecording', protocol.pointer('down', 100, 200, 100));
+        mock.emitStreamEvent('FliwrightRecording', protocol.pointer('up', 100, 200, 50_100));
+      },
     };
 
-    const result = await recordCommand({ testName: 'tap test' }, deps);
+    const result = await recordCommand({ cwd, testName: 'tap test' }, deps);
 
     expect(result.code).toContain("from '@fliwright/vitest'");
-    expect(result.code).toContain("test('tap test'");
-    expect(result.operations).toBeDefined();
+    expect(result.code).toContain("script('tap test'");
+    expect(result.operations).toHaveLength(1);
   });
 
-  it('recordCommand integrates AssertionSuggester for suggestion comments', async () => {
+  it('does not infer business assertions from click coordinates or typed input', async () => {
     const operations: RecordedOperation[] = [
       {
         kind: 'tap',
@@ -104,16 +83,15 @@ describe('CLI + Core Integration', () => {
 
     const deps: RecordDeps = {
       resolveVmUrl: async () => 'ws://mock:8181/ws',
-      createRecorder: async () => createMockRecorder(operations),
-      stopSignal: Promise.resolve(),
+      openCapture: async () => createMockCapture(operations),
+      waitForStop: async () => {},
     };
 
-    const result = await recordCommand({ testName: 'suggestion test' }, deps);
+    const result = await recordCommand({ cwd, testName: 'suggestion test' }, deps);
 
-    // Should include assertion suggestion comments
-    expect(result.code).toContain('Assertion Suggestions');
-    expect(result.code).toContain('possible navigation tap');
-    expect(result.code).toContain('possible form submit');
+    expect(result.checkpoints).toEqual([]);
+    expect(result.code).not.toContain('await expect(');
+    expect(result.readiness.automationKind).toBe('script');
   });
 
   it('recordCommand throws when no VM URL found', async () => {

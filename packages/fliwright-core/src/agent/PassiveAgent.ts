@@ -25,6 +25,8 @@ export interface PassiveAgentOptions {
   aiRuntime: AiRuntime;
   recorder?: TimelineRecorder;
   passive?: boolean;
+  /** Stop publishing diagnosis nodes after the owning attempt's deadline. */
+  signal?: AbortSignal;
 }
 
 export class PassiveAgent {
@@ -34,7 +36,7 @@ export class PassiveAgent {
     failure: AgentVisibleFailure,
     context: PassiveAgentContext = {},
   ): Promise<AgentDiagnosis | null> {
-    if (!this.options.passive) return null;
+    if (!this.options.passive || this.options.signal?.aborted) return null;
     const node = this.options.recorder?.startNode('ai-call', `Diagnose: ${failure.title}`, {
       metadata: {
         mode: 'passive-diagnosis',
@@ -44,12 +46,14 @@ export class PassiveAgent {
       },
     });
 
+    await this.options.recorder?.flushProgress();
+    if (this.options.signal?.aborted) return null;
     try {
       const diagnosis = await this.options.aiRuntime.generate<AgentDiagnosis>({
         prompt: buildDiagnosisPrompt(failure, context),
         schema: diagnosisSchema,
       });
-      if (node) {
+      if (node && !this.options.signal?.aborted) {
         this.options.recorder?.passNode(node.id, {
           diagnosis,
         });
@@ -66,8 +70,10 @@ export class PassiveAgent {
           { kind: 'retry', description: 'Retry diagnosis after checking provider configuration.' },
         ],
       };
-      if (node) this.options.recorder?.failNode(node.id, agentFailure);
+      if (node && !this.options.signal?.aborted) this.options.recorder?.failNode(node.id, agentFailure);
       throw new FliwrightAgentError(agentFailure, { cause: error });
+    } finally {
+      if (!this.options.signal?.aborted) await this.options.recorder?.flushProgress();
     }
   }
 }

@@ -9,32 +9,32 @@ import { handleRunTest, type TestRunner } from '../src/tools/runTest.js';
 import { handleGetFailure } from '../src/tools/getFailure.js';
 import { handleGenerateTest } from '../src/tools/generateTest.js';
 import { handleNavigate } from '../src/tools/navigate.js';
-import { handleRecord, type RecorderFactory } from '../src/tools/record.js';
+import { handleRecord, type RecordingCaptureFactory } from '../src/tools/record.js';
 import { createServerState } from '../src/state.js';
 import type { FailureEntry, RunResult } from '../src/types.js';
 import { FliwrightDriver } from '@fliwright/core';
 import type { RecordedOperation, WidgetInfo } from '@fliwright/core';
 import { createProtocolMock } from '../../fliwright-core/tests/helpers/mockVMService.js';
+import { installRecordingProtocol } from '../../fliwright-core/tests/helpers/recordingProtocol.js';
 
-function createRecorderFromMock(): { recorderFactory: RecorderFactory; mock: ReturnType<typeof createProtocolMock> } {
+function createRecorderFromMock() {
   const mock = createProtocolMock();
-  mock.mockExtension('ext.fliwright.startRecording', () => ({ status: 'ok' }));
-  mock.mockExtension('ext.fliwright.stopRecording', () => ({ status: 'ok' }));
+  const protocol = installRecordingProtocol(mock);
   mock.mockExtension('ext.fliwright.hitTest', () => ({ widget: { type: 'ElevatedButton', text: 'Login' } }));
 
-  const recorderFactory: RecorderFactory = async (vmUrl: string) => {
+  const recorderFactory: RecordingCaptureFactory = async (vmUrl: string) => {
     const driver = new FliwrightDriver();
     await driver.attachMockConnector(mock.ws);
-    return driver.recorder;
+    return { recorder: driver.recorder, dispose: () => driver.dispose() };
   };
 
-  return { recorderFactory, mock };
+  return { recorderFactory, mock, protocol };
 }
 
 describe('MCP + Core Integration', () => {
   it('handleRecord with real RecorderController from core', async () => {
     const state = createServerState();
-    const { recorderFactory, mock } = createRecorderFromMock();
+    const { recorderFactory, mock, protocol } = createRecorderFromMock();
 
     // Start recording, inject events, then stop after brief delay
     const recordPromise = handleRecord(
@@ -43,32 +43,17 @@ describe('MCP + Core Integration', () => {
       recorderFactory,
     );
 
-    // Inject a tap event
-    const now = Date.now();
-    mock.emitStreamEvent('FliwrightRecording', {
-      type: 'pointerEvent',
-      kind: 'down',
-      pointer: 0,
-      position: { x: 100, y: 200 },
-      timestamp: now,
-      buttons: 1,
-    });
-    mock.emitStreamEvent('FliwrightRecording', {
-      type: 'pointerEvent',
-      kind: 'up',
-      pointer: 0,
-      position: { x: 100, y: 200 },
-      timestamp: now + 50,
-      buttons: 0,
-    });
+    await protocol.whenStarted;
+    mock.emitStreamEvent('FliwrightRecording', protocol.pointer('down', 100, 200, 100));
+    mock.emitStreamEvent('FliwrightRecording', protocol.pointer('up', 100, 200, 50_100));
 
     const result = await recordPromise;
 
     expect(result.testName).toBe('test recording');
-    expect(result.testCode).toContain("import { test, expect, beforeEach } from '@fliwright/vitest'");
+    expect(result.testCode).toContain("import { script, expect, beforeEach } from '@fliwright/vitest'");
     expect(result.testCode).toContain("await page.resetToHome({ homeRoute: '/' })");
     expect(result.testCode).toContain('test recording');
-    expect(result.operationCount).toBeGreaterThanOrEqual(0);
+    expect(result.operationCount).toBe(1);
 
     // Verify state was updated
     expect(state.getVmServiceUrl()).toBe('ws://mock:8181/ws');

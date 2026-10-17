@@ -15,7 +15,8 @@ describe('FliwrightCodeLensProvider', () => {
       'Record After This Test',
     ]);
     expect(lenses[0]?.command?.command).toBe('fliwright.runCurrentTest');
-    expect(lenses[2]?.command?.command).toBe('fliwright.startRecording');
+    expect(lenses[2]?.command?.command).toBe('fliwright.recordAfterTest');
+    expect(lenses[2]?.command?.arguments).toEqual([{ kind: 'testFile', uri: Uri.file('/workspace/tests/login.test.ts'), label: 'login.test.ts' }]);
   });
 
   it('shows Fliwright actions for files importing @fliwright/vitest', () => {

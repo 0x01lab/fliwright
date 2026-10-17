@@ -5,6 +5,7 @@ import { SelfHealingEngine } from '../src/SelfHealingEngine.js';
 import { SnapshotStore } from '../src/SnapshotStore.js';
 import { MultiDimensionalHealingStrategy } from '../src/strategies/MultiDimensionalHealingStrategy.js';
 import { TimelineRecorder } from '../src/timeline/TimelineRecorder.js';
+import { RunSession } from '../src/RunSession.js';
 import type { Locator } from '../src/Locator.js';
 import type { Page } from '../src/Page.js';
 import type { TimelineArtifactStore } from '../src/timeline/TimelineArtifactStore.js';
@@ -66,6 +67,20 @@ describe('createExpect', () => {
 });
 
 describe('timeline-aware expect', () => {
+  it('keeps recording off when a failed assertion has an evidence-capable page', async () => {
+    const recorder = new TimelineRecorder({ runId: 'off', testName: 'disabled capture' });
+    const session = new RunSession({ runId: 'off', testId: 't', testName: 'disabled capture',
+      recorder, recordingMode: 'off' });
+    const page = { screenshot: vi.fn(), snapshot: vi.fn() } as unknown as Page;
+    const artifactStore = { writeScreenshot: vi.fn(), writeSnapshot: vi.fn() } as unknown as TimelineArtifactStore;
+    await expect(createExpect(createMockLocator(false), undefined, {
+      recorder, runSession: session, page, artifactStore,
+    }).toBeVisible({ timeout: 0 })).rejects.toBeInstanceOf(FliwrightAgentError);
+    expect(page.screenshot).not.toHaveBeenCalled();
+    expect(page.snapshot).not.toHaveBeenCalled();
+    expect(session.snapshot()).toMatchObject({ evidenceStatus: 'disabled', operations: [], evidence: [] });
+  });
+
   it('records passing locator assertions as timeline assertion nodes', async () => {
     const recorder = new TimelineRecorder({ runId: 'run-1', testName: 'timeline expect' });
     const locator = createMockLocator(true);

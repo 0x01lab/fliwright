@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VMServiceConnector } from '../src/VMServiceConnector.js';
+import { recordingEventEnvelopeSchema } from '../src/RunContracts.js';
 
 function createMockWS() {
   const listeners: Record<string, Array<(...args: any[]) => void>> = {};
@@ -141,6 +142,28 @@ describe('VMServiceConnector', () => {
     expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ kind: 'riverpod_changed', data: { key: 'counter', value: 5 } }));
   });
 
+  it('removes VM destination metadata before validating Android recording events', () => {
+    const onEvent = vi.fn();
+    connector.onEvent(onEvent);
+    const notify = (extra: Record<string, unknown>) => mockWS.emit('message', JSON.stringify({
+      jsonrpc: '2.0', method: 'streamNotify', params: { streamId: 'Extension', event: {
+        type: 'Extension', extensionKind: 'FliwrightRecording', extensionData: {
+          version: 2, sessionId: 'android-session', sequence: 1, elapsedUs: 205, frameId: 'frame-1',
+          payload: { kind: 'route', route: '/' }, __destinationStream: 'Extension', ...extra,
+        },
+      } },
+    }));
+    notify({});
+    const event = onEvent.mock.calls[0][0];
+    expect(event.streamId).toBe('Extension');
+    expect(event.data).not.toHaveProperty('__destinationStream');
+    expect(recordingEventEnvelopeSchema.safeParse(event.data).success).toBe(true);
+    notify({ unexpectedRecordingField: true });
+    const invalid = onEvent.mock.calls[1][0].data;
+    expect(invalid).toHaveProperty('unexpectedRecordingField', true);
+    expect(recordingEventEnvelopeSchema.safeParse(invalid).success).toBe(false);
+  });
+
   it('buffers diagnostics with stream ids and supports filters', () => {
     mockWS.emit('message', JSON.stringify({
       jsonrpc: '2.0',
@@ -205,5 +228,41 @@ describe('VMServiceConnector', () => {
 
   it('attaches the mock WS for testing', () => {
     expect(() => connector.sendRequest('getVM')).toBeDefined();
+  });
+
+  it('rejects pending requests and refuses new requests after the VM socket closes', async () => {
+    const pending = connector.sendRequest('ext.fliwright.inspect', { selector: 'text=Gone' });
+    await resolveMainIsolate(mockWS);
+    const request = JSON.parse(mockWS.sent[1]);
+    expect(request.method).toBe('ext.fliwright.inspect');
+
+    mockWS.emit('close');
+
+    await expect(pending).rejects.toThrow('WebSocket connection closed');
+    await expect(connector.sendRequest('ext.fliwright.inspect', { selector: 'text=Gone' }))
+      .rejects.toThrow('Not connected. Call connect() first.');
+  });
+
+  it('does not let a stale socket close event reject a newer connection', async () => {
+    const first = mockWS;
+    const second = createMockWS();
+    connector.attachMock(second);
+    const pending = connector.sendRequest('getVM');
+
+    first.emit('close');
+    expect(second.sent).toHaveLength(1);
+    const request = JSON.parse(second.sent[0]);
+    second.emit('message', JSON.stringify({
+      jsonrpc: '2.0', id: request.id,
+      result: { isolates: [{ id: 'isolates/new-main', isSystemIsolate: false }] },
+    }));
+    await expect(pending).resolves.toMatchObject({ isolates: [{ id: 'isolates/new-main' }] });
+  });
+
+  it('rejects requests from a replaced socket instead of leaving them pending', async () => {
+    const pending = connector.sendRequest('getVM');
+    const replacement = createMockWS();
+    connector.attachMock(replacement);
+    await expect(pending).rejects.toThrow('VM Service connection replaced');
   });
 });

@@ -1,6 +1,6 @@
 import type { ProtocolMessage } from './types.js';
 
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 
 export class Protocol {
   private nextId = 0;

@@ -15,6 +15,15 @@ const sampleResult: CliRunResult = {
   ],
 };
 
+it('displays run-level failures even when no test can start', () => {
+  const result: CliRunResult = { passed: false, status: 'failed', totalTests: 0, passedTests: 0,
+    failedTests: 0, duration: 0, results: [], runnerErrors: [{ phase: 'collection', message: 'bad <import>' }] };
+  expect(formatPretty(result)).toContain('bad <import>');
+  const junit = formatJunit(result);
+  expect(junit).toContain('errors="1"');
+  expect(junit).toContain('<error message="bad &lt;import&gt;"');
+});
+
 describe('formatJson', () => {
   it('returns valid JSON string matching the result object', () => {
     const output = formatJson(sampleResult);

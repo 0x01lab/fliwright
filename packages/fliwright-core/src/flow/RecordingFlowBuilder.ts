@@ -65,14 +65,16 @@ function frameToNode(
   const confidence = operation?.confidence ?? frame.confidence;
   const actionPosition = operation?.position ?? frame.position;
   const actionDelta = operation?.delta ?? frame.delta;
-  const actionText = operation?.text ?? frame.text;
+  const sensitive = operation?.sensitive ?? frame.sensitive;
+  const actionText = sensitive ? '<masked>' : operation?.text ?? frame.text;
   const actionValue = operation?.action ?? frame.action;
   const actionDuration = operation?.duration ?? frame.duration;
+  const durationMs = operation?.durationMs ?? frame.durationMs;
   const actionTimestamp = operation?.timestamp ?? frame.timestamp;
   return {
     id: nodeIdForFrame(frame),
     type: 'action',
-    title: titleForFrame(frame),
+    title: titleForFrame(sensitive ? { ...frame, text: '<masked>' } : frame),
     position,
     selector: frame.selector,
     recordingFrameId: frame.id,
@@ -81,9 +83,11 @@ function frameToNode(
       kind,
       position: { x: actionPosition.x, y: actionPosition.y },
       ...(actionDelta ? { delta: { x: actionDelta.x, y: actionDelta.y } } : {}),
-      ...(actionText ? { text: actionText } : {}),
+      ...(actionText !== undefined ? { text: actionText } : {}),
+      ...(sensitive ? { sensitive: true } : {}),
       ...(actionValue ? { action: actionValue } : {}),
       ...(actionDuration != null ? { duration: actionDuration } : {}),
+      ...(durationMs != null ? { durationMs } : {}),
       timestamp: actionTimestamp,
       ...(operationStatus ? { status: operationStatus } : {}),
       ...(ignoreReason ? { ignoreReason } : {}),

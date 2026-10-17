@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  fingerprintScenario,
   ScenarioCoordinator,
   ScenarioResolutionError,
   ScenarioResolver,
@@ -31,6 +32,22 @@ const scenarios: Record<string, TestScenario> = {
 };
 
 describe('ScenarioResolver', () => {
+  it('preserves fingerprints across JSON transport of optional scenario fields', () => {
+    const scenario: TestScenario = { name: 'saved', layers: [{ kind: 'storage', seed: { text: 'Saved', optional: undefined } }] };
+    expect(fingerprintScenario(scenario)).toBe(fingerprintScenario(JSON.parse(JSON.stringify(scenario))));
+  });
+  it('fingerprints resolved scenario content independently of object key order', () => {
+    const resolved = new ScenarioResolver(scenarios).resolve('member');
+    const reordered = {
+      ready: resolved.ready,
+      layers: resolved.layers,
+      startupIsolation: resolved.startupIsolation,
+      name: resolved.name,
+    } as TestScenario;
+    expect(fingerprintScenario(resolved)).toBe(fingerprintScenario(reordered));
+    expect(fingerprintScenario(resolved)).not.toBe(fingerprintScenario({ ...resolved, name: 'other' }));
+  });
+
   it('resolves inherited layers in deterministic order', () => {
     const resolved = new ScenarioResolver(scenarios).resolve('member');
 

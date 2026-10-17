@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { handleRunTest, runVitest, type TestRunner } from '../src/tools/runTest.js';
 import { createServerState } from '../src/state.js';
 
@@ -189,32 +190,25 @@ describe('runVitest', () => {
     expect(result.results[0].error).toContain('expected true to be false');
   });
 
-  it('reads structured failure context from the sidecar file', async () => {
+  it('reads structured failure context from the current runner attempt', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'fliwright-mcp-sidecar-'));
-    await writeFile(join(cwd, 'sidecar.test.ts'), [
-      "import { writeFileSync } from 'node:fs';",
-      "import { dirname } from 'node:path';",
-      "import { describe, expect, it } from 'vitest';",
-      "describe('fixture', () => {",
-      "  it('writes sidecar and fails', () => {",
-      "    writeFileSync('sidecar-dir.txt', dirname(process.env.FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH!));",
-      "    writeFileSync(process.env.FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH!, JSON.stringify([{",
-      "      testName: 'sidecar failure',",
-      "      assertion: { matcher: 'toBeVisible', expected: 'visible', actual: 'missing', timeout: 5000 },",
-      "      widgetTree: { widgets: [{ type: 'Text' }] },",
-      "      source: { file: '/tmp/sidecar.test.ts', line: 4, snippet: 'expect(locator).toBeVisible()' },",
-      "      healingSuggestion: {",
-      "        originalSelector: 'text=Login',",
-      "        suggestedSelector: 'text=Sign in',",
-      "        confidence: 0.91,",
-      "        scores: { position: 0.8, context: 0.9, codeBinding: 0.95, text: 0.99, weighted: 0.91 }",
-      '      },',
-      "      timestamp: '2026-05-31T00:00:00.000Z'",
-      '    }]));',
-      '    expect(true).toBe(false);',
-      '  });',
-      '});',
-    ].join('\n'));
+    const integrationPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../fliwright-vitest/src/index.ts');
+    await writeFile(join(cwd, 'sidecar.test.ts'), `
+      import { createFliwrightTest } from ${JSON.stringify(integrationPath)};
+      const driver = {
+        sendRequest: async (method) => {
+          if (method === 'ext.fliwright.screenshot') return { success: true, screenshot: Buffer.from('png').toString('base64') };
+          if (method === 'ext.fliwright.snap') return { widgets: [{ type: 'Text' }] };
+          if (method === 'ext.fliwright.captureFrame') return { diagnostics: [] };
+          return { success: true };
+        },
+        healing: { getReports: () => [{ originalSelector: 'text=Login', suggestedSelector: 'text=Sign in', confidence: 0.91,
+          scores: { position: 0.8, context: 0.9, codeBinding: 0.95, text: 0.99, weighted: 0.91 } }] },
+        dispose: async () => {},
+      };
+      const test = createFliwrightTest({ vmServiceUrl: 'ws://unused', requireAssertions: false, log: { format: 'silent' } }, { driverProvider: async () => driver });
+      test('sidecar failure', async ({ page }) => { throw new Error('current failure'); });
+    `);
 
     const result = await runVitest({
       cwd,
@@ -232,8 +226,8 @@ describe('runVitest', () => {
       confidence: 0.91,
       scores: { position: 0.8, context: 0.9, codeBinding: 0.95, text: 0.99, weighted: 0.91 },
     });
-    const sidecarDir = await readFile(join(cwd, 'sidecar-dir.txt'), 'utf8');
-    await expect(stat(sidecarDir)).resolves.toBeDefined();
+    expect(result.failures![0].source.file).toContain('sidecar.test.ts');
+    expect(result.artifacts?.timelines?.[0]).toContain('/attempts/attempt-0/');
     expect(result.artifacts?.reportPath).toBeDefined();
     await expect(stat(result.artifacts!.reportPath!)).resolves.toBeDefined();
   });

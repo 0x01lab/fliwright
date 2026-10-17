@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cli"
 path: "packages/fliwright-cli"
-source_fingerprint: "cc3c8e79a7cb52d76304c0497175dba42f9ecc52e7fbb0ed45a105b6b092b4b8"
+source_fingerprint: "a257f0a61d066a87d3674f781e344ef001da3661e91d55bb67ca0d7adb0114b8"
 generated: true
 ---
 
@@ -69,6 +69,8 @@ Expose operator-facing command-line workflows and reusable command capabilities 
 
 ## Source Anchors
 
+- `packages/fliwright-cli/src/ArtifactReferences.ts`
+- `packages/fliwright-cli/src/RecordingReplay.ts`
 - `packages/fliwright-cli/src/capabilities/form.ts`
 - `packages/fliwright-cli/src/capabilities/interaction.ts`
 - `packages/fliwright-cli/src/capabilities/session.ts`

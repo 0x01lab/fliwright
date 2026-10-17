@@ -2,6 +2,7 @@ import { FliwrightAgentError } from '../agent/FliwrightAgentError.js';
 import type { Page } from '../Page.js';
 import type { TimelineArtifactStore } from '../timeline/TimelineArtifactStore.js';
 import type { TimelineRecorder } from '../timeline/TimelineRecorder.js';
+import type { RunSession } from '../RunSession.js';
 import type { AgentVisibleFailure, TimelineArtifactRef } from '../timeline/types.js';
 import {
   TIMELINE_ARTIFACT_KIND_SCREENSHOT,
@@ -12,6 +13,7 @@ export interface AssertionTimelineRunOptions {
   title: string;
   metadata: Record<string, unknown> & { matcher: string; target?: string };
   recorder?: TimelineRecorder;
+  runSession?: RunSession;
   page?: Page;
   artifactStore?: TimelineArtifactStore;
   includeScreenshot?: boolean;
@@ -23,6 +25,7 @@ export async function runTimelineAssertion<T>(
   body: () => Promise<T>,
 ): Promise<T> {
   const node = options.recorder?.startNode('assertion', options.title, { metadata: options.metadata });
+  await options.recorder?.flushProgress();
   try {
     const value = await body();
     if (node) options.recorder?.passNode(node.id);
@@ -35,6 +38,8 @@ export async function runTimelineAssertion<T>(
       options.recorder?.failNode(node.id, failure, { ...options.metadata, actual: assertionActual(error) });
     }
     throw error instanceof FliwrightAgentError ? error : new FliwrightAgentError(failure, { cause: error });
+  } finally {
+    await options.recorder?.flushProgress();
   }
 }
 
@@ -42,6 +47,7 @@ async function captureFailureArtifacts(
   nodeId: string,
   options: AssertionTimelineRunOptions,
 ): Promise<TimelineArtifactRef[]> {
+  if (options.runSession?.recordingEnabled === false) return [];
   if (!options.page || !options.artifactStore) return [];
 
   const artifacts: TimelineArtifactRef[] = [];

@@ -3,22 +3,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Uri, window, workspace } from 'vscode';
 import { AiRuntime, MockAiAdapter, type FliwrightFlowDocument } from '@fliwright/core';
 import { RecorderService } from '../src/recording/RecorderService.js';
-import { createWorkspace, readText } from './helpers/workspace.js';
+import { createWorkspace, readText, writeText } from './helpers/workspace.js';
+import { rm } from 'node:fs/promises';
+
+function recording(code: string, operations: unknown[] = [], frames: unknown[] = []) {
+  return { status: 'captured', code, operations, frames, issues: [], receivedSequences: [], missingSequences: [] };
+}
 
 function mockRecorder(overrides: Partial<{
   start: typeof vi.fn;
   stop: typeof vi.fn;
-  getRawEvents: typeof vi.fn;
+  getRawEventCount: typeof vi.fn;
   getOperations: typeof vi.fn;
   getFrames: typeof vi.fn;
   setOperationIncluded: typeof vi.fn;
+  getSelectors: typeof vi.fn;
+  getArtifactDirectory: typeof vi.fn;
 }> = {}) {
   return {
     start: overrides.start ?? vi.fn(async () => undefined),
-    stop: overrides.stop ?? vi.fn(async () => "test('recorded', async () => {});"),
-    getRawEvents: overrides.getRawEvents ?? vi.fn(() => []),
+    stop: overrides.stop ?? vi.fn(async () => recording("test('recorded', async () => {});", overrides.getOperations?.() ?? [], overrides.getFrames?.() ?? [])),
+    getRawEventCount: overrides.getRawEventCount ?? vi.fn(() => 0),
     getOperations: overrides.getOperations ?? vi.fn(() => []),
     getFrames: overrides.getFrames ?? vi.fn(() => []),
+    getArtifactDirectory: overrides.getArtifactDirectory ?? vi.fn(() => undefined),
+    getSelectors: overrides.getSelectors ?? (() => new Map((overrides.getOperations?.() ?? []).map((_op: unknown, index: number) => [index, {
+      query: { match: { key: `target-${index}` } }, matchCount: 1, ambiguous: false,
+    }]))),
     setOperationIncluded: overrides.setOperationIncluded ?? vi.fn(() => "test('recorded', async () => {});"),
   };
 }
@@ -29,8 +40,7 @@ describe('RecorderService', () => {
       const changes: string[] = [];
       const recorder = mockRecorder({
         start: vi.fn(async ({ onOperation }) => onOperation?.({ kind: 'tap' }, 0)),
-        stop: vi.fn(async () => "test('recorded', async () => {});"),
-        getRawEvents: vi.fn(() => [{ kind: 'tap' }]),
+        getRawEventCount: vi.fn(() => 1),
         getOperations: vi.fn(() => [{ kind: 'tap' }]),
         getFrames: vi.fn(() => [{
           id: 'frame-1',
@@ -52,7 +62,7 @@ describe('RecorderService', () => {
       expect(stopped.status).toBe('preview');
       expect(stopped.operationCount).toBe(1);
       expect(stopped.testName).toBe('checkout flow');
-      expect(stopped.generatedCode).toContain('recorded');
+      expect(stopped.generatedCode).toContain("script('checkout flow'");
       expect(stopped.frames).toHaveLength(1);
       expect(changes).toEqual(['recording:0', 'recording:1', 'preview:1']);
       expect(recorder.start).toHaveBeenCalledWith(expect.objectContaining({
@@ -76,10 +86,10 @@ describe('RecorderService', () => {
       await service.start({ recorder } as any);
       await service.stop({ recorder } as any);
 
-      const saved = await service.saveGeneratedCode(Uri.file(root), Uri.file(path.join(root, 'tests', 'recorded.test.ts')));
+      const saved = await service.saveGeneratedCode(Uri.file(root), Uri.file(path.join(root, '.fliwright/scripts', 'recorded.script.ts')));
 
-      expect(saved.fsPath).toBe(path.join(root, 'tests', 'recorded.test.ts'));
-      await expect(readText(root, 'tests/recorded.test.ts')).resolves.toContain("test('recorded'");
+      expect(saved.fsPath).toBe(path.join(root, '.fliwright/scripts', 'recorded.script.ts'));
+      await expect(readText(root, '.fliwright/scripts/recorded.script.ts')).resolves.toContain("script('recorded test'");
       expect(service.getSession().targetFile).toBe(saved.fsPath);
     });
 
@@ -122,7 +132,7 @@ describe('RecorderService', () => {
 
     it('updates frame inclusion through the active recorder', async () => {
       const recorder = mockRecorder({
-        getRawEvents: vi.fn(() => [{ kind: 'tap' }]),
+        getRawEventCount: vi.fn(() => 1),
         getOperations: vi.fn(() => [{ kind: 'tap', status: 'ignored' }]),
         getFrames: vi.fn(() => [{
           id: 'frame-1',
@@ -143,7 +153,7 @@ describe('RecorderService', () => {
       const updated = await service.setFrameIncluded({ recorder } as any, 'frame-1', true);
 
       expect(recorder.setOperationIncluded).toHaveBeenCalledWith(0, true);
-      expect(updated.generatedCode).toContain('updated');
+      expect(updated.generatedCode).toContain("script('recorded test'");
       expect(updated.frames?.[0]).toEqual(expect.objectContaining({
         id: 'frame-1',
         operationStatus: 'included',
@@ -195,9 +205,9 @@ describe('RecorderService', () => {
 
       const saved = await service.saveGeneratedCode(Uri.file(root));
 
-      expect(saved.fsPath).toMatch(/tests\/recorded-\d+\.test\.ts$/);
+      expect(saved.fsPath).toMatch(/\.fliwright\/scripts\/recorded-\d+\.script\.ts$/);
       const written = await readText(root, saved.fsPath.replace(root + '/', ''));
-      expect(written).toContain("test('recorded'");
+      expect(written).toContain("script('recorded test'");
       expect(service.getSession().targetFile).toBe(saved.fsPath);
     });
   });
@@ -205,8 +215,11 @@ describe('RecorderService', () => {
   describe('recording persistence', () => {
     it('persists a recording manifest and frame screenshots on stop', async () => {
       const root = await createWorkspace();
+      const source = await createWorkspace();
+      await writeText(source, 'screenshots/frame.png', 'png-bytes');
       const recorder = mockRecorder({
-        getRawEvents: vi.fn(() => [{ kind: 'tap' }]),
+        getArtifactDirectory: vi.fn(() => source),
+        getRawEventCount: vi.fn(() => 1),
         getOperations: vi.fn(() => [{ kind: 'tap' }]),
         getFrames: vi.fn(() => [{
           id: 'frame-1',
@@ -217,7 +230,7 @@ describe('RecorderService', () => {
           position: { x: 10, y: 20 },
           operationIndex: 0,
           screenshot: {
-            base64: Buffer.from('png-bytes').toString('base64'),
+            path: 'screenshots/frame.png', byteLength: 9,
             format: 'png',
             width: 100,
             height: 200,
@@ -235,9 +248,9 @@ describe('RecorderService', () => {
       const relativeDir = stopped.recordingDir!.replace(`${root}/`, '');
       const manifest = JSON.parse(await readText(root, `${relativeDir}/recording.json`));
       expect(manifest).toEqual(expect.objectContaining({
-        version: 1,
+        schemaVersion: 2,
         testName: 'persisted flow',
-        generatedCode: "test('recorded', async () => {});",
+        generatedCode: stopped.generatedCode,
       }));
       expect(manifest.flow).toEqual(expect.objectContaining({
         version: 1,
@@ -260,10 +273,11 @@ describe('RecorderService', () => {
       }));
       expect(manifest.frames[0]).toEqual(expect.objectContaining({
         id: 'frame-1',
-        screenshotFile: 'screenshots/frame-0001.png',
-        screenshot: { format: 'png', width: 100, height: 200, pixelRatio: 1 },
+        screenshot: { path: 'screenshots/frame.png', byteLength: 9, format: 'png', width: 100, height: 200, pixelRatio: 1 },
       }));
-      await expect(readText(root, `${relativeDir}/screenshots/frame-0001.png`)).resolves.toBe('png-bytes');
+      expect(JSON.stringify(manifest)).not.toContain('base64');
+      await rm(source, { recursive: true });
+      await expect(readText(root, `${relativeDir}/screenshots/frame.png`)).resolves.toBe('png-bytes');
 
       const recordings = await service.listPersistedRecordings(Uri.file(root));
       expect(recordings).toHaveLength(1);
@@ -271,15 +285,18 @@ describe('RecorderService', () => {
         label: 'persisted flow',
       }));
 
+      const read = vi.spyOn(workspace.fs, 'readFile');
       const loaded = await service.loadPersistedRecording(recordings[0].recordingDir);
+      expect(read.mock.calls.map(([uri]) => uri.fsPath)).toEqual([path.join(stopped.recordingDir!, 'recording.json')]);
+      read.mockRestore();
       expect(loaded).toEqual(expect.objectContaining({
         status: 'preview',
         testName: 'persisted flow',
-        generatedCode: "test('recorded', async () => {});",
+        generatedCode: stopped.generatedCode,
       }));
       expect(loaded.flow?.nodes[0].recordingFrameId).toBe('frame-1');
       expect(loaded.frames?.[0].screenshot).toEqual({
-        base64: Buffer.from('png-bytes').toString('base64'),
+        path: 'screenshots/frame.png', byteLength: 9,
         format: 'png',
         width: 100,
         height: 200,
@@ -291,7 +308,7 @@ describe('RecorderService', () => {
       const root = await createWorkspace();
       let included = false;
       const recorder = mockRecorder({
-        getRawEvents: vi.fn(() => [{ kind: 'tap' }]),
+        getRawEventCount: vi.fn(() => 1),
         getOperations: vi.fn(() => [{ kind: 'tap', status: included ? 'included' : 'ignored' }]),
         getFrames: vi.fn(() => [{
           id: 'frame-1',
@@ -317,7 +334,7 @@ describe('RecorderService', () => {
 
       const relativeDir = stopped.recordingDir!.replace(`${root}/`, '');
       const manifest = JSON.parse(await readText(root, `${relativeDir}/recording.json`));
-      expect(manifest.generatedCode).toContain('updated');
+      expect(manifest.generatedCode).toContain("page.locator({ key: 'target-0' }).click({ waitForAnimations: true })");
       expect(manifest.frames[0]).toEqual(expect.objectContaining({
         operationStatus: 'included',
       }));
@@ -564,11 +581,11 @@ describe('RecorderService', () => {
       // First cycle with tap operation
       const recorder1 = mockRecorder({
         start: vi.fn(async ({ onOperation }) => onOperation?.({ kind: 'tap' }, 0)),
-        getRawEvents: vi.fn(() => [{ kind: 'tap' }]),
+        getRawEventCount: vi.fn(() => 1),
         getOperations: vi.fn(() => [{ kind: 'tap' }]),
-        stop: vi.fn(async () => "test('first', async () => {});"),
+        stop: vi.fn(async () => recording("test('first', async () => {});", [{ kind: 'tap' }])),
       });
-      await service.start({ recorder: recorder1 } as any);
+      await service.start({ recorder: recorder1 } as any, { testName: 'first' });
       const first = await service.stop({ recorder: recorder1 } as any);
 
       expect(first.operationCount).toBe(1);
@@ -580,9 +597,9 @@ describe('RecorderService', () => {
       expect(service.getSession().generatedCode).toBeUndefined();
 
       const recorder2 = mockRecorder({
-        getRawEvents: vi.fn(() => [{ kind: 'tap' }, { kind: 'tap' }]),
-        getOperations: vi.fn(() => [{ kind: 'tap' }, { kind: 'drag' }]),
-        stop: vi.fn(async () => "test('second', async () => {});"),
+        getRawEventCount: vi.fn(() => 2),
+        getOperations: vi.fn(() => [{ kind: 'tap' }, { kind: 'drag', delta: { x: 10, y: 20 } }]),
+        stop: vi.fn(async () => recording("test('second', async () => {});", [{ kind: 'tap' }, { kind: 'drag', delta: { x: 10, y: 20 } }])),
       });
       await service.start({ recorder: recorder2 } as any, { testName: 'second run' });
       const second = await service.stop({ recorder: recorder2 } as any);

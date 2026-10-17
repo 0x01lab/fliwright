@@ -67,19 +67,24 @@ void main() {
           contains('ext.fliwright.hitTest'));
     });
 
-    test('startRecording returns recording=true', () async {
+    test('startRecording reports an incompatible binding clearly', () async {
       await FliwrightBridge.init();
-      final result = await FliwrightBridge.registry
-          .invoke('ext.fliwright.startRecording', {});
-      expect(result['recording'], isTrue);
+      final result = await FliwrightBridge.registry.invoke(
+          'ext.fliwright.startRecording',
+          {'protocolVersion': '2', 'sessionId': 'test'});
+      expect(result['recording'], isFalse);
+      expect(result['success'], isFalse);
+      expect(result['error'], contains('FliwrightRecordingBinding'));
     });
 
-    test('stopRecording returns recording=false after start', () async {
+    test(
+        'handshake does not advertise before-dispatch capture on an incompatible binding',
+        () async {
       await FliwrightBridge.init();
-      await FliwrightBridge.registry.invoke('ext.fliwright.startRecording', {});
       final result = await FliwrightBridge.registry
-          .invoke('ext.fliwright.stopRecording', {});
-      expect(result['recording'], isFalse);
+          .invoke('ext.fliwright.handshake', {'protocolVersion': '2'});
+      expect(result['bridgeCapabilities'],
+          containsPair('recordingBeforeDispatchTarget', false));
     });
 
     test('hitTest returns widget map', () async {

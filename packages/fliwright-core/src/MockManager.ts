@@ -21,8 +21,8 @@ export class MockManager implements MockAdapter {
     return this._server.start();
   }
 
-  async stopServer(): Promise<void> {
-    await this._server.stop();
+  async stopServer(options: { signal?: AbortSignal } = {}): Promise<void> {
+    await this._server.stop(options);
   }
 
   /** Alias for MockAdapter compatibility. */

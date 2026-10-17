@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { MemoryLogSink, StructuredLogger, TimelineRecorder } from '../../src/index.js';
 
 describe('TimelineRecorder', () => {
+  it.each(['skipped', 'interrupted'] as const)('preserves runner %s with schema version 2', (status) => {
+    const recorder = new TimelineRecorder({ runId: 'r', testName: 'runner' });
+    const pending = recorder.startNode('action', 'Pending');
+    expect(recorder.complete(status)).toMatchObject({ version: 2, status });
+    expect(recorder.toJSON().nodes.find((node) => node.id === pending.id)?.status).toBe(status);
+  });
   it('records nested page step and frame nodes', () => {
     const recorder = new TimelineRecorder({
       runId: 'run-1',
@@ -20,7 +26,7 @@ describe('TimelineRecorder', () => {
     const data = recorder.complete('passed');
 
     expect(data).toMatchObject({
-      version: 1,
+      version: 2,
       runId: 'run-1',
       testName: 'register flow',
       mode: 'script',

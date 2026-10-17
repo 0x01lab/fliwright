@@ -1,6 +1,20 @@
 // packages/fliwright-core/tests/CodeGenerator.test.ts
 import { describe, it, expect } from 'vitest';
 import { CodeGenerator } from '../src/CodeGenerator.js';
+
+describe('recording automation kind', () => {
+  it('binds generated tests to the named scenario so replay applies its environment', () => {
+    const code = new CodeGenerator().generate([], new Map(), { mode: 'test', scenarioName: 'saved-form' });
+    expect(code).toContain("test.scenario('saved-form')('recorded test'");
+  });
+
+  it('generates a script fixture when script mode is requested without flow wrappers', () => {
+    const code = new CodeGenerator().generate([], new Map(), { mode: 'script', testName: 'task' });
+    expect(code).toContain("import { script, expect } from '@fliwright/vitest'");
+    expect(code).toContain("script('task', async ({ page }) => {");
+    expect(code).not.toContain("test('task'");
+  });
+});
 import type { RecordedOperation, RecordingFrame, ResolvedSelector } from '../src/types.js';
 
 function tap(x: number, y: number, ts: number): RecordedOperation {
@@ -29,6 +43,27 @@ function sel(entries: Record<number, ResolvedSelector['query']>): Map<number, Re
 }
 
 describe('CodeGenerator', () => {
+  it.each([false, true])('waits for a recorded navigation tap before entering the next page (timeline: %s)', async (timeline) => {
+    const code = new CodeGenerator().generate([
+      tap(10, 20, 1), { ...typeOp(10, 40, 'saved value', 2), action: 'replace' },
+    ], sel({ 0: { match: { key: 'open_form' } }, 1: { match: { key: 'form_input' } } }), { mode: 'script', timeline });
+    let body!: (fixtures: unknown) => Promise<void>;
+    let formReady = false;
+    const entered: string[] = [];
+    new Function('script', code.replace(/^import .*;\n/, ''))((_: string, callback: typeof body) => { body = callback; });
+    await body({
+      page: { locator: () => ({
+        click: async (options?: { waitForAnimations?: boolean }) => { formReady = options?.waitForAnimations === true; },
+        fill: async (value: string) => {
+          if (!formReady) throw new Error('The recorded form has not rendered yet');
+          entered.push(value);
+        },
+      }) },
+      flow: { step: async (_: string, action: () => Promise<void>) => action() },
+    });
+    expect(entered).toEqual(['saved value']);
+  });
+
   it('generates a complete test file with imports', () => {
     const gen = new CodeGenerator();
     const ops: RecordedOperation[] = [tap(100, 200, 1000)];
@@ -36,7 +71,7 @@ describe('CodeGenerator', () => {
     const code = gen.generate(ops, selectors);
     expect(code).toContain("import { test, expect } from '@fliwright/vitest'");
     expect(code).toContain("test('recorded test'");
-    expect(code).toContain("page.locator({ text: 'Login' }).click()");
+    expect(code).toContain("page.locator({ text: 'Login' }).click({ waitForAnimations: true })");
   });
 
   it('generates type operations', () => {
@@ -97,14 +132,36 @@ describe('CodeGenerator', () => {
     expect(code).toContain("type('line 1\\nline \\'2\\'')");
   });
 
-  it('falls back to type selector when no selector provided', () => {
+  it('keeps unresolved taps as coordinate drafts without inventing a Widget selector', () => {
     const gen = new CodeGenerator();
     const ops: RecordedOperation[] = [
       { kind: 'tap', position: { x: 100, y: 200 }, timestamp: 1000 },
     ];
     const selectors = new Map<number, ResolvedSelector>();
     const code = gen.generate(ops, selectors);
-    expect(code).toContain("page.locator({ type: 'Widget' })");
+    expect(code).toContain('page.clickAt(100, 200)');
+    expect(code).not.toContain("type: 'Widget'");
+  });
+
+  it('preserves fractional drag duration for located and coordinate replay', () => {
+    const operation = { ...drag(10, 20, 0, -240, 100), durationMs: 1281.008 };
+    const generator = new CodeGenerator();
+    expect(generator.generate([operation], sel({ 0: { match: { key: 'list' } } })))
+      .toContain('.drag(0, -240, { duration: 1281.008 })');
+    expect(generator.generate([operation], new Map()))
+      .toContain('page.dragFrom(10, 20, 0, -240, { duration: 1281.008 })');
+  });
+
+  it('preserves unresolved drags and blocks replaying unresolved input or long press', () => {
+    const gen = new CodeGenerator();
+    const code = gen.generate([
+      drag(10, 20, 30, 40, 100), typeOp(0, 0, 'typed', 200), longPress(10, 20, 600, 300),
+    ], new Map());
+    expect(code).toContain('page.dragFrom(10, 20, 30, 40)');
+    expect(code).toContain('throw new Error(');
+    expect(code).toContain('Unresolved type target');
+    expect(code).toContain('Unresolved longPress target');
+    expect(code).not.toContain("type: 'Widget'");
   });
 
   it('generates fill() for type operations with action:replace', () => {
@@ -126,8 +183,8 @@ describe('CodeGenerator', () => {
     ];
     const selectors = sel({ 0: { match: { text: 'User' } }, 1: { match: { text: 'Pass' } } });
     const code = gen.generate(ops, selectors);
-    expect(code).toContain("page.locator({ text: 'User' }).click()");
-    expect(code).toContain("page.locator({ text: 'Pass' }).click()");
+    expect(code).toContain("page.locator({ text: 'User' }).click({ waitForAnimations: true })");
+    expect(code).toContain("page.locator({ text: 'Pass' }).click({ waitForAnimations: true })");
   });
 
   it('skips ignored operations', () => {
@@ -143,7 +200,7 @@ describe('CodeGenerator', () => {
       2: { match: { text: 'Field' } },
     });
     const code = gen.generate(ops, selectors);
-    expect(code).toContain("page.locator({ text: 'Open' }).click()");
+    expect(code).toContain("page.locator({ text: 'Open' }).click({ waitForAnimations: true })");
     expect(code).toContain("page.locator({ text: 'Field' }).type('ok')");
     expect(code.match(/Open/g)).toHaveLength(1);
   });
@@ -164,7 +221,7 @@ describe('CodeGenerator', () => {
     expect(code).toContain("import { test } from '@fliwright/vitest'");
     expect(code).toContain("test('register flow', async ({ page, flow, mock, assert, agent }) => {");
     expect(code).toContain("await flow.step('Tap target', async () => {");
-    expect(code).toContain("await page.locator({ text: 'Register' }).click();");
+    expect(code).toContain("await page.locator({ text: 'Register' }).click({ waitForAnimations: true });");
     expect(code).toContain("await flow.step('Type text', async () => {");
     expect(code).toContain("await page.locator({ key: 'emailField' }).type('ada@example.com');");
   });
@@ -192,7 +249,7 @@ describe('CodeGenerator', () => {
       timestamp: 1000,
       position: { x: 100, y: 200 },
       operationIndex: 0,
-      screenshot: { base64: 'png', format: 'png' },
+      screenshot: { path: 'screenshots/frame.png', byteLength: 3, format: 'png' },
     }];
 
     const code = gen.generate(operations, sel({ 0: { match: { text: 'Start' } } }), {
@@ -203,7 +260,7 @@ describe('CodeGenerator', () => {
     expect(code).toContain("await flow.frame('Recorded frame 1', { screenshot: true });");
   });
 
-  it('emits a timeline-native assertion only for a recorded postcondition target', () => {
+  it('keeps suggestions unconfirmed even when a postcondition target exists', () => {
     const code = new CodeGenerator().generate(
       [tap(100, 200, 1000), tap(100, 300, 2000)],
       sel({
@@ -223,8 +280,8 @@ describe('CodeGenerator', () => {
     );
 
     expect(code).toContain('// TODO: Assert expected page content');
-    expect(code).toContain("await assert.visible('Suggested: possible navigation tap', page.locator({ text: 'Account details' }));");
-    expect(code).not.toContain("assert.visible('Suggested: possible navigation tap', page.locator({ text: 'Register' }))");
+    expect(code).not.toContain('await assert.visible(');
+    expect(code).not.toContain('await expect(');
   });
 
   it('keeps suggestions as TODO comments without a reliable postcondition target', () => {
@@ -256,7 +313,7 @@ describe('CodeGenerator structured selectors', () => {
       [0, { query: { match: { text: 'Login' } }, ambiguous: false, matchCount: 1 }],
     ]);
     const code = new CodeGenerator().generate([op()], selectors);
-    expect(code).toContain("page.locator({ text: 'Login' }).click()");
+    expect(code).toContain("page.locator({ text: 'Login' }).click({ waitForAnimations: true })");
   });
 
   it('serializes a within-scoped selector', () => {
@@ -267,7 +324,7 @@ describe('CodeGenerator structured selectors', () => {
       }],
     ]);
     const code = new CodeGenerator().generate([op()], selectors);
-    expect(code).toContain("within: { key: 'list' }");
+    expect(code).toContain("within: { match: { key: 'list' } }");
   });
 
   it('emits an ambiguous comment for an nth fallback', () => {

@@ -16,6 +16,14 @@ describe('CLI-first product surface', () => {
     const names = createProgram().commands.map((command) => command.name());
     expect(names).toContain('mock:start');
   });
+
+  it('does not invent explicit run overrides for absent flags', () => {
+    const run = createProgram().commands.find((command) => command.name() === 'run')!;
+    for (const field of ['reporter', 'timeout', 'screenshot', 'recordingMode']) {
+      const option = run.options.find((candidate) => candidate.attributeName() === field)!;
+      expect(option.defaultValue, field).toBeUndefined();
+    }
+  });
 });
 
 function subcommands(program: ReturnType<typeof createProgram>, name: string): string[] {

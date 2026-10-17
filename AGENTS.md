@@ -66,10 +66,11 @@ instead of reading sibling files or a whole directory.
 
 ## Feature Documentation
 
-AI-consumable implementation documentation lives in `docs/features/`.
+AI-consumable feature documentation lives in `docs/features/`. These docs summarize every implemented feature with API surfaces, type definitions, and usage examples, organized for fast lookup by AI agents.
 
-- **Start here:** [docs/features/index.md](./docs/features/index.md) for package and pipeline routing.
-- **Package APIs:** each package has a `README.md` and detailed API pages under `docs/features/<package>/`.
-- **Cross-cutting behavior:** top-level pipeline pages trace implemented integrations, including [VM Service endpoint acquisition](./docs/features/vm-service-endpoint-pipeline.md).
+- **Start here:** [docs/features/index.md](./docs/features/index.md) — routing table by package and feature slice, MCP tool quick reference, and agent quick-start guide.
+- **Per-package overviews:** each package has a `README.md` under `docs/features/<package>/` (including `core`, `vitest`, `tdd`, `cli`, `mcp`, `vscode`, `bridge`, `bridge-riverpod`, `plugin-riverpod`, and `e2e-tests`).
+- **Per-export docs:** package directories contain one page per exported class, utility, command, MCP tool, Dart extension, or VS Code contribution.
+- **Cross-cutting pipelines:** top-level `*-pipeline.md` and `*-integration.md` files trace recording, self-healing, form filling, MCP, mocks, state injection, and run artifacts.
 
-Regenerate affected feature documentation with `/document-features` after significant stable source changes.
+Regenerate with `/document-features` when source code changes significantly.

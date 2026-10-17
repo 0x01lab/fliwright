@@ -7,10 +7,11 @@ import { describe, it, expect } from 'vitest';
 import { handleRunTest, type TestRunner } from '../src/tools/runTest.js';
 import { handleGetFailure } from '../src/tools/getFailure.js';
 import { handleReadTestReport } from '../src/resources/testReport.js';
-import { handleRecord, type RecorderFactory } from '../src/tools/record.js';
+import { handleRecord, type RecordingCaptureFactory } from '../src/tools/record.js';
 import { createServerState } from '../src/state.js';
 import { FliwrightDriver } from '@fliwright/core';
 import { createProtocolMock } from '../../fliwright-core/tests/helpers/mockVMService.js';
+import { installRecordingProtocol } from '../../fliwright-core/tests/helpers/recordingProtocol.js';
 
 const passingRunner: TestRunner = async () => ({
   passed: true,
@@ -100,14 +101,13 @@ describe('MCP Multi-Tool Workflow Integration', () => {
   it('record stores VM URL in state', async () => {
     const state = createServerState();
     const mock = createProtocolMock();
-    mock.mockExtension('ext.fliwright.startRecording', () => ({ status: 'ok' }));
-    mock.mockExtension('ext.fliwright.stopRecording', () => ({ status: 'ok' }));
+    const protocol = installRecordingProtocol(mock);
     mock.mockExtension('ext.fliwright.hitTest', () => ({ widget: { type: 'Widget' } }));
 
-    const factory: RecorderFactory = async () => {
+    const factory: RecordingCaptureFactory = async () => {
       const driver = new FliwrightDriver();
       await driver.attachMockConnector(mock.ws);
-      return driver.recorder;
+      return { recorder: driver.recorder, dispose: () => driver.dispose() };
     };
 
     await handleRecord(

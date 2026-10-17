@@ -14,6 +14,31 @@ import {
 } from '../../src/index.js';
 
 describe('TimelineArtifactStore', () => {
+  it('does not replace a terminal timeline with an aborted pending write', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fliwright-timeline-abort-'));
+    try {
+      const store = new TimelineArtifactStore({ runId: 'r', attemptDir: root });
+      const recorder = new TimelineRecorder({ runId: 'r', testName: 'aborted persistence' });
+      const final = recorder.complete('failed');
+      await store.writeTimeline(final);
+      const controller = new AbortController();
+      const late = store.writeTimeline({ ...final, status: 'running' }, { signal: controller.signal });
+      controller.abort(new Error('finalization deadline'));
+      await expect(late).rejects.toThrow('finalization deadline');
+      expect(JSON.parse(await readFile(store.timelinePath, 'utf8'))).toEqual(final);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('keeps every relative artifact inside its canonical attempt directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fliwright-attempt-store-'));
+    try {
+      const attemptDir = join(root, 'r/tests/t/attempts/a');
+      const store = new TimelineArtifactStore({ runId: 'r', attemptDir });
+      const ref = await store.writeScreenshot('failure', Buffer.from('png'));
+      expect(store.runDir).toBe(attemptDir);
+      expect(await readFile(join(attemptDir, ref.path), 'utf8')).toBe('png');
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
   it('writes timeline and deterministic artifact refs', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'fliwright-timeline-'));
     const runsRoot = join(cwd, 'runs-root');
@@ -65,7 +90,7 @@ describe('TimelineArtifactStore runsRoot', () => {
   it('writes timeline.json under runsRoot', async () => {
     const custom = join(sandbox, 'custom-runs');
     const store = new TimelineArtifactStore({ runsRoot: custom, runId: 'r3' });
-    await store.writeTimeline({ version: 1, runId: 'r3', testName: 't', mode: 'test', status: 'passed', startedAt: '', nodes: [] });
+    await store.writeTimeline({ version: 2, runId: 'r3', testName: 't', mode: 'test', status: 'passed', startedAt: '', nodes: [] });
     const written = await readFile(store.timelinePath, 'utf8');
     expect(JSON.parse(written).runId).toBe('r3');
   });

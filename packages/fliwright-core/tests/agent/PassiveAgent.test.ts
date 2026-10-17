@@ -60,4 +60,51 @@ describe('PassiveAgent', () => {
       },
     });
   });
+
+  it.each(['success', 'failure'] as const)('does not mutate a closed attempt after a late diagnosis %s', async (outcome) => {
+    const controller = new AbortController();
+    const recorder = new TimelineRecorder({ runId: 'late-run', testName: 'late diagnosis' });
+    let invoked!: () => void;
+    const started = new Promise<void>((resolve) => { invoked = resolve; });
+    let finish!: (response: { text: string; json: unknown }) => void;
+    let fail!: (error: Error) => void;
+    const runtime = new AiRuntime({ adapter: { name: 'delayed', invoke: async () => {
+      invoked();
+      return new Promise((resolve, reject) => { finish = resolve; fail = reject; });
+    } } });
+    const agent = new PassiveAgent({ aiRuntime: runtime, recorder, passive: true, signal: controller.signal });
+    const diagnosis = agent.diagnose(failure);
+    await started;
+    controller.abort();
+    recorder.complete('failed');
+    const terminal = JSON.parse(JSON.stringify(recorder.toJSON()));
+    if (outcome === 'success') {
+      const json = { summary: 'late', rootCause: 'late', suggestedActions: [], confidence: 1 };
+      finish({ text: JSON.stringify(json), json });
+      await diagnosis;
+    } else {
+      const rejected = expect(diagnosis).rejects.toThrow('late error');
+      fail(new Error('late error'));
+      await rejected;
+    }
+    expect(recorder.toJSON()).toEqual(terminal);
+  });
+
+  it('does not invoke AI when aborted while waiting for progress persistence', async () => {
+    const controller = new AbortController();
+    const recorder = new TimelineRecorder({ runId: 'aborted-run', testName: 'aborted diagnosis' });
+    let flush!: () => void;
+    recorder.flushProgress = () => new Promise<void>((resolve) => { flush = resolve; });
+    let invocations = 0;
+    const runtime = new AiRuntime({ adapter: { name: 'unused', invoke: async () => {
+      invocations++;
+      throw new Error('must not invoke');
+    } } });
+    const agent = new PassiveAgent({ aiRuntime: runtime, recorder, passive: true, signal: controller.signal });
+    const diagnosis = agent.diagnose(failure);
+    controller.abort();
+    flush();
+    await expect(diagnosis).resolves.toBeNull();
+    expect(invocations).toBe(0);
+  });
 });

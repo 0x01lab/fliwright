@@ -121,7 +121,7 @@ export class FliwrightDriver {
     // Fetch SDK version from bridge handshake (non-critical).
     try {
       const handshake = await this.connector.sendRequest('ext.fliwright.handshake', {
-        protocolVersion: '1',
+        protocolVersion: '2',
       }) as { dartSdkVersion?: string };
       this._sdkVersion = handshake?.dartSdkVersion ?? null;
     } catch { /* handshake not supported by older bridges — ignore */ }
@@ -157,15 +157,32 @@ export class FliwrightDriver {
   async notifyTestStart(testName: string): Promise<void> { await this.registry.notifyTestStart(testName); }
   async notifyTestEnd(testName: string, result: TestResult): Promise<void> { await this.registry.notifyTestEnd(testName, result); }
 
-  async dispose(): Promise<void> {
+  /** Canceling cleanup releases owned transports even if a plugin never settles. */
+  async dispose(options: { signal?: AbortSignal } = {}): Promise<void> {
+    const { signal } = options;
     try {
-      await this.registry.disposeAll();
+      await waitForDisposal(this.registry.disposeAll(), signal);
     } finally {
       try {
-        await this._mock?.stopServer();
+        await waitForDisposal(this._mock?.stopServer({ signal }) ?? Promise.resolve(), signal);
       } finally {
-        this.connector.disconnect();
+        this.connector.disconnect({ force: signal?.aborted });
       }
     }
   }
+}
+
+async function waitForDisposal(work: Promise<void>, signal?: AbortSignal): Promise<void> {
+  if (!signal) return work;
+  let onAbort: (() => void) | undefined;
+  try {
+    await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason ?? new Error('Driver cleanup cancelled.'));
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
+      }),
+    ]);
+  } finally { if (onAbort) signal.removeEventListener('abort', onAbort); }
 }

@@ -1,6 +1,6 @@
 // packages/fliwright-vscode/src/viewer/ViewerPanel.ts
 import * as vscode from 'vscode';
-import { RunViewerService, type LoadedRun } from '../runviewer/RunViewerService.js';
+import { RunViewerService, type LoadedRun, type RunSelection } from '../runviewer/RunViewerService.js';
 import type { SerializableRun, ViewerInbound, ViewerOutbound } from '../webview/viewer/types.js';
 import { TIMELINE_TRACE_DIR } from './timelineConstants.js';
 
@@ -53,6 +53,7 @@ export class ViewerPanel {
       description: `${stampLabel(r.runId)} · ${r.mode}`,
       detail: `${r.status} · ${r.nodeCount} node(s)${r.endedAt ? ' · ' + r.runId : ''}`,
       runDir: r.runDir,
+      selection: { testId: r.testId, attemptId: r.attemptId },
     }));
     const picked = await vscode.window.showQuickPick(items, {
       placeHolder: 'Select a run to view',
@@ -60,11 +61,11 @@ export class ViewerPanel {
       matchOnDetail: true,
     });
     if (!picked) return;
-    await this.openForRun(picked.runDir);
+    await this.openForRun(picked.runDir, picked.selection);
   }
 
   /** Open the most recent run. */
-  async openLatest(): Promise<void> {
+  async openLatest(options: { failedOnly?: boolean } = {}): Promise<void> {
     const root = this.service.getWorkspaceRoot();
     if (!root) {
       vscode.window.showWarningMessage('No workspace folder open.');
@@ -75,17 +76,19 @@ export class ViewerPanel {
       vscode.window.showWarningMessage('No run data found under ~/.fliwright/projects for this workspace.');
       return;
     }
-    const runs = await this.service.listRuns(runsDir);
+    const allRuns = await this.service.listRuns(runsDir);
+    const runs = options.failedOnly ? allRuns.filter(run => run.status === 'failed' || run.status === 'interrupted') : allRuns;
     if (runs.length === 0) {
-      vscode.window.showWarningMessage('No runs with timeline.json found under ~/.fliwright/projects for this workspace.');
+      vscode.window.showWarningMessage(options.failedOnly ? 'No failed or interrupted runs found for this workspace.'
+        : 'No runs with timeline.json found under ~/.fliwright/projects for this workspace.');
       return;
     }
-    await this.openForRun(runs[0].runDir);
+    await this.openForRun(runs[0].runDir, runs[0]);
   }
 
   /** Load and display a specific run directory. */
-  async openForRun(runDir: vscode.Uri): Promise<void> {
-    const loaded = await this.service.loadRun(runDir);
+  async openForRun(runDir: vscode.Uri, selection: RunSelection = {}): Promise<void> {
+    const loaded = await this.service.loadRun(runDir, selection);
     if (!loaded) {
       vscode.window.showWarningMessage('Could not read timeline.json for this run.');
       return;
@@ -94,8 +97,16 @@ export class ViewerPanel {
   }
 
   /** Alias of {@link openForRun}; intent-revealing entry for view-button handlers. */
-  async openRun(runDir: vscode.Uri): Promise<void> {
-    await this.openForRun(runDir);
+  async openRun(runDir: vscode.Uri, selection: RunSelection = {}): Promise<void> {
+    await this.openForRun(runDir, selection);
+  }
+
+  /** Open a portable export independently of the current workspace's runs root. */
+  async openExportedRun(): Promise<void> {
+    const selected = await vscode.window.showOpenDialog({
+      title: 'Open Exported Fliwright Run', canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
+    });
+    if (selected?.[0]) await this.openRun(selected[0]);
   }
 
   private async show(loaded: LoadedRun): Promise<void> {

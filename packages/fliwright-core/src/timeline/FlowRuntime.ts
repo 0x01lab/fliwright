@@ -1,4 +1,5 @@
 import type { Page } from '../Page.js';
+import type { RunSession } from '../RunSession.js';
 import { FliwrightAgentError } from '../agent/FliwrightAgentError.js';
 import type { AgentVisibleFailure, TimelineArtifactRef, TimelineNodeStartOptions } from './types.js';
 import { TimelineArtifactStore } from './TimelineArtifactStore.js';
@@ -16,6 +17,7 @@ export interface FlowRuntimeOptions {
   recorder: TimelineRecorder;
   artifactStore?: TimelineArtifactStore;
   page?: Page;
+  runSession?: RunSession;
 }
 
 export interface FlowFrameOptions {
@@ -71,8 +73,10 @@ export class FlowRuntime {
     const node = this.options.recorder.startNode('optional', title, {
       metadata: { when: options.when ?? true },
     });
+    await this.options.recorder.flushProgress();
     if (options.when === false) {
       this.options.recorder.skipNode(node.id);
+      await this.options.recorder.flushProgress();
       return undefined;
     }
     try {
@@ -85,13 +89,20 @@ export class FlowRuntime {
       const failure = withArtifactAppState(createAgentFailure(error, title, node.id, 'step_failed'), artifacts);
       this.options.recorder.failNode(node.id, failure);
       throw wrapAgentError(error, failure);
+    } finally {
+      await this.options.recorder.flushProgress();
     }
   }
 
   async frame(title: string, options: FlowFrameOptions = {}): Promise<TimelineArtifactRef[]> {
-    const node = this.options.recorder.startNode('frame', title, { metadata: options.metadata });
+    const node = this.options.recorder.startNode('frame', title, {
+      metadata: { ...options.metadata, requestedBy: 'user' },
+    });
+    await this.options.recorder.flushProgress();
     try {
-      const artifacts = await this.captureFrameArtifacts(node.id, options);
+      const artifacts = this.options.runSession
+        ? await this.captureExplicitArtifacts(node.id, options)
+        : await this.captureFrameArtifacts(node.id, options);
       if (artifacts.length) this.options.recorder.addArtifacts(node.id, artifacts);
       this.options.recorder.passNode(node.id);
       return artifacts;
@@ -101,6 +112,8 @@ export class FlowRuntime {
       const failure = withArtifactAppState(createAgentFailure(error, title, node.id, 'step_failed'), artifacts);
       this.options.recorder.failNode(node.id, failure);
       throw wrapAgentError(error, failure);
+    } finally {
+      await this.options.recorder.flushProgress();
     }
   }
 
@@ -119,6 +132,7 @@ export class FlowRuntime {
           : options.confirm ? 'confirm' : 'manual-file',
       },
     });
+    await this.options.recorder.flushProgress();
     const controller = new AbortController();
     const timer = options.timeoutMs == null
       ? undefined
@@ -135,6 +149,7 @@ export class FlowRuntime {
       throw wrapAgentError(error, failure);
     } finally {
       if (timer) clearTimeout(timer);
+      await this.options.recorder.flushProgress();
     }
   }
 
@@ -168,7 +183,19 @@ export class FlowRuntime {
   }
 
   private async captureFailureArtifacts(nodeId: string): Promise<TimelineArtifactRef[]> {
+    if (this.options.runSession?.recordingEnabled === false) return [];
     return this.captureFrameArtifacts(nodeId, { screenshot: true, snapshot: true });
+  }
+
+  private async captureExplicitArtifacts(nodeId: string, options: FlowFrameOptions): Promise<TimelineArtifactRef[]> {
+    const artifacts: TimelineArtifactRef[] = [];
+    for (const kind of ['screenshot', 'snapshot', 'diagnostics'] as const) {
+      if (!options[kind]) continue;
+      const result = await this.options.runSession!.checkpoint({ kind, reason: 'explicit', operationId: nodeId });
+      artifacts.push(...(result.artifactPaths ?? []).map((path) => ({ kind, path,
+        mimeType: kind === 'screenshot' ? 'image/png' : 'application/json' })));
+    }
+    return artifacts;
   }
 
   private async captureFrameArtifacts(nodeId: string, options: FlowFrameOptions): Promise<TimelineArtifactRef[]> {

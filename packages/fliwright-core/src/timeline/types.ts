@@ -16,9 +16,9 @@ export type TimelineNodeKind =
   | 'ai-call'
   | 'failure';
 
-export type TimelineNodeStatus = 'running' | 'passed' | 'failed' | 'skipped';
+export type TimelineNodeStatus = 'running' | 'passed' | 'failed' | 'skipped' | 'interrupted';
 
-export type TimelineRunStatus = 'running' | 'passed' | 'failed';
+export type TimelineRunStatus = 'running' | 'passed' | 'failed' | 'skipped' | 'interrupted';
 
 export interface CodeRef {
   file: string;
@@ -85,7 +85,7 @@ export interface TimelineNode {
 }
 
 export interface TimelineData {
-  version: 1;
+  version: 2;
   runId: string;
   testName: string;
   mode: TimelineRunMode;
@@ -112,6 +112,10 @@ export interface TimelineRecorderOptions {
   mode?: TimelineRunMode;
   startedAt?: string;
   logger?: FliwrightLogger;
+  /** Receives an owned snapshot for each node mutation, in mutation order. */
+  onChange?: (data: TimelineData) => void | Promise<void>;
+  /** Persistence failures are evidence failures and must not replace operation errors. */
+  onPersistenceError?: (error: unknown) => void;
 }
 
 export interface TimelineNodeStartOptions {

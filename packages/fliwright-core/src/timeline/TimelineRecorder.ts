@@ -18,6 +18,7 @@ export class TimelineRecorder {
   private counter = 0;
   private status: TimelineRunStatus = 'running';
   private endedAt: string | undefined;
+  private progress: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: TimelineRecorderOptions) {}
 
@@ -50,6 +51,7 @@ export class TimelineRecorder {
     this.nodes.push(node);
     this.stack.push(node.id);
     this.logNode('debug', node, 'running');
+    this.changed();
     return node;
   }
 
@@ -60,6 +62,7 @@ export class TimelineRecorder {
     if (metadata) node.metadata = { ...(node.metadata ?? {}), ...metadata };
     this.popStack(id);
     this.logNode('success', node, 'passed');
+    this.changed();
     return node;
   }
 
@@ -74,6 +77,7 @@ export class TimelineRecorder {
     this.status = 'failed';
     this.popStack(id);
     this.logNode('error', node, 'failed', normalized.message, normalized);
+    this.changed();
     return node;
   }
 
@@ -84,12 +88,14 @@ export class TimelineRecorder {
     if (metadata) node.metadata = { ...(node.metadata ?? {}), ...metadata };
     this.popStack(id);
     this.logNode('warn', node, 'skipped');
+    this.changed();
     return node;
   }
 
   addArtifacts(id: string, artifacts: TimelineArtifactRef[]): TimelineNode {
     const node = this.requireNode(id);
     node.artifacts = [...(node.artifacts ?? []), ...artifacts];
+    this.changed();
     return node;
   }
 
@@ -99,17 +105,36 @@ export class TimelineRecorder {
     this.endedAt = new Date().toISOString();
     for (const node of this.nodes) {
       if (node.status === 'running') {
-        node.status = finalStatus === 'failed' ? 'failed' : 'passed';
+        node.status = finalStatus;
         node.endedAt = this.endedAt;
       }
     }
     this.stack.length = 0;
+    this.changed();
     return this.toJSON();
+  }
+
+  /** Await all mutations observed before this call before crossing a lifecycle boundary. */
+  async flushProgress(): Promise<void> {
+    await this.progress;
+  }
+
+  private changed(): void {
+    const onChange = this.options.onChange;
+    if (!onChange) return;
+    try {
+      const data = JSON.parse(JSON.stringify(this.toJSON())) as TimelineData;
+      this.progress = this.progress.then(() => onChange(data)).catch((error: unknown) => {
+        try { this.options.onPersistenceError?.(error); } catch { /* Preserve the operation outcome. */ }
+      });
+    } catch (error) {
+      try { this.options.onPersistenceError?.(error); } catch { /* Preserve the operation outcome. */ }
+    }
   }
 
   toJSON(): TimelineData {
     return {
-      version: 1,
+      version: 2,
       runId: this.options.runId,
       testName: this.options.testName,
       mode: this.options.mode ?? 'test',

@@ -20,6 +20,7 @@ import { Selector } from './Selector.js';
 import { FormHelper } from './FormHelper.js';
 import type { AssertionTimelineOptions } from './Assertion.js';
 import { SelectController } from './SelectRecipes.js';
+import type { RunSession } from './RunSession.js';
 
 export type NavigationWaitUntil = 'none' | 'settled';
 
@@ -233,21 +234,11 @@ export class Page {
   }
 
   async dismissModal(): Promise<void> {
-    const result = await this.sendRequest('ext.fliwright.action', {
-      action: 'dismissModal',
-    }) as { success?: boolean; error?: string };
-    if (result.success === false || result.error) {
-      throw new Error(`dismissModal failed: ${result.error ?? 'unknown error'}`);
-    }
+    await this.performAction('dismissModal', 'Dismiss modal', { action: 'dismissModal' });
   }
 
   async dismissKeyboard(): Promise<void> {
-    const result = await this.sendRequest('ext.fliwright.action', {
-      action: 'dismissKeyboard',
-    }) as { success?: boolean; error?: string };
-    if (result.success === false || result.error) {
-      throw new Error(`dismissKeyboard failed: ${result.error ?? 'unknown error'}`);
-    }
+    await this.performAction('dismissKeyboard', 'Dismiss keyboard', { action: 'dismissKeyboard' });
   }
 
   async waitForNetworkIdle(options?: { quietMs?: number; timeout?: number }): Promise<void> {
@@ -256,7 +247,7 @@ export class Page {
     };
     if (options?.quietMs != null) params.quietMs = options.quietMs.toString();
     if (options?.timeout != null) params.timeout = options.timeout.toString();
-    const result = await this.sendRequest('ext.fliwright.action', params) as {
+    const result = await this.performAction('waitForNetworkIdle', 'Wait for network idle', params) as {
       success?: boolean;
       error?: string;
     };
@@ -265,7 +256,36 @@ export class Page {
     }
   }
 
+  private async performAction(
+    action: string,
+    title: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const execute = async () => {
+      const result = await this.sendRequest('ext.fliwright.action', params) as Record<string, unknown>;
+      if (result.success === false || result.error != null) {
+        throw new Error(`${action} failed: ${String(result.error ?? 'unknown error')}`);
+      }
+      return result;
+    };
+    const result = this.assertionTimeline?.runSession
+      ? await this.assertionTimeline.runSession.perform({ kind: 'action', title, metadata: { action } }, execute)
+      : await execute();
+    return result;
+  }
+
   async waitFor(selector: SelectorInput, timeoutMs = 5000): Promise<Locator> {
+    if (this.assertionTimeline?.runSession) {
+      return this.assertionTimeline.runSession.perform({
+        kind: 'action',
+        title: `Wait for ${new Selector(selector).toString()}`,
+        metadata: { action: 'waitFor' },
+      }, () => this.waitForImpl(selector, timeoutMs));
+    }
+    return this.waitForImpl(selector, timeoutMs);
+  }
+
+  private async waitForImpl(selector: SelectorInput, timeoutMs: number): Promise<Locator> {
     const selectorObj = new Selector(selector);
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
@@ -298,6 +318,17 @@ export class Page {
    * @returns A Locator pinned to the first newly-appeared element.
    */
   async waitForNew(selector: SelectorInput, options?: { timeout?: number }): Promise<Locator> {
+    if (this.assertionTimeline?.runSession) {
+      return this.assertionTimeline.runSession.perform({
+        kind: 'action',
+        title: `Wait for new ${new Selector(selector).toString()}`,
+        metadata: { action: 'waitForNew' },
+      }, () => this.waitForNewImpl(selector, options));
+    }
+    return this.waitForNewImpl(selector, options);
+  }
+
+  private async waitForNewImpl(selector: SelectorInput, options?: { timeout?: number }): Promise<Locator> {
     const timeoutMs = options?.timeout ?? 5000;
     const selectorObj = new Selector(selector);
 
@@ -340,7 +371,7 @@ export class Page {
       params.stableFrames = options.stableFrames.toString();
     }
 
-    const result = (await this.sendRequest('ext.fliwright.settle', params)) as {
+    const result = await this.performLogicalRpc('settle', 'Wait for UI to settle', 'ext.fliwright.settle', params) as {
       success?: boolean;
       error?: string;
       timedOut?: boolean;
@@ -359,7 +390,7 @@ export class Page {
 
   get formHelper(): FormHelper {
     if (!this._formHelper) {
-      this._formHelper = new FormHelper(this.sendRequest);
+      this._formHelper = new FormHelper(this.sendRequest, this.assertionTimeline);
     }
     return this._formHelper;
   }
@@ -379,10 +410,10 @@ export class Page {
    * that are not part of the Flutter widget tree.
    */
   async clickAt(x: number, y: number): Promise<void> {
-    const result = (await this.sendRequest('ext.fliwright.click', {
+    const result = await this.performLogicalRpc('clickAt', `Click at (${x}, ${y})`, 'ext.fliwright.click', {
       x: x.toString(),
       y: y.toString(),
-    })) as { success?: boolean; error?: string };
+    }) as { success?: boolean; error?: string };
 
     if (result.success === false || result.error) {
       throw new Error(`clickAt(${x}, ${y}) failed: ${result.error ?? 'unknown error'}`);
@@ -398,24 +429,26 @@ export class Page {
    * @param deltaX - Horizontal drag distance (positive = right)
    * @param deltaY - Vertical drag distance (positive = down)
    * @param options.steps - Number of interpolation steps (default: 20, smoother motion)
+   * @param options.duration - Total pointer-down to pointer-up duration in milliseconds
    */
   async dragFrom(
     x: number,
     y: number,
     deltaX: number,
     deltaY: number,
-    options?: { steps?: number },
+    options?: { steps?: number; duration?: number },
   ): Promise<void> {
     const steps = options?.steps ?? 20;
     // We use the gesture extension's drag via raw coordinates by sending
     // the click extension with simulated pointer events through sendRequest
-    const result = (await this.sendRequest('ext.fliwright.dragFrom', {
+    const result = await this.performLogicalRpc('dragFrom', `Drag from (${x}, ${y})`, 'ext.fliwright.dragFrom', {
       x: x.toString(),
       y: y.toString(),
       deltaX: deltaX.toString(),
       deltaY: deltaY.toString(),
       steps: steps.toString(),
-    })) as { success?: boolean; error?: string };
+      ...(options?.duration == null ? {} : { duration: options.duration.toString() }),
+    }) as { success?: boolean; error?: string };
 
     if (result.success === false || result.error) {
       throw new Error(`dragFrom(${x}, ${y}, ${deltaX}, ${deltaY}) failed: ${result.error ?? 'unknown error'}`);
@@ -561,7 +594,7 @@ export class Page {
     if (options?.extra) {
       params.extra = JSON.stringify(options.extra);
     }
-    const result = (await this.sendRequest('ext.fliwright.navigate', params)) as {
+    const result = await this.performLogicalRpc('navigate', `Navigate to ${path}`, 'ext.fliwright.navigate', params) as {
       success: boolean;
       error?: string;
     };
@@ -591,7 +624,7 @@ export class Page {
     if (options?.extra) {
       params.extra = JSON.stringify(options.extra);
     }
-    const result = (await this.sendRequest('ext.fliwright.resetRouteStack', params)) as {
+    const result = await this.performLogicalRpc('resetRouteStack', `Reset route stack to ${path}`, 'ext.fliwright.resetRouteStack', params) as {
       success: boolean;
       error?: string;
     };
@@ -624,13 +657,32 @@ export class Page {
    * Go back / pop the current route.
    */
   async goBack(): Promise<void> {
-    const result = (await this.sendRequest('ext.fliwright.goBack', {})) as {
+    const result = await this.performLogicalRpc('goBack', 'Go back', 'ext.fliwright.goBack', {}) as {
       success: boolean;
       error?: string;
     };
     if (!result.success) {
       throw new Error(`Go back failed: ${result.error ?? 'unknown error'}`);
     }
+  }
+
+  private async performLogicalRpc(
+    action: string,
+    title: string,
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const execute = async () => {
+      const result = await this.sendRequest(method, params) as Record<string, unknown>;
+      if (result.success === false || result.error != null) {
+        throw new Error(`${action} failed: ${String(result.error ?? 'unknown error')}`);
+      }
+      return result;
+    };
+    const result = this.assertionTimeline?.runSession
+      ? await this.assertionTimeline.runSession.perform({ kind: 'action', title, metadata: { action, method } }, execute)
+      : await execute();
+    return result;
   }
 
   private async waitForNavigationStable(options?: PageNavigationOptions | ResetToHomeOptions): Promise<void> {

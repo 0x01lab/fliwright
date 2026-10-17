@@ -1,25 +1,9 @@
 import * as vscode from 'vscode';
-import { FLIWRIGHT_FLOWS_DIR, flowFileName, type FliwrightFlowDocument, type RecordingFrame } from '@fliwright/core';
+import { copyRecordingArtifacts, flowFileName, parseRecordingManifest, type FliwrightFlowDocument, type RecordingManifest } from '@fliwright/core';
+import { loadWorkspaceConfig, resolveWorkspacePath } from '../config.js';
 import type { RecordingSession } from '../types.js';
 
-export interface PersistedRecordingManifest {
-  version: 1;
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  status: RecordingSession['status'];
-  rawEventCount: number;
-  operationCount: number;
-  testName?: string;
-  targetFile?: string;
-  generatedCode?: string;
-  flow?: RecordingSession['flow'];
-  flowFile?: string;
-  frames: Array<Omit<RecordingFrame, 'screenshot'> & {
-    screenshotFile?: string;
-    screenshot?: Omit<NonNullable<RecordingFrame['screenshot']>, 'base64'>;
-  }>;
-}
+export type PersistedRecordingManifest = RecordingManifest;
 
 export interface RecordingListItem {
   id: string;
@@ -32,41 +16,19 @@ export interface RecordingListItem {
 
 export class RecordingPersistenceService {
   async save(workspaceRoot: vscode.Uri, session: RecordingSession, recordingId = createRecordingId(session)): Promise<vscode.Uri> {
-    const recordingDir = vscode.Uri.joinPath(workspaceRoot, '.fliwright', 'recordings', recordingId);
-    const screenshotsDir = vscode.Uri.joinPath(recordingDir, 'screenshots');
-    await vscode.workspace.fs.createDirectory(screenshotsDir);
-
-    const frames: PersistedRecordingManifest['frames'] = [];
-    for (const frame of session.frames ?? []) {
-      const { screenshot, ...rest } = frame;
-      const screenshotFile = screenshot?.base64 ? `screenshots/frame-${String(frame.index + 1).padStart(4, '0')}.png` : undefined;
-      if (screenshot?.base64 && screenshotFile) {
-        await vscode.workspace.fs.writeFile(
-          vscode.Uri.joinPath(recordingDir, ...screenshotFile.split('/')),
-          Buffer.from(screenshot.base64, 'base64'),
-        );
-      }
-      frames.push({
-        ...rest,
-        screenshotFile,
-        screenshot: screenshot
-          ? {
-              format: screenshot.format,
-              width: screenshot.width,
-              height: screenshot.height,
-              pixelRatio: screenshot.pixelRatio,
-            }
-          : undefined,
-      });
-    }
+    const config = await loadWorkspaceConfig(workspaceRoot);
+    const recordingDir = vscode.Uri.joinPath(resolveWorkspacePath(workspaceRoot, config.paths.recordings), recordingId);
+    await vscode.workspace.fs.createDirectory(recordingDir);
+    const frames = session.frames ?? [];
+    await copyRecordingArtifacts({ frames, rawEventsFile: session.recording?.rawEventsFile },
+      session.artifactDirectory, recordingDir.fsPath);
 
     const now = new Date().toISOString();
     const manifest: PersistedRecordingManifest = {
-      version: 1,
+      schemaVersion: 2,
       id: recordingId,
-      createdAt: now,
+      createdAt: new Date(session.startedAt ?? Date.now()).toISOString(),
       updatedAt: now,
-      status: session.status,
       rawEventCount: session.rawEventCount,
       operationCount: session.operationCount,
       testName: session.testName,
@@ -74,6 +36,11 @@ export class RecordingPersistenceService {
       generatedCode: session.generatedCode,
       flow: session.flow,
       flowFile: session.flowFile,
+      recording: session.recording,
+      recordedSelectors: session.recordedSelectors,
+      generationOptions: session.generationOptions,
+      readiness: session.readiness,
+      checkpoints: session.checkpoints,
       frames,
     };
     await vscode.workspace.fs.writeFile(
@@ -84,7 +51,8 @@ export class RecordingPersistenceService {
   }
 
   async saveProjectFlow(workspaceRoot: vscode.Uri, flow: FliwrightFlowDocument): Promise<vscode.Uri> {
-    const flowsRoot = vscode.Uri.joinPath(workspaceRoot, ...FLIWRIGHT_FLOWS_DIR.split('/'));
+    const config = await loadWorkspaceConfig(workspaceRoot);
+    const flowsRoot = resolveWorkspacePath(workspaceRoot, config.paths.flows);
     await vscode.workspace.fs.createDirectory(flowsRoot);
     const flowUri = vscode.Uri.joinPath(flowsRoot, flowFileName(flow.id));
     await vscode.workspace.fs.writeFile(
@@ -95,7 +63,8 @@ export class RecordingPersistenceService {
   }
 
   async list(workspaceRoot: vscode.Uri): Promise<RecordingListItem[]> {
-    const recordingsRoot = vscode.Uri.joinPath(workspaceRoot, '.fliwright', 'recordings');
+    const config = await loadWorkspaceConfig(workspaceRoot);
+    const recordingsRoot = resolveWorkspacePath(workspaceRoot, config.paths.recordings);
     let entries: [string, unknown][];
     try {
       entries = await vscode.workspace.fs.readDirectory(recordingsRoot) as [string, unknown][];
@@ -108,7 +77,7 @@ export class RecordingPersistenceService {
       const recordingDir = vscode.Uri.joinPath(recordingsRoot, name);
       const manifestUri = vscode.Uri.joinPath(recordingDir, 'recording.json');
       try {
-        const manifest = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(manifestUri)).toString('utf8')) as PersistedRecordingManifest;
+        const manifest = parseRecordingManifest(Buffer.from(await vscode.workspace.fs.readFile(manifestUri)).toString('utf8'));
         recordings.push({
           id: manifest.id,
           label: manifest.testName || manifest.id,
@@ -127,24 +96,9 @@ export class RecordingPersistenceService {
 
   async load(recordingDir: vscode.Uri): Promise<RecordingSession> {
     const manifestUri = vscode.Uri.joinPath(recordingDir, 'recording.json');
-    const manifest = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(manifestUri)).toString('utf8')) as PersistedRecordingManifest;
-    const frames: RecordingFrame[] = [];
-
-    for (const frame of manifest.frames) {
-      const { screenshotFile, screenshot, ...rest } = frame;
-      let restoredScreenshot: RecordingFrame['screenshot'] | undefined;
-      if (screenshotFile && screenshot) {
-        const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(recordingDir, ...screenshotFile.split('/')));
-        restoredScreenshot = {
-          ...screenshot,
-          base64: Buffer.from(bytes).toString('base64'),
-        };
-      }
-      frames.push({
-        ...rest,
-        screenshot: restoredScreenshot,
-      });
-    }
+    const manifest = parseRecordingManifest(Buffer.from(await vscode.workspace.fs.readFile(manifestUri)).toString('utf8'));
+    // Read metadata only. The webview requests individual visible images by URL.
+    const frames = manifest.frames;
 
     return {
       status: 'preview',
@@ -158,7 +112,13 @@ export class RecordingPersistenceService {
       testName: manifest.testName,
       recordingId: manifest.id,
       recordingDir: recordingDir.fsPath,
+      artifactDirectory: recordingDir.fsPath,
       flowFile: manifest.flowFile,
+      recording: manifest.recording,
+      recordedSelectors: manifest.recordedSelectors,
+      generationOptions: manifest.generationOptions,
+      readiness: manifest.readiness,
+      checkpoints: manifest.checkpoints,
     };
   }
 }

@@ -95,8 +95,12 @@ describe('ScriptRunner', () => {
       '.fliwright/scripts/auto.mjs',
       '--config',
       expect.stringMatching(/vitest\.config\.mjs$/),
+      '--reporter=json',
+      '--reporter',
+      expect.stringMatching(/fliwright-vitest[\\/]dist[\\/]RecoveryReporter\.js$/),
     ]);
     expect(payload.config).not.toContain("from 'vitest/config'");
+    expect(payload.config).toContain("from '@fliwright/vitest/preset'");
     expect(payload.config).toContain(`root: ${JSON.stringify(root)}`);
     expect(payload.config).toContain('include: [".fliwright/scripts/auto.mjs"]');
     expect(payload.config).toContain('maxWorkers: 1');

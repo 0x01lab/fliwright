@@ -26,10 +26,18 @@ describe('Recording command integration', () => {
   function mockRecorder(overrides: Record<string, any> = {}) {
     return {
       start: overrides.start ?? vi.fn(async () => undefined),
-      stop: overrides.stop ?? vi.fn(async () => "test('recorded', async () => {});"),
-      getRawEvents: overrides.getRawEvents ?? vi.fn(() => []),
+      stop: overrides.stop ?? vi.fn(async () => ({
+        status: 'captured', code: "test('recorded', async () => {});",
+        operations: overrides.getOperations?.() ?? [], frames: overrides.getFrames?.() ?? [],
+        issues: [], receivedSequences: [], missingSequences: [],
+      })),
+      getRawEventCount: overrides.getRawEventCount ?? vi.fn(() => 0),
       getOperations: overrides.getOperations ?? vi.fn(() => []),
       getFrames: overrides.getFrames ?? vi.fn(() => []),
+      getSelectors: overrides.getSelectors ?? (() => new Map((overrides.getOperations?.() ?? []).map((_op: unknown, index: number) => [index, {
+        query: { match: { key: `target-${index}` } }, matchCount: 1, ambiguous: false,
+      }]))),
+      getArtifactDirectory: () => undefined,
     };
   }
 
@@ -173,7 +181,7 @@ describe('Recording command integration', () => {
           { kind: 'tap', position: { x: 100, y: 200 }, timestamp: 1000, status: 'included' },
           { kind: 'type', position: { x: 120, y: 240 }, text: 'email@example.com', timestamp: 1200, status: 'included' },
         ]),
-        getRawEvents: vi.fn(() => [{ kind: 'tap' }, { kind: 'type' }]),
+        getRawEventCount: vi.fn(() => 2),
         getFrames: vi.fn(() => [
           {
             id: 'frame-1',
@@ -216,7 +224,7 @@ describe('Recording command integration', () => {
       // Verify final state
       expect(recorderService.getSession().status).toBe('preview');
       expect(recorderService.getSession().operationCount).toBe(2);
-      expect(recorderService.getSession().generatedCode).toContain('recorded');
+      expect(recorderService.getSession().generatedCode).toContain("script('checkout'");
       expect(recorderService.getSession().flow?.nodes.map((node) => node.selector)).toEqual(['text=Login', 'input=email']);
       expect(recorderService.getSession().flow?.edges).toHaveLength(1);
       expect(session.state.status).toBe('connected');
@@ -260,7 +268,7 @@ describe('Recording command integration', () => {
 
       // Simulate: user picks "Save as New Test File"
       __setShowQuickPickResult((_items: unknown[]) => ({ label: 'Save as New Test File', action: 'save' }));
-      const targetUri = Uri.file(path.join(root, 'tests', 'my-test.test.ts'));
+      const targetUri = Uri.file(path.join(root, '.fliwright/scripts', 'my-script.script.ts'));
       __setShowSaveDialogResult(targetUri);
 
       // Simulate: insertRecordedTest command logic (extension.ts line 438-439)
@@ -268,7 +276,7 @@ describe('Recording command integration', () => {
       updateRecordingViews(recorderService.getSession());
 
       expect(saved.fsPath).toBe(targetUri.fsPath);
-      await expect(readText(root, 'tests/my-test.test.ts')).resolves.toContain("test('recorded'");
+      await expect(readText(root, '.fliwright/scripts/my-script.script.ts')).resolves.toContain("script('recorded test'");
       expect(recorderService.getSession().targetFile).toBe(targetUri.fsPath);
 
       __setShowQuickPickResult(undefined);
@@ -335,9 +343,13 @@ describe('Recording command integration', () => {
           onOperation?.({ kind: 'tap' }, 0);
           onOperation?.({ kind: 'type' }, 1);
         }),
-        getRawEvents: vi.fn(() => [{ kind: 'tap' }, { kind: 'type' }]),
+        getRawEventCount: vi.fn(() => 2),
         getOperations: vi.fn(() => [{ kind: 'tap' }, { kind: 'type' }]),
-        stop: vi.fn(async () => "test('full flow', async () => { /* recorded */ });"),
+        stop: vi.fn(async () => ({
+          status: 'captured', code: "test('full flow', async () => { /* recorded */ });",
+          operations: [{ kind: 'tap' }, { kind: 'type' }], frames: [],
+          issues: [], receivedSequences: [], missingSequences: [],
+        })),
       });
 
       connectSession(recorder);
@@ -367,11 +379,11 @@ describe('Recording command integration', () => {
       expect(recorderService.getSession().generatedCode).toContain('full flow');
 
       // Step 3: Save generated code
-      const targetUri = Uri.file(path.join(root, 'tests', 'full-flow.test.ts'));
+      const targetUri = Uri.file(path.join(root, '.fliwright/scripts', 'full-flow.script.ts'));
       const saved = await recorderService.saveGeneratedCode(Uri.file(root), targetUri);
 
       expect(saved.fsPath).toBe(targetUri.fsPath);
-      await expect(readText(root, 'tests/full-flow.test.ts')).resolves.toContain('full flow');
+      await expect(readText(root, '.fliwright/scripts/full-flow.script.ts')).resolves.toContain('full flow');
 
       // Verify all state changes were tracked
       expect(changes).toContain('recording');

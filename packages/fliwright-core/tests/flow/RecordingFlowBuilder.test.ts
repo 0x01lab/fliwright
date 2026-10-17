@@ -32,7 +32,7 @@ describe('buildFlowFromRecording', () => {
         selector: 'text=Login',
         operationStatus: 'included',
         screenshot: {
-          base64: 'ignored-in-flow',
+          path: 'screenshots/frame.png', byteLength: 3,
           format: 'png',
           width: 390,
           height: 844,

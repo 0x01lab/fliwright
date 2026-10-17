@@ -75,16 +75,21 @@ export class ToolMockServer {
     return this.url!;
   }
 
-  async stop(): Promise<void> {
+  async stop(options: { signal?: AbortSignal } = {}): Promise<void> {
     const server = this.server;
     this.server = null;
     if (!server) return;
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error) reject(error);
-        else resolve();
+    const forceClose = () => server.closeAllConnections();
+    options.signal?.addEventListener('abort', forceClose, { once: true });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+        if (options.signal?.aborted) forceClose();
       });
-    });
+    } finally { options.signal?.removeEventListener('abort', forceClose); }
   }
 
   route(path: string, response: MockRouteResponse & { method?: string; id?: string }): void {

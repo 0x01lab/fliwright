@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { join, posix } from 'node:path';
 import { resolveFliwrightRunsRoot } from '../runArtifacts.js';
 import type { TimelineArtifactRef, TimelineData } from './types.js';
@@ -15,6 +16,8 @@ import {
 
 export interface TimelineArtifactStoreOptions {
   cwd?: string;
+  /** Canonical attempt directory assigned by the run store. */
+  attemptDir?: string;
   /** Absolute root for run artifacts. Overrides env + legacy default. */
   runsRoot?: string;
   runId: string;
@@ -28,16 +31,23 @@ export class TimelineArtifactStore {
       runsRoot: options.runsRoot,
       projectRoot: options.cwd,
     });
-    this.runDir = join(root, options.runId);
+    this.runDir = options.attemptDir ?? join(root, options.runId);
   }
 
   get timelinePath(): string {
     return join(this.runDir, TIMELINE_FILE_NAME);
   }
 
-  async writeTimeline(data: TimelineData): Promise<string> {
+  async writeTimeline(data: TimelineData, options: { signal?: AbortSignal } = {}): Promise<string> {
+    options.signal?.throwIfAborted();
     await mkdir(this.runDir, { recursive: true });
-    await writeFile(this.timelinePath, JSON.stringify(data, null, 2), 'utf8');
+    const temporaryPath = `${this.timelinePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      options.signal?.throwIfAborted();
+      await writeFile(temporaryPath, JSON.stringify(data, null, 2), { encoding: 'utf8', signal: options.signal });
+      options.signal?.throwIfAborted();
+      await rename(temporaryPath, this.timelinePath);
+    } finally { await rm(temporaryPath, { force: true }).catch(() => {}); }
     return this.timelinePath;
   }
 

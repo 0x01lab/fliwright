@@ -22,8 +22,21 @@ export default defineConfig({
   // vmServiceUrl: 'ws://127.0.0.1:8181/ws',
   timeout: 30000,
   screenshot: 'file',
-  testDir: 'tests',
+  recording: { mode: 'standard' },
+  paths: {
+    tests: '.fliwright/tests', scripts: '.fliwright/scripts',
+    recordings: '.fliwright/recordings', flows: '.fliwright/flows',
+  },
   reporter: 'pretty',
+});
+`;
+
+const VITEST_CONFIG_TEMPLATE = `import { defineConfig } from 'vitest/config';
+import { fliwrightPreset } from '@fliwright/vitest/preset';
+import projectConfig from './fliwright.config.js';
+
+export default defineConfig({
+  ...fliwrightPreset(projectConfig),
 });
 `;
 
@@ -39,6 +52,14 @@ test('counter increments', async ({ page }) => {
 });
 `;
 
+const EXAMPLE_SCRIPT_TEMPLATE = `import { script, expect } from '@fliwright/vitest';
+
+script('counter smoke script', async ({ page }) => {
+  await expect(page.locator('text=Counter')).toBeVisible();
+  await page.locator('text=Increment').click();
+});
+`;
+
 const TSCONFIG_TEMPLATE = `{
   "compilerOptions": {
     "target": "ES2022",
@@ -49,7 +70,7 @@ const TSCONFIG_TEMPLATE = `{
     "skipLibCheck": true,
     "types": ["node", "vitest"]
   },
-  "include": ["fliwright.config.ts", "tests/**/*.ts", ".fliwright/tests/**/*.ts"]
+  "include": ["fliwright.config.ts", "vitest.config.ts", ".fliwright/tests/**/*.ts", ".fliwright/scripts/**/*.ts"]
 }
 `;
 
@@ -100,8 +121,11 @@ export async function initCommand(
   const setupFlutter = options.flutter ?? true;
 
   await writeIfAbsent(join(projectDir, 'fliwright.config.ts'), CONFIG_TEMPLATE, result, log);
-  await mkdir(join(projectDir, 'tests'), { recursive: true });
-  await writeIfAbsent(join(projectDir, 'tests', 'example.test.ts'), EXAMPLE_TEST_TEMPLATE, result, log);
+  await writeIfAbsent(join(projectDir, 'vitest.config.ts'), VITEST_CONFIG_TEMPLATE, result, log);
+  await mkdir(join(projectDir, '.fliwright', 'tests'), { recursive: true });
+  await writeIfAbsent(join(projectDir, '.fliwright', 'tests', 'example.test.ts'), EXAMPLE_TEST_TEMPLATE, result, log);
+  await mkdir(join(projectDir, '.fliwright', 'scripts'), { recursive: true });
+  await writeIfAbsent(join(projectDir, '.fliwright', 'scripts', 'example.script.ts'), EXAMPLE_SCRIPT_TEMPLATE, result, log);
   await writeIfAbsent(join(projectDir, 'tsconfig.json'), TSCONFIG_TEMPLATE, result, log);
   await ensureGitignore(projectDir, result, log);
 
@@ -222,6 +246,7 @@ function flutterEntryTemplate(packageName: string): string {
 import 'package:${packageName}/main.dart' as app;
 
 Future<void> main() async {
+  FliwrightRecordingBinding.ensureInitialized();
   await FliwrightBridge.init();
   app.main();
 }

@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/vitest"
 path: "packages/fliwright-vitest"
-source_fingerprint: "31ecfaf093518fe8cc9f4d159691512189984d4bbcab2c94c43bb8601951e0fb"
+source_fingerprint: "5c6f95808193d9def7fb32d8e6c3ed9e87320c1c2c6ceed0b3b83ab153df17af"
 generated: true
 ---
 
@@ -31,11 +31,15 @@ Adapt the core runtime to Vitest fixtures, hooks, configuration, reporting, and 
 ## Package Entrypoints
 
 - `.`
+- `./preset`
+- `./reporter`
+- `./runner`
 
 ## Public Exports
 
 - `afterEach`
 - `beforeEach`
+- `createFliwrightRunner`
 - `createFliwrightScript`
 - `createFliwrightTest`
 - `CreateFliwrightTestOptions`
@@ -47,8 +51,14 @@ Adapt the core runtime to Vitest fixtures, hooks, configuration, reporting, and 
 - `FliwrightLogConfig`
 - `FliwrightLogFormat`
 - `FliwrightLogOutput`
+- `fliwrightPreset`
 - `FliwrightProjectFixtures`
+- `FliwrightRecoveryReporter`
+- `FliwrightRunner`
+- `FliwrightRunnerConstructor`
+- `FliwrightRunnerOptions`
 - `FliwrightTest`
+- `FliwrightVitestPresetOptions`
 - `resolveRunsRoot`
 - `ScenarioEnabledFliwrightTest`
 - `ScenarioTest`
@@ -57,6 +67,13 @@ Adapt the core runtime to Vitest fixtures, hooks, configuration, reporting, and 
 
 ## Source Anchors
 
+- `packages/fliwright-vitest/src/AttemptContext.ts`
+- `packages/fliwright-vitest/src/FinalizationBudget.ts`
+- `packages/fliwright-vitest/src/RecoveryReporter.ts`
+- `packages/fliwright-vitest/src/TaskEndpointLease.ts`
+- `packages/fliwright-vitest/src/TestRegistration.ts`
 - `packages/fliwright-vitest/src/index.ts`
+- `packages/fliwright-vitest/src/preset.ts`
 - `packages/fliwright-vitest/src/reporter.ts`
+- `packages/fliwright-vitest/src/runner.ts`
 - `packages/fliwright-vitest/src/setup.ts`

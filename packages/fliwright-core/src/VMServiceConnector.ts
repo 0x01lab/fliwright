@@ -15,6 +15,7 @@ export interface MockWebSocket {
   on(event: string, fn: (...args: any[]) => void): void;
   send(data: string): void;
   close(): void;
+  terminate?(): void;
 }
 
 export class VMServiceConnector {
@@ -32,11 +33,16 @@ export class VMServiceConnector {
 
   async connect(url: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      this.ws = new WebSocket(url);
-      this.ws.on('open', () => resolve());
-      this.ws.on('error', (err: Error) => reject(err));
-      this.ws.on('message', (data: any) => this.handleMessage(data.toString()));
-      this.ws.on('close', () => this.rejectAllPending(new Error('WebSocket connection closed')));
+      if (this.ws) {
+        this.rejectAllPending(new Error('VM Service connection replaced'));
+        this.ws.close();
+      }
+      const socket = new WebSocket(url);
+      this.ws = socket;
+      socket.on('open', () => resolve());
+      socket.on('error', (err: Error) => reject(err));
+      socket.on('message', (data: any) => this.handleMessage(data.toString()));
+      socket.on('close', () => this.handleSocketClose(socket));
     });
     await this.listenToStreams(['Isolate']);
   }
@@ -110,21 +116,30 @@ export class VMServiceConnector {
     };
   }
 
-  disconnect(): void {
+  disconnect(options: { force?: boolean } = {}): void {
     if (this.ws) {
-      this.ws.close();
+      const socket = this.ws;
       this.ws = null;
+      this.mainIsolateId = null;
+      this.rejectAllPending(new Error('VM Service disconnected'));
+      if (options.force && socket.terminate) socket.terminate();
+      else socket.close();
+    } else {
+      this.rejectAllPending(new Error('VM Service disconnected'));
     }
-    this.mainIsolateId = null;
     this.eventListeners.length = 0;
     this.clearDiagnostics();
   }
 
   attachMock(mockWS: MockWebSocket): void {
+    if (this.ws && this.ws !== mockWS) {
+      this.rejectAllPending(new Error('VM Service connection replaced'));
+      this.ws.close();
+    }
     this.ws = mockWS;
     this.mainIsolateId = null;
     mockWS.on('message', (data: string) => this.handleMessage(data));
-    mockWS.on('close', () => this.rejectAllPending(new Error('WebSocket connection closed')));
+    mockWS.on('close', () => this.handleSocketClose(mockWS));
   }
 
   private handleMessage(raw: string): void {
@@ -153,6 +168,13 @@ export class VMServiceConnector {
         data: params.event?.extensionData ?? params.event?.data ?? params.event ?? {},
         streamId: params.streamId,
       };
+      // Android's VM adds routing metadata to extensionData. It belongs to the
+      // stream transport, outside the extension's strictly validated payload.
+      if (params.event?.extensionData && Object.hasOwn(event.data, '__destinationStream')) {
+        const data = { ...event.data };
+        delete data.__destinationStream;
+        event.data = data;
+      }
       this.recordDiagnostic(event);
       const rawKind = params.event?.kind;
       const rawExtKind = params.event?.extensionKind;
@@ -166,6 +188,14 @@ export class VMServiceConnector {
   private rejectAllPending(error: Error): void {
     for (const { reject } of this.pendingRequests.values()) { reject(error); }
     this.pendingRequests.clear();
+  }
+
+  private handleSocketClose(socket: WebSocket | MockWebSocket): void {
+    // A stale socket must not tear down requests belonging to a newer attach.
+    if (this.ws !== socket) return;
+    this.ws = null;
+    this.mainIsolateId = null;
+    this.rejectAllPending(new Error('WebSocket connection closed'));
   }
 
   private handleIsolateLifecycleEvent(streamId: unknown, event: unknown): void {

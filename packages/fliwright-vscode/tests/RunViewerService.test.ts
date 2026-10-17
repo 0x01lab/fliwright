@@ -23,6 +23,7 @@ describe('RunViewerService.findLatestRunForTest', () => {
     writeFileSync(
       join(runsDir, 'run-1', 'timeline.json'),
       JSON.stringify({
+        version: 2,
         runId: 'run-1',
         testName: 'x',
         mode: 'test',
@@ -40,6 +41,7 @@ describe('RunViewerService.findLatestRunForTest', () => {
     writeFileSync(
       join(runsDir, 'run-2', 'timeline.json'),
       JSON.stringify({
+        version: 2,
         runId: 'run-2',
         testName: 'wanted',
         mode: 'test',
@@ -93,6 +95,7 @@ describe('RunViewerService.findLatestRunForTest', () => {
     writeFileSync(
       join(runsDir, 'run-3', 'timeline.json'),
       JSON.stringify({
+        version: 2,
         runId: 'run-3',
         testName: 'timeline only',
         mode: 'test',
@@ -127,6 +130,7 @@ describe('RunViewerService.findLatestRunForScript', () => {
     writeFileSync(
       join(runsDir, 'r-test', 'timeline.json'),
       JSON.stringify({
+        version: 2,
         runId: 'r-test',
         testName: 't',
         mode: 'test',
@@ -140,6 +144,7 @@ describe('RunViewerService.findLatestRunForScript', () => {
     writeFileSync(
       join(runsDir, 'r-script', 'timeline.json'),
       JSON.stringify({
+        version: 2,
         runId: 'r-script',
         testName: 'login.dart',
         mode: 'script',
@@ -151,10 +156,151 @@ describe('RunViewerService.findLatestRunForScript', () => {
   });
   afterAll(() => rmSync(runsDir, { recursive: true, force: true }));
 
-  it('returns the newest script-mode run', async () => {
+  it('does not attribute an unrelated script run to a source file', async () => {
     const svc = new RunViewerService();
     const run = await svc.findLatestRunForScript(runsDirUri, 'scripts/login.dart');
-    expect(run?.timeline.runId).toBe('r-script');
+    expect(run).toBeUndefined();
+  });
+
+  it('selects the exact script file and attempt in a canonical multi-script run', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'fliwright-script-identity-'));
+    try {
+      const runDir = join(root, 'run');
+      const tests = [
+        { testId: 'task-a', attempts: [
+          { attemptId: 'retry-0', resultPath: 'tests/a/attempts/retry-0/result.json' },
+          { attemptId: 'retry-1', resultPath: 'tests/a/attempts/retry-1/result.json' },
+        ] },
+        { testId: 'task-b', attempts: [
+          { attemptId: 'retry-0', resultPath: 'tests/b/attempts/retry-0/result.json' },
+        ] },
+      ];
+      for (const [testIndex, test] of tests.entries()) {
+        for (const [attemptIndex, attempt] of test.attempts.entries()) {
+          const dir = join(runDir, attempt.resultPath, '..');
+          mkdirSync(dir, { recursive: true });
+          writeFileSync(join(dir, 'result.json'), JSON.stringify({
+            testFile: `tasks/${testIndex === 0 ? 'a' : 'b'}/proof.script.ts`,
+          }));
+          writeFileSync(join(dir, 'timeline.json'), JSON.stringify({
+            version: 2, runId: 'run', testName: 'same title', mode: 'script', status: 'passed',
+            startedAt: `2026-10-17T00:00:0${testIndex * 2 + attemptIndex}Z`, nodes: [],
+          }));
+        }
+      }
+      writeFileSync(join(runDir, 'run.json'), JSON.stringify({
+        schemaVersion: 1, runId: 'run', status: 'passed', evidenceStatus: 'complete', tests,
+      }));
+      const svc = new RunViewerService();
+      expect((await svc.findLatestRunForScript(vscode.Uri.file(root), 'tasks/a/proof.script.ts'))?.runDir.fsPath)
+        .toBe(join(runDir, 'tests/a/attempts/retry-1'));
+      expect(await svc.findLatestRunForScript(vscode.Uri.file(root), 'tasks/c/proof.script.ts')).toBeUndefined();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+});
+
+describe('RunViewerService canonical manifest attempts', () => {
+  it('resolves editor source identity to an opaque runner task ID', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'fliwright-task-source-'));
+    try {
+      const runDir = join(root, 'run');
+      const testId = '-1234_0';
+      const attempts = [{ attemptId: 'attempt-0', resultPath: 'tests/task/attempts/attempt-0/result.json' }];
+      const attemptDir = join(runDir, attempts[0].resultPath, '..');
+      mkdirSync(attemptDir, { recursive: true });
+      writeFileSync(join(runDir, 'run.json'), JSON.stringify({
+        schemaVersion: 1, runId: 'run', status: 'passed', evidenceStatus: 'complete', tests: [{ testId, attempts }],
+      }));
+      writeFileSync(join(attemptDir, 'result.json'), JSON.stringify({
+        testId, testFile: 'checks/counter.test.ts', testPath: ['suite', 'counter'],
+      }));
+      writeFileSync(join(attemptDir, 'timeline.json'), JSON.stringify({
+        version: 2, runId: 'run', testName: 'counter', mode: 'test', status: 'passed',
+        startedAt: '2026-10-17T00:00:00Z', nodes: [],
+      }));
+      const service = new RunViewerService();
+      const nodeId = 'checks/counter.test.ts::suite/counter';
+      expect((await service.findLatestRunForTest(vscode.Uri.file(root), nodeId))?.runDir.fsPath).toBe(attemptDir);
+      expect((await service.findLatestRunForTestIndexed(vscode.Uri.file(root), nodeId,
+        new Map([[nodeId, { runId: 'run' }]])))?.runDir.fsPath).toBe(attemptDir);
+      expect(await service.findLatestRunForTest(vscode.Uri.file(root), 'other/counter.test.ts::suite/counter')).toBeUndefined();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it('uses the manifest test identity before same-title legacy evidence', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'fliwright-rv-identity-'));
+    try {
+      const runDir = join(runsDir, 'run-same-title');
+      const first = join(runDir, 'tests/file-a%3A%3Asame/attempts/attempt-0');
+      const second = join(runDir, 'tests/file-b%3A%3Asame/attempts/attempt-0');
+      mkdirSync(first, { recursive: true });
+      mkdirSync(second, { recursive: true });
+      writeFileSync(join(runDir, 'run.json'), JSON.stringify({
+        schemaVersion: 1,
+        runId: 'run-same-title',
+        status: 'passed',
+        evidenceStatus: 'complete',
+        tests: [
+          { testId: 'tests/file-a.ts::same', attempts: [{ attemptId: 'attempt-0', resultPath: 'tests/file-a%3A%3Asame/attempts/attempt-0/result.json' }] },
+          { testId: 'tests/file-b.ts::same', attempts: [{ attemptId: 'attempt-0', resultPath: 'tests/file-b%3A%3Asame/attempts/attempt-0/result.json' }] },
+        ],
+      }));
+      for (const [dir, marker] of [[first, 'A'], [second, 'B']] as const) {
+        writeFileSync(join(dir, 'result.json'), '{}');
+        writeFileSync(join(dir, 'timeline.json'), JSON.stringify({
+          version: 2, runId: 'run-same-title', testName: 'same', mode: 'test', status: 'passed',
+          startedAt: '2026-10-17T00:00:00Z', nodes: [{ id: marker, kind: 'action', title: marker, status: 'passed' }],
+        }));
+      }
+
+      const service = new RunViewerService();
+      const loaded = await service.findLatestRunForTest(vscode.Uri.file(runsDir), 'tests/file-b.ts::same');
+      expect(loaded?.timeline.nodes[0]?.id).toBe('B');
+    } finally {
+      rmSync(runsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('loads the selected attempt from the manifest without scanning sibling directories', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'fliwright-rv-canonical-'));
+    try {
+      const runDir = join(runsDir, 'run-canonical');
+      const first = join(runDir, 'tests/test-1/attempts/attempt-0');
+      const second = join(runDir, 'tests/test-1/attempts/attempt-1');
+      mkdirSync(first, { recursive: true });
+      mkdirSync(second, { recursive: true });
+      writeFileSync(join(runDir, 'run.json'), JSON.stringify({
+        schemaVersion: 1,
+        runId: 'run-canonical',
+        status: 'passed',
+        evidenceStatus: 'complete',
+        tests: [{ testId: 'test-1', attempts: [
+          { attemptId: 'attempt-0', resultPath: 'tests/test-1/attempts/attempt-0/result.json' },
+          { attemptId: 'attempt-1', resultPath: 'tests/test-1/attempts/attempt-1/result.json' },
+        ] }],
+      }));
+      writeFileSync(join(first, 'result.json'), '{}');
+      writeFileSync(join(second, 'result.json'), '{}');
+      for (const [dir, name, time] of [[first, 'first attempt', '2026-06-01T00:00:00Z'], [second, 'second attempt', '2026-06-02T00:00:00Z']] as const) {
+        writeFileSync(join(dir, 'timeline.json'), JSON.stringify({
+          version: 2, runId: 'run-canonical', testName: name, mode: 'test', status: 'passed', startedAt: time, nodes: [],
+        }));
+      }
+      mkdirSync(join(runsDir, 'run-canonical-first-attempt'), { recursive: true });
+      writeFileSync(join(runsDir, 'run-canonical-first-attempt', 'timeline.json'), JSON.stringify({
+        version: 2, runId: 'guessed', testName: 'wrong', mode: 'test', status: 'passed', startedAt: '2026-06-03T00:00:00Z', nodes: [],
+      }));
+
+      const service = new RunViewerService();
+      const summaries = await service.listRuns(vscode.Uri.file(runsDir));
+      expect(summaries.filter((summary) => summary.runId === 'run-canonical').map((summary) => summary.attemptId))
+        .toEqual(['attempt-1', 'attempt-0']);
+      const selected = await service.loadRun(vscode.Uri.file(runDir), { testId: 'test-1', attemptId: 'attempt-0' });
+      expect(selected?.timeline.testName).toBe('first attempt');
+      await expect(service.loadRun(vscode.Uri.file(runDir))).resolves.toBeUndefined();
+    } finally {
+      rmSync(runsDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -174,6 +320,7 @@ describe('RunViewerService.findLatestRunForTestIndexed', () => {
     writeFileSync(
       join(runsDir, 'run-1', 'timeline.json'),
       JSON.stringify({
+        version: 2,
         runId: 'run-1',
         testName: 'x',
         mode: 'test',
@@ -190,6 +337,7 @@ describe('RunViewerService.findLatestRunForTestIndexed', () => {
     writeFileSync(
       join(runsDir, 'run-2', 'timeline.json'),
       JSON.stringify({
+        version: 2,
         runId: 'run-2',
         testName: 'wanted',
         mode: 'test',
@@ -212,6 +360,44 @@ describe('RunViewerService.findLatestRunForTestIndexed', () => {
     expect(run?.timeline.runId).toBe('run-2');
   });
 
+  it('selects the indexed test from a canonical multi-test run', async () => {
+    const runDir = join(runsDir, 'run-multi');
+    const first = join(runDir, 'tests/test-a/attempts/attempt-0');
+    const second = join(runDir, 'tests/test-b/attempts/attempt-0');
+    mkdirSync(first, { recursive: true });
+    mkdirSync(second, { recursive: true });
+    writeFileSync(join(runDir, 'run.json'), JSON.stringify({
+      schemaVersion: 1,
+      runId: 'run-multi',
+      status: 'passed',
+      evidenceStatus: 'complete',
+      tests: [
+        { testId: 'tests/a.test.ts::same', attempts: [{ attemptId: 'attempt-0', resultPath: 'tests/test-a/attempts/attempt-0/result.json' }] },
+        { testId: 'tests/b.test.ts::same', attempts: [{ attemptId: 'attempt-0', resultPath: 'tests/test-b/attempts/attempt-0/result.json' }] },
+      ],
+    }));
+    for (const [dir, marker] of [[first, 'A'], [second, 'B']] as const) {
+      writeFileSync(join(dir, 'result.json'), '{}');
+      writeFileSync(join(dir, 'timeline.json'), JSON.stringify({
+        version: 2,
+        runId: 'run-multi',
+        testName: 'same',
+        mode: 'test',
+        status: 'passed',
+        startedAt: '2026-06-23T00:00:00Z',
+        nodes: [{ id: marker, kind: 'action', title: marker, status: 'passed' }],
+      }));
+    }
+
+    const svc = new RunViewerService();
+    const index = new Map<string, { runId: string }>([
+      ['tests/b.test.ts::same', { runId: 'run-multi' }],
+    ]);
+    const run = await svc.findLatestRunForTestIndexed(runsDirUri, 'tests/b.test.ts::same', index);
+    expect(run?.runDir.fsPath).toBe(second);
+    expect(run?.timeline.nodes[0]?.id).toBe('B');
+  });
+
   it('derives the timeline run id from resultRunId for current VS Code records', async () => {
     const svc = new RunViewerService();
     const baseRunId = '2026-06-22T10-00-00';
@@ -221,6 +407,7 @@ describe('RunViewerService.findLatestRunForTestIndexed', () => {
     writeFileSync(
       join(runsDir, timelineRunId, 'timeline.json'),
       JSON.stringify({
+        version: 2,
         runId: timelineRunId,
         testName: 'suite > indexed wanted',
         mode: 'test',
@@ -246,6 +433,7 @@ describe('RunViewerService.findLatestRunForTestIndexed', () => {
     writeFileSync(
       join(runsDir, timelineRunId, 'timeline.json'),
       JSON.stringify({
+        version: 2,
         runId: timelineRunId,
         testName: 'nested leaf',
         mode: 'test',

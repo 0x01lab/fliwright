@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/mcp"
 path: "packages/fliwright-mcp"
-source_fingerprint: "d89d154046d5210e9246ea3a2f65629ad5d1d6250d94fd1b5d1a1ea811869381"
+source_fingerprint: "7d711fc98b9549e96cdf8aba50af8167768df5af45f7849392989505db5b676f"
 generated: true
 ---
 

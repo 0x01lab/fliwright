@@ -21,7 +21,7 @@ class ScreenshotExtension {
 
     final pixelRatio = double.tryParse(params['pixelRatio'] ?? '') ?? 1.0;
     final fullPage = (params['fullPage'] ?? 'false') == 'true';
-    final waitForFrame = params['waitForFrame'] == 'true';
+    final waitForFrame = params['waitForFrame'] != 'false';
 
     // Full-page screenshot: scroll through the content in segments.
     if (fullPage) {
@@ -52,23 +52,6 @@ class ScreenshotExtension {
   static Future<Map<String, dynamic>> _captureRenderView(
     double pixelRatio,
   ) async {
-    final rootBoundary = _findRepaintBoundary(WidgetsBinding.instance.rootElement?.findRenderObject());
-    if (rootBoundary != null && rootBoundary.hasSize) {
-      final image = await rootBoundary.toImage(pixelRatio: pixelRatio);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      final width = rootBoundary.size.width;
-      final height = rootBoundary.size.height;
-      image.dispose();
-      if (byteData == null) return {'success': false, 'error': 'Failed to encode screenshot'};
-      return {
-        'success': true,
-        'format': 'png',
-        'screenshot': base64Encode(byteData.buffer.asUint8List()),
-        'width': width,
-        'height': height,
-        'pixelRatio': pixelRatio,
-      };
-    }
     final renderViews = RendererBinding.instance.renderViews;
     if (renderViews.isEmpty) {
       return {'success': false, 'error': 'No render view available'};
@@ -78,6 +61,9 @@ class ScreenshotExtension {
       (view) => view.size.width > 0 && view.size.height > 0,
       orElse: () => renderViews.first,
     );
+    // Flutter exposes the composited root only through this protected getter;
+    // debugLayer is unavailable in profile/release and nested boundaries omit routes.
+    // ignore: invalid_use_of_protected_member
     final layer = renderView.layer;
     final width = renderView.size.width;
     final height = renderView.size.height;
@@ -128,16 +114,6 @@ class ScreenshotExtension {
       'height': height,
       'pixelRatio': pixelRatio,
     };
-  }
-
-  static RenderRepaintBoundary? _findRepaintBoundary(RenderObject? root) {
-    if (root == null) return null;
-    if (root is RenderRepaintBoundary) return root;
-    RenderRepaintBoundary? found;
-    root.visitChildren((child) {
-      found ??= _findRepaintBoundary(child);
-    });
-    return found;
   }
 
   static Future<ui.Image> _resizeImage(
@@ -367,16 +343,11 @@ class ScreenshotExtension {
     }
   }
 
-  /// Wait for Flutter to finish rendering the current frame.
-  /// Pumps multiple frames so that ongoing repaint requests (e.g. WebView)
-  /// converge before we attempt capture.
+  /// Wait for pending builds and paint to reach the composited scene. The
+  /// scheduler requests a frame when idle; this does not wait for animations
+  /// to settle or manually drive the rendering pipeline.
   static Future<void> _waitForFrame() async {
-    final binding = WidgetsBinding.instance;
-    for (var i = 0; i < 5; i++) {
-      binding.addPostFrameCallback((_) {});
-      binding.handleDrawFrame();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
+    await WidgetsBinding.instance.endOfFrame;
   }
 }
 

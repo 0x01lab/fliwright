@@ -1,11 +1,11 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { loadConfig } from '../config.js';
+import { loadWorkspaceConfig } from '../config.js';
 import type { TestFileEntry } from '../types.js';
 
 export class TestDiscoveryService {
   async discover(workspaceRoot: vscode.Uri): Promise<TestFileEntry[]> {
-    const config = loadConfig();
+    const config = await loadWorkspaceConfig(workspaceRoot);
     const uris = await vscode.workspace.findFiles(new vscode.RelativePattern(workspaceRoot, config.testGlob));
     return uris
       .map((uri) => ({

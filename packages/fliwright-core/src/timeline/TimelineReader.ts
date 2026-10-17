@@ -34,7 +34,10 @@ export function summarizeTimeline(timeline: TimelineData): TimelineSummary {
 }
 
 function isTimelineData(value: unknown): value is TimelineData {
-  return isRecord(value) && Array.isArray(value.nodes);
+  return isRecord(value) && value.version === 2 && Array.isArray(value.nodes)
+    && typeof value.runId === 'string' && typeof value.testName === 'string'
+    && typeof value.startedAt === 'string' && (value.mode === 'test' || value.mode === 'script')
+    && ['running', 'passed', 'failed', 'skipped', 'interrupted'].includes(String(value.status));
 }
 
 function screenshotCount(node: TimelineNode): number {

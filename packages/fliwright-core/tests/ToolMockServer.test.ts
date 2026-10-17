@@ -1,7 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { ToolMockServer } from '../src/ToolMockServer.js';
+import { connect } from 'node:net';
+import { once, getEventListeners } from 'node:events';
 
 describe('ToolMockServer', () => {
+  it('closes an unfinished HTTP connection when shutdown is cancelled', async () => {
+    const server = new ToolMockServer();
+    const url = new URL(await server.start());
+    const socket = connect({ host: url.hostname, port: Number(url.port) });
+    const controller = new AbortController();
+    try {
+      await once(socket, 'connect');
+      socket.write('POST /mock HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1000\r\n\r\n');
+      const socketErrors: string[] = [];
+      socket.on('error', (error: NodeJS.ErrnoException) => { socketErrors.push(error.code ?? error.message); });
+      const closed = new Promise<void>((resolve) => socket.once('close', () => resolve()));
+      const stopped = server.stop({ signal: controller.signal });
+      controller.abort();
+      await Promise.all([stopped, closed]);
+      expect(server.url).toBeNull();
+      expect(socketErrors.every((code) => code === 'ECONNRESET')).toBe(true);
+      expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+    } finally { socket.destroy(); await server.stop(); }
+  });
+
   it('matches registered routes and records calls', () => {
     const server = new ToolMockServer({ passthrough: false });
     server.route('/api/users', {

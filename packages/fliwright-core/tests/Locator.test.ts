@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Locator } from '../src/Locator.js';
+import { RunSession } from '../src/RunSession.js';
 
 const testWidget = {
   id: '42',
@@ -28,6 +29,23 @@ function selectorParam(call: unknown[]) {
 }
 
 describe('Locator', () => {
+  it('records one logical action and treats bridge success:false as failure', async () => {
+    const sendRequest = createMockSendRequest({
+      action: { success: false, error: 'target disappeared' },
+    });
+    const session = new RunSession({ runId: 'run-actions', testId: 'test-actions', testName: 'actions' });
+    const locator = new Locator({ key: 'submit' }, sendRequest, { runSession: session });
+
+    await expect(locator.click()).rejects.toThrow('target disappeared');
+    const result = await session.finish({ status: 'failed', evidenceStatus: 'complete' });
+    expect(result.operations).toHaveLength(1);
+    expect(result.operations[0]).toMatchObject({
+      kind: 'action',
+      outcome: 'failed',
+      metadata: { action: 'tap', selector: 'key=submit' },
+    });
+  });
+
   it('click() sends a single strict hit-testable action', async () => {
     const sendRequest = createMockSendRequest({ action: { success: true } });
 
@@ -173,6 +191,14 @@ describe('Locator', () => {
     });
   });
 
+  it('marks sensitive fill input for trace redaction without changing the replay value', async () => {
+    const sendRequest = createMockSendRequest({});
+    await new Locator({ key: 'password' }, sendRequest).fill('replay-input', { sensitive: true });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.action', expect.objectContaining({
+      action: 'fill', text: 'replay-input', sensitive: 'true',
+    }));
+  });
+
   it('type() and fill() send action payloads', async () => {
     const sendRequest = createMockSendRequest({ action: { success: true } });
     const locator = new Locator({ key: 'email_field' }, sendRequest);
@@ -251,6 +277,14 @@ describe('Locator', () => {
       targetId: 'address-email-field',
       targetRect: JSON.stringify({ x: 20, y: 100, width: 360, height: 48 }),
     });
+  });
+
+  it('passes drag duration in milliseconds to the action protocol', async () => {
+    const sendRequest = createMockSendRequest({ action: { success: true } });
+    await new Locator({ key: 'list' }, sendRequest).drag(0, -240, { duration: 1281.008 });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.action', expect.objectContaining({
+      action: 'drag', deltaX: '0', deltaY: '-240', duration: '1281.008',
+    }));
   });
 
   it('gesture and scroll helpers use action extension', async () => {

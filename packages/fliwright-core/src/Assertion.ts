@@ -5,6 +5,7 @@ import type { FailureCollector } from './FailureCollector.js';
 import type { SelfHealingEngine } from './SelfHealingEngine.js';
 import type { TimelineArtifactStore } from './timeline/TimelineArtifactStore.js';
 import type { TimelineRecorder } from './timeline/TimelineRecorder.js';
+import type { RunSession } from './RunSession.js';
 import { runTimelineAssertion } from './assertions/AssertionTimeline.js';
 
 const DEFAULT_TIMEOUT = 5000;
@@ -39,6 +40,7 @@ export interface AssertionOptions {
 export interface AssertionTimelineOptions {
   title?: string;
   recorder?: TimelineRecorder;
+  runSession?: RunSession;
   artifactStore?: TimelineArtifactStore;
   page?: Page;
 }
@@ -380,6 +382,7 @@ export class Assertion {
       title,
       metadata,
       recorder,
+      runSession: this.timeline?.runSession,
       page: this.timeline?.page,
       artifactStore: this.timeline?.artifactStore,
       includeScreenshot: options?.includeScreenshot,

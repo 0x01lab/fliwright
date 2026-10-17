@@ -120,7 +120,7 @@ export async function verifyVmServiceEndpoint(endpoint: VmServiceEndpoint): Prom
   const checkedAt = new Date().toISOString();
   try {
     await connector.connect(endpoint.url);
-    const handshake = await connector.sendRequest('ext.fliwright.handshake', { protocolVersion: '1' }) as {
+    const handshake = await connector.sendRequest('ext.fliwright.handshake', { protocolVersion: '2' }) as {
       status?: string;
       compatible?: boolean;
       initialized?: boolean;

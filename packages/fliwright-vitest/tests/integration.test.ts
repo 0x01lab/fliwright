@@ -1,4 +1,4 @@
-import { describe, it, expect, test as vitestTest, vi } from 'vitest';
+import { describe, it, expect, beforeEach, test as vitestTest, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -27,6 +27,7 @@ vi.mock(import('@fliwright/core'), async () => {
   const actual = await import('../../fliwright-core/src/index.js');
 
   class MockDriver {
+    disposed = false;
     readonly page = {
       screenshot: async () => Buffer.from(''),
       snapshot: async () => ({}),
@@ -63,11 +64,14 @@ vi.mock(import('@fliwright/core'), async () => {
       }
     }
 
-    async dispose(): Promise<void> {}
+    async dispose(): Promise<void> { this.disposed = true; }
 
     async listenToDiagnostics(): Promise<void> {}
 
     async sendRequest(method?: string): Promise<unknown> {
+      if (method === 'ext.fliwright.screenshot') return { success: true, screenshot: Buffer.from('lifecycle').toString('base64') };
+      if (method === 'ext.fliwright.snap') return { widgets: [{ type: 'Root' }] };
+      if (method === 'ext.fliwright.captureFrame') return { diagnostics: [] };
       if (method === 'ext.fliwright.resolve') {
         return {
           matches: [{ id: '1', type: 'Text', text: 'Next', hitTestable: true, properties: { enabled: true } }],
@@ -186,7 +190,7 @@ describe('createFliwrightTest', () => {
 const testWithAi = createFliwrightTest({
   vmServiceUrl: 'ws://localhost:12345/ws',
   runsRoot: testRunsRoot,
-  ai: { provider: 'mock' },
+  ai: { provider: 'mock', artifactsDir: join(testRunsRoot, 'ai') },
 });
 
 testWithAi('provides an aiRuntime fixture to generated tests', async ({ aiRuntime }) => {
@@ -196,13 +200,80 @@ testWithAi('provides an aiRuntime fixture to generated tests', async ({ aiRuntim
 const testWithTimeline = createFliwrightTest({
   vmServiceUrl: 'ws://localhost:12345/ws',
   runsRoot: testRunsRoot,
-  ai: { provider: 'mock' },
+  ai: { provider: 'mock', artifactsDir: join(testRunsRoot, 'ai') },
+});
+
+let lifecycleTimelinePath = '';
+const testWithLifecycleScreenshots = createFliwrightTest({
+  vmServiceUrl: 'ws://localhost:12345/ws',
+  runsRoot: testRunsRoot,
+  recording: { mode: 'standard' },
+});
+
+testWithLifecycleScreenshots('captures standard test start and finish screenshots', async ({ page, timeline }) => {
+  lifecycleTimelinePath = timeline.artifactStore.timelinePath;
+  await fliwrightExpect(page.locator({ text: 'Next' }), 'lifecycle assertion').toBeVisible();
+});
+
+const testWithAutomaticActions = createFliwrightTest({
+  vmServiceUrl: 'ws://localhost:12345/ws',
+  runsRoot: testRunsRoot,
+  recording: { mode: 'standard', testFinalScreenshots: false },
+});
+
+let automaticActionsTimelinePath = '';
+testWithAutomaticActions('records ordinary locator actions without flow.step wrappers', async ({ page, timeline }) => {
+  automaticActionsTimelinePath = timeline.artifactStore.timelinePath;
+  const next = page.getByText('Next');
+  await next.click();
+  await next.click();
+  await fliwrightExpect(next, 'ordinary action assertion').toBeVisible();
+});
+
+vitestTest('ordinary locator actions have one action node each and one assertion', async () => {
+  const timeline = JSON.parse(await readFile(automaticActionsTimelinePath, 'utf8')) as {
+    nodes: Array<{ kind: string; metadata?: { action?: string }; status: string }>;
+  };
+  const actions = timeline.nodes.filter((node) => node.kind === 'action');
+  expect(actions).toHaveLength(2);
+  expect(actions.map((node) => node.metadata?.action)).toEqual(['tap', 'tap']);
+  expect(timeline.nodes.filter((node) => node.kind === 'assertion')).toHaveLength(1);
+});
+
+vitestTest('persists lifecycle screenshots as timeline evidence', async () => {
+  const timeline = JSON.parse(await readFile(lifecycleTimelinePath, 'utf8')) as {
+    nodes: Array<{ metadata?: { lifecycle?: string }; artifacts?: Array<{ kind: string }> }>;
+  };
+  const lifecycle = timeline.nodes.filter((node) => node.metadata?.lifecycle);
+  expect(lifecycle.map((node) => node.metadata?.lifecycle)).toEqual(['start', 'finish']);
+  expect(lifecycle.every((node) => node.artifacts?.some((artifact) => artifact.kind === 'screenshot'))).toBe(true);
+});
+
+let noFinalLifecycleTimelinePath = '';
+const testWithoutFinalScreenshot = createFliwrightTest({
+  vmServiceUrl: 'ws://localhost:12345/ws',
+  runsRoot: testRunsRoot,
+  recording: { mode: 'standard', testFinalScreenshots: false },
+});
+
+testWithoutFinalScreenshot('can disable the final lifecycle screenshot', async ({ page, timeline }) => {
+  noFinalLifecycleTimelinePath = timeline.artifactStore.timelinePath;
+  await fliwrightExpect(page.locator({ text: 'Next' }), 'no final screenshot assertion').toBeVisible();
+});
+
+vitestTest('does not write a final lifecycle screenshot when disabled', async () => {
+  const timeline = JSON.parse(await readFile(noFinalLifecycleTimelinePath, 'utf8')) as {
+    nodes: Array<{ metadata?: { lifecycle?: string } }>;
+  };
+  expect(timeline.nodes.filter((node) => node.metadata?.lifecycle).map((node) => node.metadata?.lifecycle))
+    .toEqual(['start']);
 });
 
 const testWithPassiveDiagnosis = createFliwrightTest({
   vmServiceUrl: 'ws://localhost:12346/ws',
   runsRoot: testRunsRoot,
   ai: {
+    artifactsDir: join(testRunsRoot, 'ai'),
     provider: 'mock',
     adapter: new MockAiAdapter([{
       text: JSON.stringify({
@@ -276,6 +347,27 @@ connectFailureTest('retries the same shared driver config after a connect failur
   expect(mockConnectCalls.filter((url) => url === retryAfterConnectFailureUrl)).toHaveLength(2);
 });
 
+describe('parallel apps keep independent driver connections', () => {
+  const arrived = new Set<string>();
+  let release!: () => void;
+  const bothConnected = new Promise<void>((resolve) => { release = resolve; });
+  let firstReady!: () => void;
+  const firstConnected = new Promise<void>((resolve) => { firstReady = resolve; });
+  beforeEach(async ({ task }) => {
+    if (task.name === 'parallel-b') await firstConnected;
+  });
+  for (const app of ['parallel-a', 'parallel-b']) {
+    const appTest = createFliwrightTest({ vmServiceUrl: `ws://${app}/ws`, runsRoot: testRunsRoot });
+    appTest.concurrent(app, async ({ driver }) => {
+      arrived.add(app);
+      if (app === 'parallel-a') firstReady();
+      if (arrived.size === 2) release();
+      await bothConnected;
+      expect((driver as unknown as { disposed: boolean }).disposed).toBe(false);
+    });
+  }
+});
+
 testWithTimeline('provides timeline-native fixtures', async ({ page, flow, mock, agent, timeline }) => {
   await flow.step('Generate data', async () => {
     await agent.generate('Generate payload', {
@@ -340,7 +432,7 @@ vitestTest('failed assert fixture writes an agent-visible failure to timeline.js
   expect(timeline.agentVisibleFailures).toContainEqual(expect.objectContaining({ code: 'assertion_failed' }));
 });
 
-const testWithLogger = createFliwrightTest({
+const testWithLogger = createFliwrightScript({
   vmServiceUrl: 'ws://localhost:12345/ws',
   timelineDir: await mkdtemp(join(tmpdir(), 'fliwright-vitest-logs-')),
   runsRoot: testRunsRoot,
@@ -363,11 +455,11 @@ vitestTest('logger jsonl file is persisted', async () => {
   const lines = (await readFile(persistedLogPath, 'utf8')).trim().split('\n');
   const events = lines.map((line) => JSON.parse(line) as { kind: string; message: string; data?: Record<string, unknown> });
   expect(events).toContainEqual(expect.objectContaining({
-    kind: 'test',
-    message: 'Test started',
+    kind: 'script',
+    message: 'Script started',
   }));
   expect(events).toContainEqual(expect.objectContaining({
-    kind: 'test',
+    kind: 'script',
     message: 'custom user log',
     data: { screen: 'login' },
   }));
@@ -375,7 +467,7 @@ vitestTest('logger jsonl file is persisted', async () => {
 
 let persistedTimelinePath = '';
 
-testWithTimeline('writes timeline.json after each run', async ({ flow, timeline }) => {
+createFliwrightScript({ vmServiceUrl: 'ws://localhost:12345/ws', runsRoot: testRunsRoot })('writes timeline.json after each run', async ({ flow, timeline }) => {
   await flow.step('A passing step', () => undefined);
   persistedTimelinePath = timeline.artifactStore.timelinePath;
 });

@@ -2,8 +2,60 @@ import { describe, expect, it, vi } from 'vitest';
 import { commands, Uri, window } from 'vscode';
 import type { RecordingSession } from '../src/types.js';
 import { RecordingPanel } from '../src/webview/RecordingPanel.js';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 describe('RecordingPanel', () => {
+  it('serves local evidence by webview URL and refuses references outside the recording', () => {
+    const root = mkdtempSync(join(tmpdir(), 'recording-panel-'));
+    const { panel, getPostedMessages, restore } = createPanel();
+    try {
+      mkdirSync(join(root, 'screenshots'));
+      writeFileSync(join(root, 'screenshots/frame.png'), 'png');
+      panel.open({ status: 'preview', rawEventCount: 0, operationCount: 1, artifactDirectory: root,
+        frames: [ { id: 'frame', index: 0, kind: 'tap', status: 'ready', timestamp: 1,
+          position: { x: 1, y: 2 }, screenshot: { path: 'screenshots/frame.png', byteLength: 3, format: 'png' } },
+        { id: 'escape', index: 1, kind: 'tap', status: 'ready', timestamp: 2,
+          position: { x: 1, y: 2 }, screenshot: { path: '../outside.png', byteLength: 3, format: 'png' } } ],
+      });
+      const message = getPostedMessages()[0] as any;
+      expect(message.session.frames[0].screenshot.uri).toContain(`/webview${root}/screenshots/frame.png`);
+      expect(message.session.frames[1]).toMatchObject({ status: 'error', screenshot: undefined });
+      expect(JSON.stringify(message)).not.toContain('base64');
+    } finally { restore(); rmSync(root, { recursive: true, force: true }); }
+  });
+  it.each([
+    ['confirmRecordingCheckpoints', 'fliwright.confirmRecordingCheckpoints'],
+    ['verifyRecording', 'fliwright.verifyRecording'],
+  ])('forwards %s from the review panel', (type, command) => {
+    const { panel, sendMessage, restore } = createPanel();
+    const spy = vi.spyOn(commands, 'executeCommand').mockResolvedValue(undefined);
+    try {
+      panel.open({ status: 'preview', rawEventCount: 0, operationCount: 0 });
+      sendMessage({ type });
+      expect(spy).toHaveBeenCalledWith(command);
+    } finally { spy.mockRestore(); restore(); }
+  });
+
+  it('forwards edited checkpoint candidates to the recorder review handler', () => {
+    const onReviewRecordingCheckpoints = vi.fn();
+    const { panel, sendMessage, restore } = createPanel({ onReviewRecordingCheckpoints });
+    panel.open({ status: 'preview', rawEventCount: 0, operationCount: 1 });
+
+    const checkpoints = [{
+      id: 'saved',
+      query: { match: { key: 'result' } },
+      matcher: 'toHaveText',
+      expected: 'Saved',
+      source: 'snapshot',
+      confirmed: true,
+    }] as const;
+    sendMessage({ type: 'reviewRecordingCheckpoints', checkpoints });
+
+    expect(onReviewRecordingCheckpoints).toHaveBeenCalledWith(checkpoints);
+    restore();
+  });
   function createPanel(options?: ConstructorParameters<typeof RecordingPanel>[1]): {
     panel: RecordingPanel;
     getHtml: () => string;
@@ -99,7 +151,7 @@ describe('RecordingPanel', () => {
           status: 'ready',
           timestamp: 1000,
           position: { x: 10, y: 20 },
-          screenshot: { base64: 'png', format: 'png', width: 100, height: 200, pixelRatio: 1 },
+          screenshot: { path: 'screenshots/frame.png', byteLength: 3, format: 'png', width: 100, height: 200, pixelRatio: 1 },
         },
       ],
     };

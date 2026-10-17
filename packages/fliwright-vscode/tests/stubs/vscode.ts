@@ -161,6 +161,9 @@ export const workspace = {
       get<T>(key: string, defaultValue: T): T {
         return (key in configValue ? configValue[key] : defaultValue) as T;
       },
+      inspect<T>(key: string) {
+        return { key, workspaceValue: configValue[key] as T | undefined };
+      },
       update(key: string, value: unknown) {
         configValue[key] = value;
         const event = {

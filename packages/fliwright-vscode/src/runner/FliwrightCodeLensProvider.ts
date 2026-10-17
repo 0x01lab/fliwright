@@ -24,7 +24,8 @@ export class FliwrightCodeLensProvider implements vscode.CodeLensProvider {
       }),
       new vscode.CodeLens(top, {
         title: 'Record After This Test',
-        command: 'fliwright.startRecording',
+        command: 'fliwright.recordAfterTest',
+        arguments: [{ kind: 'testFile', uri: document.uri, label: path.basename(document.uri.fsPath) }],
       }),
     ];
   }

@@ -2,10 +2,10 @@ import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { FLIWRIGHT_RUNS_ROOT_ENV } from '@fliwright/core';
-import type * as vscode from 'vscode';
-import { resolveVitestCli } from '../runner/VitestRunner.js';
+import * as vscode from 'vscode';
+import { VitestRunner } from '../runner/VitestRunner.js';
 import type { RunResult, ScriptFileEntry } from '../types.js';
-import { createVitestScriptConfig } from './VitestScriptConfig.js';
+import { createVitestScriptConfig, usesVitestScript } from './VitestScriptConfig.js';
 
 export interface ScriptRunParams {
   workspaceRoot: vscode.Uri;
@@ -13,8 +13,6 @@ export interface ScriptRunParams {
   vmServiceUrl?: string;
   runsRoot?: string;
   runId?: string;
-  traceDir?: vscode.Uri;
-  traceMode?: 'full' | 'on-failure' | 'off';
   onOutput?: (chunk: string, stream: 'stdout' | 'stderr') => void;
 }
 
@@ -22,6 +20,17 @@ export class ScriptRunner {
   async run(params: ScriptRunParams): Promise<RunResult> {
     const startedAt = Date.now();
     const relativeScript = path.relative(params.workspaceRoot.fsPath, params.script.uri.fsPath);
+    const source = await fs.readFile(params.script.uri.fsPath, 'utf8');
+    if (usesVitestScript(params.script.uri.fsPath, source)) {
+      const config = await createVitestScriptConfig(relativeScript, params.workspaceRoot.fsPath);
+      try {
+        return await new VitestRunner().run({ ...params, testFile: params.script.uri,
+          failureContextDir: vscode.Uri.joinPath(params.workspaceRoot, '.fliwright', 'failures'),
+          configPath: config.path });
+      } finally {
+        await config.cleanup();
+      }
+    }
     const env: NodeJS.ProcessEnv = {
       ...process.env,
     };
@@ -31,19 +40,8 @@ export class ScriptRunner {
     }
     if (params.runsRoot) env[FLIWRIGHT_RUNS_ROOT_ENV] = params.runsRoot;
     if (params.runId) env.FLIWRIGHT_RUN_ID = params.runId;
-    if (params.traceMode && params.traceMode !== 'off' && params.traceDir) {
-      env.FLIWRIGHT_TRACE = params.traceMode;
-      env.FLIWRIGHT_TRACE_DIR = params.traceDir.fsPath;
-      env.FLIWRIGHT_TRACE_LAYOUT = 'run';
-    }
 
-    const command = await resolveScriptCommand(params.script.uri.fsPath, relativeScript, params.workspaceRoot.fsPath);
-    let execution: CommandResult;
-    try {
-      execution = await runCommand(command.command, command.args, params.workspaceRoot.fsPath, env, params.onOutput);
-    } finally {
-      await command.cleanup?.();
-    }
+    const execution = await runCommand('node', [relativeScript], params.workspaceRoot.fsPath, env, params.onOutput);
     const duration = Date.now() - startedAt;
     const passed = execution.exitCode === 0;
     const output = [execution.stdout, execution.stderr].filter(Boolean).join('\n').trim();
@@ -64,36 +62,6 @@ export class ScriptRunner {
       stderr: execution.stderr,
     };
   }
-}
-
-interface ScriptCommand {
-  command: string;
-  args: string[];
-  cleanup?: () => Promise<void>;
-}
-
-async function resolveScriptCommand(scriptPath: string, relativeScript: string, workspaceRoot: string): Promise<ScriptCommand> {
-  const source = await fs.readFile(scriptPath, 'utf8');
-  if (usesFliwrightVitest(source)) {
-    const config = await createVitestScriptConfig(relativeScript, workspaceRoot);
-    return {
-      command: process.execPath,
-      args: [
-        resolveVitestCli(workspaceRoot),
-        'run',
-        relativeScript,
-        '--config',
-        config.path,
-      ],
-      cleanup: config.cleanup,
-    };
-  }
-  return { command: 'node', args: [relativeScript] };
-}
-
-function usesFliwrightVitest(source: string): boolean {
-  return /from\s+['"]@fliwright\/vitest['"]/.test(source) ||
-    /import\s*\(\s*['"]@fliwright\/vitest['"]\s*\)/.test(source);
 }
 
 interface CommandResult {

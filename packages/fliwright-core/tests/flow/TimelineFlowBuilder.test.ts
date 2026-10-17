@@ -5,7 +5,7 @@ import type { TimelineData } from '../../src/timeline/types.js';
 describe('buildFlowFromTimeline', () => {
   it('creates a linear business flow from timeline nodes', () => {
     const timeline: TimelineData = {
-      version: 1,
+      version: 2,
       runId: 'run-1',
       testName: 'checkout test',
       mode: 'test',
@@ -106,7 +106,7 @@ describe('buildFlowFromTimeline', () => {
 
   it('omits failure nodes by default and can include them as notes', () => {
     const timeline: TimelineData = {
-      version: 1,
+      version: 2,
       runId: 'run-fail',
       testName: 'failing test',
       mode: 'test',

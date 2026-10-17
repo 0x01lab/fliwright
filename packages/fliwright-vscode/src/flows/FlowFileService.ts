@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { FLIWRIGHT_FLOWS_DIR, flowFileName, sanitizeFlowFileId, type FliwrightFlowDocument } from '@fliwright/core';
+import { flowFileName, sanitizeFlowFileId, type FliwrightFlowDocument } from '@fliwright/core';
+import { loadWorkspaceConfig, resolveWorkspacePath } from '../config.js';
 
 export interface CreateFlowOptions {
   title: string;
@@ -14,7 +15,9 @@ export class FlowFileService {
   async create(workspaceRoot: vscode.Uri, options: CreateFlowOptions): Promise<CreatedFlowFile> {
     const now = new Date().toISOString();
     const baseId = sanitizeFlowFileId(options.title);
-    const id = await nextAvailableFlowId(workspaceRoot, baseId);
+    const config = await loadWorkspaceConfig(workspaceRoot);
+    const flowsRoot = resolveWorkspacePath(workspaceRoot, config.paths.flows);
+    const id = await nextAvailableFlowId(flowsRoot, baseId);
     const flow: FliwrightFlowDocument = {
       version: 1,
       id,
@@ -26,15 +29,14 @@ export class FlowFileService {
       edges: [],
       viewport: { x: 0, y: 0, zoom: 1 },
     };
-    const uri = vscode.Uri.joinPath(workspaceRoot, ...FLIWRIGHT_FLOWS_DIR.split('/'), flowFileName(id));
-    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(workspaceRoot, ...FLIWRIGHT_FLOWS_DIR.split('/')));
+    const uri = vscode.Uri.joinPath(flowsRoot, flowFileName(id));
+    await vscode.workspace.fs.createDirectory(flowsRoot);
     await vscode.workspace.fs.writeFile(uri, Buffer.from(`${JSON.stringify(flow, null, 2)}\n`, 'utf8'));
     return { uri, flow };
   }
 }
 
-async function nextAvailableFlowId(workspaceRoot: vscode.Uri, baseId: string): Promise<string> {
-  const flowsRoot = vscode.Uri.joinPath(workspaceRoot, ...FLIWRIGHT_FLOWS_DIR.split('/'));
+async function nextAvailableFlowId(flowsRoot: vscode.Uri, baseId: string): Promise<string> {
   for (let index = 0; index < 1000; index++) {
     const id = index === 0 ? baseId : `${baseId}-${index + 1}`;
     const uri = vscode.Uri.joinPath(flowsRoot, flowFileName(id));

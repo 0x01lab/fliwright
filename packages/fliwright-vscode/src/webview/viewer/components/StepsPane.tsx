@@ -11,6 +11,7 @@ function statusGlyph(status: string): string {
   if (status === 'passed') return '✓';
   if (status === 'failed') return '✗';
   if (status === 'skipped') return '○';
+  if (status === 'interrupted') return '■';
   return '◐';
 }
 
@@ -19,6 +20,7 @@ const DOT_BG: Record<string, string> = {
   failed: 'bg-fail',
   skipped: 'bg-muted-foreground',
   running: 'bg-info',
+  interrupted: 'bg-info',
 };
 
 function durationOf(startedAt?: string, endedAt?: string, status?: string): string {
@@ -86,7 +88,7 @@ export function StepsPane(props: StepsPaneProps): JSX.Element {
           <button
             className={cn('flex-1 px-2 py-1 text-[11px] disabled:opacity-40', mode === 'actions' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent')}
             disabled={!hasTrace}
-            title={hasTrace ? 'Action trace' : 'No trace recorded (traceMode off)'}
+            title={hasTrace ? 'Action trace' : 'No action trace available'}
             onClick={() => props.onModeChange('actions')}
           >Actions</button>
         </div>
@@ -132,6 +134,7 @@ export function StepsPane(props: StepsPaneProps): JSX.Element {
                 const key = `trace:${i}`;
                 const isSelected = key === selectedKey;
                 const isFail = s.status === 'fail';
+                const status = s.status === 'pass' ? 'passed' : isFail ? 'failed' : s.status;
                 return (
                   <div
                     key={key}
@@ -143,8 +146,8 @@ export function StepsPane(props: StepsPaneProps): JSX.Element {
                       !isSelected && isFail && 'bg-fail/[0.07]',
                     )}
                   >
-                    <span className={cn('flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full text-[9px] text-white', isFail ? 'bg-fail' : 'bg-pass')}>
-                      {isFail ? '✗' : '✓'}
+                    <span className={cn('flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full text-[9px] text-white', DOT_BG[status] ?? 'bg-muted-foreground')}>
+                      {statusGlyph(status)}
                     </span>
                     <span className={cn('shrink-0 rounded px-1 text-[9px] font-semibold uppercase tracking-wide', isSelected ? 'bg-white/20' : 'bg-muted text-muted-foreground')}>action</span>
                     <span className="min-w-0 flex-1 truncate">{s.action}</span>

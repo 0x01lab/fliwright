@@ -12,6 +12,8 @@ export 'src/extensions/hive_mock_rule_storage.dart';
 export 'src/extensions/mock_server.dart';
 export 'src/extensions/mock_rule_store.dart';
 export 'src/extensions/recording.dart';
+export 'src/extensions/recording_binding.dart';
+export 'src/extensions/recording_input.dart';
 export 'src/extensions/riverpod.dart';
 export 'src/extensions/router_navigate.dart';
 export 'src/extensions/screenshot.dart';

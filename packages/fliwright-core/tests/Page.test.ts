@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Page } from '../src/Page.js';
+import { RunSession } from '../src/RunSession.js';
 
 function createMockSendRequest(responses: Record<string, unknown>) {
   return vi.fn().mockImplementation((method: string, params?: Record<string, unknown>) => {
@@ -11,6 +12,40 @@ function createMockSendRequest(responses: Record<string, unknown>) {
 }
 
 describe('Page', () => {
+  it('passes coordinate drag duration in milliseconds without changing step defaults', async () => {
+    const sendRequest = createMockSendRequest({ 'ext.fliwright.dragFrom': { success: true } });
+    await new Page(sendRequest).dragFrom(10, 20, 0, -240, { duration: 1281.008 });
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.dragFrom', {
+      x: '10', y: '20', deltaX: '0', deltaY: '-240', steps: '20', duration: '1281.008',
+    });
+  });
+
+  it('records navigation and coordinate gestures as logical actions', async () => {
+    const sendRequest = vi.fn().mockImplementation(async (method: string) => {
+      if (method === 'ext.fliwright.navigate') return { success: true };
+      if (method === 'ext.fliwright.click') return { success: true };
+      return { success: true };
+    });
+    const session = new RunSession({ runId: 'run-page', testId: 'page-test', testName: 'page' });
+    const page = new Page(sendRequest, { runSession: session });
+
+    await page.navigate('/details');
+    await page.clickAt(10, 20);
+    const result = await session.finish({ status: 'passed', evidenceStatus: 'complete' });
+    expect(result.operations.map((operation) => operation.title)).toEqual([
+      'Navigate to /details',
+      'Click at (10, 20)',
+    ]);
+  });
+
+  it('records bridge-level navigation errors as failed actions', async () => {
+    const session = new RunSession({ runId: 'run-page-fail', testId: 'page-test', testName: 'page' });
+    const page = new Page(vi.fn().mockResolvedValue({ success: false, error: 'route missing' }), { runSession: session });
+    await expect(page.navigate('/missing')).rejects.toThrow('route missing');
+    const result = await session.finish({ status: 'failed', evidenceStatus: 'complete' });
+    expect(result.operations[0]).toMatchObject({ outcome: 'failed', kind: 'action' });
+  });
+
   it('returns a Locator from locator()', () => {
     const page = new Page(createMockSendRequest({}));
     const locator = page.locator('text=Login');

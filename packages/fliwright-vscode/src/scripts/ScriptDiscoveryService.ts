@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { loadConfig } from '../config.js';
+import { loadWorkspaceConfig } from '../config.js';
 import type { ScriptFileEntry } from '../types.js';
 
 const DEFAULT_SCRIPT_GLOBS = [
@@ -11,7 +11,7 @@ const DEFAULT_SCRIPT_GLOBS = [
 
 export class ScriptDiscoveryService {
   async discover(workspaceRoot: vscode.Uri): Promise<ScriptFileEntry[]> {
-    const globs = expandScriptGlobs(loadConfig().scriptGlob);
+    const globs = expandScriptGlobs((await loadWorkspaceConfig(workspaceRoot)).scriptGlob);
     const seen = new Set<string>();
     const entries: ScriptFileEntry[] = [];
 

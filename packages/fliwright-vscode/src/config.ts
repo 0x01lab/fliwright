@@ -1,5 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { resolveProjectConfig } from '@fliwright/cli';
+import { mergeFliwrightConfig, type ResolvedFliwrightConfig } from '@fliwright/core';
 import type { ExtensionConfig } from './types.js';
 
 export function getWorkspaceRoot(): vscode.Uri | undefined {
@@ -25,7 +27,25 @@ export function loadConfig(): ExtensionConfig {
     formDebug: config.get<boolean>('formDebug', false),
     formOperationTimeoutMs: config.get<number>('formOperationTimeoutMs', 60_000),
     codeLensEnabled: config.get<boolean>('codeLensEnabled', true),
-    scriptGlob: config.get<string>('scriptGlob', '.fliwright/scripts/**/*.{js,mjs,cjs}'),
+    scriptGlob: config.get<string>('scriptGlob', '.fliwright/scripts/**/*.{script.ts,js,mjs,cjs}'),
+  };
+}
+
+/** Resolve shared project settings at each discovery/save boundary, preserving explicit editor globs. */
+export async function loadWorkspaceConfig(root: vscode.Uri): Promise<ExtensionConfig & ResolvedFliwrightConfig> {
+  const project = await resolveProjectConfig(root.fsPath);
+  const shared = mergeFliwrightConfig({ project });
+  const editor = loadConfig();
+  const settings = vscode.workspace.getConfiguration('fliwright', root);
+  const explicitGlob = (key: 'testGlob' | 'scriptGlob'): string | undefined => {
+    const inspected = settings.inspect<string>(key);
+    return inspected?.workspaceFolderValue ?? inspected?.workspaceValue ?? inspected?.globalValue;
+  };
+  return {
+    ...editor,
+    ...shared,
+    testGlob: explicitGlob('testGlob') ?? `${shared.paths.tests.replace(/\\/g, '/').replace(/\/$/, '')}/**/*.test.ts`,
+    scriptGlob: explicitGlob('scriptGlob') ?? `${shared.paths.scripts.replace(/\\/g, '/').replace(/\/$/, '')}/**/*.{script.ts,js,mjs,cjs}`,
   };
 }
 
