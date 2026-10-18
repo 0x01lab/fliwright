@@ -38,6 +38,13 @@ describe('recording configuration contract', () => {
     });
   });
 
+  it('transports and validates the cache root independently of run settings', () => {
+    const environment = readFliwrightEnvironment({ FLIWRIGHT_CONFIG: JSON.stringify({ cacheRoot: '/worker/cache' }) });
+    expect(mergeFliwrightConfig({ project: { runsRoot: 'history', cacheRoot: 'scratch' }, environment }))
+      .toMatchObject({ runsRoot: 'history', cacheRoot: '/worker/cache' });
+    expect(() => fliwrightConfigSchema.parse({ cacheRoot: '' })).toThrow();
+  });
+
   it('rejects unknown recording modes and preserves explicit off', () => {
     expect(() => fliwrightConfigSchema.parse({ recording: { mode: 'trace' } })).toThrow();
     expect(fliwrightConfigSchema.parse({ recording: { mode: 'off' } }).recording.mode).toBe('off');

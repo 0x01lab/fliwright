@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { FliwrightDriver } from '../src/Driver.js';
+import { Locator } from '../src/Locator.js';
 import { SnapshotStore } from '../src/SnapshotStore.js';
 import type { WidgetSnapshot } from '../src/types.js';
 import * as fs from 'node:fs';
@@ -16,6 +18,17 @@ afterEach(() => {
 });
 
 describe('SnapshotStore', () => {
+  it('stores driver healing data in the configured cache independently of run artifacts', async () => {
+    const driver = new FliwrightDriver({ projectRoot: tmpDir, cacheRoot: 'scratch' });
+    const snapshot: WidgetSnapshot = { type: 'TextButton', parentType: 'Column', adjacentText: [],
+      rect: { x: 0, y: 0, width: 10, height: 10 }, callbackNames: [] };
+    const locator = new Locator('key=submit', async () => ({}));
+    await driver.healing.recordSuccess(locator, 'saves', async () => snapshot);
+    const store = new SnapshotStore(path.join(tmpDir, 'scratch/healing'));
+    expect(store.load('saves', 'key=submit')).toEqual(snapshot);
+    expect(fs.existsSync(path.join(tmpDir, '.fliwright/snapshots'))).toBe(false);
+  });
+
   it('load returns null when no snapshot exists', () => {
     const store = new SnapshotStore(tmpDir);
     const result = store.load('my test', 'text=Login');

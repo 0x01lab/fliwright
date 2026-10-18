@@ -5,6 +5,19 @@ import { tmpdir } from 'node:os';
 import * as vscode from 'vscode';
 import { RunViewerService } from '../src/runviewer/RunViewerService.js';
 
+it('uses the configured project run directory without selecting an old default', async () => {
+  const project = mkdtempSync(join(tmpdir(), 'fliwright-viewer-storage-'));
+  try {
+    mkdirSync(join(project, 'history'));
+    mkdirSync(join(project, '.fliwright/runs'), { recursive: true });
+    writeFileSync(join(project, 'fliwright.config.ts'), "export default { runsRoot: 'history' };");
+    const service = new RunViewerService();
+    expect((await service.getRunsDir(vscode.Uri.file(project)))?.fsPath).toBe(join(project, 'history'));
+    rmSync(join(project, 'history'), { recursive: true });
+    expect(await service.getRunsDir(vscode.Uri.file(project))).toBeUndefined();
+  } finally { rmSync(project, { recursive: true, force: true }); }
+});
+
 describe('RunViewerService.findLatestRunForTest', () => {
   let runsDir: string;
   let runsDirUri: vscode.Uri;

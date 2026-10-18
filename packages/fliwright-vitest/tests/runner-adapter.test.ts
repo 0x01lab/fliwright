@@ -4,6 +4,18 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 describe('fliwright Vitest preset', () => {
+  it('resolves storage against the project before transporting config to workers', () => {
+    try {
+      vi.stubEnv('FLIWRIGHT_CONFIG', '');
+      vi.stubEnv('FLIWRIGHT_RUNS_ROOT', '');
+      const preset = fliwrightPreset({ projectRoot: '/repos/app', runsRoot: 'evidence', cacheRoot: 'scratch' });
+      const env = preset.test.env as Record<string, string>;
+      expect(env.FLIWRIGHT_PROJECT_ROOT).toBe('/repos/app');
+      expect(env.FLIWRIGHT_RUNS_ROOT).toBe('/repos/app/evidence');
+      expect(JSON.parse(env.FLIWRIGHT_CONFIG)).toMatchObject({ runsRoot: '/repos/app/evidence', cacheRoot: '/repos/app/scratch' });
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('keeps project reporters and adds terminal recovery for direct runs', () => {
     const custom = { onTestRunEnd: () => {} };
     for (const reporters of ['json', ['dot', custom], []]) {

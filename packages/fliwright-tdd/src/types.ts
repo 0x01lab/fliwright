@@ -55,6 +55,7 @@ export interface RuntimeSnapshot {
 }
 
 export interface StartOpts {
+  sharedConfig?: Partial<import('@fliwright/core').FliwrightProjectConfig>;
   app?: AppStartParams;
   vmServiceUrl?: string;
   configRoot: string;
@@ -204,7 +205,7 @@ export interface TddRuntimeDeps {
     dispose(options?: { keepAppAlive?: boolean }): Promise<void>;
   };
   executor?: {
-    boot(opts: { configRoot: string; vmServiceUrl?: string; driverProvider: () => Promise<unknown>; defaultScenario?: string; scenarioMode?: 'managed-start' | 'attach' }): Promise<void>;
+    boot(opts: { sharedConfig?: StartOpts['sharedConfig']; configRoot: string; vmServiceUrl?: string; driverProvider: () => Promise<unknown>; defaultScenario?: string; scenarioMode?: 'managed-start' | 'attach' }): Promise<void>;
     rerun(file: string, testName?: string): Promise<{
       status: 'red' | 'green';
       testName?: string;

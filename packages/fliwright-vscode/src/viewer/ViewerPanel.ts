@@ -39,12 +39,12 @@ export class ViewerPanel {
     }
     const runsDir = await this.service.getRunsDir(root);
     if (!runsDir) {
-      vscode.window.showWarningMessage('No run data found under ~/.fliwright/projects for this workspace.');
+      vscode.window.showWarningMessage('No run data found in the configured runs directory for this workspace.');
       return;
     }
     const runs = await this.service.listRuns(runsDir);
     if (runs.length === 0) {
-      vscode.window.showWarningMessage('No runs with timeline.json found under ~/.fliwright/projects for this workspace.');
+      vscode.window.showWarningMessage('No runs with timeline.json found in the configured runs directory for this workspace.');
       return;
     }
 
@@ -73,14 +73,14 @@ export class ViewerPanel {
     }
     const runsDir = await this.service.getRunsDir(root);
     if (!runsDir) {
-      vscode.window.showWarningMessage('No run data found under ~/.fliwright/projects for this workspace.');
+      vscode.window.showWarningMessage('No run data found in the configured runs directory for this workspace.');
       return;
     }
     const allRuns = await this.service.listRuns(runsDir);
     const runs = options.failedOnly ? allRuns.filter(run => run.status === 'failed' || run.status === 'interrupted') : allRuns;
     if (runs.length === 0) {
       vscode.window.showWarningMessage(options.failedOnly ? 'No failed or interrupted runs found for this workspace.'
-        : 'No runs with timeline.json found under ~/.fliwright/projects for this workspace.');
+        : 'No runs with timeline.json found in the configured runs directory for this workspace.');
       return;
     }
     await this.openForRun(runs[0].runDir, runs[0]);

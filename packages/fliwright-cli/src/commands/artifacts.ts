@@ -1,7 +1,7 @@
 import { cp, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { ensureFliwrightRunsRoot, runManifestSchema, RunArtifactStore, recoverRunProgress } from '@fliwright/core';
-import { loadConfig } from '../config.js';
+import { resolveProjectConfig } from '../config.js';
 import { artifactReferences, relativeArtifactPath } from '../ArtifactReferences.js';
 
 export interface ArtifactOptions {
@@ -273,8 +273,8 @@ export async function artifactPathIssue(boundary: string, target: string): Promi
 
 async function listRuns(options: ArtifactOptions) {
   const cwd = options.cwd ?? process.cwd();
-  const config = await loadConfig(cwd);
-  const runsRoot = await ensureFliwrightRunsRoot({ projectRoot: cwd, runsRoot: options.runsRoot ?? config.runsRoot });
+  const config = await resolveProjectConfig(cwd, { runsRoot: options.runsRoot });
+  const runsRoot = await ensureFliwrightRunsRoot({ runsRoot: config.runsRoot });
   const entries = await readdir(runsRoot, { withFileTypes: true });
   const runs = await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => ({
     runId: basename(entry.name),

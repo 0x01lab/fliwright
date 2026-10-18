@@ -324,9 +324,9 @@ const pluginConfiguredTest = createFliwrightTest({
 
 pluginConfiguredTest('passes configured plugins to the shared driver', async ({ driver }) => {
   expect(driver).toBeDefined();
-  expect(mockDriverOptions).toContainEqual({
+  expect(mockDriverOptions).toContainEqual(expect.objectContaining({
     plugins: [expect.objectContaining({ name: 'exio-project-plugin' })],
-  });
+  }));
 });
 
 const retryAfterConnectFailureUrl = 'ws://localhost:32345/ws';

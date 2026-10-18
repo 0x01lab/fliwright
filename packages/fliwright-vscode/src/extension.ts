@@ -99,7 +99,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const websocketMockTree = new WebSocketMockTreeProvider(websocketMockConfigService);
   const formTree = new FormDataTreeProvider(formService);
   const runArtifactStore = new RunArtifactStore();
-  // Resolve the per-project runs root (~/​.fliwright/​projects/​<project>/​runs).
+  // Resolve runsRoot from fliwright.config.ts (default: <project>/.fliwright/runs).
   // Best-effort: if the workspace root is unavailable or mkdir fails, fall back to
   // undefined so run recording is skipped (the tests tree still works against an
   // empty in-memory store). The store is always constructed so TestsTreeProvider
@@ -114,7 +114,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       runsRoot = undefined;
     }
   }
-  const statusStore = new TestStatusStore(runsRoot ?? '');
+  const statusStore = new TestStatusStore(() => runsRoot ?? '');
   const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore);
   const scriptsTree = new ScriptsTreeProvider(scriptDiscoveryService);
   const flowsTree = new FlowsTreeProvider();
@@ -1644,6 +1644,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           : undefined;
         const failureContextDir = resolveWorkspacePath(root, loadConfig().failureContextDir);
 
+        runsRoot = await runArtifactStore.ensureRunsDir(root);
         const recordingMode = (await loadWorkspaceConfig(root)).recording.mode;
         const runId = runArtifactStore.generateBaseRunId();
         const abortController = new AbortController();
@@ -1736,6 +1737,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
       const runId = runArtifactStore.generateBaseRunId();
       output.show(true);
+      runsRoot = await runArtifactStore.ensureRunsDir(root);
       output.appendLine(`Running script: ${script.uri.fsPath}`);
       output.appendLine(`VM Service: ${session.currentUrl ?? '(none)'}`);
       let result: RunResult;

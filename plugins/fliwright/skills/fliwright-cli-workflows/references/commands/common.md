@@ -70,6 +70,6 @@ fliwright run --vm-url "$VM_URL" --scenario logged-in --json \
   --output artifacts/report.json --deadline 180000
 ```
 
-Run root precedence is explicit --runs-root, project config, FLIWRIGHT_RUNS_ROOT, then ~/.fliwright/projects/<project-key>/runs. Offline queries ensure that directory and default project metadata exist. The CI example uses an explicit root for portable upload.
+Run root precedence is explicit --runs-root, FLIWRIGHT_RUNS_ROOT, project config, then <project>/.fliwright/runs. Relative roots resolve from the project config directory. Configure cacheRoot independently (default <project>/.fliwright/cache). Offline queries use the same resolved run directory. The CI example uses an explicit root for portable upload.
 
 The named scenario and test selectors must exist in the target project. Use --device-id with a bridge-enabled target instead of --vm-url for an owned launch. Preserve the runner exit code. Upload artifacts/runs, report.json and junit.xml in an always-run CI step, including failed/cancelled runs; artifact finalization can itself fail, so retain any paths supplied in data. --output is JSON, --junit-output is XML. Investigate offline with artifacts show/failures/timeline using the same --runs-root; select testId and attemptId when multiple attempts exist.

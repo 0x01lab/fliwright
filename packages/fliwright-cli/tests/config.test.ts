@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadConfig, defineConfig, type FliwrightCliConfig } from '../src/config.js';
+import { loadConfig, defineConfig, resolveProjectConfig, type FliwrightCliConfig } from '../src/config.js';
 
 describe('defineConfig', () => {
   it('fills defaults for omitted optional fields', () => {
@@ -55,6 +55,25 @@ describe('loadConfig', () => {
     expect(config.testDir).toBe('.fliwright/tests');
     expect(config.reporter).toBe('pretty');
     expect(config.timeout).toBe(30000);
+  });
+
+  it('resolves configurable storage from the project file even when started in a child directory', async () => {
+    const child = join(tmpDir, 'lib/features');
+    await mkdir(child, { recursive: true });
+    await writeFile(join(tmpDir, 'fliwright.config.ts'), `export default { runsRoot: 'evidence/runs', cacheRoot: 'scratch' };`);
+    expect(await resolveProjectConfig(child, {}, {})).toMatchObject({
+      runsRoot: join(tmpDir, 'evidence/runs'), cacheRoot: join(tmpDir, 'scratch'),
+    });
+    expect(await resolveProjectConfig(child, { runsRoot: 'one-off' }, { FLIWRIGHT_RUNS_ROOT: 'ci-runs' }))
+      .toMatchObject({ runsRoot: join(tmpDir, 'one-off'), cacheRoot: join(tmpDir, 'scratch') });
+    expect(await resolveProjectConfig(child, {}, { FLIWRIGHT_RUNS_ROOT: 'ci-runs' }))
+      .toMatchObject({ runsRoot: join(tmpDir, 'ci-runs'), cacheRoot: join(tmpDir, 'scratch') });
+  });
+
+  it('defaults both storage roots inside the project', async () => {
+    expect(await resolveProjectConfig(tmpDir, {}, {})).toMatchObject({
+      runsRoot: join(tmpDir, '.fliwright/runs'), cacheRoot: join(tmpDir, '.fliwright/cache'),
+    });
   });
 
   it('loads values from fliwright.config.ts', async () => {

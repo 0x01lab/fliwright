@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { join, relative } from 'node:path';
 import { AiArtifactStore } from './AiArtifactStore.js';
 import { validateJsonSchema } from './AiSchemaValidator.js';
 import { AiAssertionError, AiDisabledError, AiInvocationError, AiParseError, AiTimeoutError } from './errors.js';
@@ -27,15 +29,22 @@ export class AiRuntime {
   get timelineMetadata(): { provider?: string; artifactsDir?: string } {
     return {
       ...(this.config.provider ? { provider: this.config.provider } : {}),
-      ...(this.config.artifactsDir ? { artifactsDir: this.config.artifactsDir } : {}),
+      ...(this.context.attemptDir ? { artifactsDir: 'artifacts/ai' }
+        : this.config.artifactsDir ? { artifactsDir: this.config.artifactsDir } : {}),
     };
+  }
+
+  private artifactReference(directory: string | undefined): string | undefined {
+    return directory && this.context.attemptDir ? relative(this.context.attemptDir, directory).split('\\').join('/') : directory;
   }
 
   async ask(input: AiRequest, call?: AiCallContext): Promise<AiResponse> {
     const adapter = this.resolveAdapter();
-    const callId = `ai-${++this.callCounter}`;
+    const callId = this.context.attemptDir ? `ai-${randomUUID()}` : `ai-${++this.callCounter}`;
     const timeoutMs = input.timeoutMs ?? this.config.timeoutMs ?? 60_000;
-    const store = this.config.artifactsDir ? new AiArtifactStore(this.config.artifactsDir) : undefined;
+    const store = this.context.attemptDir
+      ? new AiArtifactStore(join(this.context.attemptDir, 'artifacts/ai'), true)
+      : this.config.artifactsDir ? new AiArtifactStore(this.config.artifactsDir) : undefined;
     const artifactsDir = store
       ? await store.createInvocationDir({
           runId: call?.runId ?? this.context.runId,
@@ -68,9 +77,9 @@ export class AiRuntime {
       await store?.writeResponseText(artifactsDir!, response.text);
       if (json !== undefined) await store?.writeResponseJson(artifactsDir!, json);
       await store?.writeMeta(artifactsDir!, buildMeta(adapter.name, 'passed', startedAt, response.raw));
-      return { text: response.text, json, metadata: response.metadata, artifactsDir };
+      return { text: response.text, json, metadata: response.metadata, artifactsDir: this.artifactReference(artifactsDir) };
     } catch (error) {
-      const normalized = normalizeError(error, artifactsDir);
+      const normalized = normalizeError(error, this.artifactReference(artifactsDir));
       await store?.writeMeta(artifactsDir!, {
         provider: adapter.name,
         status: 'failed',
@@ -215,7 +224,15 @@ function parseJsonIfNeeded(text: string, responseFormat: AiRequest['responseForm
 }
 
 function normalizeError(error: unknown, artifactsDir?: string): AiInvocationError {
-  if (error instanceof AiInvocationError) return error;
+  if (error instanceof AiInvocationError) {
+    if (!artifactsDir || error.artifactsDir === artifactsDir) return error;
+    // Preserve error subclasses, stack and provider fields while replacing
+    // the machine-local location with the attempt-owned reference.
+    return Object.create(Object.getPrototypeOf(error), {
+      ...Object.getOwnPropertyDescriptors(error),
+      artifactsDir: { value: artifactsDir, enumerable: true, configurable: true },
+    }) as AiInvocationError;
+  }
   if (error instanceof Error) return new AiInvocationError(error.message, { cause: error, artifactsDir });
   return new AiInvocationError(String(error), { artifactsDir });
 }

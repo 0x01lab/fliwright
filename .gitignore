@@ -24,6 +24,7 @@ docs/features
 # Fliwright runtime and test artifacts (keep authored tests, mocks, and forms).
 **/.fliwright/config.json
 **/.fliwright/ai/
+**/.fliwright/cache/
 **/.fliwright/leases/
 **/.fliwright/recordings/
 **/.fliwright/runs/

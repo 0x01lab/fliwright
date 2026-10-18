@@ -31,7 +31,9 @@ interface IndexMap {
  * Uses `node:fs/promises` (NOT `vscode.workspace.fs`) for testability.
  */
 export class TestStatusStore {
-  constructor(private readonly runsDir: string) {}
+  constructor(private readonly root: string | (() => string)) {}
+
+  private get runsDir(): string { return typeof this.root === 'function' ? this.root() : this.root; }
 
   get indexUri(): string {
     return join(this.runsDir, 'index.json');

@@ -1,6 +1,7 @@
+import { inspectionOutput } from '../InspectionOutput.js';
 import { CliError } from '../CommandRegistry.js';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 import {
   actionInteraction,
   dragInteraction,
@@ -134,7 +135,7 @@ export async function appScreenshotCommand(
   deps: AppSessionDeps = {},
 ) {
   return withAppSession(options, async ({ driver }) => {
-    const output = resolve(options.cwd ?? process.cwd(), options.output ?? '.fliwright/artifacts/screenshot.png');
+    const output = await inspectionOutput(options, 'screenshot');
     const screenshot = await driver.page.screenshot({ pixelRatio: options.pixelRatio });
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, screenshot);

@@ -1,9 +1,10 @@
+import { inspectionOutput } from '../InspectionOutput.js';
 import { artifactsFailuresCommand } from './artifact-query.js';
 import { tddStatusCommand } from './tdd.js';
 import { mockListCommand } from './mock-management.js';
 import { CliError } from '../CommandRegistry.js';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 import { diagnosticsInteraction, findInteraction, hotReloadAndSnapInteraction, snapInteraction } from '../capabilities/interaction.js';
 import { withAppSession, type AppSessionOptions, type AppSessionDeps } from '../capabilities/session.js';
 
@@ -25,7 +26,7 @@ export async function appReloadCommand(options: AppSessionOptions & { depth?: nu
     const { screenshot: base64, ...data } = result;
     let screenshot: { path: string } | undefined;
     if (base64) {
-      const path = resolve(options.cwd ?? process.cwd(), options.output ?? `.fliwright/artifacts/reload-${Date.now()}.png`);
+      const path = await inspectionOutput(options, 'reload');
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, Buffer.from(base64, 'base64'));
       screenshot = { path };
@@ -54,7 +55,7 @@ export async function appDebugSnapshotCommand(options: AppSessionOptions & {
     })) : undefined;
     const sourceMap = options.includeSourceMap ? await section('sourceMap', () => driver.page.sourceMap({ ...options, limit: options.sourceMapLimit })) : undefined;
     const screenshot = options.includeScreenshot ? await section('screenshot', async () => {
-      const path = resolve(options.cwd ?? process.cwd(), options.output ?? `.fliwright/artifacts/debug-${Date.now()}.png`);
+      const path = await inspectionOutput(options, 'debug');
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, await driver.page.screenshot({ pixelRatio: options.pixelRatio }));
       return { path, mimeType: 'image/png' };

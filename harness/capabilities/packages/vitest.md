@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/vitest"
 path: "packages/fliwright-vitest"
-source_fingerprint: "864d0a478af92d5c0c7a35961b8ba90f00291f6c0dd1688802facf1fbef670a5"
+source_fingerprint: "379d2e324b611e0c9db253b0b14395b19822cb2ef02654dc85057eaa893c1277"
 generated: true
 ---
 

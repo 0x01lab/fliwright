@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 
 export const FLIWRIGHT_RUNS_ROOT_ENV = 'FLIWRIGHT_RUNS_ROOT';
 
@@ -14,7 +15,7 @@ export interface ProjectRunsRootResult {
 export interface ResolveFliwrightRunsRootOptions {
   /** Explicit root from config or caller options. Highest priority. */
   runsRoot?: string;
-  /** Workspace/project root used for the default per-project artifact path. */
+  /** Project root used for default and relative artifact paths. */
   projectRoot?: string;
   /** Environment source. Defaults to process.env. */
   env?: NodeJS.ProcessEnv;
@@ -23,15 +24,33 @@ export interface ResolveFliwrightRunsRootOptions {
 }
 
 export interface EnsureFliwrightRunsRootOptions extends ResolveFliwrightRunsRootOptions {
-  /** Project path written to meta.json. Defaults to projectRoot. */
+  /** Project identity supplied by editor integrations. */
   projectPath?: string;
+}
+
+/** Locate the project config from nested working directories without loading TypeScript. */
+export function resolveFliwrightProjectRoot(start = process.cwd()): string {
+  const initial = resolve(start);
+  let directory = initial;
+  let packageRoot: string | undefined;
+  while (true) {
+    if (existsSync(join(directory, 'fliwright.config.ts'))) return directory;
+    if (!packageRoot && existsSync(join(directory, 'package.json'))) packageRoot = directory;
+    const parent = dirname(directory);
+    if (parent === directory) return packageRoot ?? initial;
+    directory = parent;
+  }
 }
 
 export function resolveFliwrightRunsRoot(options: ResolveFliwrightRunsRootOptions = {}): string {
   const env = options.env ?? process.env;
-  return options.runsRoot
-    ?? env[FLIWRIGHT_RUNS_ROOT_ENV]
-    ?? projectRunsRoot(options.projectRoot ?? process.cwd(), options).runsDir;
+  return resolve(options.projectRoot ?? resolveFliwrightProjectRoot(),
+    options.runsRoot ?? env[FLIWRIGHT_RUNS_ROOT_ENV] ?? '.fliwright/runs');
+}
+
+/** Resolve reusable and temporary data independently of the run history. */
+export function resolveFliwrightCacheRoot(options: { cacheRoot?: string; projectRoot?: string } = {}): string {
+  return resolve(options.projectRoot ?? resolveFliwrightProjectRoot(), options.cacheRoot ?? '.fliwright/cache');
 }
 
 export async function ensureFliwrightRunsRoot(
@@ -40,14 +59,6 @@ export async function ensureFliwrightRunsRoot(
   const runsDir = resolveFliwrightRunsRoot(options);
   await mkdir(runsDir, { recursive: true });
 
-  const projectPath = options.projectPath ?? options.projectRoot ?? process.cwd();
-  const defaultRoot = projectRunsRoot(projectPath, options);
-  if (runsDir === defaultRoot.runsDir) {
-    await writeFile(join(defaultRoot.rootDir, 'meta.json'), JSON.stringify({
-      projectPath,
-      updatedAt: Date.now(),
-    }, null, 2), 'utf8');
-  }
   return runsDir;
 }
 

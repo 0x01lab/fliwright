@@ -1,5 +1,6 @@
 import {
   ensureFliwrightRunsRoot,
+  resolveFliwrightProjectRoot,
   FLIWRIGHT_RUNS_ROOT_ENV,
   TIMELINE_FILE_NAME,
   parseTimelineData,
@@ -70,7 +71,7 @@ export class RunFinalizationError extends Error {
 }
 
 export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promise<CliRunResult> {
-  const cwd = options.cwd ?? process.cwd();
+  const cwd = resolveFliwrightProjectRoot(options.cwd);
   const config = await resolveProjectConfig(cwd, {
     ...(options.recordingMode ? { recording: { mode: options.recordingMode } } : {}), runsRoot: options.runsRoot, defaultScenario: options.scenario, scenarioMode: options.scenarioMode,
   });
@@ -228,6 +229,7 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
     args,
     {
       ...process.env,
+      FLIWRIGHT_PROJECT_ROOT: options.cwd,
       ...(options.sharedConfig ? { FLIWRIGHT_CONFIG: JSON.stringify(options.sharedConfig) } : {}),
       FLIWRIGHT_VM_URL: options.vmUrl,
       FLIWRIGHT_SCREENSHOT_MODE: options.screenshot,

@@ -24,7 +24,7 @@ Use when the Skill needs a visual artifact to inspect or compare.
 | JSON field | CLI syntax | Type / values | Required | Schema default | Meaning |
 | --- | --- | --- | --- | --- | --- |
 | `vmUrl` | `--vm-url` | string | no | — | Dart VM Service websocket URL. Omit to use project/environment endpoint resolution where supported. (minLength=1) |
-| `output` | `--output` | string | no | — | PNG destination; default .fliwright/artifacts/screenshot.png. (minLength=1) |
+| `output` | `--output` | string | no | — | PNG destination; otherwise a unique file in configured cacheRoot/inspect (default .fliwright/cache/inspect). (minLength=1) |
 | `pixelRatio` | `--pixel-ratio` | number | no | — | Runtime screenshot scale. (exclusiveMinimum=0) |
 
 Requiredness/defaults above come from the input schema. Conditional requirements and effective implementation defaults are explained above; “—” means no Zod default. Every command also accepts [common options](./common.md#common-options). JSON keys use camelCase; flags use kebab-case. Positional fields are supplied positionally or in --input, not as flags.
@@ -45,7 +45,7 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 
 | Data field / variant | Meaning |
 | --- | --- |
-| path | Written PNG path, default .fliwright/artifacts/screenshot.png. |
+| path | Written PNG path; default is a unique capture in cacheRoot/inspect (project default .fliwright/cache/inspect). |
 | bytes | PNG byte length. |
 
 ## Effects and failure handling

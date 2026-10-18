@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "7084dfd4b5d3c0a9542bbfabe11e2241942528562e576a0d8065ee507706b3e1"
+source_fingerprint: "4b653789612e333c23b16f9e81bb69a1966b7ced858026b727f5b1a376e408c5"
 generated: true
 ---
 
@@ -437,6 +437,8 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ResolvedFliwrightConfig`
 - `ResolvedScenario`
 - `ResolvedSelector`
+- `resolveFliwrightCacheRoot`
+- `resolveFliwrightProjectRoot`
 - `resolveFliwrightRunsRoot`
 - `ResolveFliwrightRunsRootOptions`
 - `resolveRecordingArtifact`

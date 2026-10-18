@@ -1,3 +1,6 @@
+import { join } from 'node:path';
+import { resolveFliwrightCacheRoot } from '../runArtifacts.js';
+import { readFliwrightEnvironment } from '../RecordingConfig.js';
 import { CliJsonAdapter } from './adapters/CliJsonAdapter.js';
 import { ClaudeCliAdapter } from './adapters/ClaudeCliAdapter.js';
 import { CodexCliAdapter } from './adapters/CodexCliAdapter.js';
@@ -11,7 +14,7 @@ export function resolveAiConfig(config: AiRuntimeConfig | undefined): AiRuntimeC
   return {
     provider,
     timeoutMs: config?.timeoutMs ?? parsePositiveInt(process.env.FLIWRIGHT_AI_TIMEOUT_MS) ?? 60_000,
-    artifactsDir: config?.artifactsDir ?? process.env.FLIWRIGHT_AI_ARTIFACTS_DIR ?? '.fliwright/ai',
+    artifactsDir: config?.artifactsDir ?? process.env.FLIWRIGHT_AI_ARTIFACTS_DIR ?? join(resolveFliwrightCacheRoot({ cacheRoot: readFliwrightEnvironment(process.env).cacheRoot, projectRoot: process.env.FLIWRIGHT_PROJECT_ROOT }), 'inspect/ai'),
     cache: config?.cache ?? parseAiCache(process.env.FLIWRIGHT_AI_CACHE),
     maxConcurrency: config?.maxConcurrency ?? 1,
     enabled: config?.enabled ?? parseAiEnabled(process.env.FLIWRIGHT_AI_ENABLED, provider),

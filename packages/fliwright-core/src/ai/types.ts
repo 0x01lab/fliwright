@@ -95,6 +95,8 @@ export interface AiAdapter {
 }
 
 export interface AiRuntimeContext {
+  /** Owning attempt; invocation evidence cannot escape this directory. */
+  attemptDir?: string;
   page?: Page;
   driver?: FliwrightDriver;
   testName?: string;

@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { resolveFliwrightCacheRoot } from './runArtifacts.js';
 import { Page } from './Page.js';
 import { AppInstance } from './AppInstance.js';
 import { DesignQaClient } from './DesignQaClient.js';
@@ -18,7 +20,7 @@ import { SnapshotStore } from './SnapshotStore.js';
 import { MultiDimensionalHealingStrategy } from './strategies/MultiDimensionalHealingStrategy.js';
 import type { TestResult, VMServiceEvent } from './types.js';
 
-export interface DriverOptions { plugins?: FliwrightPlugin[]; }
+export interface DriverOptions { plugins?: FliwrightPlugin[]; cacheRoot?: string; projectRoot?: string; }
 
 export class FliwrightDriver {
   private registry = new PluginRegistry();
@@ -46,7 +48,7 @@ export class FliwrightDriver {
   get healing(): SelfHealingEngine {
     if (!this._healing) {
       this._healing = new SelfHealingEngine(
-        new SnapshotStore(),
+        new SnapshotStore(join(resolveFliwrightCacheRoot(this.options), 'healing')),
         new MultiDimensionalHealingStrategy(),
       );
     }
@@ -67,7 +69,7 @@ export class FliwrightDriver {
     return this.registry.getStateAdapter('riverpod');
   }
 
-  constructor(options: DriverOptions = {}) {
+  constructor(private readonly options: DriverOptions = {}) {
     for (const plugin of options.plugins ?? []) { this.registry.register(plugin); }
   }
 

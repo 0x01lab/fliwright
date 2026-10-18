@@ -9,9 +9,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('PersistentTestExecutor.rerun', () => {
   it('places default artifacts under the project root for file and directory config roots', () => {
-    expect(defaultArtifactsRoot('/repo/app/vitest.config.ts')).toBe('/repo/app/.fliwright/tdd');
-    expect(defaultArtifactsRoot('/repo/app/custom.vitest.mjs')).toBe('/repo/app/.fliwright/tdd');
-    expect(defaultArtifactsRoot('/repo/app')).toBe('/repo/app/.fliwright/tdd');
+    expect(defaultArtifactsRoot('/repo/app/vitest.config.ts')).toBe('/repo/app/.fliwright/runs');
+    expect(defaultArtifactsRoot('/repo/app/custom.vitest.mjs')).toBe('/repo/app/.fliwright/runs');
+    expect(defaultArtifactsRoot('/repo/app')).toBe('/repo/app/.fliwright/runs');
   });
 
   it('does not restore runtime env before boot has applied it', async () => {
@@ -34,7 +34,7 @@ describe('PersistentTestExecutor.rerun', () => {
 
     await executor.boot({
       configRoot: resolve(__dirname, '../../spike/fixture-project/vitest.config.ts'),
-      artifactsRoot,
+      runsRoot: artifactsRoot,
       vmServiceUrl: 'ws://runtime/ws',
       scenarioMode: 'managed-start',
       driverProvider: async () => ({}),
@@ -62,7 +62,7 @@ describe('PersistentTestExecutor.rerun', () => {
 
     await executor.boot({
       configRoot: resolve(fixtureRoot, 'vitest.config.ts'),
-      artifactsRoot,
+      runsRoot: artifactsRoot,
       vmServiceUrl: 'ws://runtime/ws',
       driverProvider: async () => ({}),
     });
@@ -81,7 +81,7 @@ describe('PersistentTestExecutor.rerun', () => {
     }
   }, 30_000);
 
-  it('reads the current attempt evidence from actual Fliwright fixtures across reruns', async () => {
+  it.each(['explicit', 'preset'] as const)('reads current attempt evidence in one shared root across reruns (%s)', async (storage) => {
     const project = await realpath(await mkdtemp(resolve(tmpdir(), 'fliwright-tdd-canonical-')));
     const artifactsRoot = resolve(project, 'artifacts');
     const testDir = resolve(project, '.fliwright/tests');
@@ -89,7 +89,11 @@ describe('PersistentTestExecutor.rerun', () => {
     const configFile = resolve(project, 'vitest.config.mjs');
     const fixtureApi = resolve(__dirname, '../../../fliwright-vitest/src/index.ts');
     await mkdir(testDir, { recursive: true });
-    await writeFile(configFile, `export default { root: ${JSON.stringify(project)}, test: { include: ['.fliwright/tests/*.test.ts'] } };`);
+    await writeFile(configFile, storage === 'preset' ? `
+      import { fliwrightPreset } from ${JSON.stringify(import.meta.resolve('@fliwright/vitest/preset'))};
+      export default { root: ${JSON.stringify(project)}, ...fliwrightPreset({ projectRoot: ${JSON.stringify(project)},
+        runsRoot: 'artifacts', cacheRoot: 'scratch' }) };
+    ` : `export default { root: ${JSON.stringify(project)}, test: { include: ['.fliwright/tests/*.test.ts'] } };`);
     await writeFile(testFile, `
       import { createFliwrightTest } from ${JSON.stringify(fixtureApi)};
       const driver = {
@@ -105,7 +109,7 @@ describe('PersistentTestExecutor.rerun', () => {
     `);
     const executor = new PersistentTestExecutor();
     try {
-      await executor.boot({ configRoot: configFile, artifactsRoot, driverProvider: async () => ({}) });
+      await executor.boot({ configRoot: configFile, runsRoot: storage === 'explicit' ? artifactsRoot : undefined, driverProvider: async () => ({}) });
       const first = await executor.rerun(testFile, 'beta fails');
       expect(first.status).toBe('red');
       expect(first.failureDetails, JSON.stringify(first)).toMatchObject({
@@ -116,6 +120,9 @@ describe('PersistentTestExecutor.rerun', () => {
       const second = await executor.rerun(testFile, 'beta fails');
       expect(second.failureDetails?.assertion?.actual).toBe('current attempt error');
       expect(second.timelinePath).not.toBe(first.timelinePath);
+      expect(first.timelinePath).toContain(`${artifactsRoot}/run-`);
+      expect(second.timelinePath).toContain(`${artifactsRoot}/run-`);
+      expect(await readdir(artifactsRoot)).not.toContain('runs');
     } finally {
       await executor.dispose();
       await rm(project, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -132,7 +139,7 @@ describe('PersistentTestExecutor.rerun', () => {
       test('explicit only', () => writeFileSync(${JSON.stringify(marker)}, 'ran'));`);
     const executor = new PersistentTestExecutor();
     try {
-      await executor.boot({ configRoot: config, artifactsRoot: resolve(project, 'artifacts'), driverProvider: async () => ({}) });
+      await executor.boot({ configRoot: config, runsRoot: resolve(project, 'artifacts'), driverProvider: async () => ({}) });
       await expect(stat(marker)).rejects.toThrow();
       const result = await executor.rerun(testFile, 'explicit only');
       expect(result.status, JSON.stringify(result)).toBe('green');

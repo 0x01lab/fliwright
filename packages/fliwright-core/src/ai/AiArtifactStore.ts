@@ -10,13 +10,13 @@ export interface AiArtifactPathInput {
 }
 
 export class AiArtifactStore {
-  constructor(private readonly rootDir: string) {}
+  constructor(private readonly rootDir: string, private readonly attemptLayout = false) {}
 
   async createInvocationDir(input: AiArtifactPathInput): Promise<string> {
     const run = sanitizeSegment(input.runId ?? 'run');
     const test = sanitizeSegment(input.testName ?? 'unknown-test');
     const call = sanitizeSegment(input.callId);
-    const dir = resolve(this.rootDir, run, test, call);
+    const dir = this.attemptLayout ? resolve(this.rootDir, call) : resolve(this.rootDir, run, test, call);
     await mkdir(dir, { recursive: true });
     return dir;
   }

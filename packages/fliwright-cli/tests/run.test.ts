@@ -598,7 +598,7 @@ describe('runCommand', () => {
         resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
         onVmResolved: (url) => { capturedUrl = url; },
       });
-      expect(runResult.artifacts!.outputDir).toContain(join(home, '.fliwright', 'projects'));
+      expect(runResult.artifacts!.outputDir).toContain(join(tmpDir, '.fliwright/runs'));
       await expect(stat(runResult.artifacts!.reportPath!)).resolves.toBeDefined();
       return runResult;
     });
@@ -607,7 +607,7 @@ describe('runCommand', () => {
     expect(result.passed).toBe(true);
     expect(result.totalTests).toBe(1);
     expect(result.artifacts?.reportPath).toBeDefined();
-    expect(result.artifacts!.outputDir).not.toContain(join(tmpDir, '.fliwright', 'runs'));
+    expect(result.artifacts!.outputDir).toContain(join(tmpDir, '.fliwright', 'runs'));
 
     await rm(tmpDir, { recursive: true, force: true });
   });
@@ -1160,7 +1160,7 @@ describe('runCommand', () => {
 
     let expectedHomeRoot = '';
     const result = await withIsolatedHome(async (home) => {
-      expectedHomeRoot = join(home, '.fliwright', 'projects');
+      expectedHomeRoot = join(tmpDir, '.fliwright/runs');
       const run = await runCommand({
         testPattern: 'timeline.test.ts',
         reporter: 'json',

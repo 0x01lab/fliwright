@@ -34,6 +34,29 @@ test('increments the counter', async ({ page }) => {
 Run `npx fliwright doctor` when the Flutter VM Service cannot be discovered or
 the bridge does not report its capabilities.
 
+## Artifact Storage
+
+Run history defaults to `.fliwright/runs/` inside the project. Reusable healing
+state and temporary inspection captures use `.fliwright/cache/`. Configure both
+in `fliwright.config.ts`; relative paths resolve from that file's project root:
+
+```ts
+import { defineConfig } from '@fliwright/cli';
+
+export default defineConfig({
+  runsRoot: '.fliwright/runs',
+  cacheRoot: '.fliwright/cache',
+});
+```
+
+These fields are optional. `--runs-root` overrides `FLIWRIGHT_RUNS_ROOT`, which
+overrides the project setting. CLI, the Vitest preset, TDD and VS Code use the
+same resolved paths. Runs own their attempts' screenshots, snapshots, logs,
+Trace and AI records; temporary screenshots use unique files in `cache/inspect`.
+Ignore generated runs/cache contents in Git, keeping authored tests and mocks.
+Existing home-directory history is preserved; switching defaults does not move
+or delete it. Use `fliwright artifacts export` to save a portable report.
+
 ## Product Surface
 
 - **Core:** locator/action/assertion/wait, screenshots, timelines, failure

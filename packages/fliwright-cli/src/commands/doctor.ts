@@ -121,7 +121,7 @@ async function checkRecordingConfiguration(projectDir: string): Promise<CheckRes
       'FLIWRIGHT_SCENARIOS', 'FLIWRIGHT_SCENARIO_MODE'].filter((key) => process.env[key]);
     return [{
       name: 'Recording configuration', passed: true,
-      message: `mode=${config.recording.mode}, runsRoot=${config.runsRoot ?? 'project default'}, scenarios=${names.join(',') || '(none)'}, source=${environment.length ? `environment (${environment.join(',')}) > ` : ''}fliwright.config.ts/defaults`,
+      message: `mode=${config.recording.mode}, runsRoot=${config.runsRoot}, cacheRoot=${config.cacheRoot}, scenarios=${names.join(',') || '(none)'}, source=${environment.length ? `environment (${environment.join(',')}) > ` : ''}fliwright.config.ts/defaults`,
     }, {
       name: 'Automation paths', passed: true,
       message: Object.entries(config.paths).map(([key, value]) => `${key}=${value}`).join(', '),

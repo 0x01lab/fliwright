@@ -19,6 +19,8 @@ const DEFAULT_SCRIPTS: Record<string, string> = {
 const CONFIG_TEMPLATE = `import { defineConfig } from '@fliwright/cli';
 
 export default defineConfig({
+  runsRoot: '.fliwright/runs',
+  cacheRoot: '.fliwright/cache',
   // vmServiceUrl: 'ws://127.0.0.1:8181/ws',
   timeout: 30000,
   screenshot: 'file',
@@ -75,6 +77,8 @@ const TSCONFIG_TEMPLATE = `{
 `;
 
 const GITIGNORE_LINES = [
+  '.fliwright/runs/',
+  '.fliwright/cache/',
   '.fliwright/ai/',
   '.fliwright/failures/',
 ];

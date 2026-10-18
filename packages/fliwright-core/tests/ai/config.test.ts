@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AiDisabledError, resolveAiConfig } from '../../src/index.js';
 import { AiRuntime, CodexCliAdapter, MockAiAdapter } from '../../src/index.js';
@@ -31,7 +32,7 @@ describe('resolveAiConfig', () => {
     expect(config.provider).toBe('none');
     expect(config.enabled).toBe(false);
     expect(config.timeoutMs).toBe(60_000);
-    expect(config.artifactsDir).toBe('.fliwright/ai');
+    expect(config.artifactsDir).toBe(resolve('.fliwright/cache/inspect/ai'));
     expect(config.cache).toBe('off');
   });
 

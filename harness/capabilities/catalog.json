@@ -25,6 +25,7 @@
       "sourceFiles": [
         "packages/fliwright-cli/src/ArtifactReferences.ts",
         "packages/fliwright-cli/src/CommandRegistry.ts",
+        "packages/fliwright-cli/src/InspectionOutput.ts",
         "packages/fliwright-cli/src/RecordingReplay.ts",
         "packages/fliwright-cli/src/WorkflowContext.ts",
         "packages/fliwright-cli/src/capabilities/form.ts",
@@ -95,7 +96,7 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "0a4aa4d8a31da735632923edd2b2c1a5b7f4834190e43b35ad90f2f897ab08ac"
+      "sourceFingerprint": "faf809f0c91ef671376e7c7e735f2010001e02b41ef197c67428dbc16b7606aa"
     },
     {
       "name": "@fliwright/core",
@@ -630,6 +631,8 @@
         "ResolvedFliwrightConfig",
         "ResolvedScenario",
         "ResolvedSelector",
+        "resolveFliwrightCacheRoot",
+        "resolveFliwrightProjectRoot",
         "resolveFliwrightRunsRoot",
         "ResolveFliwrightRunsRootOptions",
         "resolveRecordingArtifact",
@@ -780,7 +783,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "7084dfd4b5d3c0a9542bbfabe11e2241942528562e576a0d8065ee507706b3e1"
+      "sourceFingerprint": "4b653789612e333c23b16f9e81bb69a1966b7ced858026b727f5b1a376e408c5"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -1006,7 +1009,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "5dcdecc346f394002733f0f5ed7c3358710ece21582e482493d5001180d9b803"
+      "sourceFingerprint": "0ef4e292dbe5bb0a96f16f00fd19a18ef1f53f0f84dbf9127f27d18aeff79c02"
     },
     {
       "name": "@fliwright/vitest",
@@ -1073,7 +1076,7 @@
         "./runner"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "864d0a478af92d5c0c7a35961b8ba90f00291f6c0dd1688802facf1fbef670a5"
+      "sourceFingerprint": "379d2e324b611e0c9db253b0b14395b19822cb2ef02654dc85057eaa893c1277"
     },
     {
       "name": "fliwright_bridge",
@@ -1587,7 +1590,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "12de57876e07151ed6c574934bc164f88b05a0ebd738a3bc3e54215d42b1a188"
+      "sourceFingerprint": "c865b21dcd1c7a185c89a7432e54053ad5c6e922c63165a0dc138fd2fb3b6fb6"
     }
   ]
 }

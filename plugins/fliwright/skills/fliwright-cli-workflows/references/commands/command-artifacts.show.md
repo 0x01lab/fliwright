@@ -18,7 +18,7 @@ Use as the offline evidence entry point, including after the app has stopped.
 - No live app required by the registry. Check command-specific runtime requirements below.
 - No persistent session required. See usage for finite/session variants.
 - Omitting runId selects the newest available run. With no runs, report is null; this is not proof a test passed.
-- Root resolution uses explicit runsRoot, project config, FLIWRIGHT_RUNS_ROOT, then ~/.fliwright/projects/<project-key>/runs. Inspect evidence status before treating interrupted runs as complete.
+- Root resolution uses explicit runsRoot, FLIWRIGHT_RUNS_ROOT, project config, then <project>/.fliwright/runs. Relative roots resolve from the project config directory. Inspect evidence status before treating interrupted runs as complete.
 - allowPartial tolerates an unreadable report when a manifest is available; reportIssue records the gap.
 
 ## Input
@@ -26,7 +26,7 @@ Use as the offline evidence entry point, including after the app has stopped.
 | JSON field | CLI syntax | Type / values | Required | Schema default | Meaning |
 | --- | --- | --- | --- | --- | --- |
 | `runId` | `positional runId` | string | no | — | Saved run id; omission selects the latest available run where supported. (minLength=1) |
-| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default ~/.fliwright/projects/<project-key>/runs. (minLength=1) |
+| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default <project>/.fliwright/runs. Relative paths use the project root. (minLength=1) |
 | `allowPartial` | `--allow-partial` | boolean | no | — | Tolerate unreadable report JSON when a manifest exists; export also tolerates missing references and reports them. |
 
 Requiredness/defaults above come from the input schema. Conditional requirements and effective implementation defaults are explained above; “—” means no Zod default. Every command also accepts [common options](./common.md#common-options). JSON keys use camelCase; flags use kebab-case. Positional fields are supplied positionally or in --input, not as flags.

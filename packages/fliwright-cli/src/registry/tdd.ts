@@ -1,14 +1,14 @@
 import { z } from 'zod';
 import { TddRuntime } from '@fliwright/tdd';
 import { tddStatusCommand, tddSyncCommand } from '../commands/tdd.js';
-import { resolve } from 'node:path';
+import { dirname, extname, resolve } from 'node:path';
 import { ScenarioResolver } from '@fliwright/core';
 import { analyzeInteractionSpecCoverage, validateInteractionSpec, DevAssistCoordinator, defaultStatusFilePath } from '@fliwright/tdd';
 import { CliError, type CommandRegistry } from '../CommandRegistry.js';
 import type { ConnectionHost } from '../session/ConnectionHost.js';
 import { generateTestCommand } from '../commands/generate-test.js';
 import { GenerateTestParamsSchema } from './generation-schema.js';
-import { loadConfig } from '../config.js';
+import { loadConfig, resolveProjectConfig } from '../config.js';
 import { str, bool, positive } from './finite.js';
 const cycle = { testName: str, sync: z.enum(['none', 'reload', 'restart', 'auto']).optional(), fullReset: bool,
   changes: z.array(z.string()).optional(), autoEscalate: bool, timeoutMs: positive };
@@ -33,8 +33,9 @@ export function registerTdd(registry: CommandRegistry, host?: ConnectionHost): v
     if (input.vmUrl && input.deviceId) throw new CliError('INVALID_INPUT', 'Choose vmUrl or deviceId.', 2);
     if (input.scenario) { const config = await loadConfig(context.cwd); new ScenarioResolver(config.scenarios ?? {}).resolve(input.scenario); }
     const configRoot = input.config ? resolve(context.cwd, input.config) : context.cwd;
+    const sharedConfig = await resolveProjectConfig(extname(configRoot) ? dirname(configRoot) : configRoot);
     const vmServiceUrl = input.vmUrl ?? (!input.deviceId ? host!.status().endpoint : undefined);
-    const result = await host!.startRuntime({ configRoot, vmServiceUrl,
+    const result = await host!.startRuntime({ configRoot, vmServiceUrl, sharedConfig,
       app: input.deviceId ? { deviceId: input.deviceId, target: input.target, projectId: input.projectId ?? context.cwd, flutterArgs: input.flutterArgs, mode: input.mode } : undefined,
       launchMode: vmServiceUrl ? 'attach' : 'start', defaultScenario: input.scenario, statusFilePath: input.statusFile ?? defaultStatusFilePath(configRoot) });
     return result;
@@ -56,7 +57,7 @@ export function registerTdd(registry: CommandRegistry, host?: ConnectionHost): v
     flutterArgs: z.array(z.string()).optional(), scenario: str, keepAppAlive: bool }), async (input, context) => {
     if (host) return runCycle(input);
     if (!input.file) throw new CliError('INVALID_INPUT', 'Finite cycle requires --file; use --session for persistent focus.', 2);
-    const config = await loadConfig(context.cwd);
+    const config = await resolveProjectConfig(context.cwd);
     // Resolve early, before app startup. Worker fixtures own per-attempt scenario preparation.
     if (input.scenario) new ScenarioResolver(config.scenarios ?? {}).resolve(input.scenario);
     const runtime = new TddRuntime();
@@ -64,7 +65,7 @@ export function registerTdd(registry: CommandRegistry, host?: ConnectionHost): v
     context.signal.addEventListener('abort', abort, { once: true });
     try {
       context.signal.throwIfAborted();
-      await runtime.start({ configRoot: context.cwd, vmServiceUrl: input.vmUrl ?? config.vmServiceUrl,
+      await runtime.start({ configRoot: context.cwd, sharedConfig: config, vmServiceUrl: input.vmUrl ?? config.vmServiceUrl,
         app: input.deviceId ? { deviceId: input.deviceId, target: input.target, projectId: context.cwd, flutterArgs: input.flutterArgs } : undefined,
         defaultScenario: input.scenario });
       await runtime.focus(resolve(context.cwd, input.file), input.testName);

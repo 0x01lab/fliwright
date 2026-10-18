@@ -10,7 +10,7 @@ describe('RunArtifactStore', () => {
   it('retains canonical runs and their failure evidence when recording a newer test result', async () => {
     const home = mkdtempSync(join(tmpdir(), 'fliwright-canonical-history-'));
     const root = vscode.Uri.file('/repos/app');
-    const store = new RunArtifactStore({ homeDir: home });
+    const store = new RunArtifactStore({ runsRoot: join(home, 'runs') });
     const oldRun = join(await store.ensureRunsDir(root), 'earlier-failure');
     mkdirSync(join(oldRun, 'tests/failure/attempts/first'), { recursive: true });
     writeFileSync(join(oldRun, 'run.json'), JSON.stringify({ schemaVersion: 1, runId: 'earlier-failure', status: 'failed' }));
@@ -27,7 +27,7 @@ describe('RunArtifactStore', () => {
   it('records result.json and indexes the matching timeline run id', async () => {
     const home = mkdtempSync(join(tmpdir(), 'fliwright-home-'));
     const root = vscode.Uri.file('/repos/app');
-    const store = new RunArtifactStore({ homeDir: home });
+    const store = new RunArtifactStore({ runsRoot: join(home, 'runs') });
     const result: RunResult = {
       passed: true,
       totalTests: 1,
@@ -55,7 +55,7 @@ describe('RunArtifactStore', () => {
   it('indexes workspace run results by each vitest file path', async () => {
     const home = mkdtempSync(join(tmpdir(), 'fliwright-home-'));
     const root = vscode.Uri.file('/repos/app');
-    const store = new RunArtifactStore({ homeDir: home });
+    const store = new RunArtifactStore({ runsRoot: join(home, 'runs') });
     const result: RunResult = {
       passed: true,
       totalTests: 2,
@@ -81,7 +81,7 @@ describe('RunArtifactStore', () => {
   it('keeps the known file relPath when vitest reports only a basename', async () => {
     const home = mkdtempSync(join(tmpdir(), 'fliwright-home-'));
     const root = vscode.Uri.file('/repos/app');
-    const store = new RunArtifactStore({ homeDir: home });
+    const store = new RunArtifactStore({ runsRoot: join(home, 'runs') });
     const result: RunResult = {
       passed: true,
       totalTests: 1,
@@ -105,7 +105,7 @@ describe('RunArtifactStore', () => {
   it('prunes older test run directories once a newer result is indexed', async () => {
     const home = mkdtempSync(join(tmpdir(), 'fliwright-home-'));
     const root = vscode.Uri.file('/repos/app');
-    const store = new RunArtifactStore({ homeDir: home });
+    const store = new RunArtifactStore({ runsRoot: join(home, 'runs') });
     const result: RunResult = {
       passed: true,
       totalTests: 1,
@@ -143,7 +143,7 @@ describe('RunArtifactStore', () => {
   it('does not prune script run directories', async () => {
     const home = mkdtempSync(join(tmpdir(), 'fliwright-home-'));
     const root = vscode.Uri.file('/repos/app');
-    const store = new RunArtifactStore({ homeDir: home });
+    const store = new RunArtifactStore({ runsRoot: join(home, 'runs') });
     const scriptRunDir = join(store.runsDir(root), 'script-run');
     mkdirSync(scriptRunDir, { recursive: true });
     writeFileSync(join(scriptRunDir, 'timeline.json'), JSON.stringify({
@@ -174,7 +174,7 @@ describe('RunArtifactStore', () => {
   it('does not create a separate traces directory for new runs', async () => {
     const home = mkdtempSync(join(tmpdir(), 'fliwright-home-'));
     const root = vscode.Uri.file('/repos/app');
-    const store = new RunArtifactStore({ homeDir: home });
+    const store = new RunArtifactStore({ runsRoot: join(home, 'runs') });
 
     await store.ensureRunsDir(root);
 

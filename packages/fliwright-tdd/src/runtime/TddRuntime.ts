@@ -45,6 +45,7 @@ export class TddRuntime {
   private app?: { appId: string; wsUri: string; supportsRestart: boolean };
   private vmServiceUrl?: string;
   private configRoot?: string;
+  private sharedConfig?: StartOpts['sharedConfig'];
   private startAppParams?: import('../types.js').StartOpts['app'];
   private testScenario?: ResolvedScenario;
   private defaultScenarioName?: string;
@@ -68,7 +69,10 @@ export class TddRuntime {
   constructor(deps: TddRuntimeDeps = {}) {
     this.daemon = deps.daemon ?? new FlutterDaemonController(new SubprocessDaemonTransport());
     this.executor = deps.executor ?? new PersistentTestExecutor();
-    this.driverFactory = deps.driverFactory ?? (() => new FliwrightDriver());
+    this.driverFactory = deps.driverFactory ?? (() => new FliwrightDriver({
+      cacheRoot: this.sharedConfig?.cacheRoot,
+      projectRoot: this.configRoot && (/\.[cm]?[jt]s$/.test(this.configRoot) ? dirname(this.configRoot) : this.configRoot),
+    }));
     this.injectedBaseline = deps.baseline;
     this.baseline = deps.baseline;
     this.repairPlanner = deps.repair;
@@ -88,6 +92,7 @@ export class TddRuntime {
       this.launchMode = opts.launchMode ?? (opts.app ? 'start' : 'attach');
       this.startSignature = startSignature;
       this.configRoot = opts.configRoot;
+      this.sharedConfig = opts.sharedConfig;
       this.startAppParams = opts.app;
       this.statusFilePath = opts.statusFilePath;
 
@@ -120,7 +125,7 @@ export class TddRuntime {
       }
 
       this.baseline = this.baseline ?? this.injectedBaseline ?? new BaselineManager(this.driver);
-      await this.executor.boot({ scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach',
+      await this.executor.boot({ sharedConfig: this.sharedConfig, scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach',
         defaultScenario: opts.defaultScenario,
         configRoot: opts.configRoot,
         vmServiceUrl,
@@ -160,7 +165,7 @@ export class TddRuntime {
     return this.enqueueOperation(async () => {
       // Reboot the worker environment so each retry prepares the named scenario.
       await this.executor.dispose();
-      await this.executor.boot({ scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach', configRoot: this.configRoot!, vmServiceUrl: this.vmServiceUrl,
+      await this.executor.boot({ sharedConfig: this.sharedConfig, scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach', configRoot: this.configRoot!, vmServiceUrl: this.vmServiceUrl,
         defaultScenario: scenario.name, driverProvider: async () => this.requireDriver() });
       this.defaultScenarioName = scenario.name;
       this.testScenario = scenario;
@@ -237,7 +242,7 @@ export class TddRuntime {
     if (urlChanged && this.configRoot) {
       // Fixtures read FLIWRIGHT_VM_SERVICE_URL at run time; reboot so the new URL propagates.
       await this.executor.dispose().catch(() => undefined);
-      await this.executor.boot({ scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach',
+      await this.executor.boot({ sharedConfig: this.sharedConfig, scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach',
         configRoot: this.configRoot,
         defaultScenario: this.defaultScenarioName,
         vmServiceUrl,
@@ -613,6 +618,7 @@ function startOptsSignature(opts: StartOpts): string {
       }
       : undefined,
     configRoot: opts.configRoot,
+    sharedConfig: opts.sharedConfig,
     launchMode: opts.launchMode ?? (opts.app ? 'start' : 'attach'),
     scenario: opts.scenario ?? defaultScenario,
     vmServiceUrl: opts.vmServiceUrl,

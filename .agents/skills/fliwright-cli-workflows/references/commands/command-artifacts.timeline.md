@@ -25,7 +25,7 @@ Use to trace the sequence leading to a failure without reconnecting to Flutter.
 | JSON field | CLI syntax | Type / values | Required | Schema default | Meaning |
 | --- | --- | --- | --- | --- | --- |
 | `runId` | `positional runId` | string | no | — | Saved run id; omission selects the latest available run where supported. (minLength=1) |
-| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default ~/.fliwright/projects/<project-key>/runs. (minLength=1) |
+| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default <project>/.fliwright/runs. Relative paths use the project root. (minLength=1) |
 | `allowPartial` | `--allow-partial` | boolean | no | — | Tolerate unreadable report JSON when a manifest exists; export also tolerates missing references and reports them. |
 | `path` | `--path` | string | no | — | Direct path to timeline JSON; overrides run/test/attempt lookup. (minLength=1) |
 | `testId` | `--test-id` | string | no | — | Manifest test identity used to select a timeline. (minLength=1) |

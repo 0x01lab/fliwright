@@ -1,6 +1,6 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { FLIWRIGHT_RUNS_ROOT_ENV, RunArtifactStore, parseTimelineData } from '@fliwright/core';
+import { FLIWRIGHT_RUNS_ROOT_ENV, RunArtifactStore, parseTimelineData, resolveFliwrightRunsRoot, resolveFliwrightCacheRoot, mergeFliwrightConfig, readFliwrightEnvironment } from '@fliwright/core';
 import type { RunSessionResult } from '@fliwright/core';
 import { fileURLToPath } from 'node:url';
 import { startVitest, type Vitest } from 'vitest/node';
@@ -21,7 +21,8 @@ export interface BootOptions {
   configRoot: string;
   vmServiceUrl?: string;
   driverProvider: () => Promise<unknown>;
-  artifactsRoot?: string;
+  runsRoot?: string;
+  sharedConfig?: Partial<import('@fliwright/core').FliwrightProjectConfig>;
   defaultScenario?: string;
   scenarioMode?: 'managed-start' | 'attach';
 }
@@ -38,8 +39,8 @@ export class PersistentTestExecutor {
   private previousFailureTimeoutMs?: string;
   private previousRunsRoot?: string;
   private previousRunId?: string;
-  private artifactsRoot?: string;
-  private rerunCount = 0;
+  private previousSharedConfig?: string;
+  private previousProjectRoot?: string;
   private runsRoot?: string;
   private envApplied = false;
 
@@ -67,6 +68,11 @@ export class PersistentTestExecutor {
         (runtimeConfig.test ??= {}).runner ??= fileURLToPath(import.meta.resolve('@fliwright/vitest/runner'));
       } }] });
       if (!this.vitest) throw new Error('Failed to start Vitest');
+      // A directly used executor can receive storage through the project's
+      // Vitest preset. Resolve the same root the worker actually receives.
+      const workerRoot = this.vitest.projects[0]?.config.env?.FLIWRIGHT_RUNS_ROOT;
+      if (workerRoot) this.runsRoot = resolve(String(workerRoot));
+      await mkdir(this.runsRoot!, { recursive: true });
     } catch (error) {
       await this.dispose().catch(() => undefined);
       throw error;
@@ -81,11 +87,6 @@ export class PersistentTestExecutor {
   async rerun(file: string, testName?: string): Promise<TestRunOutcome> {
     if (!this.vitest || !this.reporter) throw new Error('PersistentTestExecutor not booted');
 
-    this.rerunCount++;
-    if (this.artifactsRoot) {
-      this.runsRoot = join(this.artifactsRoot, 'runs', `rerun-${this.rerunCount}`);
-      process.env[FLIWRIGHT_RUNS_ROOT_ENV] = this.runsRoot;
-    }
     this.reporter.drain();
     // The public API returns the exact run we requested. A reporter's next
     // event may instead belong to a watcher refresh (or contain no modules).
@@ -139,6 +140,8 @@ export class PersistentTestExecutor {
     restoreEnv('FLIWRIGHT_FAILURE_TIMEOUT_MS', this.previousFailureTimeoutMs);
     restoreEnv(FLIWRIGHT_RUNS_ROOT_ENV, this.previousRunsRoot);
     restoreEnv('FLIWRIGHT_RUN_ID', this.previousRunId);
+    restoreEnv('FLIWRIGHT_CONFIG', this.previousSharedConfig);
+    restoreEnv('FLIWRIGHT_PROJECT_ROOT', this.previousProjectRoot);
     this.envApplied = false;
   }
 
@@ -153,11 +156,17 @@ export class PersistentTestExecutor {
         process.env.FLIWRIGHT_VM_URL = opts.vmServiceUrl;
       }
 
-      const artifactsRoot = opts.artifactsRoot ?? defaultArtifactsRoot(opts.configRoot);
-      this.artifactsRoot = artifactsRoot;
-      await mkdir(artifactsRoot, { recursive: true });
-      this.runsRoot = join(artifactsRoot, 'runs');
-      process.env[FLIWRIGHT_RUNS_ROOT_ENV] = this.runsRoot;
+      const projectRoot = looksLikeConfigFile(opts.configRoot) ? resolve(opts.configRoot, '..') : resolve(opts.configRoot);
+      const config = mergeFliwrightConfig({ project: opts.sharedConfig, environment: readFliwrightEnvironment(process.env), explicit: { runsRoot: opts.runsRoot } });
+      this.runsRoot = resolveFliwrightRunsRoot({ projectRoot, runsRoot: config.runsRoot, env: {} });
+      await mkdir(this.runsRoot, { recursive: true });
+      if (opts.sharedConfig) {
+        config.cacheRoot = resolveFliwrightCacheRoot({ projectRoot, cacheRoot: config.cacheRoot });
+        config.runsRoot = this.runsRoot;
+        process.env.FLIWRIGHT_CONFIG = JSON.stringify(config);
+      }
+      process.env.FLIWRIGHT_PROJECT_ROOT = projectRoot;
+      if (config.runsRoot) process.env[FLIWRIGHT_RUNS_ROOT_ENV] = this.runsRoot;
       process.env.FLIWRIGHT_SCREENSHOT_MODE = process.env.FLIWRIGHT_SCREENSHOT_MODE ?? 'base64';
       process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS = process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS ?? '5000';
       this.envApplied = true;
@@ -178,6 +187,8 @@ export class PersistentTestExecutor {
     this.previousFailureTimeoutMs = process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS;
     this.previousRunsRoot = process.env[FLIWRIGHT_RUNS_ROOT_ENV];
     this.previousRunId = process.env.FLIWRIGHT_RUN_ID;
+    this.previousSharedConfig = process.env.FLIWRIGHT_CONFIG;
+    this.previousProjectRoot = process.env.FLIWRIGHT_PROJECT_ROOT;
   }
 
   private attemptDirectory(result: CollectedResult | undefined): string | undefined {
@@ -227,7 +238,7 @@ function restoreEnv(name: string, value: string | undefined): void {
 
 export function defaultArtifactsRoot(configRoot: string): string {
   const root = looksLikeConfigFile(configRoot) ? resolve(configRoot, '..') : resolve(configRoot);
-  return join(root, '.fliwright', 'tdd');
+  return join(root, '.fliwright', 'runs');
 }
 
 /**

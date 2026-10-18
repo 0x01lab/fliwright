@@ -1,3 +1,4 @@
+import { resolveFliwrightCacheRoot } from './runArtifacts.js';
 import type { WidgetSnapshot } from './types.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -18,7 +19,7 @@ export class SnapshotStore {
   private readonly baseDir: string;
 
   constructor(baseDir?: string) {
-    this.baseDir = baseDir ?? path.join(process.cwd(), '.fliwright', 'snapshots');
+    this.baseDir = baseDir ?? path.join(resolveFliwrightCacheRoot(), 'healing');
   }
 
   load(testName: string, selector: string): WidgetSnapshot | null {

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { FliwrightDriver } from '@fliwright/core';
 import { riverpodPlugin } from '@fliwright/plugin-riverpod';
+import { resolveProjectConfig } from '@fliwright/cli';
 import type { DeviceConnectionState } from '../types.js';
 import { resolveVmServiceUrl } from './VmServiceDiscovery.js';
 
@@ -84,7 +85,10 @@ export class FliwrightSession implements vscode.Disposable {
     await this.disconnect(false);
     this.setState({ status: 'connecting', url });
 
-    const driver = this.options.createDriver?.() ?? new FliwrightDriver({ plugins: [riverpodPlugin()] });
+    const driver = this.options.createDriver?.() ?? new FliwrightDriver({
+      plugins: [riverpodPlugin()],
+      cacheRoot: (await resolveProjectConfig(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd())).cacheRoot,
+    });
     try {
       await driver.connect(url);
       this.driver = driver;

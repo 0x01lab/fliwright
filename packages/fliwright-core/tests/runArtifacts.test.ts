@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -9,6 +9,7 @@ import {
   projectRunsRootCandidates,
   resolveFliwrightRunsRoot,
   sanitizeProjectPathName,
+  resolveFliwrightCacheRoot,
 } from '../src/index.js';
 
 describe('run artifact root resolution', () => {
@@ -37,12 +38,12 @@ describe('run artifact root resolution', () => {
     })).toBe('/env/runs');
   });
 
-  it('falls back to the per-project home root', () => {
+  it('defaults to runs inside the project without using the home directory', () => {
     expect(resolveFliwrightRunsRoot({
       projectRoot: '/repos/app',
       env: {},
       homeDir: '/tmp/h',
-    })).toBe(join('/tmp/h', '.fliwright', 'projects', 'repos-app', 'runs'));
+    })).toBe('/repos/app/.fliwright/runs');
   });
 
   it('keeps the legacy hash candidate for existing migrated data', () => {
@@ -56,16 +57,18 @@ describe('run artifact root resolution', () => {
     expect(sanitizeProjectPathName('C:\\Users\\leo\\repo')).toBe('C:-Users-leo-repo');
   });
 
-  it('ensureFliwrightRunsRoot creates dirs and writes meta.json', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'fliwright-home-'));
-    const runsDir = await ensureFliwrightRunsRoot({
-      projectRoot: '/repos/exio_app',
-      homeDir: home,
-      env: {},
-    });
+  it('resolves relative run and cache roots against the project independently', () => {
+    expect(resolveFliwrightRunsRoot({ projectRoot: '/repos/app', runsRoot: 'evidence/runs', env: {} }))
+      .toBe('/repos/app/evidence/runs');
+    expect(resolveFliwrightCacheRoot({ projectRoot: '/repos/app' })).toBe('/repos/app/.fliwright/cache');
+    expect(resolveFliwrightCacheRoot({ projectRoot: '/repos/app', cacheRoot: 'scratch' })).toBe('/repos/app/scratch');
+  });
+
+  it('ensures only the configured project-local run directory', async () => {
+    const project = mkdtempSync(join(tmpdir(), 'fliwright-project-'));
+    const runsDir = await ensureFliwrightRunsRoot({ projectRoot: project, env: {} });
+    expect(runsDir).toBe(join(project, '.fliwright/runs'));
     expect(existsSync(runsDir)).toBe(true);
-    const meta = JSON.parse(readFileSync(join(home, '.fliwright', 'projects', 'repos-exio_app', 'meta.json'), 'utf8'));
-    expect(meta.projectPath).toBe('/repos/exio_app');
-    expect(typeof meta.updatedAt).toBe('number');
+    expect(existsSync(join(project, '.fliwright/meta.json'))).toBe(false);
   });
 });

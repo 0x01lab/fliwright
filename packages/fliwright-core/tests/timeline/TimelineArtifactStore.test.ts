@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join, posix } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  projectRunsRoot,
   TIMELINE_ARTIFACTS_DIR,
   TIMELINE_DIAGNOSTICS_DIR,
   TIMELINE_FILE_NAME,
@@ -76,9 +75,9 @@ describe('TimelineArtifactStore runsRoot', () => {
     await rm(sandbox, { recursive: true, force: true });
   });
 
-  it('uses the per-project home runs root when no runsRoot and no env', () => {
+  it('uses the project-local runs root when no runsRoot and no env', () => {
     const store = new TimelineArtifactStore({ cwd: sandbox, runId: 'r1' });
-    expect(store.runDir).toBe(join(projectRunsRoot(sandbox).runsDir, 'r1'));
+    expect(store.runDir).toBe(join(sandbox, '.fliwright/runs', 'r1'));
   });
 
   it('uses options.runsRoot when provided', () => {

@@ -69,7 +69,7 @@ export class AttemptContext {
     this.recordingMode = process.env.FLIWRIGHT_RECORDING_MODE === 'off' ? 'off'
       : process.env.FLIWRIGHT_RECORDING_MODE === 'full' ? 'full' : 'standard';
     this.configureRecordingPolicy({});
-    this.runStore = new RunArtifactStore({ runsRoot: resolveFliwrightRunsRoot({}), runId });
+    this.runStore = new RunArtifactStore({ runsRoot: resolveFliwrightRunsRoot({ projectRoot: process.env.FLIWRIGHT_PROJECT_ROOT }), runId });
     this.artifactStore = this.makeArtifactStore();
     this.journal = new RunProgressJournal(this.runStore, testId, attemptId);
     this.recorder = this.makeRecorder();

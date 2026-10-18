@@ -38,7 +38,7 @@ Use for an app task stored as a TypeScript script, such as data setup or a repea
 | `recordingMode` | `--recording-mode` | "standard" \| "full" \| "off" | no | — | Runner timeline/recording evidence level. |
 | `output` | `--output` | string | no | — | Write the JSON run report here. Use junitOutput for XML. (minLength=1) |
 | `junitOutput` | `--junit-output` | string | no | — | Path for a separate JUnit XML report, including failed runs. (minLength=1) |
-| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default ~/.fliwright/projects/<project-key>/runs. (minLength=1) |
+| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default <project>/.fliwright/runs. Relative paths use the project root. (minLength=1) |
 | `scenario` | `--scenario` | string | no | — | Named composed TestScenario in fliwright.config; resolve it before execution. (minLength=1) |
 | `file` | `positional file` | string | yes | — | Automation file to execute or focus; interpreted relative to cwd. (minLength=1) |
 

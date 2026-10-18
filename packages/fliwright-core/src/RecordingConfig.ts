@@ -23,6 +23,7 @@ export interface FliwrightProjectConfig {
   recording: Partial<FliwrightRecordingConfig>;
   paths: Partial<FliwrightPathsConfig>;
   runsRoot?: string;
+  cacheRoot?: string;
   scenarios?: Record<string, TestScenario>;
   scenarioMode?: ScenarioExecutionMode;
   defaultScenario?: string;
@@ -32,6 +33,7 @@ export interface ResolvedFliwrightConfig {
   recording: FliwrightRecordingConfig;
   paths: FliwrightPathsConfig;
   runsRoot?: string;
+  cacheRoot?: string;
   scenarios?: Record<string, TestScenario>;
   scenarioMode?: ScenarioExecutionMode;
   defaultScenario?: string;
@@ -91,6 +93,7 @@ export const fliwrightConfigSchema = z.object({
   recording: recordingSchema.partial().optional(),
   paths: pathsSchema.partial().optional(),
   runsRoot: z.string().min(1).optional(),
+  cacheRoot: z.string().min(1).optional(),
   scenarios: z.record(scenarioSchema).optional(),
   scenarioMode: z.enum(['managed-start', 'attach']).optional(),
   defaultScenario: z.string().min(1).optional(),
@@ -124,6 +127,7 @@ export function mergeFliwrightConfig(options: {
     recording: Object.assign({}, DEFAULT_FLIWRIGHT_CONFIG.recording, ...layers.map((layer) => layer?.recording)),
     paths: Object.assign({}, DEFAULT_FLIWRIGHT_CONFIG.paths, ...layers.map((layer) => layer?.paths)),
     runsRoot: layers.reduce<string | undefined>((value, layer) => layer?.runsRoot ?? value, undefined),
+    cacheRoot: layers.reduce<string | undefined>((value, layer) => layer?.cacheRoot ?? value, undefined),
     scenarios: layers.reduce<Record<string, TestScenario> | undefined>((value, layer) => layer?.scenarios ?? value, undefined),
     defaultScenario: layers.reduce<string | undefined>((value, layer) => layer?.defaultScenario ?? value, undefined),
     scenarioMode: layers.reduce<ScenarioExecutionMode | undefined>((value, layer) => layer?.scenarioMode ?? value, undefined),

@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { resolveProjectConfig } from '../config.js';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, dirname, resolve, relative } from 'node:path';
 import { AiRuntime, PassiveAgent, TimelineRecorder, buildFlowFromTimeline, resolveAiConfig, type TimelineData, type AgentVisibleFailure } from '@fliwright/core';
@@ -59,7 +62,8 @@ export async function artifactsDiagnoseCommand(options: ArtifactOptions & { path
   const failure = options.failure ? { ...options.failure, recoveryHints: [] } as AgentVisibleFailure : timeline?.agentVisibleFailures?.[options.failureIndex ?? 0];
   if (!failure) throw new Error('No agent-visible failure is available.');
   const recorder = new TimelineRecorder({ runId: timeline?.runId ?? 'cli-diagnosis', testName: timeline?.testName ?? 'CLI diagnosis' });
-  const aiRuntime = new AiRuntime(resolveAiConfig(undefined), { runId: recorder.runId, testName: recorder.testName });
+  const config = await resolveProjectConfig(options.cwd ?? process.cwd());
+  const aiRuntime = new AiRuntime(resolveAiConfig({ artifactsDir: join(config.cacheRoot!, 'inspect', randomUUID(), 'ai') }), { runId: recorder.runId, testName: recorder.testName });
   const agent = new PassiveAgent({ aiRuntime, recorder, passive: true });
   const currentNode = timeline?.nodes.find((node) => node.id === failure.timelineNodeId);
   const diagnosis = await agent.diagnose(failure, { currentNode, recentNodes: timeline?.nodes.slice(-8), artifacts: currentNode?.artifacts,

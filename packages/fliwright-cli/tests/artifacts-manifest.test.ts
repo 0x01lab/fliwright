@@ -7,6 +7,19 @@ import { artifactsExportCommand, artifactsShowCommand } from '../src/commands/ar
 import { RunArtifactStore, RunProgressJournal, RunSession } from '@fliwright/core';
 
 describe('manifest-backed artifact commands', () => {
+  it('resolves an explicit relative runs root from the project when queried in a child directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fliwright-query-project-'));
+    try {
+      await mkdir(join(root, 'child'));
+      await mkdir(join(root, 'custom-runs', 'run-one'), { recursive: true });
+      await writeFile(join(root, 'fliwright.config.ts'), 'export default {};');
+      await writeFile(join(root, 'custom-runs/run-one/run.json'), JSON.stringify({ runId: 'run-one' }));
+      const shown = await artifactsShowCommand({ cwd: join(root, 'child'), runsRoot: 'custom-runs', runId: 'run-one' });
+      expect(shown.runsRoot).toBe(join(root, 'custom-runs'));
+      expect(shown.manifest).toEqual({ runId: 'run-one' });
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   it('requires a canonical manifest instead of copying a legacy directory', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fliwright-export-no-manifest-'));
     try {
@@ -46,6 +59,24 @@ describe('manifest-backed artifact commands', () => {
     await writeFile(join(attempt, 'frame.png'), 'frame');
     return { root, runDir, attempt, prefix };
   }
+
+  it('exports attempt-owned AI records with portable references', async () => {
+    const { root, runDir, attempt, prefix } = await referencedRun();
+    try {
+      const directory = 'artifacts/ai/invocation-one';
+      await mkdir(join(attempt, directory), { recursive: true });
+      await writeFile(join(attempt, directory, 'response.txt'), 'saved AI response');
+      await writeFile(join(attempt, 'timeline.json'), JSON.stringify({ version: 2,
+        nodes: [{ kind: 'ai-call', metadata: { artifactsDir: directory }, artifacts: [] }],
+      }));
+      const output = join(root, 'portable');
+      await artifactsExportCommand({ runsRoot: root, runId: 'run-evidence', output });
+      await rm(runDir, { recursive: true, force: true });
+      const timeline = JSON.parse(await readFile(join(output, prefix, 'timeline.json'), 'utf8'));
+      expect(timeline.nodes[0].metadata.artifactsDir).toBe(directory);
+      expect(await readFile(join(output, prefix, directory, 'response.txt'), 'utf8')).toBe('saved AI response');
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
 
   it.each(['tail', 'gap', 'corrupt', 'missing'] as const)('validates a referenced progress journal (%s) before export', async (damage) => {
     const { root, runDir, attempt } = await referencedRun();

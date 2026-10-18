@@ -7,7 +7,7 @@ import {
   type FliwrightLogEvent,
   type TraceData,
 } from '@fliwright/core';
-import { projectRunsRootCandidates } from '../testing/ProjectRunsRoot.js';
+import { resolveProjectConfig } from '@fliwright/cli';
 import { RunArtifactStore, type RunArtifactIndexEntry } from '../testing/RunArtifactStore.js';
 import {
   TIMELINE_FILE_NAME,
@@ -48,17 +48,9 @@ export interface LoadedRun {
 /**
  * Reads timeline run data from run directories.
  *
- * The runs root resolves per-project-first (`~/.fliwright/projects/<project>/runs`,
- * from projectRunsRoot) with a legacy fallback to the project-local
- * `<workspaceRoot>/.fliwright/runs`. Within that root each run directory holds:
- *   - timeline.json           (TimelineData — the source of truth)
- *   - logs/events.jsonl       (one FliwrightLogEvent per line)
- *   - artifacts/screenshots/* (PNGs referenced by node artifacts[])
- *
- * Unlike traces, core does not export a reader store for timeline runs, so this
- * service reads the files directly via vscode.workspace.fs. New runs live under
- * `~/.fliwright/projects/<project>/runs`; project-local `.fliwright/runs` is
- * read only as a legacy fallback.
+ * Reads the configured project runsRoot; defaults to <workspace>/.fliwright/runs.
+ * Attempts own their timeline, logs, trace and evidence. Historical roots are
+ * never selected implicitly.
  */
 export class RunViewerService {
   private readonly artifacts = new RunArtifactStore();
@@ -67,31 +59,14 @@ export class RunViewerService {
     return vscode.workspace.workspaceFolders?.[0]?.uri;
   }
 
-  /**
-   * Resolve the runs directory for a workspace root.
-   *
-   * Prefers the per-project root under the user home
-   * (`~/.fliwright/projects/<project>/runs`, from projectRunsRoot); falls back to
-   * the legacy project-local `<root>/.fliwright/runs` for back-compat. Returns
-   * undefined when neither exists.
-   */
+  /** Return the configured run history when it exists. */
   async getRunsDir(root: vscode.Uri): Promise<vscode.Uri | undefined> {
-    for (const candidate of projectRunsRootCandidates(root)) {
-      const migrated = vscode.Uri.file(candidate.runsDir);
-      try {
-        await vscode.workspace.fs.stat(migrated);
-        return migrated;
-      } catch {
-        /* keep looking */
-      }
-    }
-    const legacy = vscode.Uri.file(this.artifacts.legacyRunsDir(root));
+    const config = await resolveProjectConfig(root.fsPath);
+    const directory = vscode.Uri.file(config.runsRoot!);
     try {
-      await vscode.workspace.fs.stat(legacy);
-      return legacy;
-    } catch {
-      return undefined;
-    }
+      await vscode.workspace.fs.stat(directory);
+      return directory;
+    } catch { return undefined; }
   }
 
   /**

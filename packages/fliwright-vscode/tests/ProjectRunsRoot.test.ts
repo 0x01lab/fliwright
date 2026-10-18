@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -18,7 +18,7 @@ describe('ProjectRunsRoot', () => {
     const b = projectRunsRoot(fakeUri('/repos/exio_app'), { homeDir: '/tmp/h' });
     expect(a.hash).toBe(b.hash);
     expect(a.hash).toBe('repos-exio_app');
-    expect(a.runsDir).toBe(join('/tmp/h', '.fliwright', 'projects', 'repos-exio_app', 'runs'));
+    expect(a.runsDir).toBe('/repos/exio_app/.fliwright/runs');
   });
 
   it('keeps the legacy hash candidate for existing migrated data', () => {
@@ -28,13 +28,12 @@ describe('ProjectRunsRoot', () => {
     expect(candidates[1]?.hash).toBe(legacyProjectRunsRoot(root, { homeDir: '/tmp/h' }).hash);
   });
 
-  it('ensureProjectRunsRoot creates dirs and writes meta.json', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'fliwright-home-'));
-    const runsDir = await ensureProjectRunsRoot(fakeUri('/repos/exio_app'), { homeDir: home });
+  it('ensures the configured run directory without a home metadata file', async () => {
+    const project = mkdtempSync(join(tmpdir(), 'fliwright-project-'));
+    const runsDir = await ensureProjectRunsRoot(fakeUri(project));
+    expect(runsDir).toBe(join(project, '.fliwright/runs'));
     expect(existsSync(runsDir)).toBe(true);
-    const meta = JSON.parse(readFileSync(join(home, '.fliwright', 'projects', projectRunsRoot(fakeUri('/repos/exio_app'), { homeDir: home }).hash, 'meta.json'), 'utf8'));
-    expect(meta.projectPath).toBe('/repos/exio_app');
-    expect(typeof meta.updatedAt).toBe('number');
+    expect(existsSync(join(project, '.fliwright/meta.json'))).toBe(false);
   });
 
   it('re-exports core path sanitization', () => {

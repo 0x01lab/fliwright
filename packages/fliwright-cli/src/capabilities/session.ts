@@ -1,5 +1,5 @@
 import { EndpointLeaseManager, FliwrightDriver } from '@fliwright/core';
-import { loadConfig } from '../config.js';
+import { resolveProjectConfig } from '../config.js';
 import { resolveVmUrl } from '../vm-discovery.js';
 
 export interface AppSessionOptions {
@@ -25,7 +25,7 @@ export async function connectAppSession(
 ): Promise<AppSession> {
   options.signal?.throwIfAborted();
   const cwd = options.cwd ?? process.cwd();
-  const config = await loadConfig(cwd);
+  const config = await resolveProjectConfig(cwd);
   const vmServiceUrl = await (deps.resolveVmUrl ?? resolveVmUrl)({
     cliFlag: options.vmUrl,
     configUrl: config.vmServiceUrl,
@@ -35,7 +35,7 @@ export async function connectAppSession(
   if (!vmServiceUrl) {
     throw new Error('Could not find a running Flutter VM Service. Pass --vm-url or start the app with the Fliwright bridge enabled.');
   }
-  const driver = deps.driverFactory ? await deps.driverFactory() : new FliwrightDriver();
+  const driver = deps.driverFactory ? await deps.driverFactory() : new FliwrightDriver({ cacheRoot: config.cacheRoot });
   const abort = () => { void driver.dispose({ signal: AbortSignal.abort(options.signal?.reason) }).catch(() => {}); };
   options.signal?.addEventListener('abort', abort, { once: true });
   try { await driver.connect(vmServiceUrl); options.signal?.throwIfAborted(); } catch (error) { await driver.dispose().catch(() => {}); throw error; }

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { createJiti } from 'jiti';
-import { mergeFliwrightConfig, readFliwrightEnvironment } from '@fliwright/core';
+import { mergeFliwrightConfig, readFliwrightEnvironment, resolveFliwrightProjectRoot, resolveFliwrightRunsRoot, resolveFliwrightCacheRoot } from '@fliwright/core';
 import type { FliwrightPathsConfig, FliwrightProjectConfig, FliwrightRecordingConfig, ResolvedFliwrightConfig, ScenarioExecutionMode, TestScenario } from '@fliwright/core';
 
 export interface FliwrightCliConfig {
@@ -11,6 +11,7 @@ export interface FliwrightCliConfig {
   testDir: string;
   reporter: 'pretty' | 'json' | 'junit';
   runsRoot?: string;
+  cacheRoot?: string;
   recording?: Partial<FliwrightRecordingConfig>;
   paths?: Partial<FliwrightPathsConfig>;
   scenarios?: Record<string, TestScenario>;
@@ -34,7 +35,7 @@ export function defineConfig(overrides: Partial<FliwrightCliConfig> = {}): Fliwr
 }
 
 export async function loadConfig(projectDir: string): Promise<FliwrightCliConfig> {
-  const configPath = join(projectDir, 'fliwright.config.ts');
+  const configPath = join(resolveFliwrightProjectRoot(projectDir), 'fliwright.config.ts');
 
   try {
     await stat(configPath);
@@ -56,5 +57,9 @@ export async function resolveProjectConfig(
 ): Promise<FliwrightCliConfig & ResolvedFliwrightConfig> {
   const project = await loadConfig(projectDir);
   const shared = mergeFliwrightConfig({ project, environment: readFliwrightEnvironment(environment), explicit });
-  return { ...project, ...shared, testDir: shared.paths.tests };
+  const projectRoot = resolveFliwrightProjectRoot(projectDir);
+  return { ...project, ...shared, testDir: shared.paths.tests,
+    runsRoot: resolveFliwrightRunsRoot({ projectRoot, runsRoot: shared.runsRoot, env: {} }),
+    cacheRoot: resolveFliwrightCacheRoot({ projectRoot, cacheRoot: shared.cacheRoot }),
+  };
 }

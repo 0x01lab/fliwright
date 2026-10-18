@@ -1,3 +1,5 @@
+import { resolveProjectConfig } from '../config.js';
+import { dirname, extname } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { defaultStatusFilePath, TddRuntime } from '@fliwright/tdd';
 import type { CycleOpts, RuntimeSnapshot, StartOpts, TddCycleResult } from '@fliwright/tdd';
@@ -117,6 +119,7 @@ export async function tddCycleCommand(
 
   const snapshot = await runtime.start({
     configRoot: options.configRoot,
+    sharedConfig: await resolveProjectConfig(extname(options.configRoot) ? dirname(options.configRoot) : options.configRoot),
     vmServiceUrl: options.vmUrl,
     app: options.deviceId
       ? {
@@ -182,6 +185,7 @@ export async function tddSyncCommand(
     options.signal?.throwIfAborted();
     snapshot = await runtime.start({
       configRoot: options.configRoot,
+      sharedConfig: await resolveProjectConfig(extname(options.configRoot) ? dirname(options.configRoot) : options.configRoot),
       vmServiceUrl: options.vmUrl,
       app: options.deviceId
         ? {

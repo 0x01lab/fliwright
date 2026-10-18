@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { formatJunit, formatPretty, type CliRunResult } from './reporter.js';
 import { CommandRegistry, CliError, classifyError, requestId } from './CommandRegistry.js';
@@ -101,7 +102,7 @@ export async function executeCli(argv: string[], registry = createRegistry()): P
   if (failure && !json) stderr += `${failure.code}: ${failure.message}\n`;
   return { stdout, stderr, exitCode };
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(resolve(process.argv[1]))) {
   executeCli(process.argv.slice(2)).then((result) => {
     process.stdout.write(result.stdout);
     process.stderr.write(result.stderr);

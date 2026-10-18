@@ -322,6 +322,8 @@ export {
   projectRunsRoot,
   projectRunsRootCandidates,
   resolveFliwrightRunsRoot,
+  resolveFliwrightCacheRoot,
+  resolveFliwrightProjectRoot,
   sanitizeProjectPathName,
 } from './runArtifacts.js';
 export type {

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { resolveProjectConfig } from '../config.js';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
@@ -189,7 +191,9 @@ export async function flowAgentSpecCommand(options: FlowCommandOptions): Promise
 
 export async function flowCleanCommand(options: FlowCleanOptions): Promise<{ path: string; outputPath: string; flow: FliwrightFlowDocument; plan: FlowCleanPlan; dryRun: boolean }> {
   const { path, flow } = await flowGetCommand(options);
+  const config = options.aiRuntime ? undefined : await resolveProjectConfig(options.cwd ?? process.cwd());
   const aiRuntime = options.aiRuntime ?? new AiRuntime(resolveAiConfig({
+    artifactsDir: join(config!.cacheRoot!, 'inspect', randomUUID(), 'ai'),
     provider: options.aiProvider,
     timeoutMs: options.aiTimeoutMs,
   }));

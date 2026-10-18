@@ -1,10 +1,11 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   AiAssertionError,
+  AiParseError,
   AiTimeoutError,
   AiRuntime,
   MockAiAdapter,
@@ -25,6 +26,30 @@ function pageStub(): Page {
 }
 
 describe('AiRuntime', () => {
+  it('keeps AI invocations in their owning attempt without collisions between runtimes', async () => {
+    const attemptDir = await mkdtemp(join(tmpdir(), 'ai-attempt-'));
+    const context = { attemptDir, runId: 'run-one', testName: 'same title' };
+    const first = new AiRuntime({ adapter: new MockAiAdapter([{ text: 'one' }]), artifactsDir: '/unused-external-root' }, context);
+    const second = new AiRuntime({ adapter: new MockAiAdapter([{ text: 'two' }]) }, context);
+    const a = await first.ask({ prompt: 'first' });
+    const b = await second.ask({ prompt: 'second' });
+    expect(a.artifactsDir).toMatch(/^artifacts\/ai\//);
+    expect(b.artifactsDir).toMatch(/^artifacts\/ai\//);
+    expect(b.artifactsDir).not.toBe(a.artifactsDir);
+    expect(await readFile(join(attemptDir, a.artifactsDir!, 'response.txt'), 'utf8')).toBe('one');
+    expect(await readdir(join(attemptDir, 'artifacts/ai'))).toHaveLength(2);
+  });
+
+  it('keeps a provider failure artifact reference portable when using a fallback', async () => {
+    const attemptDir = await mkdtemp(join(tmpdir(), 'ai-attempt-failure-'));
+    const runtime = new AiRuntime({ adapter: { name: 'failing', async invoke(_request, context) {
+      throw new AiParseError('provider failed', { artifactsDir: context.artifactsDir });
+    } } }, { attemptDir });
+    const result = await runtime.generateWithStatus({ prompt: 'fail', fallback: { ok: false } });
+    expect(result.fallbackUsed).toBe(true);
+    expect(result.artifactsDir).toMatch(/^artifacts\/ai\//);
+  });
+
   it('generate returns schema-validated adapter JSON', async () => {
     const runtime = new AiRuntime({
       adapter: new MockAiAdapter([{ text: '{"phone":"13800138000"}', json: { phone: '13800138000' } }]),

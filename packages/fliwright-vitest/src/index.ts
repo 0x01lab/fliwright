@@ -25,6 +25,8 @@ import {
   PrettyLogFormatter,
   readWorkspaceConfigSync,
   resolveFliwrightRunsRoot,
+  resolveFliwrightCacheRoot,
+  resolveFliwrightProjectRoot,
   StructuredLogger,
   TimelineArtifactStore,
   RunArtifactStore,
@@ -72,6 +74,8 @@ export interface FliwrightConfig {
   agentPolicy?: AgentPolicy;
   timelineDir?: string;
   runsRoot?: string;
+  cacheRoot?: string;
+  projectRoot?: string;
   log?: FliwrightLogConfig;
   /** Named, composable environment declarations used by `test.scenario(name)`. */
   scenarios?: Record<string, TestScenario>;
@@ -93,12 +97,12 @@ export function defineConfig(overrides: Partial<FliwrightConfig> & { vmServiceUr
 /**
  * Decide where run artifacts go for a fliwright test run.
  * Precedence is implemented by @fliwright/core:
- * explicit config.runsRoot > FLIWRIGHT_RUNS_ROOT env > per-project home root.
+ * explicit config.runsRoot > FLIWRIGHT_RUNS_ROOT env > project-local root.
  */
 export function resolveRunsRoot(config: { runsRoot?: string; projectRoot?: string }): string {
   return resolveFliwrightRunsRoot({
     runsRoot: config.runsRoot,
-    projectRoot: config.projectRoot,
+    projectRoot: config.projectRoot ?? process.env.FLIWRIGHT_PROJECT_ROOT ?? resolveFliwrightProjectRoot(),
   });
 }
 
@@ -206,7 +210,7 @@ export function createFliwrightTest(
       const config = resolveConfig();
       const testName = getTestName(task);
       const attempt = requireAttemptContext(task);
-      const cwd = config.timelineDir ?? process.cwd();
+      const cwd = config.projectRoot ?? process.env.FLIWRIGHT_PROJECT_ROOT ?? config.timelineDir ?? resolveFliwrightProjectRoot();
       const runsRoot = resolveRunsRoot({ runsRoot: config.runsRoot, projectRoot: cwd });
       const store = new RunArtifactStore({ runsRoot, runId: attempt.runId });
       const logger = createRunLogger(config, {
@@ -318,6 +322,7 @@ export function createFliwrightTest(
       timeline.driver = driver;
       const testName = getTestName(task);
       const runtime = new AiRuntime(resolveAiConfig(config.ai), {
+        attemptDir: timeline.artifactStore.runDir,
         page: driver.page,
         driver,
         testName,
@@ -581,11 +586,13 @@ async function getSharedDriver(config: FliwrightConfig): Promise<FliwrightDriver
       'No VM Service URL provided. Set FLIWRIGHT_VM_URL or FLIWRIGHT_VM_SERVICE_URL, or use createFliwrightTest({ vmServiceUrl }).',
     );
   }
-  const key = sharedDriverCacheKey(vmServiceUrl, config.plugins);
+  const cacheRoot = resolveFliwrightCacheRoot({ cacheRoot: config.cacheRoot,
+    projectRoot: config.projectRoot ?? process.env.FLIWRIGHT_PROJECT_ROOT });
+  const key = `${sharedDriverCacheKey(vmServiceUrl, config.plugins)}:${cacheRoot}`;
   let pending = sharedDrivers.get(key);
   if (!pending) {
     pending = (async () => {
-      const driver = new FliwrightDriver({ plugins: config.plugins });
+      const driver = new FliwrightDriver({ plugins: config.plugins, cacheRoot });
       try {
         await driver.connect(vmServiceUrl);
         await listenToDiagnostics(driver);
@@ -818,7 +825,7 @@ async function diagnoseTimelineFailures(
       const aiRuntime = new AiRuntime({ ...resolveAiConfig(config.ai),
         timeoutMs: Math.min(config.ai?.timeoutMs ?? Infinity, remainingMs()),
       }, {
-        page: driver.page, driver, testName: timeline.recorder.testName, runId: timeline.runId, cwd: process.cwd(),
+        attemptDir: timeline.artifactStore.runDir, page: driver.page, driver, testName: timeline.recorder.testName, runId: timeline.runId, cwd: process.cwd(),
       });
       const agent = new PassiveAgent({ aiRuntime, recorder: timeline.recorder, passive: true, signal });
       const currentNode = data.nodes.find((node) => node.id === failure.timelineNodeId);

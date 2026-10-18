@@ -50,7 +50,9 @@ describe('initCommand', () => {
     expect(pkg.devDependencies['@fliwright/vitest']).toBeDefined();
     expect(pkg.devDependencies.vitest).toBe('5.0.5');
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
-    expect(gitignore).not.toContain('.fliwright/runs/');
+    expect(gitignore).toContain('.fliwright/runs/');
+    expect(gitignore).toContain('.fliwright/cache/');
+    expect(config).toContain("cacheRoot: '.fliwright/cache'");
     expect(gitignore).toContain('.fliwright/failures/');
   });
 

@@ -21,7 +21,7 @@ describe('workspace path identity', () => {
       const reportedFile = await realpath(join(project, '.fliwright/tests/form.test.ts'));
       const result = { passed: true, totalTests: 1, passedTests: 1, failedTests: 0, duration: 1,
         results: [{ name: 'form > saves', filePath: reportedFile, passed: true, duration: 1 }] };
-      const artifacts = new RunArtifactStore({ homeDir: join(temp, 'home') });
+      const artifacts = new RunArtifactStore({ runsRoot: join(temp, 'runs') });
       const statuses = new TestStatusStore(join(temp, 'statuses'));
       if (kind === 'artifact') await artifacts.recordTestRun(root, result, discovered, { baseRunId: 'proof', ranAt: 1 });
       else await statuses.recordRun('proof', 1, root, result, discovered);

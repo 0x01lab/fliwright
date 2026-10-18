@@ -23,6 +23,7 @@ export interface RunArtifactIndexEntry {
 
 export interface RunArtifactStoreOptions {
   homeDir?: string;
+  runsRoot?: string;
 }
 
 interface IndexMap {
@@ -30,6 +31,7 @@ interface IndexMap {
 }
 
 export class RunArtifactStore {
+  private readonly resolvedRoots = new Map<string, string>();
   constructor(private readonly options: RunArtifactStoreOptions = {}) {}
 
   projectRoot(workspaceRoot: vscode.Uri): string {
@@ -37,7 +39,7 @@ export class RunArtifactStore {
   }
 
   runsDir(workspaceRoot: vscode.Uri): string {
-    return projectRunsRoot(workspaceRoot, this.options).runsDir;
+    return this.resolvedRoots.get(workspaceRoot.fsPath) ?? projectRunsRoot(workspaceRoot, this.options).runsDir;
   }
 
   traceDir(workspaceRoot: vscode.Uri): string {
@@ -45,7 +47,9 @@ export class RunArtifactStore {
   }
 
   async ensureRunsDir(workspaceRoot: vscode.Uri): Promise<string> {
-    return ensureProjectRunsRoot(workspaceRoot, this.options);
+    const runsDir = await ensureProjectRunsRoot(workspaceRoot, this.options);
+    this.resolvedRoots.set(workspaceRoot.fsPath, runsDir);
+    return runsDir;
   }
 
   legacyRunsDir(workspaceRoot: vscode.Uri): string {
