@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile, stat } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { FliwrightDriver } from '@fliwright/core';
@@ -15,47 +15,52 @@ export interface CheckResult {
 
 export interface DoctorOptions {
   vmServiceUrl?: string;
+  print?: boolean;
+  signal?: AbortSignal;
 }
 
 export async function doctorCommand(
   projectDir: string,
   options: DoctorOptions = {},
 ): Promise<CheckResult[]> {
+  options.signal?.throwIfAborted();
   const checks: CheckResult[] = [];
 
   checks.push(await checkNodeVersion());
-  checks.push(await checkFlutterSdk());
+  checks.push(await checkFlutterSdk(options.signal));
   checks.push(await checkPackageInstalled('@fliwright/core'));
   checks.push(await checkPackageInstalled('@fliwright/vitest'));
   checks.push(await checkConfigFile(projectDir));
   checks.push(...await checkRecordingConfiguration(projectDir));
-  checks.push(await checkVitestPreset(projectDir));
+  checks.push(await checkVitestPreset(projectDir, options.signal));
   const vmService = await checkVmService(projectDir, options.vmServiceUrl);
   checks.push(vmService.check);
-  checks.push(...await checkRuntimeDiagnostics(vmService.url));
+  checks.push(...await checkRuntimeDiagnostics(vmService.url, options.signal));
 
+  options.signal?.throwIfAborted();
   const output = checks.map((check) => {
     const icon = check.passed ? chalk.green('✅') : chalk.yellow('⚠️ ');
     return `${icon} ${check.name}: ${check.message}`;
   }).join('\n');
 
-  console.log(output);
+  if (options.print !== false) console.log(output);
   return checks;
 }
 
 async function checkNodeVersion(): Promise<CheckResult> {
   const version = process.version;
-  const major = Number.parseInt(version.slice(1).split('.')[0], 10);
+  const [major, minor] = version.slice(1).split('.').map(Number);
+  const supported = (major === 22 && minor >= 12) || major === 24 || major >= 26;
   return {
     name: 'Node.js',
-    passed: major >= 18,
-    message: `${version}${major < 18 ? ' (requires >= 18)' : ''}`,
+    passed: supported,
+    message: `${version}${!supported ? ' (requires Node 22.12+, 24.x or >=26)' : ''}`,
   };
 }
 
-async function checkFlutterSdk(): Promise<CheckResult> {
+async function checkFlutterSdk(signal?: AbortSignal): Promise<CheckResult> {
   try {
-    const output = await execAsync('flutter', ['--version']);
+    const output = await execAsync('flutter', ['--version'], undefined, signal);
     const versionLine = output.split('\n')[0] ?? '';
     return {
       name: 'Flutter SDK',
@@ -73,9 +78,9 @@ async function checkFlutterSdk(): Promise<CheckResult> {
 
 async function checkPackageInstalled(pkg: string): Promise<CheckResult> {
   try {
-    const url = import.meta.resolve(`${pkg}/package.json`);
-    const { default: mod } = await import(url, { assert: { type: 'json' } });
-    const version = (mod as { version?: string })?.version ?? 'unknown';
+    const entry = fileURLToPath(import.meta.resolve(pkg));
+    const mod = JSON.parse(await readFile(join(dirname(entry), '..', 'package.json'), 'utf8')) as { version?: string };
+    const version = mod.version ?? 'unknown';
     return {
       name: pkg,
       passed: true,
@@ -127,16 +132,16 @@ async function checkRecordingConfiguration(projectDir: string): Promise<CheckRes
 }
 
 /** Resolve the real config in a bounded subprocess; never collect or execute project tests. */
-async function checkVitestPreset(projectDir: string): Promise<CheckResult> {
+async function checkVitestPreset(projectDir: string, signal?: AbortSignal): Promise<CheckResult> {
   try {
     const script = `
       import { resolveConfig } from ${JSON.stringify(import.meta.resolve('vitest/node'))};
-      const { vitestConfig, viteConfig } = await resolveConfig({ root: ${JSON.stringify(projectDir)} });
-      const result = { runner: vitestConfig.runner, include: vitestConfig.include,
-        env: vitestConfig.env, configFile: viteConfig.configFile };
+      const viteConfig = await resolveConfig({ root: ${JSON.stringify(projectDir)} });
+      const result = { runner: viteConfig.test?.runner, include: viteConfig.test?.include ?? [],
+        env: viteConfig.test?.env, configFile: viteConfig.configFile };
       process.stdout.write('\\nFLIWRIGHT_DOCTOR_CONFIG=' + JSON.stringify(result) + '\\n');
     `;
-    const output = await execAsync(process.execPath, ['--input-type=module', '--eval', script], projectDir);
+    const output = await execAsync(process.execPath, ['--input-type=module', '--eval', script], projectDir, signal);
     const line = output.split('\n').find((entry) => entry.startsWith('FLIWRIGHT_DOCTOR_CONFIG='));
     if (!line) throw new Error('Vitest did not return its resolved configuration.');
     const config = JSON.parse(line.slice('FLIWRIGHT_DOCTOR_CONFIG='.length)) as {
@@ -172,9 +177,12 @@ async function checkVmService(projectDir: string, providedUrl?: string): Promise
 const runtimeCheckNames = ['Bridge extensions', 'Recording target capture', 'Recording focused input',
   'Evidence screenshot', 'Evidence snapshot', 'Mock server', 'Riverpod observer'];
 
-async function checkRuntimeDiagnostics(vmServiceUrl?: string): Promise<CheckResult[]> {
+async function checkRuntimeDiagnostics(vmServiceUrl?: string, signal?: AbortSignal): Promise<CheckResult[]> {
+  signal?.throwIfAborted();
   if (!vmServiceUrl) return runtimeCheckNames.map(skippedRuntimeCheck);
   const driver = new FliwrightDriver();
+  const abort = () => { void driver.dispose({ signal: AbortSignal.abort() }).catch(() => {}); };
+  signal?.addEventListener('abort', abort, { once: true });
   try {
     await driver.connect(toWebSocketUrl(vmServiceUrl));
     return [
@@ -188,7 +196,8 @@ async function checkRuntimeDiagnostics(vmServiceUrl?: string): Promise<CheckResu
     return runtimeCheckNames.map((name) => ({ name, passed: false,
       message: `could not connect to VM Service: ${messageOf(error)}` }));
   } finally {
-    await driver.dispose();
+    signal?.removeEventListener('abort', abort);
+    await driver.dispose(signal?.aborted ? { signal: AbortSignal.abort() } : undefined);
   }
 }
 
@@ -297,9 +306,9 @@ function toWebSocketUrl(url: string): string {
   return converted.endsWith('/ws') ? converted : converted.replace(/\/?$/, '/ws');
 }
 
-function execAsync(command: string, args: string[], cwd?: string): Promise<string> {
+function execAsync(command: string, args: string[], cwd?: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { timeout: 5000, cwd }, (error, stdout) => {
+    execFile(command, args, { timeout: 5000, cwd, signal }, (error, stdout) => {
       if (error) {
         reject(error);
       } else {

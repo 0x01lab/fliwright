@@ -8,14 +8,24 @@
     "url": "https://github.com/0x01lab/fliwright.git",
     "directory": "packages/fliwright-cli"
   },
-  "bugs": { "url": "https://github.com/0x01lab/fliwright/issues" },
+  "bugs": {
+    "url": "https://github.com/0x01lab/fliwright/issues"
+  },
   "homepage": "https://github.com/0x01lab/fliwright#readme",
   "type": "module",
   "main": "dist/config.js",
   "types": "dist/config.d.ts",
-  "files": ["dist", "README.md", "LICENSE"],
-  "engines": { "node": ">=20" },
-  "publishConfig": { "access": "public" },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "fliwright": "dist/index.js"
   },
@@ -47,10 +57,12 @@
     "@fliwright/tdd": "workspace:*",
     "commander": "^12.0.0",
     "chalk": "^5.3.0",
-    "jiti": "^2.0.0"
+    "jiti": "^2.0.0",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2"
   },
   "peerDependencies": {
-    "vitest": "4.1.11",
+    "vitest": "5.0.5",
     "@fliwright/vitest": "workspace:*"
   },
   "peerDependenciesMeta": {
@@ -61,6 +73,8 @@
   "devDependencies": {
     "@types/node": "^25.9.1",
     "typescript": "^5.5.0",
-    "vitest": "4.1.11"
+    "vitest": "5.0.5",
+    "ws": "^8.17.0",
+    "@types/ws": "^8.5.10"
   }
 }

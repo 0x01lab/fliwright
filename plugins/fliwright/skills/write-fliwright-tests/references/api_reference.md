@@ -16,7 +16,7 @@
 | 表单助手 | [forms.md](./forms.md) |
 | Mocks | [mocks.md](./mocks.md) |
 | 手动 driver 生命周期 | [driver-lifecycle.md](./driver-lifecycle.md) |
-| MCP 辅助工作流 | [mcp-workflow.md](./mcp-workflow.md) |
+| Agent CLI 工作流 | [agent-workflow.md](./agent-workflow.md) |
 | 校验命令 / CLI | [cli.md](./cli.md) |
 
 单页签名速查表请见 [api-quick-reference.md](./api-quick-reference.md)。

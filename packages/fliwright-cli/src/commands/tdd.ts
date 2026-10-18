@@ -73,6 +73,7 @@ export interface TddSyncCommandOptions {
   keepAppAlive?: boolean;
   json?: boolean;
   print?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface TddCommandDeps {
@@ -172,31 +173,34 @@ export async function tddSyncCommand(
   const statusFilePath = options.statusFile ?? defaultStatusFilePath(options.configRoot);
   const print = options.print ?? true;
 
-  const snapshot = await runtime.start({
-    configRoot: options.configRoot,
-    vmServiceUrl: options.vmUrl,
-    app: options.deviceId
-      ? {
-        deviceId: options.deviceId,
-        projectId: options.projectId,
-        target: options.target,
-        flutterArgs: options.flutterArgs,
-        mode: options.mode,
-      }
-      : undefined,
-    launchMode: options.vmUrl ? 'attach' : 'start',
-    statusFilePath,
-  });
-
-  const syncRuntime = runtime as TddRuntime & {
-    syncApp(sync: TddSyncMode): Promise<{ lastSync: TddSyncMode; snapshot: RuntimeSnapshot }>;
-  };
-
+  let snapshot: RuntimeSnapshot;
   let synced: { lastSync: TddSyncMode; snapshot: RuntimeSnapshot };
-  let stopped: RuntimeSnapshot | undefined;
+  let stopped: RuntimeSnapshot;
+  const abort = () => { void runtime.cancel(); };
+  options.signal?.addEventListener('abort', abort, { once: true });
   try {
-    synced = await syncRuntime.syncApp(options.sync);
+    options.signal?.throwIfAborted();
+    snapshot = await runtime.start({
+      configRoot: options.configRoot,
+      vmServiceUrl: options.vmUrl,
+      app: options.deviceId
+        ? {
+          deviceId: options.deviceId,
+          projectId: options.projectId,
+          target: options.target,
+          flutterArgs: options.flutterArgs,
+          mode: options.mode,
+        }
+        : undefined,
+      launchMode: options.vmUrl ? 'attach' : 'start',
+      statusFilePath,
+    });
+
+    options.signal?.throwIfAborted();
+    synced = await runtime.syncApp(options.sync);
+    options.signal?.throwIfAborted();
   } finally {
+    options.signal?.removeEventListener('abort', abort);
     await runtime.stop({ keepAppAlive: options.keepAppAlive ?? Boolean(options.vmUrl) });
     stopped = runtime.snapshot();
   }

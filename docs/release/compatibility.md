@@ -57,9 +57,9 @@ folders moved; 1,400 PNGs decoded and 24 terminal samples were visually checked.
 
 | Layer | Verified / required version | Notes |
 | --- | --- | --- |
-| Node.js | 20 or newer | Required by all public TypeScript packages. |
+| Node.js | `^22.12.0 \|\| ^24.0.0 \|\| >=26.0.0` | Required by Vitest 5, CLI, and TDD; core-only packages retain Node 20+. |
 | TypeScript | 5.5 or newer in the workspace | Consumer projects may use a compatible newer version. |
-| Vitest | 4.1.11 | `@fliwright/vitest`, CLI peer dependency, and generated projects use this line. |
+| Vitest | 5.0.5 | `@fliwright/vitest`, CLI peer dependency, and generated projects use this line. |
 | Dart SDK | 3.5 or newer, below 4.0 | Required by the published bridge packages. |
 | Flutter | Stable channel; package constraints apply | The bridge runs only in debug/profile or test builds. |
 | Design QA Flutter | 3.24 or newer | `fliwright_design_qa` is an optional Labs package. |
@@ -177,7 +177,7 @@ while actual actions and evidence come from the mobile Flutter App.
 - Run the app in debug/profile or a Flutter test build; the bridge is inert in
   release mode and does not register VM Service extensions or mock servers.
 - The app must expose a locally reachable Dart VM Service endpoint.
-- `fliwright_design_qa`, Riverpod, MCP, and TDD are optional packages and are
+- `fliwright_design_qa`, Riverpod and TDD are optional packages and are
   not required for the core CLI/Vitest journey.
 
 Project fixtures created through `extendFliwrightTest` retain named scenario
@@ -331,7 +331,7 @@ retains that failed state across reload/save, uses `.dart` output and a Dart sav
 filter, opens Dart source in the default editor, and writes the exact source bytes.
 CLI `record --dart-verification <file>` and the editor's Import Dart Verification
 command validate the shared evidence JSON before changing capture/session state.
-CLI/MCP evidence-consumption checks
+CLI evidence-consumption checks
 use the same fingerprint as the actual compiled source; their capture input is
 reconstructed from the fixture and does not prove native recording. Evidence:
 `/tmp/fliwright-dart-evidence-producer/acceptance.json` and

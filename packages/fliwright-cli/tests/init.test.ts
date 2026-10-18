@@ -48,7 +48,8 @@ describe('initCommand', () => {
     expect(pkg.scripts['test:fliwright']).toBe('fliwright run');
     expect(pkg.devDependencies['@fliwright/cli']).toBeDefined();
     expect(pkg.devDependencies['@fliwright/vitest']).toBeDefined();
-    expect(pkg.devDependencies.vitest).toBe('4.1.11');
+    expect(pkg.devDependencies.vitest).toBe('5.0.5');
+    expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(gitignore).not.toContain('.fliwright/runs/');
     expect(gitignore).toContain('.fliwright/failures/');
   });

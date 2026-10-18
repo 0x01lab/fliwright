@@ -1,6 +1,6 @@
 import { restoreRunAttempts } from '@fliwright/core';
 import type { RecoverableRunAttempt } from '@fliwright/core';
-import type { Reporter } from 'vitest/reporters';
+import type { Reporter } from 'vitest/node';
 
 /** Parent-side persistence fallback for direct Vitest runs using fliwrightPreset. */
 export class FliwrightRecoveryReporter implements Reporter {

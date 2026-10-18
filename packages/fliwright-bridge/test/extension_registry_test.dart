@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 import 'package:fliwright_bridge/src/click_indicator.dart';
-import 'package:fliwright_bridge/src/extensions/gesture.dart';
 import 'package:fliwright_bridge/src/extensions/inspect.dart';
 import 'package:fliwright_bridge/src/extensions/type_extension.dart';
 

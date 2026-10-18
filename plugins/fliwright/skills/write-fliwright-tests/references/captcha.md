@@ -193,7 +193,7 @@ function delay(ms) {
 
 要点：
 
-- **靠 app 状态、不靠外部信号**：`completion: 'app-state'` 这个 metadata 是给 reviewer 的约定——本节点“完成”由 app 状态判定，而非人工在终端/IDE 点按钮。脚本在 CLI、CI、MCP 任意 runner 下行为一致。
+- **靠 app 状态、不靠外部信号**：`completion: 'app-state'` 这个 metadata 是给 reviewer 的约定——本节点“完成”由 app 状态判定，而非人工在终端/IDE 点按钮。脚本在 CLI、CI 任意 runner 下行为一致。
 - **宽超时**：真人拖滑块可能要几十秒，`captchaManualTimeoutMs` 默认 180s；窄超时会在人还没拖完时就失败。
 - **CI 跳过**：CI 设 `SOLVE_CAPTCHA=false`，`flow.optional` 会留下一条“已跳过校验”的显式记录，而不是默默跳过。
 

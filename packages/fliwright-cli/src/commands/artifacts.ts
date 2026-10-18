@@ -15,6 +15,7 @@ export async function artifactsShowCommand(options: ArtifactOptions = {}) {
   const { runsRoot, runs } = await listRuns(options);
   const runId = options.runId ?? runs[0]?.runId;
   if (!runId) return { runsRoot, runs, report: null, reportIssue: undefined as string | undefined };
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(runId)) throw new Error('Invalid runId.');
   const runDir = join(runsRoot, runId);
   const reportPath = join(runDir, 'report.json');
   let report: unknown;
@@ -261,7 +262,7 @@ async function exists(path: string): Promise<boolean> {
 }
 
 /** Resolve symlinks as well as lexical paths before reading or copying evidence. */
-async function artifactPathIssue(boundary: string, target: string): Promise<'path escape' | 'missing' | 'not a file' | undefined> {
+export async function artifactPathIssue(boundary: string, target: string): Promise<'path escape' | 'missing' | 'not a file' | undefined> {
   if (relativeArtifactPath(boundary, target) === undefined) return 'path escape';
   try {
     const [actualBoundary, actualTarget] = await Promise.all([realpath(boundary), realpath(target)]);

@@ -19,7 +19,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
@@ -30,7 +30,7 @@ jobs:
         run: |
           expected="npm-v$(node -p "require('./packages/fliwright-cli/package.json').version")"
           test "${GITHUB_REF_NAME}" = "${expected}"
-          for manifest in packages/fliwright-{core,vitest,cli,mcp,tdd,plugin-riverpod}/package.json; do
+          for manifest in packages/fliwright-{core,vitest,cli,tdd,plugin-riverpod}/package.json; do
             test "$(node -p "require('./${manifest}').version")" = "${GITHUB_REF_NAME#npm-v}"
           done
 
@@ -58,7 +58,6 @@ jobs:
           publish_if_missing @fliwright/plugin-riverpod
           publish_if_missing @fliwright/tdd
           publish_if_missing @fliwright/cli
-          publish_if_missing @fliwright/mcp
 
       - name: Verify published registry consumer
         env:

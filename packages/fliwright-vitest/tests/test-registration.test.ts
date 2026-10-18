@@ -11,7 +11,7 @@ it('retains fluent registration, project fixtures, timeouts and user metadata wi
   const runner = fileURLToPath(new URL('../src/runner.ts', import.meta.url));
   try {
     await writeFile(join(root, 'vitest.config.mjs'), `export default { test: {
-      include: ['registration.test.mjs'], runner: ${JSON.stringify(runner)}, maxWorkers: 1, reporters: ['json'],
+      include: ['registration.test.mjs'], runner: ${JSON.stringify(runner)}, maxWorkers: 1, reporters: ['dot'],
     } };`);
     await writeFile(join(root, 'registration.test.mjs'), `
       import { expect } from 'vitest';
@@ -27,7 +27,7 @@ it('retains fluent registration, project fixtures, timeouts and user metadata wi
       test.skipIf(true)('skipped conditional', () => { throw new Error('must not run'); });
       test.runIf(true)('enabled conditional', async ({ page }) => { await page.clickAt(1, 2); });
       test.fails('expected failure', () => { throw new Error('expected assertion failure'); });
-      test.sequential('keeps metadata', { meta: { ticket: 'FW-123' } }, ({ task }) => {
+      test('keeps metadata', { concurrent: false, meta: { ticket: 'FW-123' } }, ({ task }) => {
         expect(task.meta.ticket).toBe('FW-123');
         expect(JSON.stringify(task.meta)).toBe(JSON.stringify({ ticket: 'FW-123' }));
       });

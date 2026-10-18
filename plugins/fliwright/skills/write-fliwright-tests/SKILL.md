@@ -1,6 +1,6 @@
 ---
 name: write-fliwright-tests
-description: Create, update, review, or debug Fliwright TypeScript automation scripts and E2E tests for Flutter apps. Use for `@fliwright/vitest` `test` or `script` fixtures, timeline-aware `flow`/`mock`/`agent`/`logger` usage, locator selectors, gestures, form filling, assertions, HTTP mocks, Riverpod state setup, app capabilities, MCP-recorded code cleanup, CLI/MCP runs, run artifacts, or manual human-verification/captcha/WebView overlay handling. Covers Fliwright framework patterns only; project-specific routes, Keys, providers, mock endpoints, and captcha config belong in the target project context.
+description: Create, update, review, or debug Fliwright TypeScript automation scripts and E2E tests for Flutter apps. Use for `@fliwright/vitest` `test` or `script` fixtures, timeline-aware `flow`/`mock`/`agent`/`logger` usage, locator selectors, gestures, form filling, assertions, HTTP mocks, Riverpod state setup, app capabilities, CLI-recorded code cleanup, CLI runs, run artifacts, or manual human-verification/captcha/WebView overlay handling. Covers Fliwright framework patterns only; project-specific routes, Keys, providers, mock endpoints, and captcha config belong in the target project context.
 ---
 
 # Write Fliwright Automation & Tests
@@ -10,7 +10,7 @@ Use Fliwright as deterministic Flutter app automation through the Dart VM Servic
 ## First Decision
 
 - Use `test` from `@fliwright/vitest` for durable regression coverage, CI checks, and user-visible behavior verification. Put it in `.fliwright/tests/*.test.ts` and include meaningful assertions.
-- Use `script` from `@fliwright/vitest` for one-off automation, data entry, account setup, operational tasks, and MCP-recorded script cleanup. Put it in `.fliwright/scripts/*.script.ts` or `.fliwright/scripts/*.mjs`; do not add assertions only to make it look like a test.
+- Use `script` from `@fliwright/vitest` for one-off automation, data entry, account setup, operational tasks, and CLI-recorded script cleanup. Put it in `.fliwright/scripts/*.script.ts` or `.fliwright/scripts/*.mjs`; do not add assertions only to make it look like a test.
 - Use bare `FliwrightDriver` only for custom plugin work, legacy bridge compatibility, or low-level coordinate/extension tests. Manage `connect()` and `dispose()` explicitly.
 
 ## File Placement
@@ -35,7 +35,7 @@ Before writing a new file, `ls .fliwright/tests/` (or `scripts/`) to match the p
 4. Put setup in `mock.activateRules(...)`, `mock.rules(...)`, or named `flow.step()` blocks. Put each user action in a concise `flow.step()`. In `script` mode, use `flow.frame()`, `logger`, or `agent.verify()` to record facts; use `expect(locator, title?)` only when failure should stop the run.
 5. Avoid fixed sleeps. Rely on locator assertions, `page.waitFor(...)`, `page.settle()`, or navigation helpers.
 6. Keep committed tests portable. Accept VM Service URLs from CLI/config/env (`FLIWRIGHT_VM_URL`, `FLIWRIGHT_VM_SERVICE_URL`, project `.fliwright/config.json`, or `fliwright.config.ts`); never commit local URLs or device-specific config.
-7. Prefer `fliwright run --test path/to/file.ts --reporter ai-json` or MCP `fliwright_run` for active app validation because they return the richest report. Use `pnpm vitest run path/to/file.ts` only for quick local checks when full Fliwright reports are not needed.
+7. Prefer `fliwright run --test path/to/file.ts --json` for active app validation because they return the richest report. Use `pnpm vitest run path/to/file.ts` only for quick local checks when full Fliwright reports are not needed.
 
 ## Reference Routing
 
@@ -46,7 +46,7 @@ Read only the reference needed for the current task:
 - Logging and run artifacts: [references/logging.md](references/logging.md)
 - Selectors, gestures, assertions, navigation, screenshots: [references/selectors.md](references/selectors.md), [references/actions.md](references/actions.md), [references/assertions.md](references/assertions.md), [references/navigation.md](references/navigation.md), [references/screenshots-snapshots.md](references/screenshots-snapshots.md)
 - Forms, AI, mocks, Riverpod state, app capabilities: [references/forms.md](references/forms.md), [references/ai.md](references/ai.md), [references/mocks.md](references/mocks.md), [references/state.md](references/state.md), [references/app-instance.md](references/app-instance.md)
-- CLI/MCP workflow and failure diagnosis: [references/cli.md](references/cli.md), [references/mcp-workflow.md](references/mcp-workflow.md), [references/troubleshooting.md](references/troubleshooting.md)
+- CLI workflow and failure diagnosis: [references/cli.md](references/cli.md), [references/agent-workflow.md](references/agent-workflow.md), [references/troubleshooting.md](references/troubleshooting.md)
 - Human verification, captcha, slider, or WebView/PlatformView overlays: read [references/captcha.md](references/captcha.md) before designing the flow.
 - Exact signatures or copyable templates: [references/api-quick-reference.md](references/api-quick-reference.md), [references/examples.md](references/examples.md), and `examples/*.ts`.
 
@@ -123,7 +123,7 @@ Treat captcha, slider verification, QR login, SMS approval, and WebView/Platform
 ## Validation
 
 - For generated or edited test code, run the narrowest relevant TypeScript check or package test available. Use `pnpm lint`, `pnpm --filter @fliwright/vitest test`, `pnpm --filter @fliwright/core test`, or a targeted `pnpm vitest run path/to/file.ts` as appropriate.
-- For active Flutter app validation, prefer `fliwright run --test path/to/file.ts --reporter ai-json` or MCP `fliwright_run`. Pass `--vm-url` only when config/env discovery is unavailable.
+- For active Flutter app validation, prefer `fliwright run --test path/to/file.ts --json`. Pass `--vm-url` only when config/env discovery is unavailable.
 - If validation needs a running app or VM Service URL that is not available, say that explicitly and still perform static checks where possible.
 - When debugging failures, inspect the run report, `timeline.json`, `logs/events.jsonl`, screenshots/snapshots, diagnostics, and self-healing suggestions before editing selectors blindly.
 

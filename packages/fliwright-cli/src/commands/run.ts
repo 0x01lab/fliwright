@@ -17,8 +17,9 @@ import { resolveProjectConfig } from '../config.js';
 import { artifactReferences } from '../ArtifactReferences.js';
 import { formatPretty, formatJson, formatJunit, type CliFailureEntry, type CliRunResult } from '../reporter.js';
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { createJiti } from 'jiti';
-import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 
@@ -26,11 +27,15 @@ export interface RunOptions {
   testPattern?: string;
   testName?: string;
   vmUrl?: string;
-  reporter?: 'pretty' | 'json' | 'junit' | 'ai-json';
+  reporter?: 'pretty' | 'json' | 'junit';
   timeout?: number;
   screenshot?: 'file' | 'base64' | 'off';
   recordingMode?: 'standard' | 'full' | 'off';
   output?: string;
+  junitOutput?: string;
+  scenario?: string;
+  /** Set by the CLI only when it owns a managed app launch. */
+  scenarioMode?: ScenarioExecutionMode;
   cwd?: string;
   print?: boolean;
   runsRoot?: string;
@@ -67,7 +72,7 @@ export class RunFinalizationError extends Error {
 export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promise<CliRunResult> {
   const cwd = options.cwd ?? process.cwd();
   const config = await resolveProjectConfig(cwd, {
-    ...(options.recordingMode ? { recording: { mode: options.recordingMode } } : {}), runsRoot: options.runsRoot,
+    ...(options.recordingMode ? { recording: { mode: options.recordingMode } } : {}), runsRoot: options.runsRoot, defaultScenario: options.scenario, scenarioMode: options.scenarioMode,
   });
   const shared = mergeFliwrightConfig({ project: config });
 
@@ -132,6 +137,11 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
     testPattern,
     testName: options.testName,
   });
+  if (options.junitOutput) {
+    const path = resolve(cwd, options.junitOutput);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, formatJunit(withArtifacts), 'utf8');
+  }
   const formatted = formatOutput(withArtifacts, reporter);
 
   if (options.print !== false) {
@@ -167,12 +177,15 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
     ?? import.meta.resolve(specifier);
   const runnerPath = fileURLToPath(resolveRuntime('@fliwright/vitest/runner'));
   const vitestUrl = resolveRuntime('vitest/node');
-  // Vitest 4 does not expose --runner in its CLI. Use its public Node API in
-  // the isolated child, preserving project configuration and custom runners.
+  // Use the public Node API and explicit file reports in an isolated child,
+  // preserving project configuration and custom runners.
   const isGlob = ['*', '?', '{', '['].some((token) => options.testPattern.includes(token));
   const isFile = !isGlob && await stat(resolve(options.cwd, options.testPattern)).then((entry) => entry.isFile(), () => false);
   const filters = isGlob ? [] : [options.testPattern];
+  const reportDirectory = await mkdtemp(join(tmpdir(), 'fliwright-vitest-report-'));
+  const rawReportPath = join(reportDirectory, 'report.json');
   const bootstrap = `
+    const { readFile, writeFile } = await import('node:fs/promises');
     const { startVitest, JsonReporter } = await import(${JSON.stringify(vitestUrl)});
     class RunReporter extends JsonReporter {
       runnerErrors = [];
@@ -194,15 +207,15 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
           }
         }
         await super.onTestRunEnd(modules);
-      }
-      async writeReport(report) {
-        await super.writeReport(JSON.stringify({ ...JSON.parse(report), runnerErrors: this.runnerErrors,
-          recoveryAttempts: this.recoveryAttempts }));
+        const report = JSON.parse(await readFile(${JSON.stringify(rawReportPath)}, 'utf8'));
+        await writeFile(${JSON.stringify(rawReportPath)}, JSON.stringify({ ...report,
+          runnerErrors: this.runnerErrors, recoveryAttempts: this.recoveryAttempts }));
       }
     }
+
     const context = await startVitest('test', ${JSON.stringify(filters)}, {
       ${isGlob || isFile ? `include: ${JSON.stringify([options.testPattern])},` : ''}
-      run: true, reporters: [new RunReporter({})], testTimeout: ${JSON.stringify(options.timeout)},
+      run: true, reporters: [new RunReporter({ outputFile: ${JSON.stringify(rawReportPath)} })], testTimeout: ${JSON.stringify(options.timeout)},
       ${options.testName ? `testNamePattern: ${JSON.stringify(options.testName)},` : ''}
     }, { plugins: [{ name: 'fliwright-runner', config(config) {
       return { test: { runner: config.test?.runner ?? ${JSON.stringify(runnerPath)} } };
@@ -231,7 +244,9 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
     options.signal,
   );
 
-  const result = parseVitestOutput(stdout);
+  const reportJson = await readFile(rawReportPath, 'utf8').catch(() => '');
+  await rm(reportDirectory, { recursive: true, force: true });
+  const result = parseVitestOutput(reportJson);
   if (interrupted) {
     result.runnerErrors = [...(result.runnerErrors ?? []), {
       phase: 'process',
@@ -239,7 +254,8 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
     }];
   }
   if (interrupted || exitCode !== 0 || exitSignal || result.runnerErrors?.length) result.passed = false;
-  if (!interrupted && (exitCode !== 0 || exitSignal) && !result.runnerErrors?.some((error) => error.phase === 'process')) {
+  const expectedTestFailureExit = exitCode === 1 && result.failedTests > 0;
+  if (!interrupted && (exitSignal || (exitCode !== 0 && !expectedTestFailureExit)) && !result.runnerErrors?.some((error) => error.phase === 'process')) {
     result.runnerErrors = [...(result.runnerErrors ?? []), { phase: 'process',
       message: stderr.trim() || `Vitest did not finish successfully (exit ${exitCode ?? exitSignal ?? 'unknown'}).`,
     }];
@@ -252,7 +268,7 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
   result.status = interrupted ? 'interrupted' : result.passed ? 'passed' : 'failed';
   if (options.runId && options.runsRoot) {
     try {
-      await restoreRunAttempts(readVitestReport(stdout)?.recoveryAttempts ?? [], options.runId, options.runsRoot);
+      await restoreRunAttempts(readVitestReport(reportJson)?.recoveryAttempts ?? [], options.runId, options.runsRoot);
     } catch (cause) {
       throw new RunFinalizationError(result, {
         runId: options.runId, outputDir: join(options.runsRoot, options.runId),
@@ -290,6 +306,7 @@ function execNode(
     };
     const onAbort = () => onSigint();
     process.once('SIGINT', onSigint);
+    process.once('SIGTERM', onSigint);
     if (signal?.aborted) onAbort();
     else signal?.addEventListener('abort', onAbort, { once: true });
     child.stdout.setEncoding('utf8');
@@ -298,6 +315,7 @@ function execNode(
     child.stderr.on('data', (chunk: string) => { stderr += chunk; });
     const cleanup = () => {
       process.removeListener('SIGINT', onSigint);
+      process.removeListener('SIGTERM', onSigint);
       signal?.removeEventListener('abort', onAbort);
       if (killTimer) clearTimeout(killTimer);
     };
@@ -782,7 +800,6 @@ function shellQuote(value: string): string {
 
 function formatOutput(result: CliRunResult, reporter: string): string {
   switch (reporter) {
-    case 'ai-json':
     case 'json':
       return formatJson(result);
     case 'junit':

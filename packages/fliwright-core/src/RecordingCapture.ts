@@ -34,7 +34,7 @@ export interface RecordingCaptureResult {
   stopReason: 'duration' | 'requested' | 'cancelled';
 }
 
-/** Own start → wait/cancel → stop/flush → dispose for CLI and MCP captures. */
+/** Own start → wait/cancel → stop/flush → dispose for CLI and editor captures. */
 export async function captureRecording(options: RecordingCaptureOptions): Promise<RecordingCaptureResult> {
   if (options.signal?.aborted) throw new Error('Recording cancelled.');
   if (!options.waitForStop && options.durationMs === undefined) {

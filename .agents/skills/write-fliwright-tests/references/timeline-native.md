@@ -13,7 +13,7 @@ import { test, script, expect } from '@fliwright/vitest';
 | `test` | E2E verification that should pass/fail in CI | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
 | `script` | Automation tasks, account setup, data entry, cleanup flows | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
 
-Both write `<runsRoot>/<runId>/timeline.json` and `<runsRoot>/<runId>/logs/events.jsonl`. `<runsRoot>` 默认是 `~/.fliwright/projects/<project-slug>/runs`，也可通过 `FLIWRIGHT_RUNS_ROOT` 或 `defineConfig({ runsRoot })` 覆盖。`test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions.
+Both write `tests/<testId>/attempts/<attemptId>/timeline.json` and `logs/events.jsonl` beneath `<runsRoot>/<runId>/`. `<runsRoot>` 默认是 `~/.fliwright/projects/<project-slug>/runs`，也可通过 `FLIWRIGHT_RUNS_ROOT` 或 `defineConfig({ runsRoot })` 覆盖。`test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions.
 
 ## Standard Test Shape
 
@@ -220,14 +220,14 @@ Never hide AI use inside ordinary helper functions. If a script depends on AI, m
 
 ## Timeline Inspection
 
-After `fliwright run --reporter ai-json`, reports include timeline paths. MCP tools can inspect them:
+After `fliwright run --json`, reports include timeline paths. CLI commands inspect them:
 
 ```text
-fliwright_timeline_get({ path?, runId?, nodeId?, includeArtifacts? })
-fliwright_agent_diagnose({ path?, runId?, failureIndex?, failure? })
+fliwright artifacts timeline RUN_ID --node-id NODE_ID --include-artifacts --json
+fliwright artifacts diagnose RUN_ID --failure-index 0 --json
 ```
 
-For local debugging, open `<runsRoot>/<runId>/timeline.json`（默认在 `~/.fliwright/projects/<project-slug>/runs/`） and inspect `agentVisibleFailures`, failed nodes, and artifact paths.
+For local debugging, use `fliwright artifacts timeline RUN_ID --json`（默认在 `~/.fliwright/projects/<project-slug>/runs/`） and inspect `agentVisibleFailures`, failed nodes, and artifact paths.
 
 For chronological log events, read `<runsRoot>/<runId>/logs/events.jsonl`（路径同上） or enable live output with:
 

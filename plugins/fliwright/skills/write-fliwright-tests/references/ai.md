@@ -35,7 +35,7 @@ type AiProviderName = 'mock' | 'claude' | 'codex' | 'custom-cli' | 'none';
 
 ### 三种配置方式（优先级：代码 > 环境变量）
 
-**方式 A：环境变量（推荐用于 CLI/MCP 运行）**
+**方式 A：环境变量（推荐用于 CLI 运行）**
 
 ```bash
 export FLIWRIGHT_AI_PROVIDER=mock          # mock | claude | codex | custom-cli | none
@@ -201,7 +201,7 @@ const result = await aiRuntime.inspect<{ hasError: boolean; message?: string }>(
      | codeBinding | 0.15 | 回调名/类型绑定 |
 
    - 加权分 ≥ **0.85**（`DEFAULT_THRESHOLD`）即认定命中 → 断言视为通过，并产出一份 `HealingReport`。
-3. 若未达阈值，照常抛 `AssertionError`，并把建议写进失败上下文（MCP/CLI 报告里能看到）。
+3. 若未达阈值，照常抛 `AssertionError`，并把建议写进失败上下文（CLI 报告里能看到）。
 
 > `.not`（否定断言）**关闭**自愈——否则逻辑会自相矛盾。源码里对 `negated` 直接跳过记录与尝试。
 
@@ -302,7 +302,7 @@ const tips = suggester.suggest(recordedOperations);
 // tips: { afterIndex: number; reason: string; template: string }[]
 ```
 
-启发式规则举例：屏幕顶部的 tap 可能是导航、表单输入后的 tap 可能是提交、drag 后的 tap 可能是列表项选中。`template` 是一行 `// TODO: …` 注释占位，供你补全。录制→生成代码流程（见 [mcp-workflow.md](./mcp-workflow.md)）会用到它。
+启发式规则举例：屏幕顶部的 tap 可能是导航、表单输入后的 tap 可能是提交、drag 后的 tap 可能是列表项选中。`template` 是一行 `// TODO: …` 注释占位，供你补全。录制→生成代码流程（见 [agent-workflow.md](./agent-workflow.md)）会用到它。
 
 ---
 
@@ -364,6 +364,6 @@ try {
 
 - 表单填充全貌 → [forms.md](./forms.md)
 - 断言与自动等待 → [assertions.md](./assertions.md)
-- 录制 → 生成代码 → 运行 → 查失败（含自愈建议） → [mcp-workflow.md](./mcp-workflow.md)
+- 录制 → 生成代码 → 运行 → 查失败（含自愈建议） → [agent-workflow.md](./agent-workflow.md)
 - 失败时如何拿到自愈建议与诊断 → [troubleshooting.md](./troubleshooting.md)
 - 测试夹具与 `aiRuntime` 装配 → [test-harness.md](./test-harness.md)

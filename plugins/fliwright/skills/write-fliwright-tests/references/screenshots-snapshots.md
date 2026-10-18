@@ -104,7 +104,7 @@ await confirm.click();
 2. 选一个稳定的**查询**（role + text + key），而不是某个 `e<N>` ref；
 3. 提交一个有韧性的 locator：`page.getBySemantics({ label: 'Confirm', role: 'button' })`，或者在同一次运行内捕获的 `await page.findRef({ text: 'Confirm', role: 'button' })`。
 
-MCP 工具 `fliwright_snap` / `fliwright_observe` 走的就是这条同样的快照路径——见 [mcp-workflow.md](./mcp-workflow.md)。
+CLI 命令 `fliwright app snapshot` / `fliwright app observe` 走的就是这条同样的快照路径——见 [agent-workflow.md](./agent-workflow.md)。
 
 ## 桥接能力清单
 
@@ -112,7 +112,7 @@ MCP 工具 `fliwright_snap` / `fliwright_observe` 走的就是这条同样的快
 
 | 能力 | 所需场景 |
 | --- | --- |
-| `ext.fliwright.snap` | `page.snapshot()`、`page.findRef()`、MCP `fliwright_snap` / `fliwright_observe` |
+| `ext.fliwright.snap` | `page.snapshot()`、`page.findRef()`、CLI `fliwright app snapshot` / `fliwright app observe` |
 | `ext.fliwright.action` | ref 支撑的 tap/type/wait，所有 `Locator` 动作，actionability 诊断 |
 | `ext.fliwright.extractForm` | `page.formHelper.*`、`fill()`、`fillFields()` |
 | `ext.fliwright.screenshot` | `page.screenshot()`、AI 运行报告截图 |

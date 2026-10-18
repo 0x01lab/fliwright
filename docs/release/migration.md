@@ -6,44 +6,57 @@ E2E runtime; the change is which adapter owns the public workflow.
 
 ## Required environment changes
 
-- Use Node.js 20 or newer and Vitest 4.1.11.
+- Use Node.js 22.12+ (22.x), 24.x, or 26+ and Vitest 5.0.5.
 - Install `@fliwright/cli` and `@fliwright/vitest` for the normal test path.
 - Keep `fliwright_bridge` behind a dedicated debug or test Flutter entrypoint.
-- Install `@fliwright/mcp` only when a coding agent needs MCP access.
+- Remove `@fliwright/mcp` and its MCP host configuration. Install the bundled CLI workflow Skills.
 - Import Design QA from `fliwright_design_qa`; it is no longer exported by the
   base bridge.
+
+## Vitest 5 migration
+
+- Pin Vitest to `5.0.5` across consumer projects and use a supported Node version.
+- Custom runner subclasses import `TestRunner` from `vitest`; reporter types
+  import from `vitest/node`. The former `vitest/runners` and `vitest/reporters`
+  entrypoints have been removed.
+- Replace `test.sequential(...)` with `test(..., { concurrent: false }, handler)`.
+- Mocks are cleared before each test by default. Assert calls in the same test
+  that performs them instead of depending on a previous test's call history.
+- The JSON reporter writes to a file by default. External runners should set
+  `--outputFile` and read that file; stdout contains the report location.
 
 ## Surface migration
 
 | Earlier workflow | Current workflow |
 | --- | --- |
-| Treat the MCP server as the primary runner | Use `fliwright run` and its exit code in local scripts and CI. |
-| Configure every low-level MCP tool | Start with the default eight-tool `core` profile. Opt into `development`, `tdd`, `flow`, or `full` only for a specialist session. |
-| Call `fliwright_snap`, `fliwright_tap`, or `fliwright_type` in ordinary sessions | Use `fliwright_observe` followed by `fliwright_interact`; granular tools remain in `development`. |
-| Call `fliwright_mock_list` and `fliwright_mock_switch` | Use CLI `fliwright mock ...` or the intent-level `fliwright_mock` core tool. |
-| Read failure data only through `fliwright_get_failure` | Use `fliwright artifacts show|export` or the read-only `test_report` MCP resource; `fliwright_get_failure` remains in `development`. |
-| Put Design QA dependencies in `fliwright_bridge` | Add `fliwright_design_qa` separately and register `FliwrightDesignQaExtension` only in a debug/profile entrypoint. |
+| MCP server and tool profiles | Project-local CLI plus bundled Skills; discover commands with `fliwright schema --json`. |
+| `fliwright_connect` / `fliwright_status` | `app status`, or explicit `session open` for a persistent connection. |
+| snap / find / observe / tap / type / action | `app snapshot`, `app find`, `app observe`, `app interact`. |
+| screenshots as inline base64 | `app screenshot --output <file>` returns the image path. |
+| mock tools | `mock list`, `mock status`, `mock calls`, `mock apply`, `mock clear-calls`, `mock reset`. |
+| run / failure resource / timeline tools | `run --json`, `artifacts show`, `artifacts failures`, `artifacts timeline`, `artifacts diagnose`. |
+| persistent TDD tool state | `session open` then `tdd start/focus/cycle/stop --session <id>`. |
+| unbounded recording | `record --duration <seconds>` for CI and automated captures. |
+| `--reporter ai-json` | `--json`; read the result from `data` in the versioned envelope. |
+| `mock:start` | `mock start`. |
+| Flow review bundle `fliwrightMcp` | Version 2 bundle `fliwrightCli`; external `figmaMcp` remains. |
 
-## MCP configuration
+## CI and cancellation
 
-An existing MCP host configuration can keep launching `fliwright-mcp`. With no
-profile variable, it now receives the compact `core` profile. Generate an
-explicit configuration with:
+Use finite `run`, `script`, or `tdd cycle --file` commands. Combine `--json` with
+`--junit-output <file>` and retain the run root in an always-run artifact step.
+Test/review failures exit 1; usage errors 2; runtime failures 3; workflow conflicts
+4; deadlines 5; cancellation 130. JSON errors retain available evidence in `data`.
+`--deadline` requests cancellation and waits for owned work to settle.
 
-```bash
-fliwright mcp config --profile core
-fliwright mcp doctor
-```
-
-Choose `full` only as a temporary migration or debugging surface. It registers
-all implemented tool families and therefore increases tool-selection ambiguity
-and agent context usage.
+Named scenarios prepare every fixture attempt, including retries. Authenticated
+business tests use app-owned auth seeding. Endpoint control phases release their
+lease before Vitest forks acquire it.
 
 ## Compatibility policy
 
-The Developer Preview does not promise compatibility paths for replaced
-behavior. The deprecated top-level `mock:start` alias currently remains for
-migration, but new scripts should use the grouped `fliwright mock start`
-command. Update other scripts and agent configurations to the current CLI
-commands and profiles before promoting them to CI. Public stable-version
-deprecation periods will be defined before 1.0.
+The MCP package, server configuration and deprecated aliases have been removed.
+There is no compatibility server. Update agent configuration and shell scripts
+to the current command schema. Snapshot refs are opaque app/isolate handles;
+reacquire after app restart. Session operations have durable IDs: inspect status
+after a lost response before retrying a mutation.

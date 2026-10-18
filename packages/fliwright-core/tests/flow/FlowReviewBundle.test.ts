@@ -3,7 +3,7 @@ import { buildFlowReviewBundle } from '../../src/flow/FlowReviewBundle.js';
 import type { FliwrightFlowDocument } from '../../src/flow/types.js';
 
 describe('buildFlowReviewBundle', () => {
-  it('builds Figma MCP and Fliwright MCP review tasks from bound runtime targets', () => {
+  it('builds Figma MCP and Fliwright CLI review tasks from bound runtime targets', () => {
     const flow: FliwrightFlowDocument = {
       version: 1,
       id: 'checkout',
@@ -40,7 +40,7 @@ describe('buildFlowReviewBundle', () => {
     });
 
     expect(bundle).toMatchObject({
-      version: 1,
+      version: 2,
       flowId: 'checkout',
       title: 'Checkout',
       generatedAt: '2026-07-01T00:00:00.000Z',
@@ -64,17 +64,17 @@ describe('buildFlowReviewBundle', () => {
         mcpTool: 'figma.get_screenshot',
       },
     ]);
-    expect(bundle.fliwrightMcp.runtimeCapture.args).toEqual({
+    expect(bundle.fliwrightCli.runtimeCapture.args).toEqual({
       path: '/workspace/.fliwright/flows/checkout.flow.json',
       outputDir: '.fliwright/reviews/checkout-bundle/runtime',
       targetIds: ['checkout-screen'],
     });
-    expect(bundle.fliwrightMcp.report.args).toEqual({
+    expect(bundle.fliwrightCli.report.args).toEqual({
       path: '/workspace/.fliwright/flows/checkout.flow.json',
       outputPath: '.fliwright/reviews/checkout-bundle/checkout-report.json',
       autoCompare: true,
-      runtimeCaptures: '.fliwright/reviews/checkout-bundle/runtime/runtime-captures.json',
-      figmaCaptures: '.fliwright/reviews/checkout-bundle/figma/figma-captures.json',
+      runtimeCapturesFile: '.fliwright/reviews/checkout-bundle/runtime/runtime-captures.json',
+      figmaCapturesFile: '.fliwright/reviews/checkout-bundle/figma/figma-captures.json',
     });
   });
 });

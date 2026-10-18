@@ -173,14 +173,16 @@ export async function snapInteraction(
   driver: InteractionDriver,
   options: SnapshotOptions = {},
 ): Promise<SnapshotResult> {
-  return driver.page.snapshot(options);
+  const result = await driver.page.snapshot(options);
+  if (result.error) throw new Error(result.error);
+  return result;
 }
 
 export async function findInteraction(
   driver: InteractionDriver,
   query: FindQuery,
 ): Promise<{ matches: SnapshotRef[]; count: number }> {
-  const snapshot = await driver.page.snapshot();
+  const snapshot = await snapInteraction(driver);
   const matches = snapshot.refs.filter((candidate) => matchesFindQuery(candidate, query));
   return { matches, count: matches.length };
 }
@@ -423,7 +425,7 @@ export async function waitInteraction(
 
 export async function hotReloadAndSnapInteraction(
   driver: InteractionDriver,
-  options: SnapshotOptions & { pixelRatio?: number } = {},
+  options: SnapshotOptions & { pixelRatio?: number; includeScreenshot?: boolean } = {},
 ): Promise<{
   reloaded: boolean;
   durationMs: number;
@@ -457,7 +459,7 @@ export async function hotReloadAndSnapInteraction(
 
   let screenshot: string | undefined;
   try {
-    if (driver.page.screenshot) {
+    if (options.includeScreenshot !== false && driver.page.screenshot) {
       screenshot = (await driver.page.screenshot({ pixelRatio: options.pixelRatio })).toString('base64');
     }
   } catch (error) {

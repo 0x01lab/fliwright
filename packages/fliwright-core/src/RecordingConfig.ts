@@ -25,6 +25,7 @@ export interface FliwrightProjectConfig {
   runsRoot?: string;
   scenarios?: Record<string, TestScenario>;
   scenarioMode?: ScenarioExecutionMode;
+  defaultScenario?: string;
 }
 
 export interface ResolvedFliwrightConfig {
@@ -33,6 +34,7 @@ export interface ResolvedFliwrightConfig {
   runsRoot?: string;
   scenarios?: Record<string, TestScenario>;
   scenarioMode?: ScenarioExecutionMode;
+  defaultScenario?: string;
 }
 
 export const DEFAULT_FLIWRIGHT_CONFIG: ResolvedFliwrightConfig = {
@@ -91,6 +93,7 @@ export const fliwrightConfigSchema = z.object({
   runsRoot: z.string().min(1).optional(),
   scenarios: z.record(scenarioSchema).optional(),
   scenarioMode: z.enum(['managed-start', 'attach']).optional(),
+  defaultScenario: z.string().min(1).optional(),
 }).strict();
 
 const resolvedFliwrightConfigSchema = fliwrightConfigSchema.extend({
@@ -103,6 +106,7 @@ export function readFliwrightEnvironment(environment: Record<string, string | un
   const config = environment.FLIWRIGHT_CONFIG ? fliwrightConfigSchema.parse(JSON.parse(environment.FLIWRIGHT_CONFIG)) : {};
   return fliwrightConfigSchema.parse({
     ...config,
+    ...(environment.FLIWRIGHT_DEFAULT_SCENARIO ? { defaultScenario: environment.FLIWRIGHT_DEFAULT_SCENARIO } : {}),
     ...(environment.FLIWRIGHT_RECORDING_MODE ? { recording: { ...config.recording, mode: environment.FLIWRIGHT_RECORDING_MODE } } : {}),
     ...(environment.FLIWRIGHT_RUNS_ROOT ? { runsRoot: environment.FLIWRIGHT_RUNS_ROOT } : {}),
     ...(environment.FLIWRIGHT_SCENARIOS ? { scenarios: JSON.parse(environment.FLIWRIGHT_SCENARIOS) } : {}),
@@ -121,6 +125,7 @@ export function mergeFliwrightConfig(options: {
     paths: Object.assign({}, DEFAULT_FLIWRIGHT_CONFIG.paths, ...layers.map((layer) => layer?.paths)),
     runsRoot: layers.reduce<string | undefined>((value, layer) => layer?.runsRoot ?? value, undefined),
     scenarios: layers.reduce<Record<string, TestScenario> | undefined>((value, layer) => layer?.scenarios ?? value, undefined),
+    defaultScenario: layers.reduce<string | undefined>((value, layer) => layer?.defaultScenario ?? value, undefined),
     scenarioMode: layers.reduce<ScenarioExecutionMode | undefined>((value, layer) => layer?.scenarioMode ?? value, undefined),
   } satisfies ResolvedFliwrightConfig;
   return resolvedFliwrightConfigSchema.parse(merged) as ResolvedFliwrightConfig;

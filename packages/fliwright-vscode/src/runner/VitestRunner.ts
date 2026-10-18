@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createRequire as createNodeRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
+import { readFile, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import { FLIWRIGHT_RUNS_ROOT_ENV, ensureFliwrightRunsRoot } from '@fliwright/core';
 import { resolveProjectConfig } from '@fliwright/cli';
@@ -15,16 +16,23 @@ export class VitestRunner implements TestRunner {
     const runId = params.runId ?? `run-${randomUUID()}`;
     params = { ...params, runsRoot, runId };
     const vitestCli = resolveVitestCli(params.workspaceRoot.fsPath);
-    const args = [vitestCli, ...buildVitestArgs(params)];
+    const outputDir = path.join(runsRoot, runId);
+    const vitestReportPath = path.join(outputDir, 'vitest.json');
+    const args = [vitestCli, ...buildVitestArgs(params), '--outputFile', vitestReportPath];
     // CLI reporter flags replace the project's reporters, including the preset
     // recovery hook. Keep it alongside JSON output for bounded worker writes.
     const workspaceRequire = createNodeRequire(path.join(params.workspaceRoot.fsPath, 'package.json'));
     args.push('--reporter', workspaceRequire.resolve('@fliwright/vitest/reporter'));
     const env = buildRunEnv(params);
 
+    await rm(vitestReportPath, { force: true });
     const execution = await runCommand(process.execPath, args, params.workspaceRoot.fsPath, env, params.signal, params.onOutput);
-    const result = parseVitestJson(execution.stdout, execution.stderr, execution.exitCode);
-    const outputDir = path.join(runsRoot, runId);
+    // Vitest 5 writes JSON to disk; stdout contains only the report location.
+    const report = await readFile(vitestReportPath, 'utf8').catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return '';
+      throw error;
+    });
+    const result = parseVitestJson(report, execution.stderr, execution.exitCode);
     const finalized = await finalizeRunArtifacts({ ...result,
       status: execution.exitCode === 130 ? 'interrupted' : result.passed ? 'passed' : 'failed',
     }, { cwd: params.workspaceRoot.fsPath, outputDir, reportPath: path.join(outputDir, 'report.json'),
@@ -46,7 +54,6 @@ export function buildVitestArgs(params: RunParams): string[] {
 export function buildRunEnv(params: RunParams): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH: params.failureContextDir.fsPath,
   };
   if (params.runsRoot) env[FLIWRIGHT_RUNS_ROOT_ENV] = params.runsRoot;
   if (params.runId) env.FLIWRIGHT_RUN_ID = params.runId;

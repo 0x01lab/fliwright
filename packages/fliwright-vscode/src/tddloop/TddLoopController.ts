@@ -5,7 +5,7 @@
  * Single-driver ownership (design principle 4): the controller is READ-ONLY. It never creates a
  * `FliwrightDriver`, never connects to a VM service, never spawns a flutter daemon. The take-over
  * command is opt-in and disabled by default — it only records a user-confirmed request that the
- * agent/MCP runtime cede the loop. It does NOT start a second driver here.
+ * agent/CLI runtime cede the loop. It does NOT start a second driver here.
  */
 import * as vscode from 'vscode';
 import { TddLoopPanel } from './TddLoopPanel.js';
@@ -65,7 +65,7 @@ export class TddLoopController implements vscode.Disposable {
       }),
       // Take-over is opt-in (design principle 4). Hidden unless the user enables it in settings
       // AND arms it via this command (which itself prompts for confirmation). It never starts a
-      // second driver locally — it only signals intent to the MCP-owned runtime.
+      // second driver locally — it only signals intent to the CLI-owned runtime.
       vscode.commands.registerCommand(TDD_LOOP_TAKE_OVER_COMMAND, async () => {
         if (!this.isTakeOverEnabled()) {
           await vscode.window.showInformationMessage(
@@ -75,12 +75,12 @@ export class TddLoopController implements vscode.Disposable {
         }
         const choice = await vscode.window.showWarningMessage(
           'Request TDD loop take-over?',
-          { modal: true, detail: 'This records a take-over request for the running MCP-owned TDD runtime. VS Code remains read-only until the agent/MCP side explicitly stops or hands off the loop.' },
+          { modal: true, detail: 'This records a take-over request for the running CLI-owned TDD runtime. VS Code remains read-only until the agent/CLI side explicitly stops or hands off the loop.' },
           'Request take-over',
         );
         if (choice !== 'Request take-over') return;
         this.takeOverArmed = true;
-        // No local driver is created here. The actual hand-off is owned by the MCP runtime side.
+        // No local driver is created here. The actual hand-off is owned by the CLI runtime side.
         await vscode.commands.executeCommand('fliwright.refreshTddLoop');
       }),
     ];

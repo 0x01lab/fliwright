@@ -68,13 +68,16 @@ describe('ScriptRunner', () => {
     await writeText(root, 'node_modules/vitest/vitest.mjs', [
       "import fs from 'node:fs';",
       "const configPath = process.argv[process.argv.indexOf('--config') + 1];",
-      'console.log(JSON.stringify({',
+      'const payload = {',
       '  cli: process.argv[1],',
       '  argv: process.argv.slice(2),',
       '  config: fs.readFileSync(configPath, "utf8"),',
       '  vmServiceUrl: process.env.FLIWRIGHT_VM_SERVICE_URL,',
       '  vmUrl: process.env.FLIWRIGHT_VM_URL,',
-      '}));',
+      '};',
+      "const output = process.argv[process.argv.indexOf('--outputFile') + 1];",
+      "fs.mkdirSync(new URL('.', 'file://' + output), { recursive: true });",
+      'fs.writeFileSync(output, JSON.stringify({ success: true, numTotalTests: 1, numPassedTests: 1, numFailedTests: 0, testResults: [], probe: payload }));',
     ].join('\n'));
 
     const result = await new ScriptRunner().run({
@@ -88,7 +91,7 @@ describe('ScriptRunner', () => {
     });
 
     expect(result.passed).toBe(true);
-    const payload = JSON.parse(result.stdout);
+    const payload = JSON.parse(result.stdout).probe;
     expect(payload.cli).toMatch(/node_modules[\\/]vitest[\\/]vitest\.mjs$/);
     expect(payload.argv).toEqual([
       'run',
@@ -96,6 +99,8 @@ describe('ScriptRunner', () => {
       '--config',
       expect.stringMatching(/vitest\.config\.mjs$/),
       '--reporter=json',
+      '--outputFile',
+      expect.stringMatching(/vitest\.json$/),
       '--reporter',
       expect.stringMatching(/fliwright-vitest[\\/]dist[\\/]RecoveryReporter\.js$/),
     ]);

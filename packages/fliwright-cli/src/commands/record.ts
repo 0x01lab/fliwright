@@ -4,12 +4,14 @@ import { verifyRecordingReplay } from '../RecordingReplay.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
-import { copyRecordingArtifacts, applyDartVerification, parseDartVerificationEvidence, fingerprintScenario, generateRecordingAutomation, buildFlowFromRecording, captureRecording, openRecordingCapture, ScenarioResolver } from '@fliwright/core';
+import { copyRecordingArtifacts, applyDartVerification, parseDartVerificationEvidence, fingerprintScenario, generateRecordingAutomation, buildFlowFromRecording, captureRecording, openRecordingCapture, ScenarioResolver, EndpointLeaseManager } from '@fliwright/core';
 import type { CodegenOptions, DartVerificationEvidence, FliwrightFlowDocument, FliwrightPathsConfig, RecordedOperation, RecordingFrame } from '@fliwright/core';
 import type { RecordingCaptureResource, RecordingReadinessResult, RecordingResult, RecordingCheckpointCandidate } from '@fliwright/core';
 import type { RecordingManifest, GenerateRecordingAutomationOptions, ResolvedSelector } from '@fliwright/core';
 
 export interface RecordOptions {
+  durationMs?: number;
+  print?: boolean;
   vmUrl?: string;
   output?: string;
   flowOutput?: string;
@@ -44,7 +46,7 @@ export interface RecordDeps {
   openCapture?: (vmUrl: string) => Promise<RecordingCaptureResource>;
   /** An adapter stop source; the signal removes its listeners after capture. */
   waitForStop?: (signal: AbortSignal) => Promise<void>;
-  /** Optional explicit replay hook supplied by CLI/MCP/IDE integrations. */
+  /** Optional explicit replay hook supplied by CLI/IDE integrations. */
   verifyRecording?: (input: {
     code: string;
     scenario: string;
@@ -89,7 +91,8 @@ export async function recordCommand(
   const generatedTarget = options.output ? resolve(cwd, options.output)
     : defaultGeneratedTarget(cwd, mode, testName, lang, config.paths);
 
-  console.log('🔴 Recording... Press Ctrl+C to stop.\n');
+  const log = options.print === false ? () => {} : console.error;
+  log('Recording... Press Ctrl+C to stop.');
 
   const checkpointInput = options.assertions
     ? await readCheckpointFile(resolve(cwd, options.assertions))
@@ -100,20 +103,22 @@ export async function recordCommand(
     resetToHomeBeforeEach: options.resetToHomeBeforeEach ?? lang === 'ts',
     homeRoute: options.homeRoute,
   };
-  const captured = await captureRecording({
+  const lease = await recordingLeases.acquire(vmUrl, { signal: options.signal });
+  const captured = await lease.run(() => captureRecording({
     open: () => (deps.openCapture ?? openRecordingCapture)(vmUrl),
     signal: options.signal,
+    durationMs: options.durationMs,
     waitForStop: deps.waitForStop ?? waitForSigint,
     start: {
       captureScreenshots: true,
       filterNoise: true,
       onOperation: (op, index) => {
         // Input contents may be sensitive. Progress only needs the action kind.
-        console.log(`  ${index + 1}. ${op.kind}`);
+        log(`  ${index + 1}. ${op.kind}`);
       },
     },
     generate: codegenOptions,
-  });
+  })).finally(() => lease.release());
   const generated = generateRecordingAutomation(captured, {
     ...codegenOptions, checkpoints: checkpointInput, scenarioName: options.scenario, scenarioFingerprint,
   });
@@ -184,16 +189,16 @@ export async function recordCommand(
   if (generatedTarget && canWriteAutomation) {
     await mkdir(dirname(generatedTarget), { recursive: true });
     await writeFile(generatedTarget, finalCode, 'utf8');
-    console.log(`\n✅ Automation written to ${generatedTarget}`);
+    log(`\n✅ Automation written to ${generatedTarget}`);
   } else if (generatedTarget && !canWriteAutomation) {
-    console.log(`\n⚠️  Recording was kept as a draft because recording is not ready: ${finalBlockers.join('; ')}`);
+    log(`\n⚠️  Recording was kept as a draft because recording is not ready: ${finalBlockers.join('; ')}`);
   }
 
   if (options.flowOutput) {
     const flowPath = resolve(cwd, options.flowOutput);
     await mkdir(dirname(flowPath), { recursive: true });
     await writeFile(flowPath, `${JSON.stringify(flow, null, 2)}\n`, 'utf8');
-    console.log(`\n✅ Flow written to ${options.flowOutput}`);
+    log(`\n✅ Flow written to ${options.flowOutput}`);
   }
 
   return {
@@ -278,7 +283,7 @@ function waitForSigint(signal: AbortSignal): Promise<void> {
     };
     const stop = () => {
       cleanup();
-      console.log('\n⏹  Stopping recording...');
+      console.error('Stopping recording...');
       resolve();
     };
     if (signal.aborted) return resolve();
@@ -286,3 +291,5 @@ function waitForSigint(signal: AbortSignal): Promise<void> {
     signal.addEventListener('abort', cleanup, { once: true });
   });
 }
+
+const recordingLeases = new EndpointLeaseManager();

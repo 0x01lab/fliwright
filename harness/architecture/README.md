@@ -23,8 +23,7 @@ other Harness document duplicates those rules.
 | `packages/fliwright-core` | Reusable automation runtime, VM-service client protocol, shared models | CLI, MCP, editor UX, or in-app Dart instrumentation |
 | `packages/fliwright-bridge` | Flutter-side `ext.fliwright.*` instrumentation and app interaction | TypeScript orchestration or user-facing transports |
 | `packages/fliwright-vitest` | Vitest fixtures, hooks, reporters, test lifecycle integration | Core automation semantics or transport workflows |
-| `packages/fliwright-mcp` | Agent-facing MCP tools and resources | Core primitives, CLI ownership, editor UX, or Dart protocol behavior |
-| `packages/fliwright-cli` | Operator-facing CLI commands and reusable command capabilities | Core primitives, MCP semantics, editor UX, or Dart instrumentation |
+| `packages/fliwright-cli` | Developer, agent and CI CLI commands and reusable command capabilities | Core primitives, editor UX, or Dart instrumentation |
 | `packages/fliwright-vscode` | VS Code commands, views, webviews, and project workflows | Core primitives, MCP contracts, or Dart instrumentation |
 | `packages/fliwright-plugin-riverpod` | TypeScript Riverpod plugin and state adapter | Flutter observation or generic runtime behavior |
 | `packages/fliwright-bridge-riverpod` | Flutter/Riverpod observation and provider bridge methods | Generic bridge behavior or TypeScript adapters |
@@ -51,7 +50,7 @@ runtime surfaces; use it to discover an implemented capability, then use
   area to its owner instead of adding a compatibility path.
 - A bridge protocol change is cross-boundary: inspect both the Dart bridge and
   its TypeScript caller, then test the contract at both ends.
-- A public core, MCP, CLI, Vitest, or VS Code behavior change may require its
+- A public core, CLI, Vitest, or VS Code behavior change may require its
   matching integration tests and generated feature reference.
 - TypeScript packages keep source in `packages/*/src` and focused tests in
   matching `packages/*/tests` directories. The Dart bridge uses

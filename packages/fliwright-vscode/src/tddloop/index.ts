@@ -1,7 +1,7 @@
 /**
  * Public surface of the read-only TDD Loop monitor (design spec §4.3 / §5.4 / §10 P1).
  *
- * The monitor renders a `RuntimeSnapshot` produced by the MCP-owned `TddRuntime` without ever
+ * The monitor renders a `RuntimeSnapshot` produced by the CLI-owned `TddRuntime` without ever
  * creating a second driver (design principle 4). See per-file docblocks for the data-source
  * rationale.
  */

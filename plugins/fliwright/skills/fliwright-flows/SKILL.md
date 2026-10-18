@@ -15,7 +15,7 @@ test: it is an editable `.fliwright/flows/<id>.flow.json` document.
   `@fliwright/vitest` test or script.
 - Use this skill when the durable artifact is a flow document, a flow-derived
   implementation plan, or a Figma-backed UI review.
-- Use `fliwright-mcp-workflows` when MCP configuration or tool availability is
+- Use `fliwright-cli-workflows` when CLI discovery or command availability is
   the blocker.
 
 ## Workflow
@@ -55,20 +55,6 @@ test: it is an editable `.fliwright/flows/<id>.flow.json` document.
   before changing code.
 - Keep Figma credentials outside flow files and source control.
 
-## Commands And MCP
+## Commands
 
-Use `fliwright flow list|get|bind-figma|agent-spec|clean|review-*|generate-test|validate`
-for CLI workflows. The equivalent MCP tools are `fliwright_flow_*`.
-
-Flow MCP tools require the `flow` or `full` profile. This plugin configures
-`full`; if the tools are absent, inspect `FLIWRIGHT_MCP_TOOL_PROFILE` before
-assuming the flow is invalid.
-
-## Validation
-
-- Validate the flow graph before generating test or review artifacts.
-- Run the generated test skeleton through the normal test-authoring review.
-- For runtime capture, connect to the correct Flutter VM Service and use a
-  stable starting state.
-- For Figma review, record the compared artifacts and tolerances with the
-  review output; do not rely on an untracked local screenshot.
+Discover input with `fliwright schema flow.review-run --json` and other `flow.*` command schemas. Use `--input file.json` for structured capture arrays. Runtime captures can use a connection session; local Flow reading, generation and reporting work offline. Use external Figma MCP only for Figma design context.

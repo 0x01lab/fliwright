@@ -120,10 +120,7 @@ export class MockManager implements MockAdapter {
 
   async getCalls(path?: string): Promise<MockCall[]> {
     if (this.usesFlutterStore) {
-      const result = unwrapExtensionPayload(await this.sendRequest('ext.fliwright.mock.getCalls', path ? { path } : {})) as {
-        calls?: MockCall[];
-      };
-      return result.calls ?? [];
+      return this.getFlutterCalls(path);
     }
     return this._server.getCalls(path);
   }
@@ -139,11 +136,30 @@ export class MockManager implements MockAdapter {
   }
 
   async listFlutterRoutes(): Promise<Array<{ id: string; method?: string; path: string }>> {
-    const result = unwrapExtensionPayload(await this.sendRequest('ext.fliwright.mock.listRoutes', {})) as {
+    const result = await this.readFlutterStore('ext.fliwright.mock.listRoutes', {}) as {
       routes?: Array<{ id: string; method?: string; path: string }>;
     };
     this.usesFlutterStore = true;
     return result.routes ?? [];
+  }
+
+  /** Query the running app without loading or applying local rules. */
+  async getFlutterCalls(path?: string): Promise<MockCall[]> {
+    const result = await this.readFlutterStore('ext.fliwright.mock.getCalls', path ? { path } : {}) as { calls?: MockCall[] };
+    return result.calls ?? [];
+  }
+
+  /** Clear app history only; preserve routes and passthrough policy. */
+  async clearFlutterCalls(): Promise<void> {
+    await this.readFlutterStore('ext.fliwright.mock.clearCalls');
+  }
+
+  private async readFlutterStore(method: string, params?: Record<string, unknown>): Promise<unknown> {
+    const result = await this.sendRequest(method, params);
+    const error = extensionError(result);
+    if (error) throw new Error(`Flutter mock request failed: ${error}`);
+    this.usesFlutterStore = true;
+    return unwrapExtensionPayload(result);
   }
 
   async clearCalls(): Promise<void> {

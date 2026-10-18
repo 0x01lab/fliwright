@@ -20,7 +20,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Validate Harness
         if: github.event_name == 'pull_request'
@@ -40,14 +40,26 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm docs:cli:check
       - run: pnpm lint
       - run: pnpm test
-      - run: pnpm build
+      - run: pnpm plugin:check -- --strict-plugin --skip-cli
       - run: pnpm package:check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: typescript-run-evidence
+          path: |
+            **/.fliwright/runs/
+            ~/.fliwright/projects/*/runs/
+            **/junit.xml
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   dart:
     name: Dart and Flutter quality
@@ -95,7 +107,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - uses: subosito/flutter-action@v2
         with:
@@ -104,5 +116,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fliwright/core build
       - run: pnpm --filter @fliwright/vitest build
+      - run: pnpm --filter @fliwright/tdd build
       - run: pnpm --filter @fliwright/cli build
       - run: pnpm --filter @fliwright/e2e-tests test
+        env:
+          FLIWRIGHT_E2E_ARTIFACTS: ${{ github.workspace }}/e2e-artifacts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generated-flutter-smoke
+          path: e2e-artifacts/
+          include-hidden-files: true
+          if-no-files-found: ignore

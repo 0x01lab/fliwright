@@ -36,11 +36,13 @@ describe('PersistentTestExecutor.rerun', () => {
       configRoot: resolve(__dirname, '../../spike/fixture-project/vitest.config.ts'),
       artifactsRoot,
       vmServiceUrl: 'ws://runtime/ws',
+      scenarioMode: 'managed-start',
       driverProvider: async () => ({}),
     });
 
     try {
       expect(process.env.FLIWRIGHT_VM_SERVICE_URL).toBe('ws://runtime/ws');
+      expect(process.env.FLIWRIGHT_SCENARIO_MODE).toBe('managed-start');
       const failing = await executor.rerun(resolve(__dirname, '../../spike/fixture-project/.fliwright/tests/sample.test.ts'), 'beta fails');
       expect(failing.status).toBe('red');
 

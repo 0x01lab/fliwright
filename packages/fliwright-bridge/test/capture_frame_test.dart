@@ -3,8 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 import 'package:fliwright_bridge/src/extensions/capture_frame.dart';
 import 'package:fliwright_bridge/src/extensions/context.dart';
-import 'package:fliwright_bridge/src/extensions/router_navigate.dart';
-import 'package:fliwright_bridge/src/extensions/snap.dart';
 
 void main() {
   testWidgets('captureFrame composes route snap and diagnostics', (

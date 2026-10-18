@@ -77,6 +77,7 @@ export interface FliwrightConfig {
   scenarios?: Record<string, TestScenario>;
   /** Attach to an already running app, or prepare a waiting test-only app before its first frame. */
   scenarioMode?: ScenarioExecutionMode;
+  defaultScenario?: string;
   recording?: Partial<FliwrightRecordingConfig>;
 }
 
@@ -179,7 +180,7 @@ export function createFliwrightTest(
   const resolveDriver = options?.driverProvider
     ? () => options.driverProvider!()
     : () => getSharedDriver(resolveConfig());
-  const fliwrightTest = vitestTest.extend<FliwrightFixtures & { _fliwrightEndpointLease: undefined }>({
+  let fliwrightTest = vitestTest.extend<FliwrightFixtures & { _fliwrightEndpointLease: undefined }>({
     _fliwrightEndpointLease: [async ({ task }, use) => {
       await requireAttemptContext(task).beforeFixtures?.();
       const endpoint = resolveConfig().vmServiceUrl.trim();
@@ -233,12 +234,12 @@ export function createFliwrightTest(
       const ctx = testContext.getStore();
       if (ctx) ctx.timeline = timeline;
 
-      const assertionCallsBefore = vitestExpect.getState().assertionCalls ?? 0;
       attempt.validate = () => {
         const required = config.requireAssertions ?? config.recording?.requireAssertions
           ?? (config.mode !== 'script' && DEFAULT_FLIWRIGHT_CONFIG.recording.requireAssertions);
         if (required && !timeline.recorder.toJSON().nodes.some((node) => node.kind === 'assertion')
-          && (vitestExpect.getState().assertionCalls ?? 0) <= assertionCallsBefore
+          // The runner resets Vitest counts before every attempt, after aroundEach fixtures resolve.
+          && (vitestExpect.getState().assertionCalls ?? 0) === 0
           && task.context.expect.getState().assertionCalls === 0) {
           return new Error('Test mode requires at least one executed assertion, but none were recorded. Add an assertion or use script mode.');
         }
@@ -348,6 +349,18 @@ export function createFliwrightTest(
     },
   });
 
+  const selected = resolveConfig().defaultScenario;
+  if (selected) {
+    fliwrightTest = fliwrightTest.extend({
+      _fliwrightDefaultScenario: [async ({ driver, timeline }, use) => {
+        const selectedScenario = new ScenarioResolver(resolveConfig().scenarios ?? {}).resolve(selected);
+        const node = timeline.recorder.startNode('step', `Scenario: ${selected}`);
+        await new ScenarioCoordinator(driver).apply(selectedScenario, { mode: resolveConfig().scenarioMode ?? 'attach' });
+        timeline.recorder.passNode(node.id, { scenarioName: selected, scenarioFingerprint: fingerprintScenario(selectedScenario) });
+        await use(undefined);
+      }, { auto: true }],
+    });
+  }
   return withScenarioSupport(fliwrightTest as unknown as TestAPI<FliwrightFixtures>, resolveConfig);
 }
 
@@ -372,6 +385,8 @@ function withScenarioSupport<TFixtures extends FliwrightFixtures>(
   scenarioConfigs.set(scenarioTest, resolveConfig);
   scenarioTest.scenario = (scenarioName: string): ScenarioTest<TFixtures> => {
     const config = resolveConfig();
+    if (config.defaultScenario && config.defaultScenario !== scenarioName) throw new Error(`Explicit scenario '${scenarioName}' conflicts with selected scenario '${config.defaultScenario}'.`);
+    if (config.defaultScenario === scenarioName) return (name, handler, timeout) => { scenarioTest(name, handler, timeout); };
     const scenarios = config.scenarios;
     if (!scenarios) {
       throw new Error(`Test scenario '${scenarioName}' was requested, but defineConfig({ scenarios }) is missing.`);

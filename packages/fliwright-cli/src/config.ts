@@ -9,12 +9,13 @@ export interface FliwrightCliConfig {
   timeout: number;
   screenshot: 'file' | 'base64' | 'off';
   testDir: string;
-  reporter: 'pretty' | 'json' | 'junit' | 'ai-json';
+  reporter: 'pretty' | 'json' | 'junit';
   runsRoot?: string;
   recording?: Partial<FliwrightRecordingConfig>;
   paths?: Partial<FliwrightPathsConfig>;
   scenarios?: Record<string, TestScenario>;
   scenarioMode?: ScenarioExecutionMode;
+  defaultScenario?: string;
 }
 
 const DEFAULTS: FliwrightCliConfig = {

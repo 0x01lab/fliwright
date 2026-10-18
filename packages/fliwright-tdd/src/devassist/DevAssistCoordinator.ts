@@ -353,7 +353,7 @@ export class DevAssistCoordinator {
         passive: true,
       });
       return (await passiveAgent.diagnose(failure, {
-        allowedTools: ['fliwright_timeline_get', 'fliwright_snap', 'fliwright_observe'],
+        allowedTools: ['fliwright artifacts timeline', 'fliwright app snapshot', 'fliwright app observe'],
         screenshotPath: cycle.failureContext?.artifacts?.screenshotPath,
         snapshotPath: cycle.failureContext?.artifacts?.timelinePath,
       })) ?? undefined;

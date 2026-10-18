@@ -10,6 +10,6 @@ describe('record CLI entrypoint', () => {
       '--dart-app-entrypoint', 'package:demo/replay.dart', '--dart-verification', 'proof/verification.json']);
     expect(recordCommand).toHaveBeenCalledWith(expect.objectContaining({
       lang: 'dart', dartAppEntrypoint: 'package:demo/replay.dart', dartVerificationFile: 'proof/verification.json',
-    }));
+    }), { waitForStop: undefined });
   });
 });

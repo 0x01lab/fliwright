@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | `Unknown method "ext.fliwright.snap"` | 应用跑的是**旧版**桥接 | 升级 `fliwright_bridge`，在 `kDebugMode` 下调用 `FliwrightBridge.init()`，重新构建/重启，确认 `ext.fliwright.snap` 可用 |
 | `Unknown method "ext.fliwright.extractForm"` | 旧版桥接缺表单抽取能力 | 升级；过渡期回退到裸 driver 的 legacy 路径（标注清楚） |
-| `snapshot()`/`findRef()`/`fliwright_snap` 失败 | 同样的旧版桥接问题 | 在使用 snap/ref/observe/actionability 特性之前先升级 |
+| `snapshot()`/`findRef()`/`fliwright app snapshot` 失败 | 同样的旧版桥接问题 | 在使用 snap/ref/observe/actionability 特性之前先升级 |
 | `page.dismissKeyboard()` 报 `VM Service error [-32000]: Server error` | 运行中的 app 还没加载带原生隐藏键盘实现的新版 bridge，或 service extension 内部抛错 | 停掉 Flutter debug session 后重新 `flutter run`；重跑 TS 脚本不会更新设备端 Dart bridge。重启后再用最小调用 `page.dismissKeyboard()` 验证 |
 | mock 规则对应用不生效 | `route()` 静默回退到了工具侧镜像 | 用 `routeFlutter()`（严格），或升级桥接让 Flutter 侧存储被用上 |
 
@@ -122,6 +122,6 @@ await flow.step('Fill two-factor verification code', async () => {
 
 1. 读该次失败的 `contextDump` / `widgetTree` / `source`。
 2. `fliwright doctor --vm-url …` 做能力/版本检查。
-3. `fliwright_snap` / `page.snapshot()` 看当前控件树。
+3. `fliwright app snapshot` / `page.snapshot()` 看当前控件树。
 4. 加固选择器（key/semantics/限定范围）或等待原语。
 5. 如果应用本身不稳定/崩溃 → 先重启/重新构建，再继续 E2E。

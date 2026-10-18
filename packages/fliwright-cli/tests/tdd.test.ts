@@ -271,3 +271,16 @@ describe('tddSyncCommand', () => {
     expect(stop).toHaveBeenCalledWith({ keepAppAlive: true });
   });
 });
+
+
+it('cancels a finite sync during startup and always stops the runtime', async () => {
+  const controller = new AbortController();
+  const cancel = vi.fn(async () => {});
+  const stop = vi.fn(async () => {});
+  const syncApp = vi.fn();
+  const runtime = { cancel, stop, syncApp, snapshot: () => snapshot(), start: async () => { controller.abort(new DOMException('deadline', 'TimeoutError')); return snapshot(); } };
+  await expect(tddSyncCommand({ configRoot: '/tmp', vmUrl: 'ws://mock/ws', sync: 'reload', print: false, signal: controller.signal }, { createRuntime: () => runtime as never })).rejects.toMatchObject({ name: 'TimeoutError' });
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(syncApp).not.toHaveBeenCalled();
+  expect(stop).toHaveBeenCalledOnce();
+});

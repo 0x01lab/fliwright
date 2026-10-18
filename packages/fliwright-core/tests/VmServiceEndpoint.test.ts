@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   VmServiceEndpointResolver,
+  waitForVmServiceEndpoint,
   WorkspaceEndpointOwner,
   normalizeVmServiceUrl,
   readWorkspaceConfig,
@@ -122,4 +123,20 @@ describe('VmServiceEndpoint', () => {
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
   });
+});
+
+
+it('waits for the same managed endpoint bridge to become ready without falling back', async () => {
+  const endpoint: VmServiceEndpoint = { url: 'ws://managed/ws', kind: 'direct-vm', source: 'managed', scope: 'execution-worker', acquiredAt: '' };
+  const verify = vi.fn().mockResolvedValueOnce({ status: 'invalid', reason: 'bridge-not-ready', checkedAt: '' }).mockResolvedValue({ status: 'ok', checkedAt: '' });
+  await expect(waitForVmServiceEndpoint(endpoint, { verify, pollIntervalMs: 1, timeoutMs: 1000 })).resolves.toMatchObject({ status: 'ok' });
+  expect(verify).toHaveBeenCalledTimes(2);
+  expect(verify.mock.calls.every(([value]) => value.url === endpoint.url)).toBe(true);
+});
+
+it('bounds managed bridge readiness and preserves cancellation', async () => {
+  const endpoint: VmServiceEndpoint = { url: 'ws://managed/ws', kind: 'direct-vm', source: 'managed', scope: 'execution-worker', acquiredAt: '' };
+  const verify = vi.fn(async () => ({ status: 'invalid' as const, reason: 'bridge-not-ready', checkedAt: '' }));
+  await expect(waitForVmServiceEndpoint(endpoint, { verify, timeoutMs: 10, pollIntervalMs: 1 })).rejects.toMatchObject({ name: 'TimeoutError' });
+  await expect(waitForVmServiceEndpoint(endpoint, { verify, signal: AbortSignal.abort(new DOMException('cancelled', 'AbortError')) })).rejects.toMatchObject({ name: 'AbortError' });
 });

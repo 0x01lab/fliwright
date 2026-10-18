@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/e2e-tests"
 path: "e2e"
-source_fingerprint: "83d8cd9bbb54ce71b09bdff9a457a138c4c06b354b1f188048e9168cf1ba288e"
+source_fingerprint: "e4af59e1df2390676413cc1ca23ea4f372954fb89c4e00a06595c484e27a9153"
 generated: true
 ---
 

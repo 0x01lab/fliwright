@@ -6,7 +6,7 @@
       "name": "@fliwright/cli",
       "path": "packages/fliwright-cli",
       "kind": "typescript",
-      "responsibility": "Expose operator-facing command-line workflows and reusable command capabilities backed by core and TDD.",
+      "responsibility": "Expose developer, coding-agent and CI command workflows, explicit local connection sessions and reusable capabilities backed by core and TDD.",
       "doesNotOwn": [
         "automation primitives",
         "agent protocol semantics",
@@ -24,16 +24,21 @@
       ],
       "sourceFiles": [
         "packages/fliwright-cli/src/ArtifactReferences.ts",
+        "packages/fliwright-cli/src/CommandRegistry.ts",
         "packages/fliwright-cli/src/RecordingReplay.ts",
+        "packages/fliwright-cli/src/WorkflowContext.ts",
         "packages/fliwright-cli/src/capabilities/form.ts",
         "packages/fliwright-cli/src/capabilities/interaction.ts",
         "packages/fliwright-cli/src/capabilities/session.ts",
+        "packages/fliwright-cli/src/commands/app-inspect.ts",
         "packages/fliwright-cli/src/commands/app.ts",
+        "packages/fliwright-cli/src/commands/artifact-query.ts",
         "packages/fliwright-cli/src/commands/artifacts.ts",
         "packages/fliwright-cli/src/commands/doctor.ts",
+        "packages/fliwright-cli/src/commands/flow-runtime.ts",
         "packages/fliwright-cli/src/commands/flow.ts",
+        "packages/fliwright-cli/src/commands/generate-test.ts",
         "packages/fliwright-cli/src/commands/init.ts",
-        "packages/fliwright-cli/src/commands/mcp.ts",
         "packages/fliwright-cli/src/commands/mock-management.ts",
         "packages/fliwright-cli/src/commands/mock.ts",
         "packages/fliwright-cli/src/commands/record.ts",
@@ -42,12 +47,22 @@
         "packages/fliwright-cli/src/commands/tdd.ts",
         "packages/fliwright-cli/src/config.ts",
         "packages/fliwright-cli/src/index.ts",
+        "packages/fliwright-cli/src/registry/finite.ts",
+        "packages/fliwright-cli/src/registry/flow-schemas.ts",
+        "packages/fliwright-cli/src/registry/flow.ts",
+        "packages/fliwright-cli/src/registry/generation-schema.ts",
+        "packages/fliwright-cli/src/registry/session.ts",
+        "packages/fliwright-cli/src/registry/tdd.ts",
         "packages/fliwright-cli/src/reporter.ts",
         "packages/fliwright-cli/src/run.ts",
+        "packages/fliwright-cli/src/session/ConnectionHost.ts",
+        "packages/fliwright-cli/src/session/client.ts",
+        "packages/fliwright-cli/src/session/worker.ts",
         "packages/fliwright-cli/src/vm-discovery.ts"
       ],
       "publicExports": [
-        "createProgram"
+        "createProgram",
+        "createRegistry"
       ],
       "packageEntrypoints": [
         ".",
@@ -59,12 +74,15 @@
         "fliwright"
       ],
       "cliCommands": [
+        "app-inspect",
         "app",
+        "artifact-query",
         "artifacts",
         "doctor",
+        "flow-runtime",
         "flow",
+        "generate-test",
         "init",
-        "mcp",
         "mock-management",
         "mock",
         "record",
@@ -77,7 +95,7 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "a257f0a61d066a87d3674f781e344ef001da3661e91d55bb67ca0d7adb0114b8"
+      "sourceFingerprint": "0a4aa4d8a31da735632923edd2b2c1a5b7f4834190e43b35ad90f2f897ab08ac"
     },
     {
       "name": "@fliwright/core",
@@ -739,6 +757,7 @@
         "VMServiceEvent",
         "VmServiceUnavailableError",
         "WaitForMockCallOptions",
+        "waitForVmServiceEndpoint",
         "WebSocketMockCall",
         "WebSocketMockManager",
         "WebSocketMockPush",
@@ -761,7 +780,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "4d7ac62d3e3d878db34e3bebddfda2e4289675fbbee413d5e9f0aa2dce447e72"
+      "sourceFingerprint": "7084dfd4b5d3c0a9542bbfabe11e2241942528562e576a0d8065ee507706b3e1"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -795,164 +814,7 @@
       "publicExports": [],
       "packageEntrypoints": [],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "83d8cd9bbb54ce71b09bdff9a457a138c4c06b354b1f188048e9168cf1ba288e"
-    },
-    {
-      "name": "@fliwright/mcp",
-      "path": "packages/fliwright-mcp",
-      "kind": "typescript",
-      "responsibility": "Expose agent-facing MCP tools and resources that adapt CLI, TDD, and core capabilities.",
-      "doesNotOwn": [
-        "automation primitives",
-        "CLI command ownership",
-        "editor UX",
-        "Flutter instrumentation"
-      ],
-      "mayDependOn": [
-        "@fliwright/core",
-        "@fliwright/cli",
-        "@fliwright/tdd"
-      ],
-      "ownedCapabilities": [
-        "MCP server",
-        "MCP tool contracts"
-      ],
-      "sourceFiles": [
-        "packages/fliwright-mcp/src/cli.ts",
-        "packages/fliwright-mcp/src/index.ts",
-        "packages/fliwright-mcp/src/resources/testReport.ts",
-        "packages/fliwright-mcp/src/server.ts",
-        "packages/fliwright-mcp/src/state.ts",
-        "packages/fliwright-mcp/src/tools/action.ts",
-        "packages/fliwright-mcp/src/tools/agentDiagnose.ts",
-        "packages/fliwright-mcp/src/tools/connect.ts",
-        "packages/fliwright-mcp/src/tools/debugSnapshot.ts",
-        "packages/fliwright-mcp/src/tools/devassist.ts",
-        "packages/fliwright-mcp/src/tools/diagnostics.ts",
-        "packages/fliwright-mcp/src/tools/drag.ts",
-        "packages/fliwright-mcp/src/tools/find.ts",
-        "packages/fliwright-mcp/src/tools/flow.ts",
-        "packages/fliwright-mcp/src/tools/generateTest.ts",
-        "packages/fliwright-mcp/src/tools/getFailure.ts",
-        "packages/fliwright-mcp/src/tools/hotReloadAndSnap.ts",
-        "packages/fliwright-mcp/src/tools/interact.ts",
-        "packages/fliwright-mcp/src/tools/mock.ts",
-        "packages/fliwright-mcp/src/tools/mockTools.ts",
-        "packages/fliwright-mcp/src/tools/navigate.ts",
-        "packages/fliwright-mcp/src/tools/observe.ts",
-        "packages/fliwright-mcp/src/tools/record.ts",
-        "packages/fliwright-mcp/src/tools/runTest.ts",
-        "packages/fliwright-mcp/src/tools/scenario.ts",
-        "packages/fliwright-mcp/src/tools/screenshot.ts",
-        "packages/fliwright-mcp/src/tools/snap.ts",
-        "packages/fliwright-mcp/src/tools/sourceMap.ts",
-        "packages/fliwright-mcp/src/tools/tap.ts",
-        "packages/fliwright-mcp/src/tools/tdd.ts",
-        "packages/fliwright-mcp/src/tools/timeline.ts",
-        "packages/fliwright-mcp/src/tools/type.ts",
-        "packages/fliwright-mcp/src/tools/wait.ts",
-        "packages/fliwright-mcp/src/types.ts"
-      ],
-      "publicExports": [
-        "createFliwrightServer",
-        "CreateFliwrightServerOptions",
-        "FliwrightMcpToolProfile",
-        "resolveMcpToolProfile"
-      ],
-      "packageEntrypoints": [
-        "."
-      ],
-      "binaryEntrypoints": [
-        "fliwright-mcp"
-      ],
-      "mcpToolModules": [
-        "action",
-        "agentDiagnose",
-        "connect",
-        "debugSnapshot",
-        "devassist",
-        "diagnostics",
-        "drag",
-        "find",
-        "flow",
-        "generateTest",
-        "getFailure",
-        "hotReloadAndSnap",
-        "interact",
-        "mock",
-        "mockTools",
-        "navigate",
-        "observe",
-        "record",
-        "runTest",
-        "scenario",
-        "screenshot",
-        "snap",
-        "sourceMap",
-        "tap",
-        "tdd",
-        "timeline",
-        "type",
-        "wait"
-      ],
-      "mcpTools": [
-        "fliwright_action",
-        "fliwright_agent_diagnose",
-        "fliwright_connect",
-        "fliwright_debug_snapshot",
-        "fliwright_devassist_cycle",
-        "fliwright_diagnostics",
-        "fliwright_drag",
-        "fliwright_find",
-        "fliwright_flow_agent_spec",
-        "fliwright_flow_bind_figma",
-        "fliwright_flow_clean",
-        "fliwright_flow_generate_test",
-        "fliwright_flow_get",
-        "fliwright_flow_list",
-        "fliwright_flow_review_bundle",
-        "fliwright_flow_review_capture_figma",
-        "fliwright_flow_review_capture_runtime",
-        "fliwright_flow_review_plan",
-        "fliwright_flow_review_report",
-        "fliwright_flow_review_run",
-        "fliwright_flow_validate",
-        "fliwright_generate_test",
-        "fliwright_get_failure",
-        "fliwright_hot_reload_and_snap",
-        "fliwright_interact",
-        "fliwright_mock",
-        "fliwright_mock_clear_calls",
-        "fliwright_mock_list",
-        "fliwright_mock_status",
-        "fliwright_mock_switch",
-        "fliwright_navigate",
-        "fliwright_observe",
-        "fliwright_record",
-        "fliwright_run",
-        "fliwright_scenario",
-        "fliwright_screenshot",
-        "fliwright_snap",
-        "fliwright_source_map",
-        "fliwright_status",
-        "fliwright_tap",
-        "fliwright_tdd_cycle",
-        "fliwright_tdd_focus",
-        "fliwright_tdd_prepare",
-        "fliwright_tdd_reconnect",
-        "fliwright_tdd_reload",
-        "fliwright_tdd_repair",
-        "fliwright_tdd_restart",
-        "fliwright_tdd_set_scenario",
-        "fliwright_tdd_start",
-        "fliwright_tdd_status",
-        "fliwright_tdd_stop",
-        "fliwright_tdd_validate_spec",
-        "fliwright_timeline_get",
-        "fliwright_type",
-        "fliwright_wait"
-      ],
-      "sourceFingerprint": "7d711fc98b9549e96cdf8aba50af8167768df5af45f7849392989505db5b676f"
+      "sourceFingerprint": "e4af59e1df2390676413cc1ca23ea4f372954fb89c4e00a06595c484e27a9153"
     },
     {
       "name": "@fliwright/plugin-riverpod",
@@ -983,7 +845,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "7184992ea76f1fd9061935e3a8c20614bd212ee037196596bb6a07386a64f559"
+      "sourceFingerprint": "658c8398045b2281f2665a6ad08c4f3baa305b5b6c5fc0749edf0a8c0401a56d"
     },
     {
       "name": "@fliwright/tdd",
@@ -1144,7 +1006,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "35bdf45c32449936fbf28f57890312653beab774b223702b3059d11e007d440f"
+      "sourceFingerprint": "5dcdecc346f394002733f0f5ed7c3358710ece21582e482493d5001180d9b803"
     },
     {
       "name": "@fliwright/vitest",
@@ -1211,7 +1073,7 @@
         "./runner"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "5c6f95808193d9def7fb32d8e6c3ed9e87320c1c2c6ceed0b3b83ab153df17af"
+      "sourceFingerprint": "864d0a478af92d5c0c7a35961b8ba90f00291f6c0dd1688802facf1fbef670a5"
     },
     {
       "name": "fliwright_bridge",
@@ -1424,7 +1286,7 @@
         "ext.fliwright.websocket.push",
         "ext.fliwright.websocket.setRules"
       ],
-      "sourceFingerprint": "402a5db46cdd94b723e9f0a6ac02839dae858d53325332b87f9f400d85d04895"
+      "sourceFingerprint": "b8a4b79b7def4ba0281052465d64a65b47d73bd03175c85ca522a88fdee60553"
     },
     {
       "name": "fliwright_bridge_riverpod",
@@ -1449,7 +1311,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-bridge-riverpod/lib/fliwright_bridge_riverpod.dart"
       ],
-      "sourceFingerprint": "baf629b27d60e5597e44b08ac80ac3cc67f5bc91286f7b5aa1de7878a9424b9a"
+      "sourceFingerprint": "ecc0842b02f2cf98d57d5cbb01133cd6818afbcd973447d38cd7485203519421"
     },
     {
       "name": "fliwright_design_qa",
@@ -1517,7 +1379,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-design-qa/lib/fliwright_design_qa.dart"
       ],
-      "sourceFingerprint": "71a7ba34be1c71777ac1b1a67c940c74799db8317969a4ad5f7dc15e0b672af7"
+      "sourceFingerprint": "ee492e0e294d5a4d85a4f296053d01943b8b82cecb576ead29a1323d07464a8f"
     },
     {
       "name": "fliwright-vscode",
@@ -1638,6 +1500,7 @@
       "binaryEntrypoints": [],
       "commands": [
         "fliwright.addAnalyzedFieldToFormRules",
+        "fliwright.agentWorkflow",
         "fliwright.analyzeForm",
         "fliwright.appendLastAnalyzeToFormRules",
         "fliwright.applyDefaultMocks",
@@ -1646,7 +1509,6 @@
         "fliwright.cleanFlowFile",
         "fliwright.clearWebSocketMockCalls",
         "fliwright.clearWebSocketMockRules",
-        "fliwright.configureMcp",
         "fliwright.confirmRecordingCheckpoints",
         "fliwright.connect",
         "fliwright.copyMockEndpoint",
@@ -1725,7 +1587,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "3c27e75fbc70e65c8fba1775b77661e50fc36ec8427a2c5c15ffe96214990b91"
+      "sourceFingerprint": "12de57876e07151ed6c574934bc164f88b05a0ebd738a3bc3e54215d42b1a188"
     }
   ]
 }

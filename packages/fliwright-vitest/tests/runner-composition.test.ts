@@ -11,7 +11,7 @@ it('composes an existing runner constructor and hooks while retaining Vitest ass
     const calls = join(root, 'custom-hooks.jsonl');
     const sessions = join(root, 'sessions.jsonl');
     await writeFile(join(root, 'runner.mjs'), `
-      import { VitestTestRunner } from ${JSON.stringify(import.meta.resolve('vitest/runners'))};
+      import { TestRunner as VitestTestRunner } from ${JSON.stringify(import.meta.resolve('vitest'))};
       import { createFliwrightRunner } from ${JSON.stringify(new URL('../src/runner.ts', import.meta.url).pathname)};
       import { appendFileSync } from 'node:fs';
       class ExistingRunner extends VitestTestRunner {

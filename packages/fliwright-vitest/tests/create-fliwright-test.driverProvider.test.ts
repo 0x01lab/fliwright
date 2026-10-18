@@ -37,10 +37,7 @@ describe('createFliwrightTest driverProvider', () => {
 
   test('uses the injected provider for page-backed fixtures', async ({ page }) => {
     expect(page).toBeDefined();
-  });
-
-  test('called the injected provider instead of requiring a real shared VM driver', () => {
-    expect(provider).toHaveBeenCalled();
+    expect(provider).toHaveBeenCalledOnce();
   });
 });
 

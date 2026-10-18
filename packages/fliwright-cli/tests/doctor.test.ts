@@ -44,3 +44,8 @@ describe('doctorCommand', () => {
     }
   });
 });
+
+
+it('does not start environment probes after cancellation', async () => {
+  await expect(doctorCommand(process.cwd(), { print: false, signal: AbortSignal.abort(new DOMException('deadline', 'TimeoutError')) })).rejects.toMatchObject({ name: 'TimeoutError' });
+});

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/widgets.dart';
 
 /// Snapshot-time reference to a live Flutter element.
@@ -58,6 +60,11 @@ class QueryRef {
 class RefRegistry {
   RefRegistry._();
 
+  // Tokens belong to an app/isolate incarnation and survive transport reconnects.
+  static String _incarnation = _newIncarnation();
+  static String _newIncarnation() =>
+      '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-${Random.secure().nextInt(1 << 32).toRadixString(36)}';
+
   static int _entryCounter = 0;
   static int _queryCounter = 0;
   static final Map<String, RefEntry> _entries = <String, RefEntry>{};
@@ -77,7 +84,7 @@ class RefRegistry {
     Map<String, Object?> metadata = const <String, Object?>{},
   }) {
     final existing = semanticsId == null ? null : _bySemanticsId[semanticsId];
-    if (existing != null) {
+    if (existing != null && identical(_entries[existing]?.element, element)) {
       _entries[existing] = RefEntry(
         rect: rect,
         element: element,
@@ -94,7 +101,7 @@ class RefRegistry {
     }
 
     _entryCounter += 1;
-    final token = 'e$_entryCounter';
+    final token = 'e$_incarnation-$_entryCounter';
     _entries[token] = RefEntry(
       rect: rect,
       element: element,
@@ -118,7 +125,7 @@ class RefRegistry {
       throw ArgumentError('QueryRef requires at least one predicate');
     }
     _queryCounter += 1;
-    final token = 'q$_queryCounter';
+    final token = 'q$_incarnation-$_queryCounter';
     _queries[token] = query;
     return token;
   }
@@ -157,6 +164,7 @@ class RefRegistry {
   }
 
   static void disposeAll() {
+    _incarnation = _newIncarnation();
     _entries.clear();
     _queries.clear();
     _bySemanticsId.clear();

@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cli"
 path: "packages/fliwright-cli"
-source_fingerprint: "a257f0a61d066a87d3674f781e344ef001da3661e91d55bb67ca0d7adb0114b8"
+source_fingerprint: "0a4aa4d8a31da735632923edd2b2c1a5b7f4834190e43b35ad90f2f897ab08ac"
 generated: true
 ---
 
@@ -9,7 +9,7 @@ generated: true
 
 ## Responsibility
 
-Expose operator-facing command-line workflows and reusable command capabilities backed by core and TDD.
+Expose developer, coding-agent and CI command workflows, explicit local connection sessions and reusable capabilities backed by core and TDD.
 
 ## Boundary
 
@@ -45,15 +45,19 @@ Expose operator-facing command-line workflows and reusable command capabilities 
 ## Public Exports
 
 - `createProgram`
+- `createRegistry`
 
 ## CLI Commands
 
+- `app-inspect`
 - `app`
+- `artifact-query`
 - `artifacts`
 - `doctor`
+- `flow-runtime`
 - `flow`
+- `generate-test`
 - `init`
-- `mcp`
 - `mock-management`
 - `mock`
 - `record`
@@ -70,16 +74,21 @@ Expose operator-facing command-line workflows and reusable command capabilities 
 ## Source Anchors
 
 - `packages/fliwright-cli/src/ArtifactReferences.ts`
+- `packages/fliwright-cli/src/CommandRegistry.ts`
 - `packages/fliwright-cli/src/RecordingReplay.ts`
+- `packages/fliwright-cli/src/WorkflowContext.ts`
 - `packages/fliwright-cli/src/capabilities/form.ts`
 - `packages/fliwright-cli/src/capabilities/interaction.ts`
 - `packages/fliwright-cli/src/capabilities/session.ts`
+- `packages/fliwright-cli/src/commands/app-inspect.ts`
 - `packages/fliwright-cli/src/commands/app.ts`
+- `packages/fliwright-cli/src/commands/artifact-query.ts`
 - `packages/fliwright-cli/src/commands/artifacts.ts`
 - `packages/fliwright-cli/src/commands/doctor.ts`
+- `packages/fliwright-cli/src/commands/flow-runtime.ts`
 - `packages/fliwright-cli/src/commands/flow.ts`
+- `packages/fliwright-cli/src/commands/generate-test.ts`
 - `packages/fliwright-cli/src/commands/init.ts`
-- `packages/fliwright-cli/src/commands/mcp.ts`
 - `packages/fliwright-cli/src/commands/mock-management.ts`
 - `packages/fliwright-cli/src/commands/mock.ts`
 - `packages/fliwright-cli/src/commands/record.ts`
@@ -88,6 +97,15 @@ Expose operator-facing command-line workflows and reusable command capabilities 
 - `packages/fliwright-cli/src/commands/tdd.ts`
 - `packages/fliwright-cli/src/config.ts`
 - `packages/fliwright-cli/src/index.ts`
+- `packages/fliwright-cli/src/registry/finite.ts`
+- `packages/fliwright-cli/src/registry/flow-schemas.ts`
+- `packages/fliwright-cli/src/registry/flow.ts`
+- `packages/fliwright-cli/src/registry/generation-schema.ts`
+- `packages/fliwright-cli/src/registry/session.ts`
+- `packages/fliwright-cli/src/registry/tdd.ts`
 - `packages/fliwright-cli/src/reporter.ts`
 - `packages/fliwright-cli/src/run.ts`
+- `packages/fliwright-cli/src/session/ConnectionHost.ts`
+- `packages/fliwright-cli/src/session/client.ts`
+- `packages/fliwright-cli/src/session/worker.ts`
 - `packages/fliwright-cli/src/vm-discovery.ts`

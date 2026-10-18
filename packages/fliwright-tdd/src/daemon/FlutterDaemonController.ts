@@ -16,7 +16,7 @@ export class FlutterDaemonController {
   async start(): Promise<void> {
     if (this.started) return;
     await this.transport.connect?.();
-    // `flutter daemon` emits daemon.connected unsolicited on stdout; no request needed here.
+    // The transport owns machine-mode launch; no app RPC is sent before startApp.
     this.started = true;
   }
 
@@ -31,38 +31,42 @@ export class FlutterDaemonController {
     if (params.mode !== undefined) requestParams.mode = params.mode;
     if (params.flutterArgs !== undefined) requestParams.flutterArgs = params.flutterArgs;
 
-    const result = await this.transport.request<StartAppResult>('app.start', requestParams);
-    const appId = result.appId;
-    if (!appId) {
-      throw new Error(
-        `flutter daemon app.start returned no appId. Doctor: confirm the device is online `
-          + `(\`flutter devices\`), the target "${requestParams.target}" exists, and the project compiles.`
-          + ` Raw response: ${JSON.stringify(result)}.`,
-      );
-    }
+    const earlyEvents: DaemonMessage[] = [];
+    const stopBuffering = this.transport.onEvent((message) => { if (message.event === 'app.debugPort') earlyEvents.push(message); });
+    try {
+      const result = await this.transport.request<StartAppResult>('app.start', requestParams);
+      const appId = result.appId;
+      if (!appId) {
+        throw new Error(
+          `flutter daemon app.start returned no appId. Doctor: confirm the device is online `
+            + `(\`flutter devices\`), the target "${requestParams.target}" exists, and the project compiles.`
+            + ` Raw response: ${JSON.stringify(result)}.`,
+        );
+      }
 
-    const debugPort = await this.waitForEvent(
-      'app.debugPort',
-      (m) => m.params?.appId === appId,
-      opts.debugPortTimeoutMs ?? 60_000,
-    );
-    const wsUri = debugPort.params?.wsUri;
-    if (typeof wsUri !== 'string' || wsUri.length === 0) {
-      throw new Error(
-        `flutter daemon app.debugPort for ${appId} carried no VM service wsUri. The app likely failed `
-          + `to start. Doctor: run \`flutter run\` on the same target/device and read the console for `
-          + `compile or runtime errors, then retry fliwright_tdd_start.`,
+      const debugPort = earlyEvents.find((message) => message.params?.appId === appId) ?? await this.waitForEvent(
+        'app.debugPort',
+        (m) => m.params?.appId === appId,
+        opts.debugPortTimeoutMs ?? 60_000,
       );
-    }
+      const wsUri = debugPort.params?.wsUri;
+      if (typeof wsUri !== 'string' || wsUri.length === 0) {
+        throw new Error(
+          `flutter daemon app.debugPort for ${appId} carried no VM service wsUri. The app likely failed `
+            + `to start. Doctor: run \`flutter run\` on the same target/device and read the console for `
+            + `compile or runtime errors, then retry fliwright tdd start.`,
+        );
+      }
 
-    const handle: AppHandle = {
-      appId,
-      deviceId: result.deviceId ?? params.deviceId,
-      wsUri,
-      supportsRestart: result.supportsRestart ?? params.mode !== 'drive',
-    };
-    this.handles.set(appId, handle);
-    return handle;
+      const handle: AppHandle = {
+        appId,
+        deviceId: result.deviceId ?? params.deviceId,
+        wsUri,
+        supportsRestart: result.supportsRestart ?? params.mode !== 'drive',
+      };
+      this.handles.set(appId, handle);
+      return handle;
+    } finally { stopBuffering(); }
   }
 
   async reload(appId: string): Promise<void> {
@@ -82,10 +86,13 @@ export class FlutterDaemonController {
     this.handles.delete(appId);
   }
 
-  async dispose(): Promise<void> {
+  async dispose(options: { keepAppAlive?: boolean } = {}): Promise<void> {
+    if (options.keepAppAlive) {
+      for (const appId of this.handles.keys()) await this.transport.request('app.detach', { appId });
+    }
     this.started = false;
     this.handles.clear();
-    await this.transport.dispose();
+    await this.transport.dispose(options);
   }
 
   protected async waitForEvent(
@@ -102,7 +109,7 @@ export class FlutterDaemonController {
             ? new Error(
               `Timed out after ${timeoutMs}ms waiting for the app's VM service (app.debugPort). `
                 + `The app may still be building or may have crashed at startup. Doctor: check `
-                + `\`flutter run\` console output on this target, then retry fliwright_tdd_start.`,
+                + `\`flutter run\` console output on this target, then retry fliwright tdd start.`,
             )
             : new Error(`waitForEvent('${event}') timed out after ${timeoutMs}ms`),
         );

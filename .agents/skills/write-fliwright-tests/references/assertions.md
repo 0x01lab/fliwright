@@ -126,4 +126,4 @@ class AssertionError extends Error {
 }
 ```
 
-通过 `fliwright run` 或 MCP 运行时，fixture 还会捕获截图、控件树、最近的 VM 诊断、源码位置和自愈建议，并写入本次运行的失败上下文文件。详见 [cli.md](./cli.md) 与 [mcp-workflow.md](./mcp-workflow.md)。
+通过 `fliwright run` 运行时，fixture 还会捕获截图、控件树、最近的 VM 诊断、源码位置和自愈建议，并写入本次运行的失败上下文文件。详见 [cli.md](./cli.md) 与 [agent-workflow.md](./agent-workflow.md)。

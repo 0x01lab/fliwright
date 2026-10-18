@@ -1,5 +1,5 @@
 import { appendFileSync } from 'node:fs';
-import { VitestTestRunner } from 'vitest/runners';
+import { TestRunner as VitestTestRunner } from 'vitest';
 
 export default class RunnerLifecycleProbe extends VitestTestRunner {
   async onBeforeRunTask(task) {

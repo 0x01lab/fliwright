@@ -9,6 +9,7 @@ const defaultPluginPath = path.join(root, 'plugins/fliwright');
 const pluginCreatorRoot = path.join(os.homedir(), '.codex/skills/.system/plugin-creator');
 const skillCreatorRoot = path.join(os.homedir(), '.codex/skills/.system/skill-creator');
 const bundledSkillNames = [
+  'fliwright-cli-workflows',
   'fliwright-tdd',
   'write-fliwright-mock-rules',
   'write-fliwright-tests',
@@ -35,9 +36,9 @@ const skillRoot = fs.existsSync(path.join(pluginRoot, 'skills'))
   ? path.join(pluginRoot, 'skills')
   : path.join(root, '.agents/skills');
 
-if (!options.skipMcp) {
-  runCommand('MCP build', 'pnpm', ['--filter', '@fliwright/mcp', 'build']);
-  runCommand('MCP tests', 'pnpm', ['--filter', '@fliwright/mcp', 'test']);
+if (!options.skipCli) {
+  runCommand('CLI build', 'pnpm', ['--filter', '@fliwright/cli...', 'build']);
+  runCommand('CLI tests', 'pnpm', ['--filter', '@fliwright/cli', 'test']);
 }
 
 if (!options.skipManifest) {
@@ -55,7 +56,7 @@ function parseArgs(argv) {
   const parsed = {
     pluginPath: undefined,
     strictPlugin: false,
-    skipMcp: false,
+    skipCli: false,
     skipManifest: false,
     skipSkills: false,
     help: false,
@@ -70,8 +71,8 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === '--strict-plugin') {
       parsed.strictPlugin = true;
-    } else if (arg === '--skip-mcp') {
-      parsed.skipMcp = true;
+    } else if (arg === '--skip-cli') {
+      parsed.skipCli = true;
     } else if (arg === '--skip-manifest') {
       parsed.skipManifest = true;
     } else if (arg === '--skip-skills') {
@@ -100,7 +101,7 @@ function printHelp() {
 Options:
   --plugin <path>     Plugin root. Defaults to plugins/fliwright or FLIWRIGHT_CODEX_PLUGIN_PATH.
   --strict-plugin    Fail when the plugin manifest is missing.
-  --skip-mcp         Skip @fliwright/mcp build and tests.
+  --skip-cli         Skip @fliwright/cli build and tests.
   --skip-manifest    Skip plugin manifest validation.
   --skip-skills      Skip skill validation.
 `);
@@ -131,7 +132,7 @@ function validatePluginManifest(pluginRoot, manifestPath) {
   if (!fs.existsSync(manifestPath)) {
     const message = `No plugin manifest at ${path.relative(root, manifestPath)}. Use --plugin when testing a different plugin root.`;
     if (options.strictPlugin) fail('Plugin manifest', message);
-    else warn('Plugin manifest', `${message} Repository skills and MCP package will still be checked.`);
+    else warn('Plugin manifest', `${message} Repository skills and CLI package will still be checked.`);
     return;
   }
 
@@ -175,7 +176,7 @@ function validatePluginManifest(pluginRoot, manifestPath) {
 
   if (typeof manifest.skills === 'string') validateRelativePath(pluginRoot, manifest.skills, errors, 'skills');
   if (typeof manifest.apps === 'string') validateRelativePath(pluginRoot, manifest.apps, errors, 'apps');
-  if (typeof manifest.mcpServers === 'string') validateRelativePath(pluginRoot, manifest.mcpServers, errors, 'mcpServers');
+  if ('mcpServers' in manifest) errors.push('Fliwright plugin must use Skills + CLI without an MCP server.');
 
   if (errors.length) fail('Plugin manifest', errors.join('\n'));
   else pass('Plugin manifest', path.relative(root, manifestPath));

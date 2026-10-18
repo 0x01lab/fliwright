@@ -1,4 +1,4 @@
-import { FliwrightDriver, VmServiceEndpointResolver, explicitEndpointSource } from '@fliwright/core';
+import { waitForVmServiceEndpoint, EndpointLeaseManager, ScenarioCoordinator, type ResolvedScenario, FliwrightDriver, VmServiceEndpointResolver, explicitEndpointSource } from '@fliwright/core';
 import { dirname } from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { FlutterDaemonController } from '../daemon/FlutterDaemonController.js';
@@ -46,6 +46,8 @@ export class TddRuntime {
   private vmServiceUrl?: string;
   private configRoot?: string;
   private startAppParams?: import('../types.js').StartOpts['app'];
+  private testScenario?: ResolvedScenario;
+  private defaultScenarioName?: string;
   private scenario: Scenario = defaultScenario;
   private focusedTest?: { file: string; testName?: string };
   private lastResult?: TddCycleResult;
@@ -57,6 +59,7 @@ export class TddRuntime {
   // Serializes runtime/app state mutations (design §8: only one operation at a time). This covers
   // cycle(), manual sync, scenario updates, reconnect, and stop so an agent cannot reload/restart or
   // swap baselines mid-rerun.
+  private readonly endpointLeases = new EndpointLeaseManager();
   private operationChain: Promise<unknown> = Promise.resolve();
   private statusFilePath?: string;
   // Serializes best-effort status-file writes so concurrent snapshots never interleave bytes.
@@ -102,13 +105,14 @@ export class TddRuntime {
         throw new Error('TddRuntime.start requires either app start params or vmServiceUrl.');
       }
       this.vmServiceUrl = vmServiceUrl;
+      this.defaultScenarioName = opts.defaultScenario;
 
       this.driver = this.driverFactory();
       await this.verifyManagedEndpoint(vmServiceUrl);
       await this.driver.connect(vmServiceUrl);
       this.driverConnections += 1;
 
-      // Auto-wire the repair planner from the real driver's page so fliwright_tdd_repair works
+      // Auto-wire the repair planner from the real driver's page so fliwright tdd repair works
       // out of the box. Skipped when a planner was injected, and for non-FliwrightDriver test
       // doubles (their page lacks the AgentRepair surface) — keeping the path additive.
       if (!this.repairPlanner && this.driver instanceof FliwrightDriver) {
@@ -116,7 +120,8 @@ export class TddRuntime {
       }
 
       this.baseline = this.baseline ?? this.injectedBaseline ?? new BaselineManager(this.driver);
-      await this.executor.boot({
+      await this.executor.boot({ scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach',
+        defaultScenario: opts.defaultScenario,
         configRoot: opts.configRoot,
         vmServiceUrl,
         driverProvider: async () => this.requireDriver(),
@@ -133,10 +138,35 @@ export class TddRuntime {
     }
   }
 
+  /** Interrupt owned transports/execution; the operation chain still drains before reuse. */
+  async cancel(): Promise<void> {
+    await Promise.allSettled([
+      this.driver?.dispose({ signal: AbortSignal.abort() }),
+      this.executor.dispose(),
+      this.daemon.dispose(),
+    ]);
+  }
+
+  /** Wait for real work, including a cycle whose caller already received timeout. */
+  async whenIdle(): Promise<void> { await this.operationChain; }
+
   async focus(file: string, testName?: string): Promise<void> {
     this.focusedTest = { file, testName };
     this.markUpdated();
     this.persistStatus();
+  }
+
+  async setTestScenario(scenario: ResolvedScenario): Promise<RuntimeSnapshot> {
+    return this.enqueueOperation(async () => {
+      // Reboot the worker environment so each retry prepares the named scenario.
+      await this.executor.dispose();
+      await this.executor.boot({ scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach', configRoot: this.configRoot!, vmServiceUrl: this.vmServiceUrl,
+        defaultScenario: scenario.name, driverProvider: async () => this.requireDriver() });
+      this.defaultScenarioName = scenario.name;
+      this.testScenario = scenario;
+      this.markUpdated();
+      return this.snapshot();
+    });
   }
 
   async setScenario(scenario: Scenario): Promise<RuntimeSnapshot> {
@@ -151,7 +181,7 @@ export class TddRuntime {
   async syncApp(sync: Exclude<NonNullable<CycleOpts['sync']>, 'auto'>): Promise<TddSyncResult> {
     return await this.enqueueOperation(async () => {
       if (!this.started) throw new Error('TddRuntime is not started.');
-      const lastSync = await this.sync(sync);
+      const lastSync = await this.controlPhase(() => this.sync(sync));
       this.markUpdated();
       this.persistStatus();
       return {
@@ -207,8 +237,9 @@ export class TddRuntime {
     if (urlChanged && this.configRoot) {
       // Fixtures read FLIWRIGHT_VM_SERVICE_URL at run time; reboot so the new URL propagates.
       await this.executor.dispose().catch(() => undefined);
-      await this.executor.boot({
+      await this.executor.boot({ scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach',
         configRoot: this.configRoot,
+        defaultScenario: this.defaultScenarioName,
         vmServiceUrl,
         driverProvider: async () => this.requireDriver(),
       });
@@ -225,6 +256,7 @@ export class TddRuntime {
 
   private async verifyManagedEndpoint(vmServiceUrl: string): Promise<void> {
     if (!(this.driver instanceof FliwrightDriver)) return;
+    if (this.launchMode === 'start') await waitForVmServiceEndpoint({ url: vmServiceUrl, kind: 'direct-vm', source: 'managed-launch', scope: 'execution-worker', acquiredAt: new Date().toISOString() });
     await new VmServiceEndpointResolver([
       explicitEndpointSource(vmServiceUrl, { source: 'flutter-daemon', scope: 'execution-worker' }),
     ], { persistWorkspaceCache: false }).acquire();
@@ -376,7 +408,7 @@ export class TddRuntime {
     const resolvedSync = requestedSync === 'auto' ? decideSync(opts.changes) : requestedSync;
     let lastSync: TddCycleResult['lastSync'] = 'none';
     try {
-      lastSync = await this.sync(resolvedSync);
+      lastSync = await this.controlPhase(() => this.sync(resolvedSync));
     } catch (error) {
       const baselineVersion = this.baseline?.version ?? 0;
       const message = error instanceof Error ? error.message : String(error);
@@ -398,9 +430,12 @@ export class TddRuntime {
         }),
       };
     }
-    const resetReport = await this.requireBaseline().reset(this.scenario, {
+    const resetReport = this.defaultScenarioName ? { version: this.requireBaseline().version, applied: [], unsupported: [] } : this.testScenario ? await this.controlPhase(async () => {
+      await new ScenarioCoordinator(this.requireDriver()).apply(this.testScenario!, { mode: 'attach' });
+      return { version: this.requireBaseline().version, applied: [], unsupported: [] };
+    }) : await this.controlPhase(() => this.requireBaseline().reset(this.scenario, {
       full: opts.fullReset ?? lastSync === 'restart',
-    });
+    }));
     const outcome = await this.executor.rerun(focused.file, actualTestName);
 
     const unsupportedState = resetReport.unsupported;
@@ -455,6 +490,9 @@ export class TddRuntime {
     });
   }
 
+  /** Current endpoint for an owning CLI host; changes after managed reconnect. */
+  get endpoint(): string | undefined { return this.vmServiceUrl; }
+
   snapshot(): RuntimeSnapshot {
     return {
       connected: this.started,
@@ -466,7 +504,7 @@ export class TddRuntime {
       driverConnections: this.driverConnections,
       fixtureDriverSharing: 'vm-service-url',
       notes: [
-        'Vitest 2.1.9 runs tests in worker processes, so live FliwrightDriver objects are not shared across the executor boundary.',
+        'Vitest 5.0.5 runs tests in worker processes, so live FliwrightDriver objects are not shared across the executor boundary.',
         'The TDD runtime injects FLIWRIGHT_VM_SERVICE_URL so fixtures connect to the same app VM service.',
       ],
       focusedTest: this.focusedTest,
@@ -500,6 +538,10 @@ export class TddRuntime {
     const run = this.operationChain.then(task, task);
     this.operationChain = run.then(noop, noop);
     return run;
+  }
+
+  private async controlPhase<T>(work: () => Promise<T>): Promise<T> {
+    return this.vmServiceUrl ? this.endpointLeases.run(this.vmServiceUrl, work) : work();
   }
 
   private async sync(sync: NonNullable<CycleOpts['sync']>): Promise<TddCycleResult['lastSync']> {
@@ -540,7 +582,7 @@ export class TddRuntime {
         if (!opts.keepAppAlive && this.app) await this.daemon.stop(this.app.appId);
       } finally {
         try {
-          await this.daemon.dispose();
+          await this.daemon.dispose(opts);
         } finally {
           this.driver = undefined;
           this.app = undefined;

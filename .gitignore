@@ -29,3 +29,5 @@ docs/features
 **/.fliwright/runs/
 **/.fliwright/traces/
 **/.fliwright/snapshots/
+
+**/.fliwright/sessions/

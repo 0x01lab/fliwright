@@ -9,7 +9,7 @@ Generate structured, AI-agent-consumable documentation for every implemented fea
 
 ## Why This Exists
 
-AI agents working on this codebase need to understand what's implemented without reading every source file. These docs act as a compressed map of the project — accurate, structured, and indexed for fast lookup. They are NOT for human end-users; they are for the next Codex session, the MCP agent, or any AI tool that needs to answer "can this project do X?"
+AI agents working on this codebase need to understand what's implemented without reading every source file. These docs act as a compressed map of the project — accurate, structured, and indexed for fast lookup. They are NOT for human end-users; they are for the next Codex session, the CLI agent, or any AI tool that needs to answer "can this project do X?"
 
 ## Core Principle: Derive Everything From Source
 
@@ -47,7 +47,7 @@ Follow these steps in order. Each step builds on the previous one.
 
 Delete everything in `docs/features/` (create it if missing), then enumerate the monorepo:
 
-- Read `pnpm-workspace.yaml` and every `packages/*/package.json` to get the **authoritative package list**, names, versions, dependencies, and type (TS lib / MCP / CLI / Dart / VS Code / plugin).
+- Read `pnpm-workspace.yaml` and every `packages/*/package.json` to get the **authoritative package list**, names, versions, dependencies, and type (TS lib / CLI / Dart / VS Code / plugin).
 - For each package, locate its public entry point(s) per the derivation rules below.
 
 ### Step 2: Derive the doc targets for each package
@@ -57,8 +57,7 @@ For every package from Step 1, read its public surface **from source** and produ
 | Package type | How to recognize | Read this to get the doc targets |
 |---|---|---|
 | TS library (`@fliwright/*`) | has `src/index.ts` | every `export` in `src/index.ts`; open each class's source file to read its methods/properties |
-| MCP server | package with an MCP server entry | every tool registered (grep `server.tool(` and/or list `src/tools/`) + every resource |
-| CLI | package exposing `bin` or a `commands/` dir | every file in `commands/` → one command; every file in `capabilities/` → one capability; plus `config.ts`, `reporter.ts` |
+| CLI | package exposing `bin` or a `commands/` dir | leaf commands from `createRegistry().definitions`; public command/capability helpers plus `config.ts`, `reporter.ts` |
 | Dart bridge | `lib/<pkg>.dart` + `lib/src/extensions/` | the barrel export + every `_registry.register(...)` call across `lib/src/extensions/*.dart` |
 | Dart adapter | `lib/*.dart` exporting an observer/adapter | each exported adapter class |
 | VS Code extension | `package.json` with `engines.vscode` | `contributes.commands/views/settings/menus` + `src/extension.ts` activation points + each `src/<area>/` module |
@@ -69,11 +68,19 @@ For every package from Step 1, read its public surface **from source** and produ
 - One exported class → one `<ClassName>.md`.
 - Standalone exported functions from the **same source file** → group into one doc named after the file (e.g. `wire-protocol.md`).
 - All exported types and interfaces of a TS package → one `types.md`.
-- Each MCP tool and each resource → its own doc.
 - Each CLI command and each capability → its own doc.
 - Each Dart bridge extension → its own doc.
 
 **Use the actual source code as the single source of truth.** Do NOT document features from PRD or design specs that don't exist in code yet. Read signatures from source — never reconstruct them from memory.
+
+For CLI command pages, run `pnpm docs:cli` after building the CLI. The generator
+combines `createRegistry()` with maintained semantic guidance under
+`packages/fliwright-cli/docs/`; it validates command/parameter coverage and parses
+examples without executing app operations. It writes portable Skill references.
+`node scripts/generate-feature-docs.mjs` reuses the same renderer for
+`docs/features/cli/`. Do not replace these practical pages with raw schemas.
+After updating command guidance, run `pnpm plugin:sync` and
+`pnpm docs:cli:check` to verify source/plugin parity and reference links.
 
 ### Step 3: Map cross-cutting pipelines
 
@@ -84,7 +91,7 @@ Trace these end-to-end capabilities by following import chains through the code.
 | Self-healing | assertion entry → `SelfHealingEngine` → `SnapshotStore` → healing strategy → bridge snapshot extension |
 | Recording & codegen | `RecorderController` → `EventAggregator` → code generators → `AssertionSuggester` → bridge recording extension |
 | Form auto-fill | `FormHelper` → `SemanticInferrer` → `FakerGenerator` → `SkillRegistry`/`JsonRuleLoader` → `SelectorResolver` → bridge form extension |
-| MCP integration | vitest reporter → MCP server → MCP tools → MCP resources |
+| CLI workflows | command registry → CLI/session host → core/TDD → Vitest → run artifacts |
 
 ### Step 4: Generate per-package sub-directories with per-class docs
 
@@ -272,7 +279,7 @@ generated: "<today's date>"
 
 ## Agent Integration
 
-How an AI agent invokes/benefits from this. Include MCP tool names if applicable.
+How an AI agent invokes/benefits from this. Include CLI command paths if applicable.
 
 ## Data Flow
 
@@ -317,11 +324,11 @@ generated: "<today's date>"
 |---------|----------|-----|------------------|--------|
 | <Pipeline> | <pkgs> | [<file>.md](./<file>.md) | <how> | Implemented |
 
-## MCP Tool Quick Reference
+## CLI Command Quick Reference
 
 | Tool | Input (key fields) | Output | Doc |
 |------|--------------------|--------|-----|
-| `<tool>` | <fields> | <result> | [mcp/<tool>.md](./mcp/<tool>.md) |
+| `<tool>` | <fields> | <result> | [cli/<command>.md](./cli/<command>.md) |
 
 ## Quick Start for AI Agents
 
@@ -343,7 +350,7 @@ Check if `AGENTS.md` already contains a `## Feature Documentation` section. If i
 
 AI-consumable feature documentation lives in `docs/features/`. These docs summarize every implemented feature with full API signatures, type definitions, and usage examples, organized for fast lookup by AI agents.
 
-- **Start here:** [docs/features/index.md](./docs/features/index.md) — routing table by package and by feature slice, MCP tool quick reference, agent quick-start guide
+- **Start here:** [docs/features/index.md](./docs/features/index.md) — routing table by package and by feature slice, CLI command quick reference, agent quick-start guide
 - **Per-package overviews:** each package has a `README.md` under `docs/features/<package>/`
 - **Per-class detailed docs:** one `.md` per exported class/tool/command inside each package directory
 - **Cross-cutting pipelines:** top-level `*-pipeline.md` / `*-integration.md` files

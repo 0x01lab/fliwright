@@ -5,16 +5,16 @@
 Fliwright runs TypeScript tests against a trusted Flutter debug or test build.
 An in-app Dart bridge exposes Widget semantics, actions, screenshots, network
 mocks, state reset, and diagnostics through the Dart VM Service. The CLI is the
-primary user and CI interface; Vitest, VS Code, and MCP are adapters over the
+primary user and CI interface; Vitest and VS Code are adapters over the
 same runtime.
 
 ## Quick Start
 
-Requirements: Node.js 20 or newer, Flutter 3.x with Dart 3.5 or newer, and a
+Requirements: Node.js 22.12+ (22.x), 24.x, or 26+, Flutter 3.x with Dart 3.5 or newer, and a
 Flutter project whose source you control.
 
 ```sh
-npm install --save-dev @fliwright/cli @fliwright/vitest vitest@4.1.11 typescript
+npm install --save-dev @fliwright/cli @fliwright/vitest vitest@5.0.5 typescript
 npx fliwright init
 flutter run -t test_driver/fliwright_app.dart
 npx fliwright run
@@ -38,10 +38,10 @@ the bridge does not report its capabilities.
 
 - **Core:** locator/action/assertion/wait, screenshots, timelines, failure
   artifacts, deterministic scenarios, CLI, and Vitest.
-- **Optional:** HTTP/WebSocket mocks, Riverpod adapter, VS Code, and MCP.
+- **Optional:** HTTP/WebSocket mocks, Riverpod adapter, VS Code.
 - **Labs:** persistent TDD, AI repair, flow/Figma review, and Design QA.
 
-MCP is an optional agent adapter, not a prerequisite for local or CI tests.
+Coding agents use the bundled Skills and CLI; CI uses finite commands and exit codes.
 Deterministic automation should be expressed through the CLI and versioned
 machine-readable reports.
 
@@ -51,7 +51,7 @@ machine-readable reports.
 initializers are inert in Flutter release mode; keep it in a separate test
 entrypoint so release tree shaking can remove the package.
 
-The Developer Preview currently targets Node.js 20+, Dart 3.5+, and locally
+The Developer Preview currently targets Node.js 22.12+ (22.x), 24.x, or 26+, Dart 3.5+, and locally
 reachable Flutter VM Service sessions. Android, iOS, macOS, Windows, Linux, and
 Web are not all release-gated yet; only platforms listed in the release notes
 should be considered verified.
@@ -62,7 +62,6 @@ should be considered verified.
 - `@fliwright/core`: shared automation runtime.
 - `@fliwright/vitest`: test fixtures and lifecycle.
 - `@fliwright/cli`: primary command-line interface.
-- `@fliwright/mcp`: optional coding-agent adapter.
 - `fliwright_bridge_riverpod` / `@fliwright/plugin-riverpod`: optional Riverpod integration.
 - `fliwright_design_qa` and `@fliwright/tdd`: Labs packages.
 

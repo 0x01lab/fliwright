@@ -949,9 +949,5 @@ describe('TddRuntime', () => {
 });
 
 async function waitUntil(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (predicate()) return;
-    await Promise.resolve();
-  }
-  throw new Error('Timed out waiting for condition.');
+  await vi.waitFor(() => expect(predicate()).toBe(true));
 }

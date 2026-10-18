@@ -123,7 +123,8 @@ it('replays the exact generated test with the configured scenario and preserves 
   expect(await readFile(join(cwd, '.fliwright/tests/recorded-test.test.ts'), 'utf8')).toBe(result.code);
   const configPath = join(cwd, 'vitest.config.mjs');
   await writeFile(configPath, (await readFile(configPath, 'utf8')).replace("unrelated/*.test.ts", '.fliwright/tests/*.test.ts'));
-  const child = spawn(process.execPath, [fileURLToPath(new URL('./vitest.mjs', import.meta.resolve('vitest/package.json'))), 'run', '--reporter=json'], {
+  const reportPath = join(cwd, 'direct-replay.json');
+  const child = spawn(process.execPath, [fileURLToPath(new URL('./vitest.mjs', import.meta.resolve('vitest/package.json'))), 'run', '--reporter=json', '--outputFile', reportPath], {
     cwd, env: { ...process.env, FLIWRIGHT_SCENARIOS: '', FLIWRIGHT_VM_URL: 'ws://controlled-vm/ws', FLIWRIGHT_RUN_ID: 'direct-replay' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -132,7 +133,7 @@ it('replays the exact generated test with the configured scenario and preserves 
   child.stderr.on('data', (chunk) => { output += chunk; });
   const status = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
   expect(status, output).toBe(0);
-  expect(output).toContain('"numPassedTests":1');
+  expect(JSON.parse(await readFile(reportPath, 'utf8'))).toMatchObject({ numPassedTests: 1, success: true });
 }, 30_000);
 
 it('preserves a failed replay and its source without publishing or claiming verification', async () => {

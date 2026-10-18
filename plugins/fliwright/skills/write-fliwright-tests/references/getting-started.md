@@ -82,7 +82,7 @@ test('counter increments when the increment button is tapped', async ({ page }) 
 - 读取 `FLIWRIGHT_VM_URL`（兜底用 `FLIWRIGHT_VM_SERVICE_URL`），
 - 创建**一个共享的 `FliwrightDriver`** 并连接，
 - 给每个测试注入 `{ page, driver }`，
-- 在通过 CLI/MCP 运行时挂上失败上下文（截图 + 控件树 + 诊断信息 + 源码）。
+- 在通过 CLI 运行时挂上失败上下文（截图 + 控件树 + 诊断信息 + 源码）。
 
 自定义配置与生命周期控制见 [test-harness.md](./test-harness.md)。
 
@@ -94,7 +94,7 @@ test('counter increments when the increment button is tapped', async ({ page }) 
 fliwright run \
   --test path/to/counter.test.ts \
   --vm-url "ws://127.0.0.1:54321/abc=/ws" \
-  --reporter ai-json
+  --json
 ```
 
 想做快速冒烟可以直接调 Vitest，但**拿不到持久化报告**，除非走 `fliwright run`：

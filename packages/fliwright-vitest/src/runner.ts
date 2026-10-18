@@ -1,4 +1,4 @@
-import { VitestTestRunner } from 'vitest/runners';
+import { TestRunner as VitestTestRunner } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import type { RunnerTask as Task } from 'vitest';
 import { appendFile } from 'node:fs/promises';

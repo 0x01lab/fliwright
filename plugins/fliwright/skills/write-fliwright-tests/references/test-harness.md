@@ -27,7 +27,7 @@ script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, lo
 | Driver | 每进程一个**共享** `FliwrightDriver`，懒创建并连接 |
 | Fixtures | 提供 `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }`。`flow`、`mock`、`agent` 和 locator `expect` 都会写入 timeline；`logger` 写结构化运行日志。`script` 与 `test` 类似，但 mode 是 `script` 且不要求 assertion。 |
 | 诊断信息 | 启动 `driver.listenToDiagnostics()`，把日志/stderr 收集进失败报告 |
-| 失败上下文 | 当 `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH` 被设置时，写入断言详情 + 控件树 + 截图 + 诊断信息 + 源码 + 自愈建议 |
+| 失败上下文 | 每个 test attempt 在运行工件目录中保存断言详情 + 控件树 + 截图 + 诊断信息 + 源码 + 自愈建议 |
 | Trace | 当 `FLIWRIGHT_TRACE_DIR` + `FLIWRIGHT_TRACE` 被设置时，按动作记录 trace（见 [driver-lifecycle.md](./driver-lifecycle.md)） |
 | 截图模式 | 由 `FLIWRIGHT_SCREENSHOT_MODE` 控制 |
 | Timeline | 每次运行写 `<runsRoot>/<runId>/timeline.json`；失败节点会带 agent-visible failure 和 artifact refs |
@@ -66,7 +66,7 @@ await mock.activateRules({
 
 ## `script` fixture
 
-Use `script` for automation that drives an app but is not primarily a CI assertion suite: account registration, data seeding, cleanup, or MCP-recorded script cleanup.
+Use `script` for automation that drives an app but is not primarily a CI assertion suite: account registration, data seeding, cleanup, or CLI-recorded script cleanup.
 
 ```typescript
 import { script } from '@fliwright/vitest';
@@ -225,7 +225,6 @@ viExpect(await page.getByText('Ready').count()).toBe(1);
 | `FLIWRIGHT_VM_SERVICE_URL` | 上面 URL 的兼容别名。 |
 | `FLIWRIGHT_SCREENSHOT_MODE` | `file` \| `base64` \| `off`。供默认 `test` 使用。 |
 | `FLIWRIGHT_FAILURE_TIMEOUT_MS` | 默认 `test` 的单测试失败/断言超时。 |
-| `FLIWRIGHT_MCP_FAILURE_CONTEXT_PATH` | 追加失败上下文 JSON 的文件路径（由 `fliwright run` 设置）。 |
 | `FLIWRIGHT_MOCK_CONTROLLER_URL` | 工具侧 mock 控制器的 WebSocket URL。 |
 | `FLIWRIGHT_TRACE` | Trace 模式：`full` \| `on-failure` \| `off`。 |
 | `FLIWRIGHT_TRACE_DIR` | 写单测试 trace 产物的目录。 |

@@ -53,7 +53,7 @@ console.log(`Updated plugin version: ${previousVersion} -> ${nextVersion}`);
 
 if (options.noInstall) {
   console.log('Skipped reinstall because --no-install was passed.');
-  console.log('Open a new Codex task after reinstalling to pick up changed skills and MCP tools.');
+  console.log('Open a new Codex task after reinstalling to pick up changed skills and CLI workflows.');
   process.exit(0);
 }
 
@@ -68,7 +68,7 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
-console.log('Reinstalled plugin. Open a new Codex task to pick up changed skills and MCP tools.');
+console.log('Reinstalled plugin. Open a new Codex task to pick up changed skills and CLI workflows.');
 
 function parseArgs(argv) {
   const parsed = {

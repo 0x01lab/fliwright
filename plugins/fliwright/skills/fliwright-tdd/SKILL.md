@@ -4,7 +4,7 @@ description: >
   在 Fliwright 仓库中以测试优先方式开发时使用：TDD、red-green-refactor、
   回归测试、需要先写失败测试的 bug 修复，或用户明确提到 "先写测试"、
   "测试驱动"、"TDD"、"red green refactor"、"regression"、"回归测试" 的实现请求。
-  适用于 TypeScript 包、Dart bridge、MCP 工具、CLI 行为、选择器、协议行为、
+  适用于 TypeScript 包、Dart bridge、CLI 命令、CLI 行为、选择器、协议行为、
   代码生成以及生成式 feature docs 更新。涉及 Fliwright automation script、`.fliwright/tests`、
   `@fliwright/vitest` fixture、locator、flow、mock、agent、timeline、真实 Flutter app
   验证或 E2E 用例时，必须同时使用 `write-fliwright-tests` skill。
@@ -16,7 +16,7 @@ description: >
 
 ## 组合 Skill
 
-当 TDD 任务涉及 Fliwright 自动化测试或脚本时，先继续遵守本 Skill 的红绿重构流程，再同时使用 `write-fliwright-tests` skill 获取具体写法。典型触发包括 `.fliwright/tests`、`.fliwright/scripts`、`@fliwright/vitest`、`test` / `script` fixture、locator、selector、flow step、mock rule、agent verify、timeline、真实 Flutter app 验证、MCP 录制脚本清理和 E2E 用例。
+当 TDD 任务涉及 Fliwright 自动化测试或脚本时，先继续遵守本 Skill 的红绿重构流程，再同时使用 `write-fliwright-tests` skill 获取具体写法。典型触发包括 `.fliwright/tests`、`.fliwright/scripts`、`@fliwright/vitest`、`test` / `script` fixture、locator、selector、flow step、mock rule、agent verify、timeline、真实 Flutter app 验证、CLI 录制脚本清理和 E2E 用例。
 
 职责分工：
 
@@ -40,7 +40,7 @@ description: >
 ## 选择测试
 
 - TypeScript package 行为：在该 package 的 `tests` 目录下添加聚焦 Vitest 测试，文件名用 `*.test.ts`，并尽量镜像被测源码主题。
-- 选择器、协议、MCP 工具或代码生成变更：必须添加回归测试。
+- 选择器、协议、CLI 命令或代码生成变更：必须添加回归测试。
 - 公共 API 变更：同时测试新行为，以及调用方依赖的兼容行为或错误行为。
 - Dart bridge 变更：可行时，在 bridge 行为附近添加或更新 `dart test` 覆盖。
 - Timeline-native Flutter 自动化脚本和 `.fliwright/tests` 编写：使用 `write-fliwright-tests` skill 获取 fixture、locator、flow、mock 和真实 app 验证模式。
@@ -78,7 +78,7 @@ description: >
 - 只做满足失败行为所需的最小源码改动。
 - 新增公共 API 时，遵守通过 `src/index.ts` 导出的既有约定。
 - TypeScript ESM 相对导入保留显式 `.js` 后缀。
-- 不要在没有测试的情况下扩大选择器、协议 payload、生成输出或 MCP 契约。
+- 不要在没有测试的情况下扩大选择器、协议 payload、生成输出或 CLI 契约。
 - 不要更新 `dist` 之类的生成构建产物。
 
 ## 重构与文档

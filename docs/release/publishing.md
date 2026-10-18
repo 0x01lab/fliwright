@@ -141,8 +141,7 @@ pnpm build
 pnpm package:check
 ```
 
-The CLI is the primary install surface. `@fliwright/mcp` is optional and is
-started through `fliwright mcp serve` or the `fliwright-mcp` binary.
+The CLI and bundled Skills are the agent and CI install surface. The MCP package is no longer built or published.
 
 ## Release copy
 

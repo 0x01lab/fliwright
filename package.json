@@ -14,11 +14,13 @@
     "plugin:reload": "pnpm plugin:sync && node scripts/reload-codex-plugin.mjs",
     "plugin:sync": "node scripts/sync-codex-plugin-skills.mjs",
     "package:check": "node scripts/verify-package-tarballs.mjs",
-    "simulate:flow-clean": "node scripts/simulate-flow-clean.mjs"
+    "simulate:flow-clean": "node scripts/simulate-flow-clean.mjs",
+    "docs:cli": "node scripts/generate-cli-command-docs.mjs",
+    "docs:cli:check": "node scripts/generate-cli-command-docs.mjs --check"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
-    "vitest": "4.1.11",
+    "vitest": "5.0.5",
     "vite": "^8.1.0"
   }
 }

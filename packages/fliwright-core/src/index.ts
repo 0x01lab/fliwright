@@ -280,6 +280,7 @@ export {
   explicitEndpointSource,
   normalizeVmServiceUrl,
   verifyVmServiceEndpoint,
+  waitForVmServiceEndpoint,
   workspaceEndpointSource,
 } from './VmServiceEndpoint.js';
 export type {

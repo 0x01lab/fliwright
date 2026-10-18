@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { deflateSync } from 'node:zlib';
 import { AiRuntime, MockAiAdapter, type FliwrightFlowDocument } from '@fliwright/core';
-import { createProgram } from '../src/index.js';
+import { createProgram, executeCli } from '../src/index.js';
 import {
   flowAgentSpecCommand,
   flowBindFigmaCommand,
@@ -18,6 +18,20 @@ import {
 } from '../src/commands/flow.js';
 
 describe('flow commands', () => {
+  it('executes review bundle report arguments using capture files', async () => {
+    const root = await makeWorkspace();
+    await writeFlow(root, sampleFlow({ nodes: [{ id: 'screen', type: 'screen', title: 'Checkout', route: '/checkout', figma: { fileKey: 'FILE123', nodeId: '1:2' } }], edges: [] }));
+    const captures = join(root, 'captures.json');
+    await writeFile(captures, '[]');
+    const result = await executeCli(['flow', 'review-report', '--input', await (async () => {
+      const input = join(root, 'input.json');
+      await writeFile(input, JSON.stringify({ id: 'checkout', runtimeCapturesFile: captures, figmaCapturesFile: captures, autoCompare: false }));
+      return input;
+    })(), '--cwd', root, '--json']);
+    expect(JSON.parse(result.stdout)).toHaveProperty('data.report');
+    expect(result.exitCode).toBe(1); // Empty captures preserve missing evidence as review failure.
+  });
+
   it('lists editable flow files under .fliwright/flows', async () => {
     const root = await makeWorkspace();
     await writeFlow(root, sampleFlow({ id: 'checkout', updatedAt: '2026-01-02T00:00:00.000Z' }));
@@ -231,10 +245,10 @@ describe('flow commands', () => {
         screenshotPath: join(outputDir, 'figma', '001-screen-1.png'),
       }),
     ]);
-    expect(result.bundle.fliwrightMcp.report.args).toEqual(expect.objectContaining({
+    expect(result.bundle.fliwrightCli.report.args).toEqual(expect.objectContaining({
       outputPath: join(outputDir, 'checkout-report.json'),
-      runtimeCaptures: join(outputDir, 'runtime', 'runtime-captures.json'),
-      figmaCaptures: join(outputDir, 'figma', 'figma-captures.json'),
+      runtimeCapturesFile: join(outputDir, 'runtime', 'runtime-captures.json'),
+      figmaCapturesFile: join(outputDir, 'figma', 'figma-captures.json'),
     }));
     expect(await readFile(result.outputPath, 'utf8')).toContain('"figmaMcp"');
   });
@@ -360,35 +374,12 @@ describe('flow commands', () => {
     await writeFile(runtimePath, pngRgba(1, 1, [[255, 0, 0, 255]]));
     await writeFile(figmaPath, pngRgba(1, 1, [[0, 0, 255, 255]]));
 
-    const previousExitCode = process.exitCode;
-    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    process.exitCode = 0;
-
-    try {
-      const program = createProgram();
-      await program.parseAsync([
-        'flow',
-        'review-report',
-        'checkout',
-        '--cwd',
-        root,
-        '--runtime-capture',
-        `screen-1=${runtimePath}`,
-        '--figma-capture',
-        `screen-1=${figmaPath}`,
-        '--json',
-      ], { from: 'user' });
-
-      expect(process.exitCode).toBe(1);
-      const printed = JSON.parse(log.mock.calls[0]?.[0] as string);
-      expect(printed.report.summary).toEqual(expect.objectContaining({
-        failed: 1,
-        missing: 0,
-      }));
-    } finally {
-      process.exitCode = previousExitCode;
-      log.mockRestore();
-    }
+    const result = await executeCli(['flow', 'review-report', 'checkout', '--cwd', root,
+      '--runtime-captures', JSON.stringify([{ flowNodeId: 'screen-1', screenshotPath: runtimePath }]),
+      '--figma-captures', JSON.stringify([{ flowNodeId: 'screen-1', screenshotPath: figmaPath }]), '--json']);
+    expect(result.exitCode, result.stdout).toBe(1);
+    const printed = JSON.parse(result.stdout);
+    expect(printed.data.report.summary).toMatchObject({ failed: 1, missing: 0 });
   });
 });
 

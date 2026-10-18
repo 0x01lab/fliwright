@@ -95,12 +95,6 @@ function packageEntrypoints(manifest) {
   };
 }
 
-function registeredMcpTools(sourceFiles) {
-  const pattern = /\bserver\.tool\(\s*['"]([^'"]+)['"]/g;
-  return uniqueSorted(sourceFiles.flatMap((relativePath) => (
-    [...readText(relativePath).matchAll(pattern)].map((match) => match[1])
-  )));
-}
 
 function registeredVmServiceMethods(sourceFiles) {
   const pattern = /\bregistry\.register\(\s*['"](ext\.fliwright\.[^'"]+)['"]/g;
@@ -149,12 +143,6 @@ function typeScriptRecord(name, rule) {
     ...packageEntrypoints(manifest),
   };
 
-  if (name === '@fliwright/mcp') {
-    record.mcpToolModules = listFiles(`${rule.path}/src/tools`, ['.ts'])
-      .map((file) => path.basename(file, '.ts'))
-      .filter((name) => name !== 'index');
-    record.mcpTools = registeredMcpTools(sourceFiles);
-  }
   if (name === '@fliwright/cli') {
     record.cliCommands = listFiles(`${rule.path}/src/commands`, ['.ts'])
       .map((file) => path.basename(file, '.ts'));
@@ -233,8 +221,6 @@ function packageMarkdown(record) {
     ['Package Entrypoints', record.packageEntrypoints],
     ['Binary Entrypoints', record.binaryEntrypoints],
     ['Public Exports', record.publicExports],
-    ['MCP Tools', record.mcpTools],
-    ['MCP Tool Modules', record.mcpToolModules],
     ['CLI Commands', record.cliCommands],
     ['CLI Capabilities', record.cliCapabilities],
     ['VS Code Commands', record.commands],

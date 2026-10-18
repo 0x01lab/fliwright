@@ -9,7 +9,7 @@ type PreparedMeta = { [prepareKey]?: PrepareTask };
  */
 export function withTaskPreparation<T extends object>(test: TestAPI<T>, prepare: PrepareTask): TestAPI<T> {
   const proxies = new WeakMap<object, object>();
-  const variants = new Set(['concurrent', 'sequential', 'skip', 'only', 'todo', 'fails']);
+  const variants = new Set(['concurrent', 'skip', 'only', 'todo', 'fails']);
   const factories = new Set(['each', 'for', 'skipIf', 'runIf', 'extend']);
   const wrap = (target: (...args: unknown[]) => unknown): typeof target => {
     const existing = proxies.get(target);

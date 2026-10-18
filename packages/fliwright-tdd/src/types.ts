@@ -60,11 +60,12 @@ export interface StartOpts {
   configRoot: string;
   launchMode?: 'start' | 'attach';
   scenario?: Scenario;
+  defaultScenario?: string;
   /**
    * Optional path the runtime writes its {@link RuntimeSnapshot} to after each state change
    * (start/focus/cycle/reconnect/stop), as a best-effort, non-blocking JSON dump. Lets read-only
    * monitors (e.g. the VS Code TDD Loop panel) observe the loop without a second driver connection.
-   * Defaults to `<projectRoot>/.fliwright/tdd-status.json` when set by the MCP/CLI layer.
+   * Defaults to `<projectRoot>/.fliwright/tdd-status.json` when set by the CLI layer.
    */
   statusFilePath?: string;
 }
@@ -200,10 +201,10 @@ export interface TddRuntimeDeps {
     reload(appId: string): Promise<void>;
     restart(appId: string): Promise<void>;
     stop(appId: string): Promise<void>;
-    dispose(): Promise<void>;
+    dispose(options?: { keepAppAlive?: boolean }): Promise<void>;
   };
   executor?: {
-    boot(opts: { configRoot: string; vmServiceUrl?: string; driverProvider: () => Promise<unknown> }): Promise<void>;
+    boot(opts: { configRoot: string; vmServiceUrl?: string; driverProvider: () => Promise<unknown>; defaultScenario?: string; scenarioMode?: 'managed-start' | 'attach' }): Promise<void>;
     rerun(file: string, testName?: string): Promise<{
       status: 'red' | 'green';
       testName?: string;
@@ -236,7 +237,7 @@ export interface TddRuntimeDeps {
   };
   driverFactory?: () => {
     connect(vmServiceUrl: string): Promise<void>;
-    dispose(): Promise<void>;
+    dispose(options?: { signal?: AbortSignal }): Promise<void>;
     page: {
       resetToHome(options?: { homeRoute?: string }): Promise<void>;
     };

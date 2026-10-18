@@ -1,7 +1,7 @@
 {
   "name": "fliwright",
   "version": "0.1.0+codex.20260712075300",
-  "description": "Fliwright Flutter automation workflows, testing skills, and live MCP tools for Codex.",
+  "description": "Fliwright Flutter automation with Skills, CLI workflows, and CI artifacts.",
   "author": {
     "name": "Fliwright"
   },
@@ -22,6 +22,5 @@
       "Connect to the running Flutter app and inspect the current UI.",
       "Create a Fliwright flow review plan for this user journey."
     ]
-  },
-  "mcpServers": "./.mcp.json"
+  }
 }

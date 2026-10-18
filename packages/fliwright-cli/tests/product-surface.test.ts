@@ -5,16 +5,16 @@ describe('CLI-first product surface', () => {
   it('exposes stable intent command groups', () => {
     const program = createProgram();
 
-    expect(subcommands(program, 'app')).toEqual(['interact', 'observe', 'screenshot', 'status']);
-    expect(subcommands(program, 'scenario')).toEqual(['apply', 'list', 'reset']);
-    expect(subcommands(program, 'mock')).toEqual(['apply', 'calls', 'clear', 'list', 'start', 'status']);
-    expect(subcommands(program, 'artifacts')).toEqual(['export', 'show']);
-    expect(subcommands(program, 'mcp')).toEqual(['config', 'doctor', 'serve']);
+    expect(subcommands(program, 'app')).toEqual(['debug-snapshot', 'diagnostics', 'find', 'interact', 'observe', 'reload', 'screenshot', 'snapshot', 'source-map', 'status']);
+    expect(subcommands(program, 'scenario')).toEqual(['apply', 'list', 'reset', 'resolve']);
+    expect(subcommands(program, 'mock')).toEqual(['apply', 'calls', 'clear-calls', 'list', 'reset', 'start', 'status']);
+    expect(subcommands(program, 'artifacts')).toEqual(['diagnose', 'export', 'failures', 'show', 'timeline']);
+    expect(subcommands(program, 'session')).toEqual(['cancel', 'close', 'list', 'open', 'reconnect', 'status']);
   });
 
-  it('keeps the deprecated mock:start alias for migration', () => {
+  it('removes the deprecated mock:start alias', () => {
     const names = createProgram().commands.map((command) => command.name());
-    expect(names).toContain('mock:start');
+    expect(names).not.toContain('mock:start');
   });
 
   it('does not invent explicit run overrides for absent flags', () => {

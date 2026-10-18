@@ -20,7 +20,7 @@ void main() {
       label: 'Submit',
     );
 
-    expect(ref, 'e1');
+    expect(ref, startsWith('e'));
     final entry = RefRegistry.lookupEntry(ref);
     expect(entry, isNotNull);
     expect(entry!.element, same(element));
@@ -83,9 +83,9 @@ void main() {
       isTextField: false,
     );
 
-    expect(first, 'e1');
-    expect(second, 'e2');
-    expect(RefRegistry.refsForGroup('snapshot-a'), ['e1', 'e2']);
+    expect(first, startsWith('e'));
+    expect(second, isNot(first));
+    expect(RefRegistry.refsForGroup('snapshot-a'), [first, second]);
   });
 
   test('registers q refs independently from e refs', () {
@@ -94,10 +94,39 @@ void main() {
     final first = RefRegistry.registerQuery(query);
     final second = RefRegistry.registerQuery(query);
 
-    expect(first, 'q1');
-    expect(second, 'q2');
+    expect(first, startsWith('q'));
+    expect(second, isNot(first));
     expect(RefRegistry.lookupQuery(first), same(query));
-    expect(RefRegistry.activeRefs(), containsAll(['q1', 'q2']));
+    expect(RefRegistry.activeRefs(), containsAll([first, second]));
+  });
+
+  test('does not reuse refs after clearing a registry incarnation', () {
+    const query = QueryRef(text: 'Submit');
+    final old = RefRegistry.registerQuery(query);
+    RefRegistry.disposeAll();
+    final fresh = RefRegistry.registerQuery(query);
+    expect(fresh, isNot(old));
+    expect(RefRegistry.lookupQuery(old), isNull);
+  });
+
+  testWidgets('does not alias a semantics id reused by a new element',
+      (tester) async {
+    await tester.pumpWidget(_testText('First'));
+    final first = RefRegistry.registerEntry(
+        rect: Rect.zero,
+        element: tester.element(find.text('First')),
+        groupId: 'a',
+        isTextField: false,
+        semanticsId: 42);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(_testText('Second'));
+    final second = RefRegistry.registerEntry(
+        rect: Rect.zero,
+        element: tester.element(find.text('Second')),
+        groupId: 'b',
+        isTextField: false,
+        semanticsId: 42);
+    expect(second, isNot(first));
   });
 
   test('rejects empty query refs', () {

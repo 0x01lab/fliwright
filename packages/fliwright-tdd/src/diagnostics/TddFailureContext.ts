@@ -197,7 +197,7 @@ function buildRecoveryHints(context: TddFailureContext): TddRecoveryHint[] {
         priority: 'high',
         message: 'The generated test is looking for a widget that is not currently discoverable.',
         actions: [
-          'Capture a fresh fliwright_snap and replace brittle text/type selectors with key or semantics selectors when available.',
+          'Capture a fresh fliwright app snapshot and replace brittle text/type selectors with key or semantics selectors when available.',
           'If the widget should exist but does not render, fix the app state/setup before changing the assertion.',
         ],
       });
@@ -275,7 +275,7 @@ function buildRecoveryHints(context: TddFailureContext): TddRecoveryHint[] {
         priority: 'high',
         message: 'The Flutter VM service connection appears disconnected.',
         actions: [
-          'Call fliwright_tdd_reconnect, then rerun the focused cycle.',
+          'Call fliwright tdd reconnect, then rerun the focused cycle.',
           'If reconnect fails, restart the app/runtime and preserve the generated test file.',
         ],
       });

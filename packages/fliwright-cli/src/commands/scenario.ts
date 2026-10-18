@@ -42,3 +42,8 @@ export async function scenarioResetCommand(
     };
   }, deps);
 }
+
+export async function scenarioResolveCommand(options: { cwd?: string; name: string }) {
+  const config = await loadConfig(options.cwd ?? process.cwd());
+  return new ScenarioResolver(config.scenarios ?? {}).resolve(options.name);
+}

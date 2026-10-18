@@ -2,7 +2,7 @@
  * TDD Loop monitor view-model + mapping (design spec §4.3 / §5.4 / §6.2 / §10 P1).
  *
  * The panel renders a {@link TddLoopSnapshot} (the RuntimeSnapshot shape produced by the
- * MCP-owned `TddRuntime`) into a stable, UI-facing {@link TddLoopViewModel}. Keeping the
+ * CLI-owned `TddRuntime`) into a stable, UI-facing {@link TddLoopViewModel}. Keeping the
  * mapping in a pure, side-effect-free function lets us unit-test it without a VS Code host
  * (see `tests/TddLoopViewModel.test.ts`).
  *

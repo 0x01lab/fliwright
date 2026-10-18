@@ -2,7 +2,7 @@
 
 Fliwright is a TypeScript-scripted Flutter automation runtime. A Dart VM-Service
 bridge (`fliwright_bridge`) runs inside the app, `@fliwright/core` drives it,
-and Vitest, MCP, CLI, VS Code, and Riverpod packages integrate with that core.
+and Vitest, CLI, VS Code, and Riverpod packages integrate with that core.
 Tests are scripts plus assertions; scripts can also perform arbitrary app tasks.
 
 This file is level 0 of the repository Harness. Read it for every task. Open
@@ -19,8 +19,8 @@ only the one linked level-1 document that matches the work; do not preload
   classes, and camelCase members.
 - Keep changes in their owning package. Do not commit `dist`, Flutter-generated
   files, local VM-service URLs, device configuration, or secrets.
-- Keep fixtures deterministic. Add a regression test for selector, protocol, MCP
-  tool, or code-generation changes.
+- Keep fixtures deterministic. Add a regression test for selector, protocol, CLI
+  command, or code-generation changes.
 - Reusable automation environments use named, composed `TestScenario` declarations.
   Authenticated business tests seed app-owned auth state through `auth.seedLoggedIn`,
   never real login, CAPTCHA bypasses, or generic Riverpod auth overrides; see
@@ -66,11 +66,10 @@ instead of reading sibling files or a whole directory.
 
 ## Feature Documentation
 
-AI-consumable feature documentation lives in `docs/features/`. These docs summarize every implemented feature with API surfaces, type definitions, and usage examples, organized for fast lookup by AI agents.
+AI-consumable implementation documentation lives in `docs/features/`.
 
-- **Start here:** [docs/features/index.md](./docs/features/index.md) — routing table by package and feature slice, MCP tool quick reference, and agent quick-start guide.
-- **Per-package overviews:** each package has a `README.md` under `docs/features/<package>/` (including `core`, `vitest`, `tdd`, `cli`, `mcp`, `vscode`, `bridge`, `bridge-riverpod`, `plugin-riverpod`, and `e2e-tests`).
-- **Per-export docs:** package directories contain one page per exported class, utility, command, MCP tool, Dart extension, or VS Code contribution.
-- **Cross-cutting pipelines:** top-level `*-pipeline.md` and `*-integration.md` files trace recording, self-healing, form filling, MCP, mocks, state injection, and run artifacts.
+- Start at [docs/features/index.md](./docs/features/index.md) for package and CLI routing.
+- Package APIs have generated overviews and detailed source-derived pages.
+- Cross-cutting pipeline pages trace runtime, recording, scenarios, leases and artifacts.
 
-Regenerate with `/document-features` when source code changes significantly.
+Regenerate affected feature documentation with `/document-features` after significant stable source changes.

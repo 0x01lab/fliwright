@@ -11,10 +11,10 @@ input, reset application state, and configure mocks. Anyone who can reach the
 app's Dart VM Service can potentially invoke powerful debug behavior. Treat the
 VM Service URL and the machine running the app as trusted test infrastructure.
 
-The optional MCP server runs over stdio and has the permissions of its host
-process. It does not provide an authentication layer around Fliwright. Configure
-it only in trusted coding-agent hosts and expose the smallest suitable tool
-profile; `core` is the default.
+The CLI and its local connection workers have the permissions of their invoking
+process. Session sockets and control files use local owner permissions. The
+worker exposes the CLI command registry rather than arbitrary bridge methods.
+It does not add authentication to the app's VM Service.
 
 ## Safe deployment rules
 
@@ -22,16 +22,13 @@ profile; `core` is the default.
   entrypoint. Never make that entrypoint the production launch target.
 - Keep the Dart VM Service bound to a trusted local or isolated CI environment;
   do not publish its endpoint through a public tunnel.
-- Keep the default MCP `core` profile unless a bounded task requires
-  `development`, `tdd`, or `flow`. Use `full` only for migration or specialist
-  debugging.
 - Store only synthetic or redacted data under `.fliwright/`. Screenshots,
   widget trees, mock calls, logs, and run reports can contain personal data,
   access tokens, or application secrets.
 - Do not commit VM Service URLs, device configuration, run artifacts, or
   credentials. Apply normal CI retention and access policies to exported
   artifacts.
-- Review generated or AI-proposed test changes before merging them. MCP access
+- Review generated or AI-proposed test changes before merging them. CLI access
   does not turn generated code into a trusted security boundary.
 
 ## Release-build behavior

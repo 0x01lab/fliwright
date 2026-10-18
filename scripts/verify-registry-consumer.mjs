@@ -15,7 +15,6 @@ const packages = [
   '@fliwright/core',
   '@fliwright/vitest',
   '@fliwright/cli',
-  '@fliwright/mcp',
   '@fliwright/tdd',
   '@fliwright/plugin-riverpod',
 ];
@@ -27,7 +26,7 @@ try {
     private: true,
     type: 'module',
     dependencies: Object.fromEntries(packages.map((name) => [name, `${name}@${version}`])),
-    devDependencies: { vitest: '4.1.11' },
+    devDependencies: { vitest: '5.0.5' },
   }, null, 2)}\n`);
 
   const installArgs = [
@@ -57,11 +56,11 @@ try {
     [
       "import { FliwrightDriver } from '@fliwright/core';",
       "import { test } from '@fliwright/vitest';",
-      "import { defineConfig, runCommand } from '@fliwright/cli';",
-      "import { createFliwrightServer } from '@fliwright/mcp';",
+      "import { defineConfig } from '@fliwright/cli';",
+      "import { runCommand } from '@fliwright/cli/run';",
       "import { TddRuntime } from '@fliwright/tdd';",
       "import { riverpodPlugin } from '@fliwright/plugin-riverpod';",
-      'if (![FliwrightDriver, test, defineConfig, runCommand, createFliwrightServer, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing registry export");',
+      'if (![FliwrightDriver, test, defineConfig, runCommand, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing registry export");',
     ].join('\n'),
   ], { cwd: consumer });
   console.log(`verified npm registry consumer for ${version}`);

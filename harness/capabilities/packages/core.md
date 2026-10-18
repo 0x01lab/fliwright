@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "4d7ac62d3e3d878db34e3bebddfda2e4289675fbbee413d5e9f0aa2dce447e72"
+source_fingerprint: "7084dfd4b5d3c0a9542bbfabe11e2241942528562e576a0d8065ee507706b3e1"
 generated: true
 ---
 
@@ -564,6 +564,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `VMServiceEvent`
 - `VmServiceUnavailableError`
 - `WaitForMockCallOptions`
+- `waitForVmServiceEndpoint`
 - `WebSocketMockCall`
 - `WebSocketMockManager`
 - `WebSocketMockPush`

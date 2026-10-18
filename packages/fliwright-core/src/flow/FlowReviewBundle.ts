@@ -21,7 +21,7 @@ export interface FlowReviewFigmaCaptureTask {
 }
 
 export interface FlowReviewBundle {
-  version: 1;
+  version: 2;
   flowId: string;
   title?: string;
   generatedAt: string;
@@ -36,9 +36,9 @@ export interface FlowReviewBundle {
     tasks: FlowReviewFigmaCaptureTask[];
     capturesFile: string;
   };
-  fliwrightMcp: {
+  fliwrightCli: {
     runtimeCapture: {
-      tool: 'fliwright_flow_review_capture_runtime';
+      command: 'flow.review-capture-runtime';
       args: {
         path?: string;
         outputDir: string;
@@ -46,13 +46,13 @@ export interface FlowReviewBundle {
       };
     };
     report: {
-      tool: 'fliwright_flow_review_report';
+      command: 'flow.review-report';
       args: {
         path?: string;
         outputPath: string;
         autoCompare: true;
-        runtimeCaptures: string;
-        figmaCaptures: string;
+        runtimeCapturesFile: string;
+        figmaCapturesFile: string;
       };
     };
   };
@@ -71,7 +71,7 @@ export function buildFlowReviewBundle(
   const flowPath = options.flowPath;
 
   return {
-    version: 1,
+    version: 2,
     flowId: flow.id,
     ...(flow.title ? { title: flow.title } : {}),
     generatedAt: options.generatedAt ?? new Date().toISOString(),
@@ -95,9 +95,9 @@ export function buildFlowReviewBundle(
         mcpTool: 'figma.get_screenshot',
       })),
     },
-    fliwrightMcp: {
+    fliwrightCli: {
       runtimeCapture: {
-        tool: 'fliwright_flow_review_capture_runtime',
+        command: 'flow.review-capture-runtime',
         args: {
           ...(flowPath ? { path: flowPath } : {}),
           outputDir: runtimeDir,
@@ -105,13 +105,13 @@ export function buildFlowReviewBundle(
         },
       },
       report: {
-        tool: 'fliwright_flow_review_report',
+        command: 'flow.review-report',
         args: {
           ...(flowPath ? { path: flowPath } : {}),
           outputPath: reportPath,
           autoCompare: true,
-          runtimeCaptures: `${runtimeDir}/runtime-captures.json`,
-          figmaCaptures: `${figmaDir}/figma-captures.json`,
+          runtimeCapturesFile: `${runtimeDir}/runtime-captures.json`,
+          figmaCapturesFile: `${figmaDir}/figma-captures.json`,
         },
       },
     },

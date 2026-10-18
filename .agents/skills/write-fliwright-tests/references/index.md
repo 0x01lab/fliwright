@@ -12,7 +12,7 @@
 | 文档 | 覆盖内容 | 何时读… |
 | --- | --- | --- |
 | [getting-started.md](./getting-started.md) | 桥接设置、第一个测试、环境变量、运行测试 | 你在写第一个 Fliwright 测试 |
-| [timeline-native.md](./timeline-native.md) | 新版 `script`/`test`、`flow`、timeline-aware `mock`、`agent`、`expect(locator, title?)`、timeline/MCP inspection | 你在写新版自动化脚本、清理录制产物、或需要 AI/agent 可读失败 |
+| [timeline-native.md](./timeline-native.md) | 新版 `script`/`test`、`flow`、timeline-aware `mock`、`agent`、`expect(locator, title?)`、timeline/CLI inspection | 你在写新版自动化脚本、清理录制产物、或需要 AI/agent 可读失败 |
 | [logging.md](./logging.md) | `logger` fixture、结构化 JSONL 日志、pretty/compact/jsonl 格式、stderr/stdout/file 输出、日志环境变量 | 你需要脚本进度输出、agent 可读日志、CI 日志或调试细节 |
 | [test-harness.md](./test-harness.md) | `@fliwright/vitest` fixture：`test`、`script`、`flow`/`mock`/`agent` fixture、`expect`、`createFliwrightTest`、hooks、环境变量、失败上下文 | 你在决定如何接入 driver 生命周期 |
 | [selectors.md](./selectors.md) | 选择器格式、`getByX`、作用域（`descendant`/`ancestor`/`and`/`or`/`nth`/`first`/`last`/`filter`/`containing`）、`subtype`/`tooltip`/`state` | 你需要稳定地定位某个控件 |
@@ -28,7 +28,7 @@
 | [state.md](./state.md) | `driver.state`（StateAdapter / Riverpod）：`read` / `write` / `override` / `watch` / `listProviders`，跳过 UI 直接进入业务态 | 你要跳过登录、覆盖 provider、或断言 UI 没展示的状态 |
 | [app-instance.md](./app-instance.md) | `driver.app`（AppInstance）：`info` / `getSnapshot` / `listCapabilities` / `getCapability` / `invoke`，越过 widget 树询问 app 身份与能力 | 你要断言 app 身份/环境，或调 app 暴露的测试专用能力（如 `auth.signIn`） |
 | [cli.md](./cli.md) | `fliwright run` / `init` / `doctor` / `record` / `mock:start`、选项、reporter、环境变量、VM 发现、自动化脚本 | 你在运行测试或搭自动化 |
-| [mcp-workflow.md](./mcp-workflow.md) | `fliwright_snap` / `observe` / `record` / `generate_test` / `run` / `get_failure` | 你在通过 MCP 发现行为了或验证 |
+| [agent-workflow.md](./agent-workflow.md) | `fliwright app snapshot` / `observe` / `record` / `generate_test` / `run` / `get_failure` | 你在通过 CLI 发现行为了或验证 |
 | [troubleshooting.md](./troubleshooting.md) | 常见修复、桥接就绪检查、抖动选择器、崩溃 | 一个测试失败了，你需要解法 |
 | [examples.md](./examples.md) | 可复制、带注释的完整测试脚本 | 你想要一个能照着改的模板 |
 

@@ -1,0 +1,15 @@
+{
+  "connected": false,
+  "daemonStatus": "stopped",
+  "supportsRestart": false,
+  "launchMode": "attach",
+  "restartCapable": false,
+  "driverConnections": 0,
+  "fixtureDriverSharing": "vm-service-url",
+  "notes": [
+    "Vitest 5.0.5 runs tests in worker processes, so live FliwrightDriver objects are not shared across the executor boundary.",
+    "The TDD runtime injects FLIWRIGHT_VM_SERVICE_URL so fixtures connect to the same app VM service."
+  ],
+  "baselineVersion": 0,
+  "updatedAtMs": 1792285900295
+}

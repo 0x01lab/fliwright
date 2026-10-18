@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FlutterDaemonController } from '../../src/daemon/FlutterDaemonController.js';
 import { FakeDaemonTransport } from './FakeDaemonTransport.js';
 
@@ -125,4 +125,17 @@ describe('FlutterDaemonController reload/restart/stop', () => {
       params: { appId: 'app-1' },
     });
   });
+});
+
+
+it('detaches an explicitly retained app before disposing its machine transport', async () => {
+  const transport = new FakeDaemonTransport().on('app.start', async () => ({ appId: 'retained' })).on('app.detach', async () => ({}));
+  const dispose = vi.spyOn(transport, 'dispose');
+  const controller = new FlutterDaemonController(transport);
+  const starting = controller.startApp({ deviceId: 'macos' });
+  setTimeout(() => transport.emit({ event: 'app.debugPort', params: { appId: 'retained', wsUri: 'ws://local/ws' } }), 0);
+  await starting;
+  await controller.dispose({ keepAppAlive: true });
+  expect(transport.requests.at(-1)).toMatchObject({ method: 'app.detach', params: { appId: 'retained' } });
+  expect(dispose).toHaveBeenCalledWith({ keepAppAlive: true });
 });

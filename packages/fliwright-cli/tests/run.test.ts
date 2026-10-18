@@ -476,9 +476,10 @@ describe('runCommand', () => {
           assert.equal(config.recording.failureCaptureBudgetMs, 1234);
           assert.equal(config.recording.testFinalizationBudgetMs, 4567);
           assert.equal(config.paths.tests, 'checks');
+          assert.equal(config.scenarioMode, 'managed-start');
         });
       `);
-      const result = await runCommand({ cwd: root, recordingMode: explicitMode, print: false,
+      const result = await runCommand({ cwd: root, recordingMode: explicitMode, scenarioMode: 'managed-start', print: false,
       }, { resolveVmUrl: async () => 'ws://unused' });
       expect(result.passed, JSON.stringify(result)).toBe(true);
       expect(result.totalTests).toBe(1);
@@ -628,7 +629,7 @@ describe('runCommand', () => {
 
     const result = await withIsolatedHome(async () => runCommand({
       testPattern: 'pass.test.ts',
-      reporter: 'ai-json',
+      reporter: 'json',
       cwd: tmpDir,
       print: false,
     }, {
@@ -1004,6 +1005,16 @@ describe('runCommand', () => {
     }
   }, 30_000);
 
+  it('classifies a completed failing test as a business failure rather than a runner crash', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fliwright-test-failure-code-'));
+    try {
+      await writeFile(join(root, 'business.test.mjs'), "import { test } from 'vitest'; test('business failure', () => { throw new Error('expected business failure'); });");
+      const result = await runCommand({ cwd: root, testPattern: 'business.test.mjs', runsRoot: join(root, 'runs'), print: false }, { resolveVmUrl: async () => 'ws://unused' });
+      expect(result).toMatchObject({ passed: false, failedTests: 1 });
+      expect(result.runnerErrors).toBeUndefined();
+    } finally { await rm(root, { recursive: true, force: true }); }
+  }, 15000);
+
   it('retains a startup error when the runner cannot produce a JSON report', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fliwright-cli-startup-error-'));
     try {
@@ -1058,7 +1069,7 @@ describe('runCommand', () => {
 
     const result = await withIsolatedHome(async () => runCommand({
       testPattern: 'pass.test.ts',
-      reporter: 'ai-json',
+      reporter: 'json',
       cwd: tmpDir,
       print: false,
       runsRoot: explicitRunsRoot,
@@ -1097,7 +1108,7 @@ describe('runCommand', () => {
     const result = await withIsolatedHome(async () => {
       const runResult = await runCommand({
         testPattern: 'failure',
-        reporter: 'ai-json',
+        reporter: 'json',
         cwd: tmpDir,
         print: false,
       }, {
@@ -1152,7 +1163,7 @@ describe('runCommand', () => {
       expectedHomeRoot = join(home, '.fliwright', 'projects');
       const run = await runCommand({
         testPattern: 'timeline.test.ts',
-        reporter: 'ai-json',
+        reporter: 'json',
         cwd: tmpDir,
         print: false,
       }, {

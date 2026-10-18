@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { mkdir, open, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -115,9 +116,13 @@ export function normalizeVmServiceUrl(value: string | null | undefined): string 
 }
 
 /** Connects to the VM, confirms a runnable isolate, and requires a ready bridge. */
-export async function verifyVmServiceEndpoint(endpoint: VmServiceEndpoint): Promise<VmServiceEndpointHealth> {
+export async function verifyVmServiceEndpoint(endpoint: VmServiceEndpoint, options: { signal?: AbortSignal } = {}): Promise<VmServiceEndpointHealth> {
   const connector = new VMServiceConnector();
   const checkedAt = new Date().toISOString();
+  const signal = AbortSignal.any([options.signal ?? new AbortController().signal, AbortSignal.timeout(5000)]);
+  signal.throwIfAborted();
+  const abort = () => connector.disconnect({ force: true });
+  signal.addEventListener('abort', abort, { once: true });
   try {
     await connector.connect(endpoint.url);
     const handshake = await connector.sendRequest('ext.fliwright.handshake', { protocolVersion: '2' }) as {
@@ -143,7 +148,22 @@ export async function verifyVmServiceEndpoint(endpoint: VmServiceEndpoint): Prom
       reason: error instanceof Error ? error.message : String(error),
     };
   } finally {
+    signal.removeEventListener('abort', abort);
     connector.disconnect();
+  }
+}
+
+/** Wait for a newly launched app's own bridge; never select another cached app. */
+export async function waitForVmServiceEndpoint(endpoint: VmServiceEndpoint, options: {
+  signal?: AbortSignal; timeoutMs?: number; pollIntervalMs?: number; verify?: VmServiceEndpointVerifier;
+} = {}): Promise<VmServiceEndpointHealth> {
+  const signal = AbortSignal.any([options.signal ?? new AbortController().signal, AbortSignal.timeout(options.timeoutMs ?? 15000)]);
+  while (true) {
+    signal.throwIfAborted();
+    const health = await (options.verify ? options.verify(endpoint) : verifyVmServiceEndpoint(endpoint, { signal }));
+    signal.throwIfAborted();
+    if (health.status === 'ok') return health;
+    await delay(options.pollIntervalMs ?? 100, undefined, { signal }).catch(() => signal.throwIfAborted());
   }
 }
 

@@ -208,7 +208,7 @@ describe('runner outcomes with real Fliwright fixtures', () => {
   it('reports a missing runner preset as a configuration error', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fliwright-missing-preset-'));
     try {
-      await writeFile(join(root, 'vitest.config.mjs'), `export default { root: ${JSON.stringify(root)}, test: { include: ['missing.test.mjs'], reporters: ['json'] } };`);
+      await writeFile(join(root, 'vitest.config.mjs'), `export default { root: ${JSON.stringify(root)}, test: { include: ['missing.test.mjs'], reporters: ['dot'] } };`);
       await writeFile(join(root, 'missing.test.mjs'), `
         import { createFliwrightTest } from ${JSON.stringify(integration)};
         const test = createFliwrightTest({ vmServiceUrl: 'ws://unused', requireAssertions: false });

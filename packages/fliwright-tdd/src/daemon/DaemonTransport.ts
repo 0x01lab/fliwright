@@ -3,7 +3,7 @@ export interface DaemonMessage {
   method?: string;
   params?: Record<string, unknown>;
   result?: unknown;
-  error?: { code: string | number; message: string; data?: unknown };
+  error?: string | { code: string | number; message: string; data?: unknown };
   event?: string;
 }
 
@@ -23,12 +23,12 @@ export interface AppHandle {
 }
 
 /**
- * Line transport over `flutter daemon` JSON-RPC. Unit-tested via a fake;
+ * Line transport over Flutter machine-mode JSON-RPC. Unit-tested via a fake;
  * the real subprocess implementation is SubprocessDaemonTransport.
  */
 export interface DaemonTransport {
   connect?(): Promise<void>;
   request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
   onEvent(handler: (message: DaemonMessage) => void): () => void;
-  dispose(): Promise<void>;
+  dispose(options?: { keepAppAlive?: boolean }): Promise<void>;
 }

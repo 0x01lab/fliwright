@@ -22,11 +22,15 @@ export interface BootOptions {
   vmServiceUrl?: string;
   driverProvider: () => Promise<unknown>;
   artifactsRoot?: string;
+  defaultScenario?: string;
+  scenarioMode?: 'managed-start' | 'attach';
 }
 
 export class PersistentTestExecutor {
   private vitest?: Vitest;
   private reporter?: ResultReporter;
+  private previousDefaultScenario?: string;
+  private previousScenarioMode?: string;
   private previousVmServiceUrl?: string;
   private previousVmUrl?: string;
   private previousTddMode?: string;
@@ -42,7 +46,7 @@ export class PersistentTestExecutor {
   async boot(opts: BootOptions): Promise<void> {
     if (this.vitest) return;
 
-    // Apply env first; if anything after it throws, restore it so the MCP host process is not
+    // Apply env first; if anything after it throws, restore it so the CLI connection worker is not
     // left with TDD env vars leaking into unrelated (batch) test runs.
     await this.applyRuntimeEnv(opts);
     try {
@@ -126,6 +130,8 @@ export class PersistentTestExecutor {
   }
 
   private restoreRuntimeEnv(): void {
+    restoreEnv('FLIWRIGHT_SCENARIO_MODE', this.previousScenarioMode);
+    restoreEnv('FLIWRIGHT_DEFAULT_SCENARIO', this.previousDefaultScenario);
     restoreEnv('FLIWRIGHT_VM_SERVICE_URL', this.previousVmServiceUrl);
     restoreEnv('FLIWRIGHT_VM_URL', this.previousVmUrl);
     restoreEnv('FLIWRIGHT_TDD_MODE', this.previousTddMode);
@@ -140,6 +146,8 @@ export class PersistentTestExecutor {
     this.snapshotPreviousEnv();
     try {
       process.env.FLIWRIGHT_TDD_MODE = '1';
+      process.env.FLIWRIGHT_SCENARIO_MODE = opts.scenarioMode ?? 'attach';
+      if (opts.defaultScenario) process.env.FLIWRIGHT_DEFAULT_SCENARIO = opts.defaultScenario;
       if (opts.vmServiceUrl) {
         process.env.FLIWRIGHT_VM_SERVICE_URL = opts.vmServiceUrl;
         process.env.FLIWRIGHT_VM_URL = opts.vmServiceUrl;
@@ -161,6 +169,8 @@ export class PersistentTestExecutor {
   }
 
   private snapshotPreviousEnv(): void {
+    this.previousScenarioMode = process.env.FLIWRIGHT_SCENARIO_MODE;
+    this.previousDefaultScenario = process.env.FLIWRIGHT_DEFAULT_SCENARIO;
     this.previousVmServiceUrl = process.env.FLIWRIGHT_VM_SERVICE_URL;
     this.previousVmUrl = process.env.FLIWRIGHT_VM_URL;
     this.previousTddMode = process.env.FLIWRIGHT_TDD_MODE;
@@ -184,7 +194,7 @@ export class PersistentTestExecutor {
       const attempt = JSON.parse(await readFile(join(directory, 'result.json'), 'utf8')) as RunSessionResult;
       if (!attempt.failureContextPath) return undefined;
       const failureContextPath = join(directory, attempt.failureContextPath);
-      const entries = JSON.parse(await readFile(failureContextPath, 'utf8')) as McpFailureEntry[];
+      const entries = JSON.parse(await readFile(failureContextPath, 'utf8')) as FailureEntry[];
       const entry = entries.filter((candidate) => candidate.testName === result?.testName).at(-1);
       if (!entry) return undefined;
       const screenshotBase64 = entry.screenshot?.path
@@ -241,7 +251,7 @@ export interface TddFailureDetails {
   artifacts?: TddFailureArtifacts;
 }
 
-interface McpFailureEntry {
+interface FailureEntry {
   testName: string;
   assertion?: TddFailureAssertion;
   widgetTree?: unknown;

@@ -10,6 +10,7 @@ export interface FliwrightVitestPresetOptions {
   runsRoot?: string;
   scenarios?: Record<string, TestScenario>;
   scenarioMode?: ScenarioExecutionMode;
+  defaultScenario?: string;
 }
 
 /** Returns a Vitest config fragment using the built Fliwright runner adapter. */

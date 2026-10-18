@@ -462,8 +462,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // ── TDD Loop monitor (additive, read-only; design spec §4.3 / §5.4 / §10 P1) ──────────────
   // The monitor is invisible until the user opens it. It reads a snapshot an external party (the
-  // MCP-owned TddRuntime) writes to `<workspaceRoot>/.fliwright/tdd-status.json`; it NEVER creates
-  // a driver, connects to a VM service, or spawns a daemon — so it cannot fight the MCP-driven loop
+  // CLI-owned TddRuntime) writes to `<workspaceRoot>/.fliwright/tdd-status.json`; it NEVER creates
+  // a driver, connects to a VM service, or spawns a daemon — so it cannot fight the CLI-driven loop
   // (design principle 4, single-driver by convention). See src/tddloop/TddLoopStatusSource.ts.
   const tddLoopSource = new FileTddLoopStatusSource(getWorkspaceRoot()?.fsPath);
   const tddLoopController = new TddLoopController(tddLoopSource, context.extensionUri);
@@ -527,11 +527,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
       });
     }),
-    vscode.commands.registerCommand('fliwright.configureMcp', async () => {
-      await runCommand('Configure MCP', async () => {
+    vscode.commands.registerCommand('fliwright.agentWorkflow', async () => {
+      await runCommand('Agent CLI Workflow', async () => {
         const document = await vscode.workspace.openTextDocument({
           language: 'markdown',
-          content: mcpInstructions(),
+          content: agentWorkflowInstructions(),
         });
         await vscode.window.showTextDocument(document);
       });
@@ -1823,45 +1823,21 @@ function stateProvidersEmptyMessage(status?: { observerInstalled: boolean; conta
   return 'No state providers found';
 }
 
-function mcpInstructions(): string {
-  return `# Fliwright MCP Setup
+function agentWorkflowInstructions(): string {
+  return `# Fliwright Skill + CLI Workflow
 
-Add the Fliwright MCP server to your AI coding tool configuration:
+Install @fliwright/cli in the target project and use the bundled fliwright-cli-workflows Skill.
 
-\`\`\`json
-{
-  "mcpServers": {
-    "fliwright": {
-      "command": "pnpm",
-      "args": ["--filter", "@fliwright/mcp", "start"]
-    }
-  }
-}
-\`\`\`
+- Discover commands: fliwright schema --json
+- Check environment: fliwright doctor --strict --json
+- Inspect UI: fliwright app snapshot --json
+- Capture diagnostics: fliwright app debug-snapshot --json
+- Save screenshot: fliwright app screenshot --output .fliwright/artifacts/screen.png --json
+- Run tests: fliwright run --test .fliwright/tests/example.test.ts --scenario ready --json
+- Read failures: fliwright artifacts failures --json
 
-Available tools:
-
-- \`fliwright_status\`: inspect ordinary app-interaction connection state and any discoverable VM Service URL. This is for the current running app; \`fliwright_tdd_status\` is only for the persistent TDD runtime.
-- \`fliwright_connect\`: connect to a running Flutter app via VM Service. \`vmServiceUrl\` is optional; when omitted, MCP reuses current state, \`FLIWRIGHT_VM_URL\` / \`FLIWRIGHT_VM_SERVICE_URL\`, or \`.fliwright/config.json\`.
-- \`fliwright_debug_snapshot\`: get a compact runtime bundle for coding agents: route, page refs, diagnostics, mock status, and recent failures. It auto-connects when a VM URL is discoverable. Screenshot bytes are off by default.
-- \`fliwright_screenshot\`: capture the current app as MCP image content for visual inspection. Call this directly; it auto-connects when possible. It does not write files; if the user asks to save the image, the coding agent chooses the path and writes it.
-- \`fliwright_snap\`: read the current page structure and stable refs for follow-up actions.
-- \`fliwright_tap\` / \`fliwright_type\` / \`fliwright_action\`: interact with the app, preferably using refs from \`fliwright_snap\`.
-- \`fliwright_mock_status\`: inspect configured mock rules, applied routes, and recent mock calls.
-- \`fliwright_mock_switch\`: switch an endpoint's active mock rule.
-- \`fliwright_run\`: run a Fliwright test file.
-- \`fliwright_get_failure\`: inspect structured failure context.
-- \`fliwright_generate_test\`: generate tests from Flutter source or an InteractionSpec.
-- \`fliwright_record\`: record interactions and generate test code.
-
-Recommended agent workflows:
-
-- Runtime debug: \`fliwright_debug_snapshot\` directly; use \`fliwright_status\` only when diagnosing connection discovery.
-- Visual inspection: \`fliwright_screenshot\` directly. Do not create a temporary script or manually connect to VM Service just to view the current screen.
-- Interaction/debug loop: \`fliwright_connect\` when needed → \`fliwright_snap\` → \`fliwright_tap\` / \`fliwright_type\` / \`fliwright_action\` → \`fliwright_debug_snapshot\`.
-- Mock debugging: \`fliwright_mock_status\` → \`fliwright_mock_switch\` → \`fliwright_debug_snapshot\`.
-
-Use \`FLIWRIGHT_VM_URL\`, \`FLIWRIGHT_VM_SERVICE_URL\`, or the VS Code connection command to point Fliwright at a running Flutter VM Service. Do not use \`fliwright_tdd_status\` to inspect the current app unless you intentionally started the persistent TDD runtime.
+For persistent TDD, open a connection with fliwright session open --json and pass its sessionId with --session.
+Close the session when finished. VS Code's TDD panel observes the CLI-owned status file.
 `;
 }
 

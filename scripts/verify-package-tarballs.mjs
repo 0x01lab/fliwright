@@ -10,7 +10,6 @@ const packages = [
   'packages/fliwright-core',
   'packages/fliwright-vitest',
   'packages/fliwright-cli',
-  'packages/fliwright-mcp',
   'packages/fliwright-tdd',
   'packages/fliwright-plugin-riverpod',
 ];
@@ -73,7 +72,7 @@ try {
       private: true,
       type: 'module',
       dependencies: localDependencies,
-      devDependencies: { vitest: '4.1.11' },
+      devDependencies: { vitest: '5.0.5' },
     }, null, 2));
     if (packageManager === 'pnpm') {
       await writeFile(join(consumerDir, 'pnpm-workspace.yaml'), [
@@ -98,16 +97,23 @@ try {
         "import { FliwrightDriver } from '@fliwright/core';",
         "import { defineConfig as defineCliConfig } from '@fliwright/cli';",
         "import { runCommand } from '@fliwright/cli/run';",
-        "import { createFliwrightServer } from '@fliwright/mcp';",
         "import { TddRuntime } from '@fliwright/tdd';",
         "import { riverpodPlugin } from '@fliwright/plugin-riverpod';",
-        'if (![FliwrightDriver, defineCliConfig, runCommand, createFliwrightServer, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing public export");',
+        'if (![FliwrightDriver, defineCliConfig, runCommand, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing public export");',
       ].join('\n'),
     ], { cwd: consumerDir });
+    await writeFile(join(consumerDir, 'vitest.config.mjs'), [
+      "import { fliwrightPreset } from '@fliwright/vitest/preset';",
+      "export default fliwrightPreset({ recording: { mode: 'off' }, test: { include: ['package-entry.test.mjs'] } });",
+    ].join('\n'));
     await writeFile(join(consumerDir, 'package-entry.test.mjs'), [
       "import { test } from '@fliwright/vitest';",
       "import { expect } from 'vitest';",
       "test('loads the published Vitest fixture', () => { expect(typeof test).toBe('function'); });",
+    ].join('\n'));
+    await writeFile(join(consumerDir, 'vitest.config.mjs'), [
+      "import { fliwrightPreset } from '@fliwright/vitest/preset';",
+      "export default fliwrightPreset({ test: { include: ['package-entry.test.mjs'] } });",
     ].join('\n'));
     if (packageManager === 'npm') {
       await execFileAsync(process.execPath, [

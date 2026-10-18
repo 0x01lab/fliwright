@@ -336,7 +336,7 @@ function resolveVmServiceUrl() {
 ```bash
 # Via the CLI (full report + screenshots + reproduce command)
 fliwright run --test path/to/example.test.ts \
-  --vm-url "ws://127.0.0.1:54321/abc=/ws" --reporter ai-json
+  --vm-url "ws://127.0.0.1:54321/abc=/ws" --json
 
 # Quick smoke (no report)
 FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/abc=/ws" pnpm vitest run path/to/example.test.ts

@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "3c27e75fbc70e65c8fba1775b77661e50fc36ec8427a2c5c15ffe96214990b91"
+source_fingerprint: "12de57876e07151ed6c574934bc164f88b05a0ebd738a3bc3e54215d42b1a188"
 generated: true
 ---
 
@@ -38,6 +38,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 ## VS Code Commands
 
 - `fliwright.addAnalyzedFieldToFormRules`
+- `fliwright.agentWorkflow`
 - `fliwright.analyzeForm`
 - `fliwright.appendLastAnalyzeToFormRules`
 - `fliwright.applyDefaultMocks`
@@ -46,7 +47,6 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.cleanFlowFile`
 - `fliwright.clearWebSocketMockCalls`
 - `fliwright.clearWebSocketMockRules`
-- `fliwright.configureMcp`
 - `fliwright.confirmRecordingCheckpoints`
 - `fliwright.connect`
 - `fliwright.copyMockEndpoint`

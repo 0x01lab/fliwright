@@ -75,7 +75,7 @@ describe('VS Code manifest', () => {
       'fliwright.addAnalyzedFieldToFormRules',
       'fliwright.createFormRulesFromLastAnalyze',
       'fliwright.appendLastAnalyzeToFormRules',
-      'fliwright.configureMcp',
+      'fliwright.agentWorkflow',
       'fliwright.refreshStateProviders',
       'fliwright.readStateProvider',
       'fliwright.overrideStateProvider',

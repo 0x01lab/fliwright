@@ -12,4 +12,4 @@ test('increments the counter', async ({ page }) => {
 ```
 
 Use `fliwright init` to create compatible configuration and a test-only Flutter
-entrypoint. The current supported Vitest version is 4.1.11.
+entrypoint. The current supported Vitest version is 5.0.5.

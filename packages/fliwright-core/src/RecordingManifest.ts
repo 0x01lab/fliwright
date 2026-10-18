@@ -5,7 +5,7 @@ import type { GenerateRecordingAutomationOptions } from './RecordingAutomation.j
 import type { RecordingReadinessResult } from './RecordingReadiness.js';
 import type { RecordingCheckpointCandidate } from './RecordingCheckpoints.js';
 
-/** Shared on-disk recording contract consumed by CLI, MCP and the editor. */
+/** Shared on-disk recording contract consumed by CLI and the editor. */
 export interface RecordingManifest {
   schemaVersion: 2;
   id: string;

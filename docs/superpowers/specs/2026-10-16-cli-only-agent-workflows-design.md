@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-16
 
-**Status:** Proposed design for review
+**Status:** Historical proposal; superseded for this migration by [Skill + CLI + CI consolidation](2026-10-17-skill-cli-consolidation-design.md), reassessed against `45e3f14` on 2026-10-18. Source behavior and the updated design take precedence, including run artifacts, recording ownership, removed failure-context environment variables, and endpoint lease handoff.
 
 **Decision scope:** Remove the MCP package and expose its user-facing workflows through `@fliwright/cli`.
 

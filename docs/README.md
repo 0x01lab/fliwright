@@ -7,13 +7,14 @@ active question; this directory is not intended as a reading list.
 | --- | --- |
 | Repository operating rules, memory, boundaries, or delivery process | [../harness/README.md](../harness/README.md) |
 | Product scope | [PRD.md](./PRD.md) |
+| CLI command usage, examples and Skill workflows | [CLI task and command index](../.agents/skills/fliwright-cli-workflows/references/commands/index.md) (tracked and bundled with the Skill) |
 | Current implemented API or behavior | A known page in [`features/`](./features/), or [`features/index.md`](./features/index.md) only to find an unknown owner |
 | Design rationale or historical plan | [../harness/specs/README.md](../harness/specs/README.md) |
 | Publishing a release | [release/publishing.md](./release/publishing.md) |
 | Compatibility and supported platforms | [release/compatibility.md](./release/compatibility.md) |
 | Migrating from earlier pre-release surfaces | [release/migration.md](./release/migration.md) |
 | Security model and safe deployment | [release/security.md](./release/security.md) |
-| Troubleshooting VM Service, bridge, artifacts, or MCP | [release/troubleshooting.md](./release/troubleshooting.md) |
+| Troubleshooting VM Service, bridge, artifacts, or CLI sessions | [release/troubleshooting.md](./release/troubleshooting.md) |
 
 ## Documentation States
 

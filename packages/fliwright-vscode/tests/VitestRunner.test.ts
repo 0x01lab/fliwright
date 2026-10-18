@@ -72,6 +72,8 @@ describe('VitestRunner', () => {
       const result = await new VitestRunner().run({ workspaceRoot: { fsPath: root } as any,
         failureContextDir: { fsPath: path.join(root, 'failures') } as any, runsRoot, runId: 'direct-proof' });
       expect(result).toMatchObject({ passed: true, totalTests: 1, passedTests: 1 });
+      const vitestReport = JSON.parse(await readFile(path.join(runsRoot, 'direct-proof/vitest.json'), 'utf8'));
+      expect(vitestReport).toMatchObject({ success: true, numPassedTests: 1 });
       const manifest = JSON.parse(await readFile(path.join(runsRoot, 'direct-proof/run.json'), 'utf8'));
       expect(manifest).toMatchObject({ runId: 'direct-proof', status: 'passed', evidenceStatus: 'disabled' });
       expect(manifest.tests).toHaveLength(1);

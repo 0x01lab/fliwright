@@ -40,22 +40,15 @@ The default run root is `.fliwright/runs`. Set `runsRoot` in
 `fliwright.config.ts` or pass the command-specific override when a CI worker
 needs an isolated directory.
 
-## MCP tools are unexpectedly missing
+## Agent commands are unavailable
 
-The default MCP profile intentionally exposes only eight tools. Check the
-profile and executable before changing the server configuration:
-
-```bash
-fliwright mcp doctor
-fliwright mcp config --profile core
-```
-
-Use `FLIWRIGHT_MCP_TOOL_PROFILE=development`, `tdd`, `flow`, or `full` only for
-specialist workflows. Use the CLI for deterministic setup, CI exit codes, and
-artifact export.
+Fliwright uses Skills + CLI. Install the CLI in the target project, then inspect
+`fliwright schema --json` and `fliwright doctor --strict --json`. Remove the old
+MCP server configuration. If a session disconnects, inspect the operation journal
+with `session status --operation-id` before retrying a mutation.
 
 ## Package installation problems
 
-The published packages require Node.js 20 or newer and Vitest 4.1.11. In a
+The published packages require Node.js 22.12+ (22.x), 24.x, or 26+ and Vitest 5.0.5. In a
 workspace, run `pnpm install --frozen-lockfile`; in a clean consumer, install
 the CLI and Vitest packages together so peer dependencies resolve explicitly.

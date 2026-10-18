@@ -18,7 +18,7 @@ export interface RecordingCheckpointCandidate {
   afterOperationIndex?: number;
 }
 
-/** Shared CLI/MCP/IDE checkpoint input. Confirmation must always be explicit. */
+/** Shared CLI/IDE checkpoint input. Confirmation must always be explicit. */
 export const recordingCheckpointSchema = z.object({
   id: z.string().min(1),
   position: z.object({ x: z.number().finite(), y: z.number().finite() }).strict().optional(),

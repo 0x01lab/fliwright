@@ -3,22 +3,22 @@
  *
  * DATA-SOURCE APPROACH (chosen, with rationale):
  *
- * The TDD runtime (`TddRuntime`) lives in the MCP server process — a separate process owned by
+ * The TDD runtime (`TddRuntime`) lives in the CLI connection worker — a separate process owned by
  * the AI agent, lazily created on the first `fliwright_tdd_*` call. The VS Code extension does NOT
- * spawn or connect to the MCP server, does NOT connect to the Flutter VM service, and there is no
- * existing IPC channel between the two. Spawning an MCP client inside the extension just to read a
+ * spawn or connect to the CLI connection worker, does NOT connect to the Flutter VM service, and there is no
+ * existing IPC channel between the two. Spawning an CLI control client inside the extension just to read a
  * status field would add real coupling and (per task constraints) would risk a new npm dependency.
  *
  * The lightest additive channel that respects **single-driver ownership** (principle 4: only one
- * driver runs the loop at a time) is a **one-way status file**: the interested party (the MCP
+ * driver runs the loop at a time) is a **one-way status file**: the interested party (the CLI
  * runtime, or any user-configured provider) *may* write a JSON snapshot to a well-known workspace
  * path; this panel only ever **reads** it. The panel therefore never creates a `FliwrightDriver`,
  * never opens a VM-service WebSocket, and never drives the flutter daemon — it is impossible for it
- * to fight the MCP-driven loop. If no file exists the panel simply shows "no snapshot yet".
+ * to fight the CLI-driven loop. If no file exists the panel simply shows "no snapshot yet".
  *
  * This file is the single source of truth for the panel. It is intentionally write-agnostic: the
  * `@fliwright/tdd` runtime does not depend on `@fliwright/vscode`, so writing the file is left to
- * an optional integration point (the runtime can call its own writer, or a thin MCP-side hook can
+ * an optional integration point (the runtime can call its own writer, or a thin CLI-side hook can
  * serialize `runtime.snapshot()` here). The panel degrades gracefully when nothing writes.
  */
 import * as fs from 'node:fs/promises';

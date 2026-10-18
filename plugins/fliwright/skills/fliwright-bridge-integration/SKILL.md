@@ -20,7 +20,7 @@ data in the application.
    Riverpod observation, app capabilities, or storage reset.
 4. Rebuild and restart the Flutter debug app after Dart bridge changes.
    Re-running TypeScript alone cannot load new Dart service extensions.
-5. Run `fliwright doctor --vm-url ...` or an MCP connection check to confirm
+5. Run `fliwright doctor --vm-url ...` or `fliwright app status --json` to confirm
    the live app exposes the expected capabilities.
 
 ## Capability Boundaries
