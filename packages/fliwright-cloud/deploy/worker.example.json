@@ -1,0 +1,14 @@
+{
+  "serverUrl": "http://127.0.0.1:4780",
+  "tokenEnv": "FLIWRIGHT_CLOUD_WORKER_TOKEN",
+  "workerId": "mac-mini", "slotId": "ios", "deviceId": "REPLACE_WITH_DEDICATED_SIMULATOR_UDID",
+  "root": "/Users/cloud/Library/Application Support/FliwrightCloud/worker-ios",
+  "flutterBin": "/ABSOLUTE/PATH/TO/flutter",
+  "resetCommands": [
+    { "program": "/usr/bin/xcrun", "args": ["simctl", "shutdown", "{deviceId}"], "acceptExitCodes": [0,149] },
+    { "program": "/usr/bin/xcrun", "args": ["simctl", "erase", "{deviceId}"] },
+    { "program": "/usr/bin/xcrun", "args": ["simctl", "boot", "{deviceId}"] },
+    { "program": "/usr/bin/xcrun", "args": ["simctl", "bootstatus", "{deviceId}", "-b"] }
+  ],
+  "allowedEnv": [], "pollMs": 2000, "heartbeatMs": 5000
+}

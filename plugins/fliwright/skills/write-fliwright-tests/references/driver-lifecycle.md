@@ -117,13 +117,12 @@ if (result.success === false || result.error) throw new Error(result.error);
 
 ```typescript
 const adapter = driver.getStateAdapter('riverpod'); // or driver.state
-await adapter.read('authProvider');
-await adapter.write('authProvider', { user: { id: 1 } });
+await adapter.read('cartFilterProvider');
+await adapter.write('cartFilterProvider', 'available');
 await adapter.listProviders();
 ```
 
-用它来直接设置状态（已登录、预填充），而不必每个用例都走 UI 登录流程。完整操作集见
-`@fliwright/plugin-riverpod` 文档。
+用于普通业务 provider 的检查或修改；可复用环境放进 [命名场景](./scenarios.md)。已登录业务测试使用 app-owned `auth.seedLoggedIn`，不通过 provider 写入认证。完整操作集见 [state.md](./state.md)。
 
 ## 自定义插件
 

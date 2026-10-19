@@ -1,0 +1,43 @@
+# Template: configure TLS and oauth2-proxy with GitLab OIDC before using.
+# oauth2-proxy must enable --set-xauthrequest and restrict the allowed team.
+# Keep server port 4780 on loopback; this proxy is the only identity authority.
+server {
+  listen 443 ssl;
+  server_name cloud.example.internal;
+  ssl_certificate /PRIVATE/PATH/fullchain.pem;
+  ssl_certificate_key /PRIVATE/PATH/privkey.pem;
+  client_max_body_size 32m;
+  location /oauth2/ {
+    proxy_pass http://127.0.0.1:4180;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+  }
+  location = /cloud-auth {
+    internal;
+    # Bearer credentials are authenticated by the cloud service itself.
+    if ($http_authorization ~ "^Bearer ") { return 204; }
+    proxy_pass http://127.0.0.1:4180/oauth2/auth;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header X-Original-URL https://$host$request_uri;
+  }
+  location ~ ^/(share$|shared/|api/share/exchange$|api/shared/|assets/) {
+    proxy_pass http://127.0.0.1:4780;
+    proxy_set_header X-Cloud-User "";
+    proxy_set_header X-Cloud-Proxy-Secret "";
+    proxy_set_header Host $host;
+    access_log off;
+  }
+  location / {
+    auth_request /cloud-auth;
+    auth_request_set $cloud_user $upstream_http_x_auth_request_user;
+    error_page 401 = /oauth2/sign_in;
+    proxy_pass http://127.0.0.1:4780;
+    proxy_set_header Host $host;
+    proxy_set_header X-Cloud-User $cloud_user;
+    proxy_set_header X-Cloud-Proxy-Secret "REPLACE_IN_PRIVATE_COPY";
+    proxy_buffering off;
+    proxy_read_timeout 90s;
+  }
+}

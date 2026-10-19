@@ -2,7 +2,9 @@
 
 > 签名取自 `packages/fliwright-core/src/interfaces/StateAdapter.ts` 与 `Driver.ts`；与源码不一致处以源码为准。
 
-很多测试失败是因为“前置状态太难造”：要登录、要把某个 provider 设成特定值、要等待一个异步状态。用 UI 点一遍又慢又脆。Fliwright 通过 `driver.state` 暴露一个 **StateAdapter**，直接读写/覆盖应用内的状态（当前对接 Riverpod），跳过 UI 直接进入测试场景。
+Fliwright 通过 `driver.state` 暴露 **StateAdapter**，用于读取、订阅或修改普通业务 provider。可复用的前置环境声明为 [命名组合场景](./scenarios.md)，业务 provider 使用可选的 `kind: 'state'` layer。
+
+认证状态由 app-owned `auth.seedLoggedIn` 和 `auth.getStatus` 负责；不要覆盖 auth provider、真实登录或绕过 CAPTCHA 来准备已登录业务测试。
 
 ## 前置条件
 
@@ -26,7 +28,7 @@ interface StateAdapter {
 | --- | --- |
 | `read(key)` | 读某个 provider 的当前值 |
 | `write(key, value)` | 直接写入值 |
-| `override(key, value)` | 为测试**覆盖** provider（隔离用，推荐） |
+| `override(key, value)` | 覆盖支持该操作的业务 provider；不用于认证，且不保证自动恢复 |
 | `watch(key, cb)` | 订阅变化，返回一个 `unsubscribe` 函数 |
 | `listProviders()` | 列出全部可用 provider 及其元信息 |
 
@@ -34,17 +36,16 @@ interface StateAdapter {
 
 ## 用法示例
 
-**覆盖登录态，跳过登录直接进入首页**
+**读取普通业务状态，断言可见结果**
 
 ```ts
-test('已登录用户看到首页', async ({ page, driver }) => {
-  await driver.state.override('authProvider', {
-    token: 'test-token',
-    user: { id: 'u1', name: 'alice' },
-  });
+import { test, expect } from '@fliwright/vitest';
+import { expect as viExpect } from 'vitest';
 
-  await page.navigate('/');
-  await expect(page.getByText('欢迎，alice')).toBeVisible();
+test('购物车状态与徽标一致', async ({ page, driver }) => {
+  await page.getByKey('addToCart').click();
+  await expect(page.getByKey('cartBadge')).toHaveText('1');
+  viExpect(await driver.state.read('cartItemCountProvider')).toBe(1);
 });
 ```
 
@@ -71,18 +72,18 @@ unsubscribe();   // 用完一定要取消订阅，避免泄漏
 
 ## 选择 `override` 还是 `write`
 
-- **`override`**：本意是为测试“盖一层”，适合做隔离——理论上用例间互不污染。
+- **`override`**：使用适配器支持的测试覆盖语义；是否能恢复及如何恢复取决于 app/适配器，不能假定用例间自动隔离。
 - **`write`**：直接改值，更接近真实写入，但可能触发 provider 内部的副作用逻辑。
 
-不确定时优先 `override`；需要触发真实副作用时再用 `write`。
+先检查目标 provider 的契约。可复用的业务状态准备放进场景；直接修改时显式安排恢复，避免污染后续用例。
 
 ## 与 mock / formHelper 的搭配
 
 - 想验证“点击后正确发起了请求”，用 `driver.mock.route(...)` 拦截 + `driver.mock.getCalls(...)` 断言（见 [mocks.md](./mocks.md)）。
 - 想快速把表单造满，用 `page.formHelper.fill(...)`（见 [forms.md](./forms.md)）。
-- 想跳过登录/进入特定业务态，用本文件的 `driver.state.override(...)`。
+- 想进入已登录业务态，使用 [场景的 auth layer](./scenarios.md)，由 app 创建并校验会话。
 
-三者经常组合：`override` 登录态 → `mock.route` 拦截提交接口 → `formHelper` 填表 → 断言可见结果。
+常见组合：场景准备 auth/mock/业务状态 → `formHelper` 填表 → 断言 UI 与请求结果。
 
 ## 排错
 

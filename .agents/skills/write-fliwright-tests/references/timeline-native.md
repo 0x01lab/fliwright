@@ -13,7 +13,7 @@ import { test, script, expect } from '@fliwright/vitest';
 | `test` | E2E verification that should pass/fail in CI | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
 | `script` | Automation tasks, account setup, data entry, cleanup flows | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
 
-Both write `tests/<testId>/attempts/<attemptId>/timeline.json` and `logs/events.jsonl` beneath `<runsRoot>/<runId>/`. `<runsRoot>` 默认是 `~/.fliwright/projects/<project-slug>/runs`，也可通过 `FLIWRIGHT_RUNS_ROOT` 或 `defineConfig({ runsRoot })` 覆盖。`test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions.
+Both write `tests/<testId>/attempts/<attemptId>/timeline.json` and `logs/events.jsonl` beneath `<runsRoot>/<runId>/`. `<runsRoot>` 默认是 `<project>/.fliwright/runs`；覆盖规则见 [CLI conventions](../../fliwright-cli-workflows/references/commands/common.md#ci-evidence)。`test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions. 直接 Vitest 运行先配置 [fliwrightPreset](./getting-started.md)。
 
 ## Standard Test Shape
 
@@ -227,10 +227,10 @@ fliwright artifacts timeline RUN_ID --node-id NODE_ID --include-artifacts --json
 fliwright artifacts diagnose RUN_ID --failure-index 0 --json
 ```
 
-For local debugging, use `fliwright artifacts timeline RUN_ID --json`（默认在 `~/.fliwright/projects/<project-slug>/runs/`） and inspect `agentVisibleFailures`, failed nodes, and artifact paths.
+For local debugging, use `fliwright artifacts timeline RUN_ID --json` and inspect failed nodes and artifact paths. Use the returned runId, plus testId/attemptId for multi-attempt runs, and the same configured runs root; see [timeline queries](../../fliwright-cli-workflows/references/commands/command-artifacts.timeline.md).
 
 For chronological log events, read `<runsRoot>/<runId>/logs/events.jsonl`（路径同上） or enable live output with:
 
 ```bash
-FLIWRIGHT_LOG_OUTPUT=stderr,jsonl-file FLIWRIGHT_LOG_LEVEL=debug pnpm vitest run tests/login.test.ts
+FLIWRIGHT_LOG_OUTPUT=stderr,jsonl-file FLIWRIGHT_LOG_LEVEL=debug pnpm vitest run .fliwright/tests/checkout.test.ts
 ```

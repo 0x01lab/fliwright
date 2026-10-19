@@ -1,6 +1,6 @@
 ---
 name: fliwright-flows
-description: Create, validate, clean, generate tests from, or review Fliwright business-flow documents. Use for `.fliwright/flows/*.flow.json`, recording-to-flow conversion, Figma bindings, runtime-versus-Figma visual reviews, flow validation, agent specs, or `fliwright flow` and `fliwright_flow_*` workflows.
+description: Create, validate, clean, generate tests from, or review Fliwright business-flow documents. Use for `.fliwright/flows/*.flow.json`, recording-to-flow conversion, Figma bindings, runtime-versus-Figma visual reviews, flow validation, agent specs, or `fliwright flow` workflows.
 ---
 
 # Fliwright Business Flows

@@ -12,6 +12,12 @@ import { test, script, expect } from '@fliwright/vitest';
 包里还重新导出了：`expect`、`createFliwrightTest`、`createFliwrightScript`、`defineConfig`、`beforeEach`、
 `extendFliwrightTest`、`afterEach`、`beforeAll`、`afterAll`、`describe`。
 
+## Runner 与场景配置
+
+直接运行 Vitest 时先在 `vitest.config.ts` 合并 `fliwrightPreset(projectConfig)`；它安装 fixture 所需的 runner 和 recovery reporter。完整配置见 [快速开始](./getting-started.md)。CLI `run` 自行安装 runner，并提供汇总结果；直接 Vitest 使用 preset 也会持久化 attempt 工件。
+
+复用环境用 `TestScenario`，在 `fliwright.config.ts` 声明，再通过 `test.scenario(name)` 或 CLI `run --scenario` 选择。每个 attempt/retry 都会重新准备，认证由 app-owned `auth.seedLoggedIn` / `auth.getStatus` 完成。配置、组合和首帧隔离示例见 [scenarios.md](./scenarios.md)。
+
 ## 默认的 `test` fixture
 
 ```typescript
@@ -30,7 +36,7 @@ script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, lo
 | 失败上下文 | 每个 test attempt 在运行工件目录中保存断言详情 + 控件树 + 截图 + 诊断信息 + 源码 + 自愈建议 |
 | Trace | 当 `FLIWRIGHT_TRACE_DIR` + `FLIWRIGHT_TRACE` 被设置时，按动作记录 trace（见 [driver-lifecycle.md](./driver-lifecycle.md)） |
 | 截图模式 | 由 `FLIWRIGHT_SCREENSHOT_MODE` 控制 |
-| Timeline | 每次运行写 `<runsRoot>/<runId>/timeline.json`；失败节点会带 agent-visible failure 和 artifact refs |
+| Timeline | 每次 attempt 写 `<runsRoot>/<runId>/tests/<testId>/attempts/<attemptId>/timeline.json`；失败节点会带 agent-visible failure 和 artifact refs |
 | Logs | 默认写 `<runsRoot>/<runId>/logs/events.jsonl`；需要实时输出时配置 `FLIWRIGHT_LOG_OUTPUT=stderr,jsonl-file` |
 
 `mock` fixture 是 timeline-aware 的 mock facade；需要底层能力时再退回 `driver.mock`：
@@ -127,8 +133,12 @@ const test = createFliwrightTest(defineConfig({
 | `mode` | `'test' \| 'script'` | `'test'` | 写入 timeline 的运行模式 |
 | `requireAssertions` | `boolean` | `false` | 为 `true` 时，测试结束前必须至少有一个 locator `expect(...).to*` timeline assertion node |
 | `agentPolicy` | `AgentPolicy` | *(未设)* | 主动/被动 agent 策略 |
-| `timelineDir` | `string` | `process.cwd()` | 用作默认项目目录解析的 project root；未设 `runsRoot`/`FLIWRIGHT_RUNS_ROOT` 时，产物落到 `~/.fliwright/projects/<project-slug>/runs/<runId>/` |
-| `runsRoot` | `string` | *(未设)* | 显式产物根目录，优先级高于 `FLIWRIGHT_RUNS_ROOT` 与默认 per-project home root |
+| `timelineDir` | `string` | `process.cwd()` | 兼容的项目目录输入；新配置优先使用 `projectRoot` |
+| `projectRoot` | `string` | 当前项目 | 项目根目录；默认工件根为 `<project>/.fliwright/runs` |
+| `runsRoot` | `string` | *(未设)* | 显式工件根目录；相对路径基于项目解析。CLI/env/preset 的优先级见 [CLI conventions](../../fliwright-cli-workflows/references/commands/common.md#ci-evidence) |
+| `scenarios` | `Record<string, TestScenario>` | *(未设)* | 命名组合环境，见 [scenarios.md](./scenarios.md) |
+| `defaultScenario` | `string` | *(未设)* | 为所有 attempt 选择场景；必须与 `test.scenario(name)` 的显式选择一致 |
+| `scenarioMode` | `'attach' \| 'managed-start'` | `'attach'` | 首帧隔离还需要 managed launch 与 app 侧 waiting bootstrap |
 | `log` | `FliwrightLogConfig` | `{ outputs: ['jsonl-file'] }` | 结构化日志 level、format、outputs 和路径。见 [logging.md](./logging.md)。 |
 
 ```typescript
@@ -225,7 +235,6 @@ viExpect(await page.getByText('Ready').count()).toBe(1);
 | `FLIWRIGHT_VM_SERVICE_URL` | 上面 URL 的兼容别名。 |
 | `FLIWRIGHT_SCREENSHOT_MODE` | `file` \| `base64` \| `off`。供默认 `test` 使用。 |
 | `FLIWRIGHT_FAILURE_TIMEOUT_MS` | 默认 `test` 的单测试失败/断言超时。 |
-| `FLIWRIGHT_MOCK_CONTROLLER_URL` | 工具侧 mock 控制器的 WebSocket URL。 |
 | `FLIWRIGHT_TRACE` | Trace 模式：`full` \| `on-failure` \| `off`。 |
 | `FLIWRIGHT_TRACE_DIR` | 写单测试 trace 产物的目录。 |
 | `FLIWRIGHT_LOG_LEVEL` | 日志最低级别：`trace` \| `debug` \| `info` \| `warn` \| `error` \| `success`。 |

@@ -32,16 +32,17 @@ Before writing a new file, `ls .fliwright/tests/` (or `scripts/`) to match the p
 1. Inspect nearby tests, app source, and UI identifiers before writing selectors. Search for Keys, visible labels, routes, providers, mock endpoints, and existing Fliwright helpers with `rg`.
 2. Confirm the app exposes the needed bridge capabilities before deep exploration. Current flows should support `ext.fliwright.snap`, `ext.fliwright.action`, screenshots, and mock extensions. If `ext.fliwright.snap` is unknown, treat the app as legacy or upgrade/rebuild it before using snapshot/ref features.
 3. Start new files with `import { test, expect } from '@fliwright/vitest'` or `import { script, expect } from '@fliwright/vitest'`. If the project has `.fliwright/support/*-test.ts`, import `test`/`expect` from that support module instead so app-specific helpers are injected consistently. Use the fixture objects `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` when relevant.
-4. Put setup in `mock.activateRules(...)`, `mock.rules(...)`, or named `flow.step()` blocks. Put each user action in a concise `flow.step()`. In `script` mode, use `flow.frame()`, `logger`, or `agent.verify()` to record facts; use `expect(locator, title?)` only when failure should stop the run.
+4. Declare reusable setup as a named composed `TestScenario`; authenticated business tests use app-owned `auth.seedLoggedIn`, never real login or generic provider overrides. Use `mock.rules(...)` or `flow.step()` for test-specific changes and user actions. In `script` mode, use `flow.frame()`, `logger`, or `agent.verify()` to record facts; use `expect(locator, title?)` only when failure should stop the run.
 5. Avoid fixed sleeps. Rely on locator assertions, `page.waitFor(...)`, `page.settle()`, or navigation helpers.
 6. Keep committed tests portable. Accept VM Service URLs from CLI/config/env (`FLIWRIGHT_VM_URL`, `FLIWRIGHT_VM_SERVICE_URL`, project `.fliwright/config.json`, or `fliwright.config.ts`); never commit local URLs or device-specific config.
-7. Prefer `fliwright run --test path/to/file.ts --json` for active app validation because they return the richest report. Use `pnpm vitest run path/to/file.ts` only for quick local checks when full Fliwright reports are not needed.
+7. Prefer `fliwright run --test path/to/file.ts --json` for active app validation and `fliwright script path/to/file.script.ts --json` for one-off scripts. For direct `pnpm vitest run`, configure `fliwrightPreset()` first; it installs the runner and recovery reporter required by the fixtures. See the setup guide before creating a new test environment.
 
 ## Reference Routing
 
 Read only the reference needed for the current task:
 
 - First Fliwright test or environment setup: [references/getting-started.md](references/getting-started.md)
+- Reusable baselines, authenticated business tests, `TestScenario` and `test.scenario(...)`: [references/scenarios.md](references/scenarios.md)
 - `test`/`script`, fixtures, `flow`, timeline nodes, manual steps: [references/timeline-native.md](references/timeline-native.md), [references/test-harness.md](references/test-harness.md)
 - Logging and run artifacts: [references/logging.md](references/logging.md)
 - Selectors, gestures, assertions, navigation, screenshots: [references/selectors.md](references/selectors.md), [references/actions.md](references/actions.md), [references/assertions.md](references/assertions.md), [references/navigation.md](references/navigation.md), [references/screenshots-snapshots.md](references/screenshots-snapshots.md)
@@ -70,45 +71,7 @@ If unsure which reference applies, open [references/index.md](references/index.m
 
 ## Project Fixture Extensions
 
-When several tests repeat the same app-specific setup, create a support module under `.fliwright/support/` instead of copying helpers into every test. Use `extendFliwrightTest` to inject a project runtime that wraps Fliwright primitives while keeping routes, provider names, mock endpoints, and app business rules in the target project.
-
-Good candidates for a project runtime:
-
-- opening a stable home route and closing known optional overlays
-- activating a named group of project mock rules
-- pull-to-refresh until a project endpoint is called or provider state changes
-- reading project Riverpod/provider state for business assertions
-- reusable navigation through project account/settings screens
-
-Keep generic mechanics in Fliwright APIs (`mock.activateRules`, `page.pullToRefresh`, `locator.clickIfVisible`) and keep project vocabulary in the project runtime.
-
-```typescript
-// .fliwright/support/app-test.ts
-import { createFliwrightTest, defineConfig, extendFliwrightTest } from '@fliwright/vitest';
-import type { FliwrightLogger, MockRuntime, Page } from '@fliwright/core';
-
-class AppRuntime {
-  constructor(private readonly ctx: { page: Page; mock: MockRuntime; logger: FliwrightLogger }) {}
-
-  async activateLoggedInHome(rule: string) {
-    await this.ctx.mock.activateRules({
-      mockDir: new URL('../mocks', import.meta.url).pathname,
-      routes: [{ path: '/api/v1/user/info', method: 'POST', rule }],
-    });
-  }
-}
-
-const base = createFliwrightTest(defineConfig({
-  vmServiceUrl: process.env.FLIWRIGHT_VM_URL ?? process.env.FLIWRIGHT_VM_SERVICE_URL ?? '',
-}));
-
-export const test = extendFliwrightTest<{ app: AppRuntime }>(base, {
-  app: async ({ page, mock, logger }, use) => {
-    await use(new AppRuntime({ page, mock, logger }));
-  },
-});
-export { expect } from '@fliwright/vitest';
-```
+Put reusable app actions and business queries in `.fliwright/support/` with `extendFliwrightTest`; see the [project fixture example](references/test-harness.md#项目级-fixtureextendfliwrighttest). Keep routes, provider names and endpoints in the target project. Keep reusable mock/auth/storage/navigation baselines in [named scenarios](references/scenarios.md), so setup runs before every attempt and retry.
 
 ## Human Verification And Captcha
 
@@ -123,6 +86,7 @@ Treat captcha, slider verification, QR login, SMS approval, and WebView/Platform
 ## Validation
 
 - For generated or edited test code, run the narrowest relevant TypeScript check or package test available. Use `pnpm lint`, `pnpm --filter @fliwright/vitest test`, `pnpm --filter @fliwright/core test`, or a targeted `pnpm vitest run path/to/file.ts` as appropriate.
+- Direct Vitest execution requires `fliwrightPreset()` in the target project's Vitest config; CLI execution installs the runner itself. Use the [CLI command index](../fliwright-cli-workflows/references/commands/index.md) for current flags and lifecycle rules.
 - For active Flutter app validation, prefer `fliwright run --test path/to/file.ts --json`. Pass `--vm-url` only when config/env discovery is unavailable.
 - If validation needs a running app or VM Service URL that is not available, say that explicitly and still perform static checks where possible.
 - When debugging failures, inspect the run report, `timeline.json`, `logs/events.jsonl`, screenshots/snapshots, diagnostics, and self-healing suggestions before editing selectors blindly.

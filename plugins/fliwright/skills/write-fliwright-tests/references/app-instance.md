@@ -2,7 +2,7 @@
 
 > 签名取自 `packages/fliwright-core/src/AppInstance.ts`、`packages/fliwright-core/src/Driver.ts` 与 Dart 端 `packages/fliwright-bridge/lib/src/extensions/app_instance.dart`；与源码不一致处以源码为准。
 
-`driver.app`（一个 `AppInstance`）让脚本越过 widget 树，直接向运行中的 app 询问**身份**（id / name / environment）和**能力**（app 自行注册的命名 RPC，如 `auth.signIn`）。它解决的是「这个 app 是谁、它能干什么」这类靠 UI 推断很脆的问题——和 `driver.state`（读写 provider 值）互补：`state` 动的是数据，`app` 问的是身份与能力。
+`driver.app`（一个 `AppInstance`）让脚本向运行中的 app 询问**身份**（id / name / environment）和显式注册的**能力**。已登录业务测试通过 [场景的 auth layer](./scenarios.md) 调用 app-owned `auth.seedLoggedIn`；普通业务 provider 的检查见 [state.md](./state.md)。
 
 ## 前置条件
 
@@ -40,46 +40,41 @@ type AppCapabilityProxy<T> = T & { invoke(method: string, input?: unknown): Prom
 | `invoke(cap, method, input?)` | 直接调用某能力的某方法 |
 | `capability<T>(name)` | 同 `getCapability`，但返回非空代理（假定存在） |
 
-`capability<T>('auth')` 返回一个 Proxy：你在 TS 里定义 `interface Auth { signIn(i: { email: string }): Promise<{ userId: string }> }`，就能写 `await driver.app.capability<Auth>('auth').signIn({ email })`，Proxy 会把它翻译成 `invoke('auth', 'signIn', { email })`。框架自带 `AuthCapability` / `AuthStatus` 类型（`getStatus()` / `signIn?` / `signOut?`）可作为 auth 能力的约定形状。
+`capability<T>(name)` 返回一个类型化 Proxy，方法调用会转成 `invoke(name, method, input)`；类型参数不会在运行时注册或验证能力。框架自带 `AuthCapability` / `AuthStatus` 类型，场景认证契约为 `seedLoggedIn`、`clearSession` 和 `getStatus`。能力缺失或结果不符合认证状态时，应修复 app 测试入口。
 
 ## Dart 侧注册（被测 app）
 
 ```dart
+import 'package:flutter/foundation.dart';
 import 'package:fliwright_bridge/fliwright_bridge.dart';
 
-void main() {
-  // 1. 声明 app 身份 + 自定义 snapshot
+// 从 app 的 debug/test 入口调用，传入 app-owned 会话处理函数。
+Future<void> configureFliwright({
+  required FliwrightCapabilityMethod seedLoggedIn,
+  required FliwrightCapabilityMethod clearSession,
+  required FliwrightCapabilityMethod getStatus,
+}) async {
+  if (!kDebugMode) return;
+
   FliwrightAppInstance.configure(
     id: 'my-app',
     name: 'MyApp',
-    environment: const String.fromEnvironment('ENV', defaultValue: 'dev'),
-    snapshot: () async => {'buildNumber': buildNumber, 'features': enabledFeatures},
+    environment: 'test',
   );
 
-  // 2. 注册测试专用能力（要在 init() 之前）
   FliwrightAppInstance.registerCapability(
-    FliwrightAppCapability(
-      name: 'auth',
-      description: 'Test-only auth shortcuts',
-      methods: {
-        'signIn': (input) async {
-          final email = (input as Map?)?['email'] as String?;
-          // ... 建立会话 ...
-          return {'userId': 'u1'};
-        },
-        'signOut': (_) async => true,
-      },
+    FliwrightAuthCapability(
+      seedLoggedIn: seedLoggedIn,
+      clearSession: clearSession,
+      getStatus: getStatus,
     ),
   );
 
-  // 3. 照常初始化桥接（debug 构建里）
-  if (kDebugMode) {
-    await FliwrightBridge.init();
-  }
+  await FliwrightBridge.init();
 }
 ```
 
-注册的方法会出现在 `listCapabilities()` 的 `methods` 里，并能被 `invoke('auth', 'signIn', {...})` 调到。`FliwrightBridge.reset()` 会清掉已注册的能力（等价于 `FliwrightAppInstance.reset()`）。也可以用 `FliwrightAppCapability(...).registerMethod(name, handler)` 逐个挂方法。
+`seedLoggedIn` 必须通过 app 自己的会话机制创建测试身份，`getStatus` 返回真实的 `{isAuthenticated, userId?, roles?, metadata?}`；不要返回伪造成功或直接改 Riverpod auth provider。注册方法会出现在 `listCapabilities()` 中；其他 app 能力可用 `FliwrightAppCapability` 注册。`FliwrightBridge.reset()` 会清除已注册能力。首帧隔离还需要 [waiting bootstrap](./scenarios.md#首帧隔离)。
 
 ## 用法示例
 
@@ -95,17 +90,17 @@ test('connected to staging app', async ({ driver }) => {
 });
 ```
 
-**用能力跳过登录，直接进入受保护页面**
+**读取场景准备后的认证状态**
 
 ```ts
-interface Auth { signIn(i: { email: string }): Promise<{ userId: string }> }
+import { test, expect } from '@fliwright/vitest';
+import type { AuthStatus } from '@fliwright/core';
+import { expect as viExpect } from 'vitest';
 
-test('signed-in user sees dashboard', async ({ driver, page, expect }) => {
-  const auth = await driver.app.getCapability<Auth>('auth');
-  await auth?.signIn({ email: 'tester@example.com' });
-
-  await page.navigate('/dashboard');
-  await expect(page.getByText('Dashboard')).toBeVisible();
+test.scenario('home.logged-in')('会话与账户入口就绪', async ({ driver, page }) => {
+  const status = await driver.app.invoke<undefined, AuthStatus>('auth', 'getStatus');
+  viExpect(status.isAuthenticated).toBe(true);
+  await expect(page.getByKey('home.accountButton')).toBeVisible();
 });
 ```
 
@@ -118,11 +113,11 @@ viExpect(snap.snapshot.features).toContain('new-billing');
 
 ## 与 `driver.state` / mock 的分工
 
-- `driver.app`：问「这个 app 是谁、能做什么」；调 app 暴露的测试专用 RPC（如 `auth.signIn`）。
+- `driver.app`：查询身份、能力与 app-owned 业务契约；认证前置状态交给场景协调器调用 `auth.seedLoggedIn`。
 - `driver.state`：读写 Riverpod provider 的**值**（见 [state.md](./state.md)）。
 - `driver.mock`：拦截 **HTTP** 请求并断言（见 [mocks.md](./mocks.md)）。
 
-优先级：能用 `driver.app` 的能力入口就别用坐标/UI 硬点；要造数据用 `state`；要 stub 网络用 `mock`。
+环境准备优先使用命名场景；测试正文通过 UI 验证用户行为，必要时读取 app 状态或检查 HTTP 请求。
 
 ## 排错
 

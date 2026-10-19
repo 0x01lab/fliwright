@@ -41,6 +41,8 @@ export interface RunOptions {
   print?: boolean;
   runsRoot?: string;
   signal?: AbortSignal;
+  /** Inherit only when an external supervisor owns and terminates the whole process group. */
+  processGroup?: 'isolated' | 'inherit';
   /** Strict unchanged-candidate verification: assertions must not heal targets. */
   recordingReplay?: boolean;
 }
@@ -126,6 +128,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
     scenarios: shared.scenarios,
     scenarioMode: shared.scenarioMode,
     sharedConfig: shared,
+    processGroup: options.processGroup,
   });
   const withArtifacts = await finalizeRunArtifacts(vitestResult, {
     cwd,
@@ -152,6 +155,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
 }
 
 interface RunVitestOptions {
+  processGroup?: 'isolated' | 'inherit';
   recordingReplay?: boolean;
   sharedConfig?: ResolvedFliwrightConfig;
   testPattern: string,
@@ -244,6 +248,7 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
     },
     options.cwd,
     options.signal,
+    options.processGroup,
   );
 
   const reportJson = await readFile(rawReportPath, 'utf8').catch(() => '');
@@ -285,9 +290,10 @@ function execNode(
   env: NodeJS.ProcessEnv,
   cwd: string,
   signal?: AbortSignal,
+  processGroup: 'isolated' | 'inherit' = 'isolated',
 ): Promise<{ stdout: string; stderr: string; interrupted: boolean; exitCode: number | null; exitSignal: NodeJS.Signals | null }> {
   return new Promise((resolve, reject) => {
-    const ownsProcessGroup = process.platform !== 'win32';
+    const ownsProcessGroup = process.platform !== 'win32' && processGroup === 'isolated';
     const child = spawn(process.execPath, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: ownsProcessGroup });
     let stdout = '';
     let stderr = '';

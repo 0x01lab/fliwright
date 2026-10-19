@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { getEventListeners } from 'node:events';
 import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { runCommand, parseVitestOutput, writeRunManifest, type RunOptions } from '../src/commands/run.js';
 import { artifactsExportCommand } from '../src/commands/artifacts.js';
 import { RunArtifactStore, RunProgressJournal, RunSession, TimelineRecorder } from '@fliwright/core';
@@ -34,6 +35,19 @@ async function withIsolatedHome<T>(fn: (home: string) => Promise<T>): Promise<T>
 }
 
 describe('runCommand', () => {
+  it.skipIf(process.platform === 'win32')('keeps the runner in a cloud supervisor process group when requested', async () => {
+    const root=await mkdtemp(join(tmpdir(),'fliwright-inherit-group-'));
+    try {
+      const parentGroup=execFileSync('ps',['-o','pgid=','-p',String(process.pid)],{encoding:'utf8'}).trim();
+      await writeFile(join(root,'group.test.mjs'), `
+        import { test, expect } from 'vitest';
+        import { execFileSync } from 'node:child_process';
+        test('inherits owned group',()=>expect(execFileSync('ps',['-o','pgid=','-p',String(process.pid)],{encoding:'utf8'}).trim()).toBe(${JSON.stringify(parentGroup)}));
+      `);
+      const result=await runCommand({cwd:root,runsRoot:join(root,'runs'),testPattern:'group.test.mjs',print:false,processGroup:'inherit'}, {resolveVmUrl:async()=>'ws://unused'});
+      expect(result.passed).toBe(true);
+    } finally {await rm(root,{recursive:true,force:true});}
+  },15000);
   it.each(['canonical manifest', 'report mirror', 'worker recovery'])('retains the original runner failure when %s cannot be written', async (fault) => {
     const root = await mkdtemp(join(tmpdir(), 'fliwright-parent-write-failure-'));
     const runsRoot = join(root, 'runs');

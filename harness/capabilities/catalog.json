@@ -96,7 +96,72 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "faf809f0c91ef671376e7c7e735f2010001e02b41ef197c67428dbc16b7606aa"
+      "sourceFingerprint": "a13fdd30898f2b27ea938a6af1e9aa60ae521856d6ca867b207087881d6e1540"
+    },
+    {
+      "name": "@fliwright/cloud",
+      "path": "packages/fliwright-cloud",
+      "kind": "typescript",
+      "responsibility": "Own self-hosted team execution scheduling, durable leases, registered targets, workers and immutable report delivery.",
+      "doesNotOwn": [
+        "automation primitives",
+        "Flutter bridge protocol",
+        "public video transport"
+      ],
+      "mayDependOn": [
+        "@fliwright/core",
+        "@fliwright/cli",
+        "@fliwright/tdd"
+      ],
+      "ownedCapabilities": [
+        "team test queue",
+        "Mac execution worker",
+        "browser reports and sharing"
+      ],
+      "sourceFiles": [
+        "packages/fliwright-cloud/src/CloudClient.ts",
+        "packages/fliwright-cloud/src/CloudStore.ts",
+        "packages/fliwright-cloud/src/ReportStore.ts",
+        "packages/fliwright-cloud/src/WorkerAgent.ts",
+        "packages/fliwright-cloud/src/config.ts",
+        "packages/fliwright-cloud/src/contracts.ts",
+        "packages/fliwright-cloud/src/executor.ts",
+        "packages/fliwright-cloud/src/index.ts",
+        "packages/fliwright-cloud/src/main.ts",
+        "packages/fliwright-cloud/src/processes.ts",
+        "packages/fliwright-cloud/src/server.ts",
+        "packages/fliwright-cloud/src/web/Replay.tsx",
+        "packages/fliwright-cloud/src/web/TimeTimeline.tsx",
+        "packages/fliwright-cloud/src/web/app.tsx",
+        "packages/fliwright-cloud/src/web/replay-model.ts",
+        "packages/fliwright-cloud/src/web/ui.tsx",
+        "packages/fliwright-cloud/src/worker.ts"
+      ],
+      "publicExports": [
+        "CloudClient",
+        "CloudServerOptions",
+        "CloudStore",
+        "createCloudServer",
+        "createWorker",
+        "ExecutionResult",
+        "GitLabGateRequest",
+        "passesGitLabGate",
+        "ReportStore",
+        "ReportView",
+        "retrySpool",
+        "Role",
+        "safeArtifactPath",
+        "WorkerAgent",
+        "WorkerAgentOptions",
+        "WorkerDependencies"
+      ],
+      "packageEntrypoints": [
+        "."
+      ],
+      "binaryEntrypoints": [
+        "fliwright-cloud"
+      ],
+      "sourceFingerprint": "536f689a09857ac6f745fbd77c7f141601c448223af846f85a1d075bd99cd5fa"
     },
     {
       "name": "@fliwright/core",
@@ -783,7 +848,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "4b653789612e333c23b16f9e81bb69a1966b7ced858026b727f5b1a376e408c5"
+      "sourceFingerprint": "6826647e32939a705b9d88c1a00706518b85ee279e0e7fa4b25f341a200b6a43"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -817,7 +882,7 @@
       "publicExports": [],
       "packageEntrypoints": [],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "e4af59e1df2390676413cc1ca23ea4f372954fb89c4e00a06595c484e27a9153"
+      "sourceFingerprint": "352770f605788774ef7d77873e085bbd331d43e6fd20920d3c398c4c789954d5"
     },
     {
       "name": "@fliwright/plugin-riverpod",
@@ -848,7 +913,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "658c8398045b2281f2665a6ad08c4f3baa305b5b6c5fc0749edf0a8c0401a56d"
+      "sourceFingerprint": "505e1444c0262625d5f064a943185c5ff9bcc4f6110c1ada9ab4759d35d0436a"
     },
     {
       "name": "@fliwright/tdd",
@@ -1009,7 +1074,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "0ef4e292dbe5bb0a96f16f00fd19a18ef1f53f0f84dbf9127f27d18aeff79c02"
+      "sourceFingerprint": "30aa78281c71a436eb3830a951a4c6e0ca6a01c9aeed31194c5b0d8075801f0d"
     },
     {
       "name": "@fliwright/vitest",
@@ -1076,7 +1141,7 @@
         "./runner"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "379d2e324b611e0c9db253b0b14395b19822cb2ef02654dc85057eaa893c1277"
+      "sourceFingerprint": "2c4c034c53bc492e452fc44f866d71e2bcdbac34515440f245a0af76f5add8d6"
     },
     {
       "name": "fliwright_bridge",
@@ -1289,7 +1354,7 @@
         "ext.fliwright.websocket.push",
         "ext.fliwright.websocket.setRules"
       ],
-      "sourceFingerprint": "b8a4b79b7def4ba0281052465d64a65b47d73bd03175c85ca522a88fdee60553"
+      "sourceFingerprint": "418c5d8ecc891ab775f09187293a88fe4593dcf328bdd9a1fd5d528796f8d0f4"
     },
     {
       "name": "fliwright_bridge_riverpod",
@@ -1314,7 +1379,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-bridge-riverpod/lib/fliwright_bridge_riverpod.dart"
       ],
-      "sourceFingerprint": "ecc0842b02f2cf98d57d5cbb01133cd6818afbcd973447d38cd7485203519421"
+      "sourceFingerprint": "71ba39ae5616054319f3548fc04018e7907dac0d4add84880c6c44c063fe002d"
     },
     {
       "name": "fliwright_design_qa",
@@ -1382,7 +1447,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-design-qa/lib/fliwright_design_qa.dart"
       ],
-      "sourceFingerprint": "ee492e0e294d5a4d85a4f296053d01943b8b82cecb576ead29a1323d07464a8f"
+      "sourceFingerprint": "39e98719f995db377b5e35ae20b952d56f610d324924f407e8b1f1ac8d9cb118"
     },
     {
       "name": "fliwright-vscode",
@@ -1590,7 +1655,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "c865b21dcd1c7a185c89a7432e54053ad5c6e922c63165a0dc138fd2fb3b6fb6"
+      "sourceFingerprint": "9de471795f701c17e273fcde71626aafbaf976c250bb76b2f2859c6de21acade"
     }
   ]
 }

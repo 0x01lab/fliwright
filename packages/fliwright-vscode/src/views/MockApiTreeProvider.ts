@@ -51,6 +51,26 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
         return this.endpointItem(element);
       case 'rule':
         return this.ruleItem(element);
+      case 'runtimeRule': {
+        const { activeRule } = element;
+        const isApplied = this.appliedRules.some((entry) => (
+          entry.endpoint === activeRule.endpoint
+          && sameMethod(entry.method, activeRule.method)
+          && entry.ruleName === activeRule.ruleName
+        ));
+        const external = activeRule.ruleName === '(external)';
+        const item = new vscode.TreeItem(
+          external ? 'External mock route' : activeRule.ruleName,
+          vscode.TreeItemCollapsibleState.None,
+        );
+        item.description = `${isApplied ? 'active' : 'inactive'} · not in config`;
+        item.tooltip = `${activeRule.method} ${activeRule.endpoint}\n${external
+          ? 'Applied outside VS Code; the runtime route does not identify a configured rule.'
+          : 'The active runtime rule is missing from this config file.'}\nUse Stop All Mock Routes to clear runtime routes.`;
+        item.iconPath = new vscode.ThemeIcon(isApplied ? 'pass-filled' : 'circle-outline');
+        item.contextValue = 'mockRuntimeRule';
+        return item;
+      }
       case 'invalid':
         return invalidItem(element);
       case 'empty': {
@@ -91,12 +111,9 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
 
     if (element.kind === 'endpoint') {
       const defaultRule = element.defaultRule ?? element.endpointFile.rules[0]?.name;
-      return element.endpointFile.rules.map<MockRuleEntry>((rule) => {
-        const applied = this.appliedRules.find((entry) => (
-          entry.endpoint === element.endpointFile.endpoint
-          && sameMethod(entry.method, element.endpointFile.method)
-          && entry.ruleName === rule.name
-        ));
+      const activeRule = this.findEndpointAppliedRule(element);
+      const rules = element.endpointFile.rules.map<MockRuleEntry>((rule) => {
+        const applied = activeRule?.ruleName === rule.name ? activeRule : undefined;
         return {
           kind: 'rule',
           uri: element.uri,
@@ -108,6 +125,12 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
           appliedAt: applied?.appliedAt,
         };
       });
+      // Keep the active choice visible even for endpoints with many scenarios.
+      rules.sort((left, right) => Number(right.applied) - Number(left.applied));
+      if (activeRule && !rules.some((rule) => rule.applied)) {
+        return [{ kind: 'runtimeRule', activeRule }, ...rules];
+      }
+      return rules;
     }
 
     return [];
@@ -118,10 +141,9 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
       `${element.endpointFile.method} ${element.endpointFile.endpoint}`,
       vscode.TreeItemCollapsibleState.Collapsed,
     );
-    const appliedCount = this.appliedRules.filter((rule) => (
-      rule.endpoint === element.endpointFile.endpoint && sameMethod(rule.method, element.endpointFile.method)
-    )).length;
-    item.description = `${element.endpointFile.rules.length} rules${appliedCount ? ` · ${appliedCount} active` : ''}`;
+    const activeRule = this.findEndpointAppliedRule(element);
+    const activeLabel = activeRule?.ruleName === '(external)' ? 'external route' : activeRule?.ruleName;
+    item.description = `${element.endpointFile.rules.length} rules${activeRule ? ` · 1 active: ${activeLabel}` : ''}`;
     item.tooltip = `${element.endpointFile.name}\n${element.uri.fsPath}`;
     item.contextValue = 'mockEndpoint';
     item.iconPath = new vscode.ThemeIcon(element.indexed ? 'server-process' : 'circle-outline');
@@ -143,6 +165,12 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
 
   private findAppliedRule(element: MockRuleEntry): AppliedMockRule | undefined {
     return this.appliedRules.find((entry) => sameAppliedRule(entry, element));
+  }
+
+  private findEndpointAppliedRule(element: MockEndpointEntry): AppliedMockRule | undefined {
+    return this.appliedRules.find((rule) => (
+      rule.endpoint === element.endpointFile.endpoint && sameMethod(rule.method, element.endpointFile.method)
+    ));
   }
 }
 

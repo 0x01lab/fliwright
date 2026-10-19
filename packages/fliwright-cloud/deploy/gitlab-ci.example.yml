@@ -1,0 +1,26 @@
+# Run on a trusted team runner. Install/build the private cloud client beforehand.
+cloud-e2e:
+  stage: test
+  tags: [mac-mini-client]
+  variables:
+    CLOUD_CLIENT: /ABSOLUTE/PATH/TO/fliwright/packages/fliwright-cloud/dist/main.js
+    CLOUD_CLIENT_CONFIG: /PRIVATE/PATH/TO/client.json
+  script:
+    - |
+      node --input-type=module <<'JS'
+      import { writeFileSync } from 'node:fs';
+      writeFileSync('cloud-request.json', JSON.stringify({
+        targetId: 'app', commit: process.env.CI_COMMIT_SHA,
+        suite: 'smoke', scenario: 'clean',
+        source: {branch: process.env.CI_COMMIT_REF_NAME,
+          pipelineUrl: process.env.CI_PIPELINE_URL, jobUrl: process.env.CI_JOB_URL}
+      }));
+      JS
+    - node "$CLOUD_CLIENT" submit "$CLOUD_CLIENT_CONFIG" cloud-request.json "$CI_PROJECT_ID:$CI_PIPELINE_ID:smoke" > cloud-submitted.json
+    - |
+      CLOUD_REQUEST_ID=$(node -p "JSON.parse(require('fs').readFileSync('cloud-submitted.json','utf8')).id")
+      node -p "JSON.parse(require('fs').readFileSync('cloud-submitted.json','utf8')).url"
+      node "$CLOUD_CLIENT" wait "$CLOUD_CLIENT_CONFIG" "$CLOUD_REQUEST_ID" > cloud-result.json
+  artifacts:
+    when: always
+    paths: [cloud-submitted.json, cloud-result.json]

@@ -1,6 +1,27 @@
 # 快速开始
 
-五步写一个 Fliwright 测试：接入桥接、启动 app、设置 VM URL、写 `.test.ts`、运行它。
+先配置测试 runner，再接入桥接、启动 app、提供 VM URL、编写和运行测试。
+
+## 0. 配置项目与 runner
+
+在目标项目根目录使用项目安装的 CLI：`pnpm exec fliwright` 或 `npx --no-install fliwright`。下文简写为 `fliwright`。
+
+新项目运行 `fliwright init --json` 生成 `fliwright.config.ts`、`vitest.config.ts` 与 `.fliwright/` 示例。已有配置的项目先检查并合并所需设置；初始化选项见 [init](../../fliwright-cli-workflows/references/commands/command-init.md)。
+
+直接运行 Vitest 时，`vitest.config.ts` 必须安装 Fliwright runner 和 recovery reporter：
+
+```typescript
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+import { fliwrightPreset } from '@fliwright/vitest/preset';
+import projectConfig from './fliwright.config.js';
+
+export default defineConfig({
+  ...fliwrightPreset(projectConfig),
+});
+```
+
+已有 Vitest 设置通过 `fliwrightPreset({ ...projectConfig, test: { /* 项目设置 */ } })` 合并，避免在 preset 之后覆盖其 runner、reporters 或 env。缺少 runner 时 fixture 会抛出 `Fliwright fixtures require the Fliwright runner`。`fliwright run` 会自行安装 runner；保持同一份项目配置，让直接 Vitest 和 CLI 使用一致的场景与工件路径。
 
 ## 1. 在被测 app 中初始化桥接
 
@@ -43,7 +64,7 @@ fixture 接受 HTTP URL 并自动把它转成 `ws://…/ws`，所以两种格式
 
 ## 3. 为测试进程设置 VM URL
 
-任选一种方式（fixture 按以下优先级读取）：
+可由项目配置提供 URL，也可以为测试进程设置环境变量：
 
 ```bash
 # Option A — recommended env var
@@ -53,7 +74,7 @@ export FLIWRIGHT_VM_URL="http://127.0.0.1:54321/abc=/"
 export FLIWRIGHT_VM_SERVICE_URL="http://127.0.0.1:54321/abc=/"
 ```
 
-如果两个都没设，测试会抛：
+如果配置和环境都没有提供 URL，也未通过 CLI 发现或启动 app，fixture 会抛：
 
 ```
 No VM Service URL provided. Set FLIWRIGHT_VM_URL or FLIWRIGHT_VM_SERVICE_URL,
@@ -65,7 +86,7 @@ or use createFliwrightTest({ vmServiceUrl }).
 一个用默认 `@fliwright/vitest` fixture 的最小测试：
 
 ```typescript
-// counter.test.ts
+// .fliwright/tests/counter.test.ts
 import { test, expect } from '@fliwright/vitest';
 
 test('counter increments when the increment button is tapped', async ({ page }) => {
@@ -82,9 +103,9 @@ test('counter increments when the increment button is tapped', async ({ page }) 
 - 读取 `FLIWRIGHT_VM_URL`（兜底用 `FLIWRIGHT_VM_SERVICE_URL`），
 - 创建**一个共享的 `FliwrightDriver`** 并连接，
 - 给每个测试注入 `{ page, driver }`，
-- 在通过 CLI 运行时挂上失败上下文（截图 + 控件树 + 诊断信息 + 源码）。
+- 由 Fliwright runner 为每次 attempt 保存 timeline、日志与失败证据（截图、控件树、诊断信息等，取决于配置和 app 支持）。
 
-自定义配置与生命周期控制见 [test-harness.md](./test-harness.md)。
+自定义配置与生命周期控制见 [test-harness.md](./test-harness.md)。已登录业务测试先定义 [命名组合场景](./scenarios.md)，通过 app-owned `auth.seedLoggedIn` 准备认证状态。
 
 ## 5. 运行测试
 
@@ -92,18 +113,18 @@ test('counter increments when the increment button is tapped', async ({ page }) 
 
 ```bash
 fliwright run \
-  --test path/to/counter.test.ts \
+  --test .fliwright/tests/counter.test.ts \
   --vm-url "ws://127.0.0.1:54321/abc=/ws" \
   --json
 ```
 
-想做快速冒烟可以直接调 Vitest，但**拿不到持久化报告**，除非走 `fliwright run`：
+配置上述 preset 后，也可以直接运行 Vitest；runner 仍会保存 canonical attempt 工件，CLI 则另外提供统一 JSON envelope、汇总报告与复现命令：
 
 ```bash
-FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/abc=/ws" pnpm vitest run path/to/counter.test.ts
+FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/abc=/ws" pnpm vitest run .fliwright/tests/counter.test.ts
 ```
 
-所有 flag 和 reporter 见 [cli.md](./cli.md)。
+一项临时自动化任务使用 `.fliwright/scripts/*.script.ts` 和 `fliwright script FILE --json`。命令、参数及工件查询见 [CLI 索引](../../fliwright-cli-workflows/references/commands/index.md)。
 
 ## 前置检查清单
 
@@ -112,6 +133,7 @@ FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/abc=/ws" pnpm vitest run path/to/counter.
 | app 跑的是**当前**桥接 | `ext.fliwright.snap` 能响应（见 [screenshots-snapshots.md](./screenshots-snapshots.md)）。`fliwright doctor` 会检查能力。 |
 | 已导出 VM Service URL | `echo $FLIWRIGHT_VM_URL` 非空。 |
 | 能解析 `@fliwright/vitest` + `@fliwright/core` | 你的 `package.json` 依赖了它们；`fliwright init` 可以脚手架出一份配置。 |
+| 直接 Vitest 使用 Fliwright runner | `vitest.config.ts` 合并了 `fliwrightPreset(projectConfig)`。 |
 | app 稳定（没有崩溃循环） | 运行中的 app 屏幕可交互。 |
 
 如果 `ext.fliwright.snap` 返回 `Unknown method …`，说明 app 用的是旧桥接。**别**在抖动的屏幕上继续点——先重启/重建 app。细节见
@@ -120,6 +142,7 @@ FLIWRIGHT_VM_URL="ws://127.0.0.1:54321/abc=/ws" pnpm vitest run path/to/counter.
 ## 下一步去哪
 
 - 了解 fixture 和 hooks → [test-harness.md](./test-harness.md)
+- 定义可复用环境与已登录状态 → [scenarios.md](./scenarios.md)
 - 稳定地定位控件 → [selectors.md](./selectors.md)
 - 对可见结果做断言 → [assertions.md](./assertions.md)
 - 复制完整模板 → [examples.md](./examples.md)

@@ -18,3 +18,4 @@ export type {
 export { verifyRecordingReplay, type RecordingReplayOptions, type RecordingReplayResult } from './RecordingReplay.js';
 
 export { artifactsExportCommand, artifactsShowCommand, type ArtifactOptions } from './commands/artifacts.js';
+export { artifactReferences, type ArtifactReference } from './ArtifactReferences.js';

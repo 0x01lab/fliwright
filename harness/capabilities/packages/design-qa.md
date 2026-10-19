@@ -1,7 +1,7 @@
 ---
 package: "fliwright_design_qa"
 path: "packages/fliwright-design-qa"
-source_fingerprint: "ee492e0e294d5a4d85a4f296053d01943b8b82cecb576ead29a1323d07464a8f"
+source_fingerprint: "39e98719f995db377b5e35ae20b952d56f610d324924f407e8b1f1ac8d9cb118"
 generated: true
 ---
 

@@ -376,6 +376,7 @@ export type MockTreeNode =
   | { kind: 'mockRoot'; label: string; description?: string }
   | MockEndpointEntry
   | MockRuleEntry
+  | { kind: 'runtimeRule'; activeRule: AppliedMockRule }
   | InvalidFileEntry
   | { kind: 'empty'; label: string; description?: string; command?: vscode.Command };
 

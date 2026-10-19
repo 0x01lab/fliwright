@@ -1,0 +1,6 @@
+{
+  "serverUrl": "https://cloud.example.internal",
+  "tokenEnv": "FLIWRIGHT_CLOUD_CI_TOKEN",
+  "pollMs": 2000,
+  "waitTimeoutMs": 3600000
+}

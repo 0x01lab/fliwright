@@ -272,16 +272,9 @@ VS Code 扩展会扫描 `.fliwright/mocks/api/*.json`，让你选一条规则，
 
 ## 独立 mock 控制器（CLI）
 
-把工具侧 mock 控制器作为独立进程启动（在 app 的桥接无法承载 store，或想让多个 app
-共用同一套规则时很有用）：
+工具侧 HTTP mock 控制器使用 [mock start](../../fliwright-cli-workflows/references/commands/command-mock.start.md)。它是前台进程，启动地址写到 stderr，直到停止才返回终态结果；客户端向 `/mock` POST 结构化请求，并非直接按业务 endpoint 提供 HTTP 服务。
 
-```bash
-fliwright mock:start --host 127.0.0.1 --port 0 --mock-dir .fliwright/mocks
-# → prints a WebSocket URL
-```
-
-通过 `FLIWRIGHT_MOCK_CONTROLLER_URL`（由 vitest fixture 读取）把 app 指向它，或把
-URL 传给 `driver.mock.configureFlutterController(url)`。见 [cli.md](./cli.md)。
+使用兼容的 controller adapter 连接它。Flutter app 中的 HTTP mock 优先使用 [mock apply](../../fliwright-cli-workflows/references/commands/command-mock.apply.md) 或测试的 `mock.*` facade；这与工具侧控制器是不同的调用路径。参数、生命周期与示例统一读取命令页。
 
 ## 完整 mock + 表单 + UI 模式
 

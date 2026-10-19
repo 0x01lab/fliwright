@@ -15,20 +15,21 @@
 | [timeline-native.md](./timeline-native.md) | 新版 `script`/`test`、`flow`、timeline-aware `mock`、`agent`、`expect(locator, title?)`、timeline/CLI inspection | 你在写新版自动化脚本、清理录制产物、或需要 AI/agent 可读失败 |
 | [logging.md](./logging.md) | `logger` fixture、结构化 JSONL 日志、pretty/compact/jsonl 格式、stderr/stdout/file 输出、日志环境变量 | 你需要脚本进度输出、agent 可读日志、CI 日志或调试细节 |
 | [test-harness.md](./test-harness.md) | `@fliwright/vitest` fixture：`test`、`script`、`flow`/`mock`/`agent` fixture、`expect`、`createFliwrightTest`、hooks、环境变量、失败上下文 | 你在决定如何接入 driver 生命周期 |
+| [scenarios.md](./scenarios.md) | `TestScenario`、组合 layers、`test.scenario`、`auth.seedLoggedIn`、retry 与首帧隔离 | 你要准备复用环境或已登录业务测试 |
 | [selectors.md](./selectors.md) | 选择器格式、`getByX`、作用域（`descendant`/`ancestor`/`and`/`or`/`nth`/`first`/`last`/`filter`/`containing`）、`subtype`/`tooltip`/`state` | 你需要稳定地定位某个控件 |
 | [actions.md](./actions.md) | `click`/`longPress`/`drag`/`dragTo`/`slideTo`/`pinch`/`type`/`fill`/`clear`/`dismissKeyboard`/`pressKey`/`setCheckbox`/`selectOption`/`scrollIntoView` + 底层 `clickAt`/`dragFrom` | 你要做手势 / 输入，或移动端软键盘遮挡按钮 |
 | [assertions.md](./assertions.md) | `expect(locator, title?)` 匹配器、timeline assertion、自动等待、`.not`、自愈、失败上下文、请求检查写法 | 你在对可见结果或请求做断言 |
 | [navigation.md](./navigation.md) | `navigate` / `currentRoute` / `goBack` / `waitFor` / `waitForNew` / `settle`、go_router 设置 | 你的测试跨越多个路由 / page |
 | [forms.md](./forms.md) | `page.formHelper.analyze()` / `fill()` / `fillFields()`、语义类型、作用域、表单规则 JSON | 你在填表单或冒烟测表单 |
 | [ai.md](./ai.md) | AI runtime（`aiRuntime` fixture / `ai` 命名空间：`ask`/`generate`/`classify`/`visible`/`inspect`）、自愈 self-healing、provider 配置、`FakerGenerator`/`SemanticInferrer`/`AssertionSuggester` | 你要用 AI 造数/视觉断言，或想知道选择器自愈怎么工作 |
-| [mocks.md](./mocks.md) | timeline-aware `mock.*`、`driver.mock.*`（route / getCalls / loadRules / switchRule / …）、JSON mock 文件、`fliwright mock:start` | 你要 stub HTTP / 对请求做断言 |
+| [mocks.md](./mocks.md) | timeline-aware `mock.*`、`driver.mock.*`、JSON mock 文件、HTTP controller 与 Flutter routes 的区别 | 你要 stub HTTP / 对请求做断言 |
 | [screenshots-snapshots.md](./screenshots-snapshots.md) | `screenshot` / `screenshotFullPage` / `snapshot` / `findRef` / `ref`、桥接能力表 | 你在探查控件树、抓图、或处理 refs |
 | [captcha.md](./captcha.md) | 阿里云人机校验 / 滑块 / WebView 覆盖层的识别、决策树、`flow.manual({ resumeWhen })`、`slideTo`/坐标拖动、mock 边界 | 被测流程**触发人机校验、滑块、行为验证**或任何**不在 Flutter 控件树里**的覆盖层——**必读** |
 | [driver-lifecycle.md](./driver-lifecycle.md) | 手动 `FliwrightDriver`、`connect`/`dispose`、`sendRequest`、诊断信息、原始扩展 | 你需要自定义插件、原始扩展、或旧桥接兼容 |
-| [state.md](./state.md) | `driver.state`（StateAdapter / Riverpod）：`read` / `write` / `override` / `watch` / `listProviders`，跳过 UI 直接进入业务态 | 你要跳过登录、覆盖 provider、或断言 UI 没展示的状态 |
-| [app-instance.md](./app-instance.md) | `driver.app`（AppInstance）：`info` / `getSnapshot` / `listCapabilities` / `getCapability` / `invoke`，越过 widget 树询问 app 身份与能力 | 你要断言 app 身份/环境，或调 app 暴露的测试专用能力（如 `auth.signIn`） |
-| [cli.md](./cli.md) | `fliwright run` / `init` / `doctor` / `record` / `mock:start`、选项、reporter、环境变量、VM 发现、自动化脚本 | 你在运行测试或搭自动化 |
-| [agent-workflow.md](./agent-workflow.md) | `fliwright app snapshot` / `observe` / `record` / `generate_test` / `run` / `get_failure` | 你在通过 CLI 发现行为了或验证 |
+| [state.md](./state.md) | `driver.state`（StateAdapter / Riverpod）：业务 provider 的 read / write / override / watch / listProviders | 你要检查或修改普通业务状态 |
+| [app-instance.md](./app-instance.md) | `driver.app`（AppInstance）：身份、snapshot、显式 app-owned 能力 | 你要断言 app 身份/环境，或集成测试专用能力 |
+| [cli.md](./cli.md) | 生成的 CLI 命令指南入口、CI 与离线工件 | 你在运行测试或搭自动化 |
+| [agent-workflow.md](./agent-workflow.md) | schema 发现、app 探索、录制/生成、场景与失败证据 | 你在通过 CLI 探索行为或验证 |
 | [troubleshooting.md](./troubleshooting.md) | 常见修复、桥接就绪检查、抖动选择器、崩溃 | 一个测试失败了，你需要解法 |
 | [examples.md](./examples.md) | 可复制、带注释的完整测试脚本 | 你想要一个能照着改的模板 |
 
@@ -53,7 +54,7 @@ Page / Locator / Mock   Flutter VM Service
 
 以下这些推论会贯穿每一个测试：
 
-- app 必须在测试连接**之前**就跑起来（`flutter run`）。
+- attach 模式需要已运行的 app；managed 模式由 CLI `--device-id` 启动。首帧隔离还需要 app 的 waiting bootstrap，见 [scenarios.md](./scenarios.md)。
 - app 必须暴露当前桥接——旧桥接缺 `ext.fliwright.snap`、`ext.fliwright.action`、`ext.fliwright.extractForm`。见 [troubleshooting.md](./troubleshooting.md)。
 - `flutter run` 打印的 VM URL 有时是 `http://…`，必须转成 `ws://…/ws`。fixture 自动转；用裸 driver 的脚本得手动转。
 - 避免写死 `sleep()`。优先用 `waitFor()` / 自动等待的 `expect()` / `page.settle()`。见 [navigation.md](./navigation.md) 和 [assertions.md](./assertions.md)。

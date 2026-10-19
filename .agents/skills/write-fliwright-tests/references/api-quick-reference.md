@@ -22,7 +22,7 @@ import { test, expect, createFliwrightTest, defineConfig,
 
 环境变量：`FLIWRIGHT_VM_URL`、`FLIWRIGHT_VM_SERVICE_URL`、`FLIWRIGHT_RUNS_ROOT`、`FLIWRIGHT_SCREENSHOT_MODE`、
 `FLIWRIGHT_FAILURE_TIMEOUT_MS`、
-`FLIWRIGHT_MOCK_CONTROLLER_URL`、`FLIWRIGHT_TRACE`、`FLIWRIGHT_TRACE_DIR`、
+`FLIWRIGHT_TRACE`、`FLIWRIGHT_TRACE_DIR`、
 `FLIWRIGHT_LOG_LEVEL`、`FLIWRIGHT_LOG_FORMAT`、`FLIWRIGHT_LOG_OUTPUT`、
 `FLIWRIGHT_LOG_FILE`、`FLIWRIGHT_LOG_JSONL`。
 
@@ -239,15 +239,9 @@ driver.app.capability<T>(name): AppCapabilityProxy<T>   // typed proxy: anyMetho
 
 ## `fliwright` CLI
 
-```text
-fliwright run   [--test <p>] [--test-name <p>] [--vm-url <url>] [--reporter pretty|json|junit]
-                [--timeout <ms>] [--screenshot file|base64|off] [--output <file>]
-fliwright init
-fliwright doctor [--vm-url <url>]
-fliwright record [--vm-url <url>] [--output <file>] [--lang ts|dart] [--name <n>]
-                 [--home-route <route>] [--no-reset-home]
-fliwright mock:start [--host <h>] [--port <p>] [--mock-dir <d>]
-```
+命令和参数统一由 registry 生成的 [CLI 命令索引](../../fliwright-cli-workflows/references/commands/index.md) 维护；本页只收录 TypeScript API。按任务读取对应命令页，使用 `fliwright schema <command.path> --json` 检查安装版本的精确输入。
+
+直接 Vitest 的 runner 配置见 [快速开始](./getting-started.md)，可复用环境与认证准备见 [scenarios.md](./scenarios.md)。
 
 ## 选择器字符串格式
 

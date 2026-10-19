@@ -118,6 +118,25 @@
         "@fliwright/core",
         "@fliwright/vitest"
       ]
+    },
+    "@fliwright/cloud": {
+      "path": "packages/fliwright-cloud",
+      "capabilities": [
+        "team test queue",
+        "Mac execution worker",
+        "browser reports and sharing"
+      ],
+      "responsibility": "Own self-hosted team execution scheduling, durable leases, registered targets, workers and immutable report delivery.",
+      "doesNotOwn": [
+        "automation primitives",
+        "Flutter bridge protocol",
+        "public video transport"
+      ],
+      "mayDependOn": [
+        "@fliwright/core",
+        "@fliwright/cli",
+        "@fliwright/tdd"
+      ]
     }
   },
   "dartPackages": {

@@ -28,10 +28,12 @@ data in the application.
 - `snap`, `action`, screenshot, and mock extensions support normal
   locator-based automation.
 - App capabilities expose explicit test-only application contracts such as
-  controlled sign-in or seeded state. Register them before bridge
-  initialization and keep their inputs narrow.
+  `auth.seedLoggedIn`, `auth.clearSession`, and `auth.getStatus`. Register them
+  before bridge initialization and prepare authenticated business tests through
+  named composed scenarios; see `write-fliwright-tests` for authoring guidance.
 - Use the Riverpod bridge or plugin for provider inspection and overrides.
-  Do not use state overrides to bypass third-party captcha or security tokens.
+  Authentication setup belongs to app-owned capabilities; do not override auth
+  providers or bypass third-party captcha/security tokens.
 - Storage reset requires an app-supplied handler. Treat unsupported reset as a
   reported capability gap, not a reason to erase arbitrary app storage.
 - Raw VM extensions are an escape hatch for bridge work and legacy

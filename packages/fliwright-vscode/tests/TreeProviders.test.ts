@@ -244,8 +244,8 @@ describe('tree providers', () => {
 
     expect(rules).toHaveLength(2);
     expect(rules.filter((rule) => rule.kind === 'rule' && rule.applied)).toHaveLength(1);
-    expect(rules[0]).toMatchObject({ kind: 'rule', applied: false });
-    expect(rules[1]).toMatchObject({ kind: 'rule', applied: true });
+    expect(rules[0]).toMatchObject({ kind: 'rule', applied: true });
+    expect(rules[1]).toMatchObject({ kind: 'rule', applied: false });
     expect(provider.getTreeItem(endpoint!).description).toContain('1 active');
   });
 

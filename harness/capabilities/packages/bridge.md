@@ -1,7 +1,7 @@
 ---
 package: "fliwright_bridge"
 path: "packages/fliwright-bridge"
-source_fingerprint: "b8a4b79b7def4ba0281052465d64a65b47d73bd03175c85ca522a88fdee60553"
+source_fingerprint: "418c5d8ecc891ab775f09187293a88fe4593dcf328bdd9a1fd5d528796f8d0f4"
 generated: true
 ---
 

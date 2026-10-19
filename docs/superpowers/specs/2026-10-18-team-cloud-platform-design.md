@@ -1,8 +1,8 @@
 # Mac mini 团队云测管理平台设计
 
-日期：2026-10-18。状态：设计提案，待评审；不代表实现授权。
+日期：2026-10-18。状态：用户后续已授权按计划实现；实施验收见[计划](../plans/2026-10-18-team-cloud-platform.md)。
 
-本方案按用户新增的队列、报告上传与分享需求，将独立报告服务扩展为团队云测管理平台。它取代报告设计中“GitLab 持有唯一测试队列”的推荐，报告详情和实时观察的交互仍参考[报告设计](./2026-10-18-browser-reports-design.md)。本轮只更新文档。
+本方案按用户新增的队列、报告上传与分享需求，将独立报告服务扩展为团队云测管理平台。它取代报告设计中“GitLab 持有唯一测试队列”的推荐，报告详情和实时观察的交互仍参考[报告设计](./2026-10-18-browser-reports-design.md)。
 
 ## 1. 产品定位
 
@@ -65,6 +65,8 @@ CI 提交时传 target、commit、suite、scenario 和 CI 来源，不传任意�
 
 请求开始时即分配稳定链接。运行中先展示阶段和日志；报告提交后显示可复核证据。第一版不承诺逐步骤实时推送；浏览器可通过 SSE 获取阶段/日志变化，断线按事件序号补读，服务端事件为状态的辅助展示而非唯一真相。
 
+报告详情采用 Playwright 风格的执行时间轴：同一尝试的操作按真实开始时间定位，条宽表示耗时，父子及并行操作分轨排列，不累加嵌套耗时。点击时间条联动步骤、截图和证据详情；拖动时间游标按实际经过时间定位，支持缩放与横向滚动。缺失开始时间的步骤保留在列表，结束时间未采集时显示未完成标记，不能伪造耗时。团队报告与只读分享复用该组件，分享的安全时间线保留 `startedAt`/`endedAt`。实现读取 Fliwright Timeline，不依赖 Playwright 运行时。
+
 ## 5. 身份、状态与队列规则
 
 沿用现有领域术语：ApplicationTarget、TestRequest、ExecutionAttempt、ExecutionWorker、ExecutionSlot、RunBundle。
@@ -115,7 +117,7 @@ CI 提交时传 target、commit、suite、scenario 和 CI 来源，不传任意�
 
 浏览器身份、CI 服务令牌、Worker 注册凭据和报告分享令牌分开。所有路径实施服务端授权，修改操作具有 CSRF 防护或明确 bearer-token 机制。秘密值不进入日志和产物索引。
 
-配置和依赖选型需在实现阶段登记 Harness，本次不新增框架、数据库库或包。数据库建议 SQLite，驱动选择在目标 Node/macOS 上验证后确定。
+实现选型已登记 Harness：私有 cloud 包使用 Fastify、React/Vite 与 Node 26 内置 SQLite。SQL migration 明确版本化；不引入 ORM 或原生数据库驱动。浏览器身份采用受信反向代理，CI 与 Worker 使用独立 bearer 凭据。
 
 ## 9. 包与发布建议
 
@@ -137,6 +139,6 @@ CI 提交时传 target、commit、suite、scenario 和 CI 来源，不传任意�
 
 ## 11. 设计依据与待评审项
 
-本方案与现有 [ADR 0002](../../adr/0002-start-cloud-platform-with-a-single-tenant-team-queue.md)、[ADR 0003](../../adr/0003-run-queued-e2e-work-on-team-operated-workers.md)、[ADR 0004](../../adr/0004-restrict-queued-work-to-registered-application-targets.md) 以及 [CONTEXT](../../../CONTEXT.md) 的团队自托管、注册 target 与 Worker 模型一致。网页首版加入管理入口，是相对旧“API/CLI 优先、dashboard 后续”顺序的提议调整，尚未改动既有 ADR。
+本方案与现有 [ADR 0002](../../adr/0002-start-cloud-platform-with-a-single-tenant-team-queue.md)、[ADR 0003](../../adr/0003-run-queued-e2e-work-on-team-operated-workers.md)、[ADR 0004](../../adr/0004-restrict-queued-work-to-registered-application-targets.md) 以及 [CONTEXT](../../../CONTEXT.md) 的团队自托管、注册 target 与 Worker 模型一致。用户后续授权实现网页管理入口，ADR 0002 已同步此交付顺序。
 
-待评审的具体选择：平台持有唯一测试队列；一个 cloud package/两个进程；SQLite 与本地产物；GitLab 身份集成；P1/P2/P3 范围。未经用户确认开始实现，不修改产品代码、依赖和 Harness。
+P1/P2 通过独立 cloud package 交付；平台持有唯一测试队列，server/Worker 分进程，SQLite 与本地产物持久化。代码与本机真实模拟器验收见[实施记录](../plans/2026-10-18-team-cloud-platform.md)。正式 Mac mini 的域名、身份代理、凭据与设备映射由部署时配置；P3 视频采集和传输保持独立技术验证范围。

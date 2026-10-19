@@ -14,6 +14,8 @@ description: >
 
 使用这个 Skill，让 Fliwright 的开发保持测试优先、范围清晰、结果可验证。Fliwright 是一个自动化运行时，所以优先写面向行为的测试，用来保护协议契约、选择器语义、生成代码以及用户可见的自动化行为。
 
+本 Skill 面向 Fliwright 源码开发。若任务是对目标 Flutter app 启动或恢复持续 TDD，使用 `fliwright-cli-workflows` 的 session/TDD 命令指南；它负责 finite 与 persistent 生命周期、managed/attach 启动和操作恢复。
+
 ## 组合 Skill
 
 当 TDD 任务涉及 Fliwright 自动化测试或脚本时，先继续遵守本 Skill 的红绿重构流程，再同时使用 `write-fliwright-tests` skill 获取具体写法。典型触发包括 `.fliwright/tests`、`.fliwright/scripts`、`@fliwright/vitest`、`test` / `script` fixture、locator、selector、flow step、mock rule、agent verify、timeline、真实 Flutter app 验证、CLI 录制脚本清理和 E2E 用例。
