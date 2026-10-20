@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const root = resolve(import.meta.dirname, '..');
 const packages = [
+  'packages/fliwright-devices',
   'packages/fliwright-core',
   'packages/fliwright-vitest',
   'packages/fliwright-cli',
@@ -95,11 +96,12 @@ try {
       '--eval',
       [
         "import { FliwrightDriver } from '@fliwright/core';",
+        "import { DeviceDiscovery } from '@fliwright/devices';",
         "import { defineConfig as defineCliConfig } from '@fliwright/cli';",
         "import { runCommand } from '@fliwright/cli/run';",
         "import { TddRuntime } from '@fliwright/tdd';",
         "import { riverpodPlugin } from '@fliwright/plugin-riverpod';",
-        'if (![FliwrightDriver, defineCliConfig, runCommand, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing public export");',
+        'if (![DeviceDiscovery, FliwrightDriver, defineCliConfig, runCommand, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing public export");',
       ].join('\n'),
     ], { cwd: consumerDir });
     await writeFile(join(consumerDir, 'vitest.config.mjs'), [

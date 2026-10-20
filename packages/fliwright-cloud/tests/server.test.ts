@@ -30,6 +30,19 @@ function setup() {
       },
     ],
   );
+  store.recordDeviceInventory('mac', {
+    scannedAt: new Date().toISOString(),
+    devices: [
+      {
+        id: 'device',
+        name: 'Phone',
+        platform: 'ios',
+        kind: 'physical',
+        state: 'online',
+      },
+    ],
+    diagnostics: [],
+  });
   const server = createCloudServer({
     store,
     dataRoot: join(root, 'reports'),
@@ -49,6 +62,77 @@ function setup() {
   });
   return { server, store, browser };
 }
+it('accepts device inventories only from the owning worker and keeps discovery separate from slots', async () => {
+  const { server, store, browser } = setup();
+  const inventory = {
+    scannedAt: '2026-10-19T00:00:00.000Z',
+    devices: [
+      {
+        id: 'unregistered-phone',
+        name: 'Pixel',
+        platform: 'android',
+        kind: 'physical',
+        state: 'unauthorized',
+      },
+    ],
+    diagnostics: [
+      { source: 'ios-device', code: 'missing-tool', message: 'Xcode missing' },
+    ],
+  };
+  const send = (token: string, payload: unknown = inventory) =>
+    server.inject({
+      method: 'POST',
+      url: '/api/worker/devices',
+      headers: { authorization: `Bearer ${token}` },
+      payload,
+    });
+  expect((await send('ci-token')).statusCode).toBe(403);
+  expect(
+    (
+      await server.inject({
+        method: 'POST',
+        url: '/api/worker/devices',
+        headers: browser('admin'),
+        payload: inventory,
+      })
+    ).statusCode,
+  ).toBe(403);
+  expect(
+    (await send('worker-token', { ...inventory, workerId: 'another-worker' }))
+      .statusCode,
+  ).toBe(400);
+  expect(
+    (
+      await send('worker-token', {
+        ...inventory,
+        devices: [{ ...inventory.devices[0], state: 'idle' }],
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect((await send('worker-token')).statusCode).toBe(200);
+  const workers = (
+    await server.inject({ url: '/api/workers', headers: browser() })
+  ).json();
+  expect(workers[0].inventory).toMatchObject({
+    ...inventory,
+    stale: false,
+    receivedAt: expect.any(Number),
+  });
+  expect(workers[0].slots).toHaveLength(1);
+  expect(workers[0].slots[0].deviceId).toBe('device');
+  // The last-known snapshot survives disconnection and is explicitly marked stale.
+  store.db
+    .prepare('UPDATE device_inventories SET received_at=? WHERE worker_id=?')
+    .run(Date.now() - 100000, 'mac');
+  expect(store.listWorkers()[0].inventory).toMatchObject({
+    stale: true,
+    devices: inventory.devices,
+  });
+  expect(
+    (await send('worker-token', { ...inventory, devices: [] })).statusCode,
+  ).toBe(200);
+  expect(store.listWorkers()[0].inventory?.devices).toEqual([]);
+});
 it('separates proxy, CI and worker identities and protects mutations against CSRF', async () => {
   const { server, browser } = setup();
   expect((await server.inject({ url: '/api/requests' })).statusCode).toBe(401);
@@ -97,7 +181,7 @@ it('separates proxy, CI and worker identities and protects mutations against CSR
         method: 'POST',
         url: '/api/worker/claim',
         headers: { authorization: 'Bearer ci-token' },
-        payload: { slotId: 'ios' },
+        payload: { slotId: 'ios', deviceId: 'device' },
       })
     ).statusCode,
   ).toBe(403);
@@ -105,7 +189,7 @@ it('separates proxy, CI and worker identities and protects mutations against CSR
     method: 'POST',
     url: '/api/worker/claim',
     headers: { authorization: 'Bearer worker-token' },
-    payload: { slotId: 'ios' },
+    payload: { slotId: 'ios', deviceId: 'device' },
   });
   expect(claimed.json().request.id).toBe(id);
   expect(
@@ -176,4 +260,59 @@ it('CI submits idempotently and cannot cancel another actor’s task', async () 
       })
     ).json().events[0].kind,
   ).toBe('submitted');
+});
+
+it('serves device details to members, restricts changes to operators and enforces origin and schema', async () => {
+  const { server, store, browser } = setup();
+  store.recordDeviceInventory('mac', {
+    scannedAt: new Date().toISOString(),
+    devices: [
+      {
+        id: 'phone2',
+        name: 'Pixel',
+        platform: 'android',
+        kind: 'physical',
+        state: 'online',
+      },
+    ],
+    diagnostics: [],
+  });
+  const list = await server.inject({ url: '/api/devices', headers: browser() });
+  expect(list.statusCode).toBe(200);
+  const device = list
+    .json()
+    .find((d: { nativeId: string }) => d.nativeId === 'phone2');
+  const url = `/api/devices/${device.id}`;
+  expect(
+    (await server.inject({ url, headers: browser() })).json().settings.managed,
+  ).toBe(false);
+  const payload = {
+    alias: 'QA Pixel',
+    tags: ['qa'],
+    managed: true,
+    enabled: true,
+    targets: ['app'],
+    slotId: 'pixel',
+  };
+  const put = (headers: Record<string, string>, body = payload) =>
+    server.inject({ method: 'PUT', url, headers, payload: body });
+  expect((await put(browser())).statusCode).toBe(403);
+  expect((await put(browser('ops', 'https://evil.test'))).statusCode).toBe(403);
+  expect((await put({ authorization: 'Bearer worker-token' })).statusCode).toBe(
+    403,
+  );
+  expect(
+    (await put(browser('ops'), { ...payload, slotId: '../bad' })).statusCode,
+  ).toBe(400);
+  const saved = await put(browser('ops'));
+  expect(saved.statusCode).toBe(200);
+  expect(saved.json()).toMatchObject({
+    settings: payload,
+    ready: false,
+    blockers: expect.arrayContaining(['runtime-missing']),
+  });
+  expect(
+    (await server.inject({ url: '/api/devices/absent', headers: browser() }))
+      .statusCode,
+  ).toBe(404);
 });

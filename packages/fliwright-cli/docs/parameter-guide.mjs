@@ -1,5 +1,6 @@
 // Explanations only; requiredness, enum values, bounds and Zod defaults are derived at generation time.
 export const parameterDocs = {
+  platform: 'Limit local device detection to iOS or Android. Omit to scan the platforms supported by this host.',
   vmUrl: 'Dart VM Service websocket URL. Omit to use project/environment endpoint resolution where supported.',
   deviceId: 'Flutter device id for an owned launch; mutually exclusive with vmUrl.',
   target: 'Flutter entrypoint for a managed launch, e.g. lib/main_fliwright.dart.',

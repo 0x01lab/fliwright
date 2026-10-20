@@ -6,44 +6,22 @@ import { CloudStore, digest } from './CloudStore.js';
 import { createCloudServer } from './server.js';
 import {
   serverConfigSchema,
-  workerConfigSchema,
   clientConfigSchema,
   loadJson,
   credential,
 } from './config.js';
-import { createWorker, retrySpool } from './worker.js';
-import { executeJob } from './executor.js';
-import { runCommandProcess } from './processes.js';
 import {
   CloudClient,
   passesGitLabGate,
+  submissionSchema,
   type GitLabGateRequest,
-} from './CloudClient.js';
-import { submissionSchema } from './contracts.js';
+} from '@fliwright/cloud-protocol';
 
 const [command, path, ...args] = process.argv.slice(2);
 const stop = new AbortController();
 function installStop() {
   process.once('SIGTERM', () => stop.abort());
   process.once('SIGINT', () => stop.abort());
-}
-async function waitForGo() {
-  if (!process.send) throw new Error('Executor requires supervisor IPC');
-  await new Promise<void>((resolve, reject) => {
-    process.once('message', (message) => {
-      if (
-        message &&
-        typeof message === 'object' &&
-        'go' in message &&
-        message.go === true
-      )
-        resolve();
-      else reject(new Error('Invalid supervisor message'));
-    });
-    process.once('disconnect', () =>
-      reject(new Error('Supervisor disconnected')),
-    );
-  });
 }
 async function main() {
   if (command === 'hash-token') {
@@ -55,56 +33,8 @@ async function main() {
   }
   if (!path)
     throw new Error(
-      'Usage: fliwright-cloud <server|worker|recover|retry-uploads|submit|wait|cancel|backup> <config.json> [request.json|requestId|backupDirectory]',
+      'Usage: fliwright-cloud <server|submit|wait|cancel|backup> <config.json> [request.json|requestId|backupDirectory]',
     );
-  if (command === 'execute' || command === 'reset') {
-    installStop();
-    let forced: NodeJS.Timeout | undefined;
-    const disconnected = () => {
-      stop.abort();
-      forced = setTimeout(() => process.kill(-process.pid, 'SIGKILL'), 12000);
-    };
-    process.once('disconnect', disconnected);
-    await waitForGo();
-    try {
-      if (command === 'execute') {
-        await executeJob(path, stop.signal);
-        // Keep the leader alive so the supervisor can verify its identity and reap the whole group.
-        process.send?.({ done: true });
-        if (!stop.signal.aborted)
-          await new Promise<void>((resolve) =>
-            stop.signal.addEventListener('abort', () => resolve(), {
-              once: true,
-            }),
-          );
-      } else {
-        const { commands, deviceId, directory } = loadJson(path) as {
-          commands: Array<{
-            program: string;
-            args: string[];
-            acceptExitCodes?: number[];
-          }>;
-          deviceId: string;
-          directory: string;
-        };
-        for (const cmd of commands)
-          await runCommandProcess(
-            {
-              ...cmd,
-              args: cmd.args.map((a) => a.replaceAll('{deviceId}', deviceId)),
-            },
-            directory,
-            join(directory, 'reset.log'),
-            stop.signal,
-          );
-      }
-    } finally {
-      if (forced) clearTimeout(forced);
-      process.removeListener('disconnect', disconnected);
-      process.disconnect?.();
-    }
-    return;
-  }
   if (command === 'server') {
     const config = serverConfigSchema.parse(loadJson(path));
     mkdirSync(config.dataRoot, { recursive: true, mode: 0o700 });
@@ -127,28 +57,6 @@ async function main() {
     console.log(
       `Cloud management server listening on ${config.host}:${config.port}`,
     );
-    return;
-  }
-  if (['worker', 'recover', 'retry-uploads'].includes(command)) {
-    const config = workerConfigSchema.parse(loadJson(path)),
-      worker = createWorker(config);
-    if (command === 'recover') {
-      await worker.recover();
-      console.log('Device reset verified; slot recovered');
-      return;
-    }
-    if (command === 'retry-uploads') {
-      await retrySpool(config);
-      console.log('Retained publications processed');
-      return;
-    }
-    installStop();
-    while (!stop.signal.aborted) {
-      await worker.runOnce(stop.signal);
-      await delay(config.pollMs, undefined, { signal: stop.signal }).catch(
-        () => {},
-      );
-    }
     return;
   }
   if (command === 'backup') {
@@ -228,7 +136,7 @@ async function main() {
 }
 main().catch(() => {
   console.error(
-    'Cloud operation failed. Check configuration, credentials and local diagnostics; existing slot locks require recovery.',
+    'Cloud operation failed. Check configuration, credentials and server diagnostics.',
   );
   process.exitCode = 1;
 });

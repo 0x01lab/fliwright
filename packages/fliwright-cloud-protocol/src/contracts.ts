@@ -1,6 +1,97 @@
 import { z } from 'zod';
 
+export const deviceInventorySchema = z
+  .object({
+    scannedAt: z.string().datetime(),
+    devices: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(300),
+            name: z.string().min(1).max(300),
+            platform: z.enum(['ios', 'android']),
+            kind: z.enum(['physical', 'simulator']),
+            state: z.enum([
+              'online',
+              'offline',
+              'unauthorized',
+              'shutdown',
+              'unavailable',
+              'unknown',
+            ]),
+            osVersion: z.string().max(200).optional(),
+            model: z.string().max(300).optional(),
+            avdName: z.string().max(300).optional(),
+            detail: z.string().max(4000).optional(),
+          })
+          .strict(),
+      )
+      .max(1000),
+    diagnostics: z
+      .array(
+        z
+          .object({
+            source: z.enum([
+              'adb',
+              'android-emulator',
+              'ios-simulator',
+              'ios-device',
+            ]),
+            code: z.enum([
+              'missing-tool',
+              'command-failed',
+              'invalid-output',
+              'unsupported-host',
+            ]),
+            message: z.string().max(4000),
+          })
+          .strict(),
+      )
+      .max(2000),
+  })
+  .strict();
+export type DeviceInventory = z.infer<typeof deviceInventorySchema>;
+
 export const idSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/);
+/** Persistent cloud policy; host discovery never overwrites these values. */
+export const deviceSettingsSchema = z
+  .object({
+    alias: z.string().trim().max(100),
+    tags: z.array(z.string().trim().min(1).max(50)).max(30),
+    managed: z.boolean(),
+    enabled: z.boolean(),
+    targets: z.array(idSchema).max(100),
+    slotId: idSchema.nullable(),
+  })
+  .strict();
+export type DeviceSettings = z.infer<typeof deviceSettingsSchema>;
+export type DeviceBlocker =
+  | 'unmanaged'
+  | 'disabled'
+  | 'missing'
+  | 'stale'
+  | 'not-online'
+  | 'worker-paused'
+  | 'no-slot'
+  | 'no-targets'
+  | 'runtime-missing'
+  | 'runtime-mismatch'
+  | 'busy'
+  | 'quarantined';
+export interface ManagedDevice {
+  id: string;
+  workerId: string;
+  nativeId: string;
+  observation: DeviceInventory['devices'][number];
+  lastSeenAt: number;
+  present: boolean;
+  stale: boolean;
+  settings: DeviceSettings;
+  slot?: ExecutionSlot;
+  runtimeSeenAt?: number;
+  blockers: DeviceBlocker[];
+  ready: boolean;
+}
 export const commandSchema = z
   .object({ program: z.string().min(1), args: z.array(z.string()).default([]) })
   .strict();
@@ -31,17 +122,15 @@ export const targetSchema = z
 export const workerSchema = z
   .object({
     id: idSchema,
-    slots: z
-      .array(
-        z
-          .object({
-            id: idSchema,
-            deviceId: z.string().min(1),
-            targets: z.array(idSchema).min(1),
-          })
-          .strict(),
-      )
-      .min(1),
+    slots: z.array(
+      z
+        .object({
+          id: idSchema,
+          deviceId: z.string().min(1),
+          targets: z.array(idSchema).min(1),
+        })
+        .strict(),
+    ),
   })
   .strict();
 export const submissionSchema = z
@@ -154,6 +243,8 @@ export interface ExecutionWorker {
   paused: boolean;
   seenAt: number;
   slots: ExecutionSlot[];
+  /** Last host scan. Staleness uses server receipt time, independent of worker lease health. */
+  inventory?: DeviceInventory & { receivedAt: number; stale: boolean };
 }
 export class CloudError extends Error {
   constructor(

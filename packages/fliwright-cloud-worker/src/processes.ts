@@ -11,7 +11,7 @@ import {
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { writeJournal } from './WorkerAgent.js';
-import type { ExecutionLease } from './contracts.js';
+import type { ExecutionLease } from '@fliwright/cloud-protocol';
 
 /** Bounded, incremental diagnostics; never read an entire build log into memory. */
 export function createLogTail(directory: string, secrets: string[] = []) {

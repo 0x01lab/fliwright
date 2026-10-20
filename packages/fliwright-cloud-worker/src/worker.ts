@@ -9,10 +9,15 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { z } from 'zod';
-import { CloudClient } from './CloudClient.js';
-import { CloudError, type ExecutionLease, type Outcome } from './contracts.js';
+import {
+  CloudClient,
+  CloudError,
+  safeArtifactPath,
+  type ExecutionLease,
+  type Outcome,
+} from '@fliwright/cloud-protocol';
 import { credential, type workerConfigSchema } from './config.js';
-import { digest } from './CloudStore.js';
+import { createHash } from 'node:crypto';
 import { WorkerAgent, writeJournal } from './WorkerAgent.js';
 import {
   runCommandProcess,
@@ -21,7 +26,9 @@ import {
   sanitizedEnvironment,
   createLogTail,
 } from './processes.js';
-import { safeArtifactPath } from './ReportStore.js';
+
+const digest = (value: Buffer) =>
+  createHash('sha256').update(value).digest('hex');
 
 type WorkerSettings = z.infer<typeof workerConfigSchema>;
 export function createWorker(config: WorkerSettings) {
@@ -34,7 +41,7 @@ export function createWorker(config: WorkerSettings) {
     claim: () =>
       client.request<ExecutionLease | null>('/api/worker/claim', {
         method: 'POST',
-        body: { slotId: config.slotId },
+        body: { slotId: config.slotId, deviceId: config.deviceId },
       }),
     heartbeat: (lease, stage) => {
       if (logAttempt !== lease.attemptId) {

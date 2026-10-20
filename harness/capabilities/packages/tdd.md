@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/tdd"
 path: "packages/fliwright-tdd"
-source_fingerprint: "30aa78281c71a436eb3830a951a4c6e0ca6a01c9aeed31194c5b0d8075801f0d"
+source_fingerprint: "7cda695d469d3b89fdd0fca743975b3aba13bd4f5a99ab656969fadfa045c7ba"
 generated: true
 ---
 

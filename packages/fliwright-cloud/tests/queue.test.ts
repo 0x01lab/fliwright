@@ -43,6 +43,19 @@ function setup() {
       },
     ],
   );
+  store.recordDeviceInventory('mac', {
+    scannedAt: new Date().toISOString(),
+    devices: [
+      {
+        id: 'device',
+        name: 'Phone',
+        platform: 'ios',
+        kind: 'physical',
+        state: 'online',
+      },
+    ],
+    diagnostics: [],
+  });
   const submit = (key: string) =>
     store.submit(
       {
@@ -67,7 +80,7 @@ describe('durable exclusive queue', () => {
   it('reports offline workers without making a busy slot available', () => {
     const { store, submit, advance } = setup();
     submit('health');
-    const lease = store.claim('mac', 'ios')!;
+    const lease = store.claim('mac', 'ios', 'device')!;
     expect(store.listWorkers()[0].health).toBe('healthy');
     advance();
     store.expireLeases();
@@ -77,7 +90,7 @@ describe('durable exclusive queue', () => {
   it('retains an already observed test verdict when the worker is lost during publication or cleanup', () => {
     const { store, submit, advance } = setup();
     const request = submit('one');
-    const lease = store.claim('mac', 'ios')!;
+    const lease = store.claim('mac', 'ios', 'device')!;
     store.recordResult(lease, { verdict: 'failed' });
     advance();
     store.expireLeases();
@@ -107,8 +120,8 @@ describe('durable exclusive queue', () => {
       ),
     ).toThrow(/conflict/i);
     const peer = open();
-    expect(peer.claim('mac', 'ios')?.request.id).toBe(first.id);
-    expect(store.claim('mac', 'ios')).toBeNull();
+    expect(peer.claim('mac', 'ios', 'device')?.request.id).toBe(first.id);
+    expect(store.claim('mac', 'ios', 'device')).toBeNull();
     expect(
       peer.listRequests({ state: 'queued' }).items.map((r) => r.id),
     ).toEqual([second.id]);
@@ -117,16 +130,16 @@ describe('durable exclusive queue', () => {
     const { store, submit, advance } = setup();
     submit('one');
     submit('two');
-    const lease = store.claim('mac', 'ios')!;
+    const lease = store.claim('mac', 'ios', 'device')!;
     advance();
     store.expireLeases();
-    expect(store.claim('mac', 'ios')).toBeNull();
+    expect(store.claim('mac', 'ios', 'device')).toBeNull();
     expect(() => store.heartbeat(lease, 'running')).toThrow(/lease/i);
     expect(store.getRequest(lease.request.id).state).toBe(
       'infrastructure_failed',
     );
     store.recoverSlot('mac', 'ios', 'reset verified');
-    const next = store.claim('mac', 'ios')!;
+    const next = store.claim('mac', 'ios', 'device')!;
     expect(next.generation).toBeGreaterThan(lease.generation);
     expect(next.request.id).not.toBe(lease.request.id);
   });
@@ -134,12 +147,12 @@ describe('durable exclusive queue', () => {
     const { store, submit } = setup();
     const a = submit('one');
     const b = submit('two');
-    const lease = store.claim('mac', 'ios')!;
+    const lease = store.claim('mac', 'ios', 'device')!;
     store.cancel(b.id, 'alice');
     expect(store.getRequest(b.id).state).toBe('cancelled');
     store.cancel(a.id, 'alice');
     expect(store.heartbeat(lease, 'running').cancelRequested).toBe(true);
-    expect(store.claim('mac', 'ios')).toBeNull();
+    expect(store.claim('mac', 'ios', 'device')).toBeNull();
     store.finish(lease, {
       verdict: 'interrupted',
       cleanup: 'failed',
@@ -151,7 +164,7 @@ describe('durable exclusive queue', () => {
   it('keeps test verdict separate from publishing/cleanup and retries only transient infra once', () => {
     const { store, submit } = setup();
     const a = submit('one');
-    const lease = store.claim('mac', 'ios')!;
+    const lease = store.claim('mac', 'ios', 'device')!;
     store.finish(lease, {
       verdict: 'failed',
       cleanup: 'clean',
@@ -161,15 +174,15 @@ describe('durable exclusive queue', () => {
       state: 'completed',
       verdict: 'failed',
     });
-    expect(store.claim('mac', 'ios')).toBeNull();
+    expect(store.claim('mac', 'ios', 'device')).toBeNull();
     const b = submit('two');
-    store.finish(store.claim('mac', 'ios')!, {
+    store.finish(store.claim('mac', 'ios', 'device')!, {
       verdict: 'unknown',
       cleanup: 'clean',
       publication: 'unavailable',
       infrastructure: 'transient',
     });
-    const retry = store.claim('mac', 'ios')!;
+    const retry = store.claim('mac', 'ios', 'device')!;
     expect(retry.request.id).toBe(b.id);
     store.finish(retry, {
       verdict: 'unknown',

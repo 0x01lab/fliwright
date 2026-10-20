@@ -34,6 +34,19 @@ function setup() {
       },
     ],
   );
+  db.recordDeviceInventory('mac', {
+    scannedAt: new Date().toISOString(),
+    devices: [
+      {
+        id: 'device',
+        name: 'Phone',
+        platform: 'ios',
+        kind: 'physical',
+        state: 'online',
+      },
+    ],
+    diagnostics: [],
+  });
   const r = db.submit(
     {
       targetId: 'app',
@@ -44,7 +57,7 @@ function setup() {
     'alice',
     'key',
   );
-  const lease = db.claim('mac', 'ios')!;
+  const lease = db.claim('mac', 'ios', 'device')!;
   const files = {
     'run.json': JSON.stringify({
       schemaVersion: 1,

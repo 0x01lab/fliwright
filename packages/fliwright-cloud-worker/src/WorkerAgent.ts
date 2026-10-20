@@ -11,8 +11,8 @@ import {
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { identifier } from './CloudStore.js';
-import type { ExecutionLease, Outcome } from './contracts.js';
+import { randomUUID } from 'node:crypto';
+import type { ExecutionLease, Outcome } from '@fliwright/cloud-protocol';
 
 export interface ExecutionResult {
   verdict: Outcome['verdict'];
@@ -57,7 +57,7 @@ interface Journal {
   outcome?: Outcome;
 }
 export function writeJournal(path: string, value: unknown) {
-  const temp = `${path}.tmp-${identifier()}`;
+  const temp = `${path}.tmp-${randomUUID()}`;
   writeFileSync(temp, JSON.stringify(value), { mode: 0o600 });
   const file = openSync(temp, 'r');
   try {

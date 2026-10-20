@@ -9,10 +9,12 @@ import { sessionRequest } from './session/client.js';
 import { registerTdd } from './registry/tdd.js';
 import { registerFlow } from './registry/flow.js';
 import { registerFinite } from './registry/finite.js';
+import { registerDevices } from './registry/devices.js';
 
 export function createRegistry(): CommandRegistry {
   const registry = new CommandRegistry();
   registerFinite(registry);
+  registerDevices(registry);
   registerFlow(registry);
   registerTdd(registry);
   registerSessions(registry);

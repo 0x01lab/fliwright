@@ -1,4 +1,5 @@
 import type { TimelineNode } from '@fliwright/core';
+import { scaleLinear } from 'd3-scale';
 
 export type ReplayNode = TimelineNode & { durationMs?: number };
 export type StepFilter = 'all' | 'failed' | 'screenshots' | 'slow';
@@ -17,6 +18,14 @@ export interface TimeAxis {
   missing: ReplayNode[];
   ticks: number[];
   lanes: number;
+}
+
+/** Map elapsed milliseconds without rounding or extending the recorded domain. */
+export function createTimeScale(duration: number) {
+  return scaleLinear()
+    .domain([0, duration || 1])
+    .range([0, 100])
+    .clamp(true);
 }
 
 /** All actions share a clock; nested durations must never be added together. */
@@ -72,16 +81,7 @@ export function buildTimeAxis(
         lane,
       };
     });
-  const raw = duration / 6;
-  const power = 10 ** Math.floor(Math.log10(raw || 1));
-  const interval = ([1, 2, 5, 10].find((n) => n * power >= raw) ?? 10) * power;
-  const ticks = [0];
-  for (
-    let value = interval;
-    value <= duration && ticks.length < 20;
-    value += interval
-  )
-    ticks.push(value);
+  const ticks = duration ? createTimeScale(duration).ticks(6) : [0];
   return {
     durationMs: duration,
     entries,
@@ -130,15 +130,27 @@ export function artifactPath(
   return files.includes(resolved) ? resolved : undefined;
 }
 
+/** Resolve only archived images, preserving the preview's screenshot order. */
+export function screenshotPaths(node: ReplayNode | undefined, base: string, files: string[]): string[] {
+  const paths = [
+    ...(node?.artifacts ?? []).map((artifact) => artifact.path),
+    node?.error?.appState?.screenshotPath,
+  ];
+  return [...new Set(paths
+    .map((path) => artifactPath(base, path, files))
+    .filter((path): path is string => !!path && /\.(png|jpe?g|webp)$/i.test(path)))];
+}
+
 export function durationMs(node: ReplayNode): number | undefined {
+  const value = Date.parse(node.endedAt ?? '') - Date.parse(node.startedAt);
+  if (Number.isFinite(value) && value >= 0) return value;
   if (
     typeof node.durationMs === 'number' &&
     Number.isFinite(node.durationMs) &&
     node.durationMs >= 0
   )
     return node.durationMs;
-  const value = Date.parse(node.endedAt ?? '') - Date.parse(node.startedAt);
-  return Number.isFinite(value) && value >= 0 ? value : undefined;
+  return undefined;
 }
 
 export function durationLabel(value?: number): string {

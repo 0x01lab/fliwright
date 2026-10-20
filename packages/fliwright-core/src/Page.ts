@@ -512,10 +512,16 @@ export class Page {
   async screenshot(options?: {
     pixelRatio?: number;
     rect?: { x: number; y: number; width: number; height: number };
+    /** Wait for route transitions and animations before capturing. */
+    waitForAnimations?: boolean;
+    /** Maximum time to wait for animations when enabled. */
+    settleTimeout?: number;
   }): Promise<Buffer> {
     const params: Record<string, unknown> = {
       pixelRatio: options?.pixelRatio?.toString() ?? '1.0',
     };
+    if (options?.waitForAnimations) params.waitForAnimations = 'true';
+    if (options?.settleTimeout != null) params.settleTimeout = options.settleTimeout.toString();
     if (options?.rect) params.rect = JSON.stringify(options.rect);
 
     const result = (await this.sendRequest('ext.fliwright.screenshot', params)) as {

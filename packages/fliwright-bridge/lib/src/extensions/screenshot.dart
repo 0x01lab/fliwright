@@ -8,10 +8,14 @@ import '../bridge.dart';
 
 class ScreenshotExtension {
   static void register(ExtensionRegistry registry) {
-    registry.register('ext.fliwright.screenshot', _screenshot);
+    registry.register(
+      'ext.fliwright.screenshot',
+      (params) => _screenshot(registry, params),
+    );
   }
 
   static Future<Map<String, dynamic>> _screenshot(
+    ExtensionRegistry registry,
     Map<String, String> params,
   ) async {
     final root = WidgetsBinding.instance.rootElement;
@@ -22,6 +26,13 @@ class ScreenshotExtension {
     final pixelRatio = double.tryParse(params['pixelRatio'] ?? '') ?? 1.0;
     final fullPage = (params['fullPage'] ?? 'false') == 'true';
     final waitForFrame = params['waitForFrame'] != 'false';
+    final waitForAnimations = params['waitForAnimations'] == 'true';
+
+    if (waitForAnimations) {
+      await registry.invoke('ext.fliwright.settle', {
+        'timeout': params['settleTimeout'] ?? '500',
+      });
+    }
 
     // Full-page screenshot: scroll through the content in segments.
     if (fullPage) {
@@ -201,8 +212,12 @@ class ScreenshotExtension {
       } catch (_) {}
     }
 
+    final failedSegments = segmentCount - segments.length;
     return {
-      'success': true,
+      'success': failedSegments == 0,
+      if (failedSegments > 0)
+        'error':
+            'Failed to capture $failedSegments of $segmentCount screenshot segments',
       'format': 'png',
       'segments': segments,
       'segmentWidth': viewportSize.width,

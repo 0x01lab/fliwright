@@ -30,7 +30,7 @@ import {
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { runCommandProcess } from './processes.js';
 import { writeJournal, type ExecutionResult } from './WorkerAgent.js';
-import type { ExecutionLease } from './contracts.js';
+import type { ExecutionLease } from '@fliwright/cloud-protocol';
 
 /** Flutter's machine process inherits the executor's durable, owned process group. */
 class OwnedFlutterTransport implements DaemonTransport {

@@ -19,10 +19,11 @@ import { runManifestSchema, type RunManifest } from '@fliwright/core';
 import { CloudStore, digest, identifier } from './CloudStore.js';
 import {
   CloudError,
+  safeArtifactPath,
   publicationSchema,
   type LeaseKey,
   type PublicationInput,
-} from './contracts.js';
+} from '@fliwright/cloud-protocol';
 
 type Row = Record<string, unknown>;
 type JsonObject = Record<string, any>;
@@ -55,34 +56,9 @@ export interface ReportView {
   files: string[];
   expiresAt: number;
 }
-const extensions = new Set([
-  '.json',
-  '.jsonl',
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.webp',
-  '.txt',
-  '.log',
-  '.ts',
-  '.dart',
-]);
 const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const equalHash = (a: string, b: string) =>
   a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
-export function safeArtifactPath(path: string) {
-  if (
-    path.includes('\\') ||
-    path.includes(':') ||
-    /[\x00-\x1f]/.test(path) ||
-    path.startsWith('/') ||
-    path.split('/').some((p) => !p || p === '.' || p === '..') ||
-    !extensions.has(extname(path).toLowerCase()) ||
-    path === 'cloud-publication.json'
-  )
-    throw new CloudError(400, 'Unsafe artifact path');
-  return path;
-}
 function durableWrite(path: string, body: Buffer | string) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temp = `${path}.tmp-${identifier()}`;

@@ -27,6 +27,10 @@ only the one linked level-1 document that matches the work; do not preload
   `harness/memory/ledger/2026-08-15-composable-test-scenarios.md`.
 - Do not add compatibility paths for behavior that the current design replaces,
   unless backward compatibility is explicitly requested.
+- UI design preference: avoid decorative colored outlines, status edge stripes,
+  and colored group underlines. Use spacing, subtle fills, text and icons for
+  hierarchy, status and selection; reserve rings for keyboard focus. See
+  `docs/fliwright-theme.md` for the Cloud visual rules.
 - `docs/features/` is generated implementation reference. Do not edit it by hand;
   regenerate it with `/document-features` after significant stable source changes.
 - Do not add, remove, or upgrade a framework/dependency outside

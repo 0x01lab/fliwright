@@ -27,7 +27,7 @@ it('two OS processes racing to claim the same SQLite slot cannot both execute', 
     fileURLToPath(new URL('../node_modules', import.meta.url)),
     join(root, 'node_modules'),
   );
-  for (const name of ['CloudStore', 'contracts'])
+  for (const name of ['CloudStore'])
     writeFileSync(
       join(root, `${name}.js`),
       ts.transpileModule(
@@ -62,6 +62,19 @@ it('two OS processes racing to claim the same SQLite slot cannot both execute', 
       },
     ],
   );
+  store.recordDeviceInventory('mac', {
+    scannedAt: new Date().toISOString(),
+    devices: [
+      {
+        id: 'device',
+        name: 'Phone',
+        platform: 'ios',
+        kind: 'physical',
+        state: 'online',
+      },
+    ],
+    diagnostics: [],
+  });
   const request = store.submit(
     {
       targetId: 'app',
@@ -74,7 +87,7 @@ it('two OS processes racing to claim the same SQLite slot cannot both execute', 
   );
   const script = `import { CloudStore } from ${JSON.stringify(pathToFileURL(join(root, 'CloudStore.js')).href)};
     const store=new CloudStore(${JSON.stringify(join(root, 'db'))});process.send({ready:true});
-    process.once('message',()=>{const lease=store.claim('mac','ios');store.close();process.send({id:lease?.request.id??null},()=>process.disconnect());});`;
+    process.once('message',()=>{const lease=store.claim('mac','ios','device');store.close();process.send({id:lease?.request.id??null},()=>process.disconnect());});`;
   const children = Array.from({ length: 2 }, () =>
     spawn(process.execPath, ['--input-type=module', '--eval', script], {
       stdio: ['ignore', 'ignore', 'pipe', 'ipc'],

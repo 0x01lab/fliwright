@@ -1,0 +1,45 @@
+{
+  "name": "@fliwright/cloud-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CLI-started host device discovery and test execution Worker.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fliwright/cloud-protocol": "workspace:*",
+    "@fliwright/core": "workspace:*",
+    "@fliwright/cli": "workspace:*",
+    "@fliwright/tdd": "workspace:*",
+    "@fliwright/devices": "workspace:*",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "^5.5.0",
+    "vitest": "5.0.5",
+    "@fliwright/cloud": "workspace:*"
+  },
+  "bin": {
+    "fliwright-cloud-worker": "dist/main.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "deploy"
+  ]
+}

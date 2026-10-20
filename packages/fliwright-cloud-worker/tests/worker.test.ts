@@ -9,7 +9,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { WorkerAgent, type WorkerDependencies } from '../src/WorkerAgent.js';
-import type { ExecutionLease, Outcome } from '../src/contracts.js';
+import type { ExecutionLease, Outcome } from '@fliwright/cloud-protocol';
 const dirs: string[] = [];
 afterEach(() =>
   dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })),

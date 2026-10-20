@@ -451,7 +451,7 @@ function configureRunSessionEvidence(timeline: FliwrightTimelineContext, page: P
       const suffix = `${request.operationId ?? 'checkpoint'}-${request.reason}`;
       const sources = {
         screenshot: async () => {
-          const screenshot = await page.screenshot();
+          const screenshot = await page.screenshot({ waitForAnimations: true });
           signal?.throwIfAborted();
           return timeline.artifactStore.writeScreenshot(suffix, screenshot);
         },

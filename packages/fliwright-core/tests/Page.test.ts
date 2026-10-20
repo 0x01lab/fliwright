@@ -195,11 +195,13 @@ describe('Page', () => {
     });
     const page = new Page(sendRequest);
 
-    const result = await page.screenshot({ pixelRatio: 2 });
+    const result = await page.screenshot({ pixelRatio: 2, waitForAnimations: true, settleTimeout: 1500 });
 
     expect(result.toString()).toBe('png');
     expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', {
       pixelRatio: '2',
+      waitForAnimations: 'true',
+      settleTimeout: '1500',
     });
   });
 

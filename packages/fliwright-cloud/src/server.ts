@@ -15,7 +15,7 @@ import {
   publicationSchema,
   submissionSchema,
   targetSchema,
-} from './contracts.js';
+} from '@fliwright/cloud-protocol';
 
 export type Role = 'member' | 'operator' | 'admin';
 export interface CloudServerOptions {
@@ -333,6 +333,22 @@ export function createCloudServer(options: CloudServerOptions) {
     const expiry = setTimeout(close, 60000);
     reply.raw.on('close', () => clearTimeout(expiry));
   });
+  app.get('/api/devices', (req) => {
+    const who = team(req);
+    if (who.kind !== 'browser')
+      throw new CloudError(403, 'Browser member required');
+    return store.listDevices();
+  });
+  app.get('/api/devices/:id', (req) => {
+    const who = team(req);
+    if (who.kind !== 'browser')
+      throw new CloudError(403, 'Browser member required');
+    return store.getDevice(param(req, 'id'));
+  });
+  app.put('/api/devices/:id', (req) => {
+    const who = team(req, 'operator');
+    return store.updateDevice(param(req, 'id'), req.body, who.name);
+  });
   app.get('/api/workers', (req) => {
     team(req);
     return store.listWorkers();
@@ -360,8 +376,16 @@ export function createCloudServer(options: CloudServerOptions) {
   });
   app.post('/api/worker/claim', (req) => {
     const who = worker(req),
-      { slotId } = z.object({ slotId: idSchema }).strict().parse(req.body);
-    return store.claim(who.name, slotId);
+      { slotId, deviceId } = z
+        .object({ slotId: idSchema, deviceId: z.string().min(1).max(300) })
+        .strict()
+        .parse(req.body);
+    return store.claim(who.name, slotId, deviceId);
+  });
+  app.post('/api/worker/devices', (req) => {
+    const who = worker(req);
+    store.recordDeviceInventory(who.name, req.body);
+    return { accepted: true };
   });
   app.post('/api/worker/heartbeat', (req) => {
     const key = lease(req),

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
-import { commandSchema, targetSchema, workerSchema } from './contracts.js';
+import { targetSchema, workerSchema } from '@fliwright/cloud-protocol';
 const secret = z
   .string()
   .min(1)
@@ -46,27 +46,6 @@ export const serverConfigSchema = z
       .int()
       .positive()
       .default(100 * 1024 ** 3),
-  })
-  .strict();
-export const workerConfigSchema = z
-  .object({
-    serverUrl: z.string().url(),
-    tokenEnv: z.string().min(1),
-    workerId: z.string().min(1),
-    slotId: z.string().min(1),
-    deviceId: z.string().min(1),
-    root: z.string().min(1),
-    flutterBin: z.string().default('flutter'),
-    resetCommands: z
-      .array(
-        commandSchema.extend({
-          acceptExitCodes: z.array(z.number().int()).optional(),
-        }),
-      )
-      .min(1),
-    allowedEnv: z.array(z.string()).default([]),
-    pollMs: z.number().int().min(500).default(2000),
-    heartbeatMs: z.number().int().min(500).max(10000).default(5000),
   })
   .strict();
 export const clientConfigSchema = z

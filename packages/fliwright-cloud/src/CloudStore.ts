@@ -9,6 +9,10 @@ import {
   workerSchema,
   outcomeSchema,
   resultSchema,
+  deviceInventorySchema,
+  deviceSettingsSchema,
+  type ManagedDevice,
+  type DeviceSettings,
   type ApplicationTarget,
   type WorkerConfig,
   type Submission,
@@ -20,7 +24,7 @@ import {
   type LeaseKey,
   type Outcome,
   type RequestState,
-} from './contracts.js';
+} from '@fliwright/cloud-protocol';
 
 type Row = Record<string, unknown>;
 export const digest = (value: string | Buffer) =>
@@ -42,14 +46,15 @@ export class CloudStore {
     this.db.exec(
       'PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;',
     );
-    const version = Number(
-      (this.db.prepare('PRAGMA user_version').get() as Row).user_version,
-    );
-    if (version > 1) throw new Error('Unsupported cloud database version');
     this.transaction(() => {
+      const version = Number(
+        (this.db.prepare('PRAGMA user_version').get() as Row).user_version,
+      );
+      if (version > 3) throw new Error('Unsupported cloud database version');
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS targets(id TEXT PRIMARY KEY, data TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS workers(id TEXT PRIMARY KEY, paused INTEGER NOT NULL DEFAULT 0, seen_at INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS device_inventories(worker_id TEXT PRIMARY KEY REFERENCES workers(id) ON DELETE CASCADE, received_at INTEGER NOT NULL, data TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS slots(worker_id TEXT NOT NULL, id TEXT NOT NULL, device_id TEXT NOT NULL UNIQUE, targets TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'idle', generation INTEGER NOT NULL DEFAULT 0, attempt_id TEXT, PRIMARY KEY(worker_id,id));
         CREATE TABLE IF NOT EXISTS requests(id TEXT PRIMARY KEY, actor TEXT NOT NULL, idem TEXT NOT NULL, fingerprint TEXT NOT NULL, created_at INTEGER NOT NULL, queued_at INTEGER NOT NULL, state TEXT NOT NULL, data TEXT NOT NULL, UNIQUE(actor,idem));
         CREATE INDEX IF NOT EXISTS request_queue ON requests(state,queued_at,created_at);
@@ -59,7 +64,17 @@ export class CloudStore {
         CREATE TABLE IF NOT EXISTS publications(id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL UNIQUE, request_id TEXT NOT NULL, state TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, data TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS shares(id TEXT PRIMARY KEY, bundle_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0, sensitive INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS share_sessions(token_hash TEXT PRIMARY KEY, share_id TEXT NOT NULL, expires_at INTEGER NOT NULL);
-        PRAGMA user_version=1;
+      `);
+      if (version < 3)
+        this.db.exec(`
+        ALTER TABLE slots RENAME TO slots_old;
+        CREATE TABLE slots(worker_id TEXT NOT NULL, id TEXT NOT NULL, device_id TEXT NOT NULL, targets TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'idle', generation INTEGER NOT NULL DEFAULT 0, attempt_id TEXT, registry_id TEXT UNIQUE, runtime_device_id TEXT, runtime_seen_at INTEGER, PRIMARY KEY(worker_id,id));
+        INSERT INTO slots(worker_id,id,device_id,targets,state,generation,attempt_id) SELECT worker_id,id,device_id,targets,state,generation,attempt_id FROM slots_old;
+        DROP TABLE slots_old;
+      `);
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS managed_devices(id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workers(id), identity TEXT NOT NULL, native_id TEXT NOT NULL, observation TEXT NOT NULL, last_seen_at INTEGER NOT NULL, present INTEGER NOT NULL, settings TEXT NOT NULL, UNIQUE(worker_id,identity));
+        PRAGMA user_version=3;
       `);
     });
   }
@@ -86,23 +101,17 @@ export class CloudStore {
           .run(target.id, JSON.stringify(target));
       const registered = workers.map((w) => workerSchema.parse(w));
       for (const worker of registered) {
-        this.db
+        const inserted = this.db
           .prepare('INSERT OR IGNORE INTO workers(id) VALUES(?)')
           .run(worker.id);
+        if (!inserted.changes) continue;
         for (const slot of worker.slots) {
           if (slot.targets.some((t) => !this.targets().some((p) => p.id === t)))
             throw new CloudError(400, 'Unknown slot target');
-          const old = this.slot(worker.id, slot.id, false);
-          if (
-            old &&
-            old.state !== 'idle' &&
-            (old.deviceId !== slot.deviceId ||
-              JSON.stringify(old.targets) !== JSON.stringify(slot.targets))
-          )
-            throw new CloudError(409, 'Cannot reconfigure an occupied slot');
+          // Configuration is a bootstrap seed. Database-owned settings survive restart.
           this.db
             .prepare(
-              'INSERT INTO slots(worker_id,id,device_id,targets) VALUES(?,?,?,?) ON CONFLICT(worker_id,id) DO UPDATE SET device_id=excluded.device_id,targets=excluded.targets',
+              'INSERT OR IGNORE INTO slots(worker_id,id,device_id,targets) VALUES(?,?,?,?)',
             )
             .run(
               worker.id,
@@ -111,26 +120,10 @@ export class CloudStore {
               JSON.stringify(slot.targets),
             );
         }
-        for (const previous of this.listWorkers().find(
-          (w) => w.id === worker.id,
-        )!.slots) {
-          if (worker.slots.some((s) => s.id === previous.id)) continue;
-          if (previous.state !== 'idle')
-            throw new CloudError(
-              409,
-              'Cannot remove an occupied or quarantined slot',
-            );
-          this.db
-            .prepare('DELETE FROM slots WHERE worker_id=? AND id=?')
-            .run(worker.id, previous.id);
-        }
       }
-      // Removed workers stay visible for recovery but can no longer acquire work.
-      for (const w of this.listWorkers())
-        if (!registered.some((c) => c.id === w.id))
-          this.db.prepare('UPDATE workers SET paused=1 WHERE id=?').run(w.id);
     });
   }
+
   targets(): ApplicationTarget[] {
     return (
       this.db.prepare('SELECT data FROM targets ORDER BY id').all() as Row[]
@@ -301,6 +294,206 @@ export class CloudStore {
       attemptId: r.attempt_id as string | null,
     };
   }
+  recordDeviceInventory(workerId: string, input: unknown): void {
+    const inventory = deviceInventorySchema.parse(input);
+    if (!this.db.prepare('SELECT id FROM workers WHERE id=?').get(workerId))
+      throw new CloudError(404, 'Worker not registered');
+    this.transaction(() => {
+      this.db
+        .prepare(
+          'INSERT INTO device_inventories VALUES(?,?,?) ON CONFLICT(worker_id) DO UPDATE SET received_at=excluded.received_at,data=excluded.data',
+        )
+        .run(workerId, this.now(), JSON.stringify(inventory));
+      this.db
+        .prepare('UPDATE managed_devices SET present=0 WHERE worker_id=?')
+        .run(workerId);
+      for (const observation of inventory.devices) {
+        // AVD names survive the avd:name -> emulator-port transition.
+        const identity = JSON.stringify([
+          observation.platform,
+          observation.kind,
+          observation.platform === 'android' &&
+          observation.kind === 'simulator' &&
+          observation.avdName
+            ? `avd:${observation.avdName}`
+            : observation.id,
+        ]);
+        const id = digest(JSON.stringify([workerId, identity]));
+        const existing = this.db
+          .prepare('SELECT id FROM managed_devices WHERE id=?')
+          .get(id);
+        const seed = !existing
+          ? (this.db
+              .prepare(
+                'SELECT * FROM slots WHERE worker_id=? AND device_id=? AND registry_id IS NULL',
+              )
+              .get(workerId, observation.id) as Row | undefined)
+          : undefined;
+        const settings: DeviceSettings = {
+          alias: '',
+          tags: [],
+          managed: !!seed,
+          enabled: !!seed,
+          targets: seed ? JSON.parse(String(seed.targets)) : [],
+          slotId: seed ? String(seed.id) : null,
+        };
+        this.db
+          .prepare(
+            'INSERT INTO managed_devices VALUES(?,?,?,?,?,?,1,?) ON CONFLICT(id) DO UPDATE SET native_id=excluded.native_id,observation=excluded.observation,last_seen_at=excluded.last_seen_at,present=1',
+          )
+          .run(
+            id,
+            workerId,
+            identity,
+            observation.id,
+            JSON.stringify(observation),
+            this.now(),
+            JSON.stringify(settings),
+          );
+        if (seed)
+          this.db
+            .prepare(
+              'UPDATE slots SET registry_id=? WHERE worker_id=? AND id=?',
+            )
+            .run(id, workerId, String(seed.id));
+      }
+    });
+  }
+  listDevices(): ManagedDevice[] {
+    const workers = this.listWorkers();
+    return (
+      this.db
+        .prepare('SELECT * FROM managed_devices ORDER BY worker_id,id')
+        .all() as Row[]
+    ).map((row) => {
+      const settings = deviceSettingsSchema.parse(
+        JSON.parse(String(row.settings)),
+      );
+      const worker = workers.find((w) => w.id === row.worker_id)!;
+      const slot = settings.slotId
+        ? worker.slots.find((s) => s.id === settings.slotId)
+        : undefined;
+      const runtime = slot
+        ? (this.db
+            .prepare(
+              'SELECT runtime_device_id,runtime_seen_at FROM slots WHERE worker_id=? AND id=? AND registry_id=?',
+            )
+            .get(worker.id, slot.id, String(row.id)) as Row | undefined)
+        : undefined;
+      const device: ManagedDevice = {
+        id: String(row.id),
+        workerId: worker.id,
+        nativeId: String(row.native_id),
+        observation: JSON.parse(String(row.observation)),
+        lastSeenAt: Number(row.last_seen_at),
+        present: !!row.present,
+        stale:
+          !worker.inventory ||
+          worker.inventory.stale ||
+          this.now() - Number(row.last_seen_at) >= 90000,
+        settings,
+        slot,
+        runtimeSeenAt:
+          runtime?.runtime_seen_at == null
+            ? undefined
+            : Number(runtime.runtime_seen_at),
+        blockers: [],
+        ready: false,
+      };
+      const reasons = device.blockers;
+      if (!settings.managed) reasons.push('unmanaged');
+      if (!settings.enabled) reasons.push('disabled');
+      if (!device.present) reasons.push('missing');
+      if (device.stale) reasons.push('stale');
+      if (device.observation.state !== 'online') reasons.push('not-online');
+      if (worker.paused) reasons.push('worker-paused');
+      if (!slot) reasons.push('no-slot');
+      if (
+        !settings.targets.some((id) => this.targets().some((t) => t.id === id))
+      )
+        reasons.push('no-targets');
+      if (slot) {
+        if (slot.state !== 'idle') reasons.push(slot.state);
+        if (
+          device.runtimeSeenAt === undefined ||
+          this.now() - device.runtimeSeenAt >= 30000
+        )
+          reasons.push('runtime-missing');
+        else if (runtime?.runtime_device_id !== device.nativeId)
+          reasons.push('runtime-mismatch');
+      }
+      device.ready = reasons.length === 0;
+      return device;
+    });
+  }
+  getDevice(id: string): ManagedDevice {
+    const device = this.listDevices().find((d) => d.id === id);
+    if (!device) throw new CloudError(404, 'Device not found');
+    return device;
+  }
+  updateDevice(id: string, input: unknown, actor: string): ManagedDevice {
+    const settings = deviceSettingsSchema.parse(input);
+    return this.transaction(() => {
+      const device = this.getDevice(id);
+      if (
+        settings.targets.some((id) => !this.targets().some((t) => t.id === id))
+      )
+        throw new CloudError(400, 'Unknown device target');
+      if (!settings.managed && settings.slotId)
+        throw new CloudError(400, 'Unmanaged device cannot have a slot');
+      const old = device.slot;
+      const bindingChanged =
+        device.settings.slotId !== settings.slotId ||
+        device.settings.managed !== settings.managed ||
+        JSON.stringify(device.settings.targets) !==
+          JSON.stringify(settings.targets);
+      if (old && old.state !== 'idle' && bindingChanged)
+        throw new CloudError(
+          409,
+          'Cannot reconfigure an occupied or quarantined slot',
+        );
+      if (settings.slotId) {
+        const occupied = this.db
+          .prepare(
+            'SELECT registry_id,state FROM slots WHERE worker_id=? AND id=?',
+          )
+          .get(device.workerId, settings.slotId) as Row | undefined;
+        if (occupied && settings.slotId !== old?.id) {
+          if (occupied.state !== 'idle')
+            throw new CloudError(
+              409,
+              'Cannot reconfigure an occupied or quarantined slot',
+            );
+          if (occupied.registry_id)
+            throw new CloudError(
+              409,
+              'Slot already configured; choose a different slot ID',
+            );
+        }
+      }
+      if (old && old.id !== settings.slotId)
+        this.db
+          .prepare('DELETE FROM slots WHERE worker_id=? AND id=?')
+          .run(device.workerId, old.id);
+      if (settings.slotId)
+        this.db
+          .prepare(
+            "INSERT INTO slots(worker_id,id,device_id,targets,registry_id) VALUES(?,?,?,?,?) ON CONFLICT(worker_id,id) DO UPDATE SET targets=excluded.targets,registry_id=excluded.registry_id,device_id=CASE WHEN slots.state='idle' THEN excluded.device_id ELSE slots.device_id END",
+          )
+          .run(
+            device.workerId,
+            settings.slotId,
+            device.nativeId,
+            JSON.stringify(settings.targets),
+            id,
+          );
+      this.db
+        .prepare('UPDATE managed_devices SET settings=? WHERE id=?')
+        .run(JSON.stringify(settings), id);
+      this.event(null, 'device-updated', { actor, deviceId: id, settings });
+      return this.getDevice(id);
+    });
+  }
   listWorkers(): ExecutionWorker[] {
     return (
       this.db.prepare('SELECT * FROM workers ORDER BY id').all() as Row[]
@@ -320,7 +513,26 @@ export class CloudStore {
           : this.now() - seenAt >= 30000
             ? 'offline'
             : 'healthy';
-      return { id: String(r.id), paused: !!r.paused, seenAt, health, slots };
+      const snapshot = this.db
+        .prepare(
+          'SELECT received_at,data FROM device_inventories WHERE worker_id=?',
+        )
+        .get(String(r.id)) as Row | undefined;
+      const inventory = snapshot
+        ? {
+            ...deviceInventorySchema.parse(JSON.parse(String(snapshot.data))),
+            receivedAt: Number(snapshot.received_at),
+            stale: this.now() - Number(snapshot.received_at) >= 90000,
+          }
+        : undefined;
+      return {
+        id: String(r.id),
+        paused: !!r.paused,
+        seenAt,
+        health,
+        slots,
+        inventory,
+      };
     });
   }
   pauseWorker(workerId: string, paused: boolean, actor: string) {
@@ -333,17 +545,33 @@ export class CloudStore {
       this.event(null, 'worker-paused', { workerId, paused, actor });
     });
   }
-  claim(workerId: string, slotId: string): ExecutionLease | null {
+  claim(
+    workerId: string,
+    slotId: string,
+    runtimeDeviceId: string,
+  ): ExecutionLease | null {
     return this.transaction(() => {
       this.expireInside();
       const slot = this.slot(workerId, slotId)!;
       this.db
         .prepare('UPDATE workers SET seen_at=? WHERE id=?')
         .run(this.now(), workerId);
-      const worker = this.listWorkers().find((w) => w.id === workerId)!;
-      if (worker.paused || slot.state !== 'idle') return null;
-      const req = this.queue().find((r) =>
-        slot.targets.includes(r.input.targetId),
+      this.db
+        .prepare(
+          'UPDATE slots SET runtime_device_id=?,runtime_seen_at=? WHERE worker_id=? AND id=?',
+        )
+        .run(runtimeDeviceId, this.now(), workerId, slotId);
+      const device = this.listDevices().find(
+        (d) => d.workerId === workerId && d.settings.slotId === slotId,
+      );
+      if (!device?.ready || runtimeDeviceId !== device.nativeId) return null;
+      this.db
+        .prepare('UPDATE slots SET device_id=? WHERE worker_id=? AND id=?')
+        .run(runtimeDeviceId, workerId, slotId);
+      const req = this.queue().find(
+        (r) =>
+          device.settings.targets.includes(r.input.targetId) &&
+          this.targets().some((t) => t.id === r.input.targetId),
       );
       if (!req) return null;
       req.state = 'assigned';
@@ -371,7 +599,7 @@ export class CloudStore {
         slotId,
         generation: attempt.generation,
       });
-      return { ...attempt, request: req, deviceId: slot.deviceId };
+      return { ...attempt, request: req, deviceId: runtimeDeviceId };
     });
   }
   owned(key: LeaseKey): ExecutionAttempt {
@@ -419,6 +647,11 @@ export class CloudStore {
       this.db
         .prepare('UPDATE workers SET seen_at=? WHERE id=?')
         .run(this.now(), key.workerId);
+      this.db
+        .prepare(
+          'UPDATE slots SET runtime_seen_at=? WHERE worker_id=? AND id=?',
+        )
+        .run(this.now(), key.workerId, key.slotId);
       return {
         cancelRequested: req.state === 'cancel_requested',
         expiresAt: a.expiresAt,

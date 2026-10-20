@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cli"
 path: "packages/fliwright-cli"
-source_fingerprint: "a13fdd30898f2b27ea938a6af1e9aa60ae521856d6ca867b207087881d6e1540"
+source_fingerprint: "4b691498ff19d863ed6f51148145e5ee1dcc75d5fa60e24f19b1307d054e0455"
 generated: true
 ---
 
@@ -18,6 +18,7 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 - `@fliwright/core`
 - `@fliwright/tdd`
 - `@fliwright/vitest`
+- `@fliwright/devices`
 
 ### Must Not Own
 
@@ -98,6 +99,7 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 - `packages/fliwright-cli/src/commands/tdd.ts`
 - `packages/fliwright-cli/src/config.ts`
 - `packages/fliwright-cli/src/index.ts`
+- `packages/fliwright-cli/src/registry/devices.ts`
 - `packages/fliwright-cli/src/registry/finite.ts`
 - `packages/fliwright-cli/src/registry/flow-schemas.ts`
 - `packages/fliwright-cli/src/registry/flow.ts`

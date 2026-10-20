@@ -5,7 +5,9 @@ import {
   matchesStep,
   orderedSteps,
   parseLog,
+  screenshotPaths,
   buildTimeAxis,
+  createTimeScale,
   stepAtTime,
   type ReplayNode,
 } from '../src/web/replay-model.js';
@@ -20,6 +22,41 @@ const step = (id: string, extra: Partial<ReplayNode> = {}): ReplayNode => ({
 });
 
 describe('report replay evidence', () => {
+  it('maps unequal durations, idle gaps and pointer positions on the same elapsed scale', () => {
+    const scale = createTimeScale(13000);
+    expect(scale(1300)).toBeCloseTo(10);
+    expect(scale(6500)).toBeCloseTo(50);
+    expect(scale(7800) - scale(6500)).toBeCloseTo(10);
+    expect(scale(6500) - scale(1300)).toBeCloseTo(40);
+    expect(scale.invert(60)).toBeCloseTo(7800);
+    expect(scale.invert(-10)).toBe(0);
+    expect(scale.invert(110)).toBe(13000);
+    expect(scale.domain()).toEqual([0, 13000]);
+    expect(createTimeScale(0)(0)).toBe(0);
+  });
+
+  it('uses recorded end timestamps for geometry when duration metadata disagrees', () => {
+    const axis = buildTimeAxis(
+      [
+        step('recorded', {
+          endedAt: '2026-10-19T01:00:02Z',
+          durationMs: 10000,
+        }),
+        step('duration-only', {
+          startedAt: '2026-10-19T01:00:03Z',
+          durationMs: 1000,
+        }),
+      ],
+      { endedAt: '2026-10-19T01:00:13Z' },
+    );
+    expect(axis.durationMs).toBe(13000);
+    expect(axis.entries.map(({ startMs, endMs }) => [startMs, endMs])).toEqual([
+      [0, 2000],
+      [3000, 4000],
+    ]);
+    expect(axis.ticks).toEqual([0, 2000, 4000, 6000, 8000, 10000, 12000]);
+  });
+
   it('places nested and overlapping steps on a shared elapsed-time axis', () => {
     const nodes = [
       step('parent', { endedAt: '2026-10-19T01:00:10Z' }),
@@ -149,5 +186,22 @@ describe('report replay evidence', () => {
       { message: 'plain log' },
       { message: 'null' },
     ]);
+  });
+
+  it('shares archived screenshot order between the preview and filmstrip without duplicate failure images', () => {
+    const files = ['tests/a/first.PNG', 'tests/a/second.webp', 'tests/a/snapshot.json'];
+    const node = step('capture', {
+      artifacts: [
+        { kind: 'screenshot', path: 'first.PNG' },
+        { kind: 'snapshot', path: 'snapshot.json' },
+        { kind: 'screenshot', path: 'https://other/private.png' },
+        { kind: 'screenshot', path: 'missing.png' },
+        { kind: 'screenshot', path: 'second.webp' },
+      ],
+      error: { code: 'unknown', title: 'failed', message: 'failed', recoveryHints: [],
+        appState: { screenshotPath: 'first.PNG' } },
+    });
+    expect(screenshotPaths(node, 'tests/a', files)).toEqual(files.slice(0, 2));
+    expect(screenshotPaths(undefined, 'tests/a', files)).toEqual([]);
   });
 });

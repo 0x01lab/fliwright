@@ -20,6 +20,10 @@ other Harness document duplicates those rules.
 
 | Area | Owns | Must Not Own |
 | --- | --- | --- |
+| `packages/fliwright-cloud` | Central queue, leases, device policies, reports and browser administration | Host scanning, local execution or device reset |
+| `packages/fliwright-cloud-worker` | CLI-started host discovery/reporting, supervised execution, cleanup and upload | Server persistence, browser UI or central scheduling |
+| `packages/fliwright-cloud-protocol` | Shared wire schemas, HTTP client and artifact upload path policy | Host tools, execution or server persistence |
+| `packages/fliwright-devices` | Host iOS/Android physical device and simulator discovery, normalized state and tooling diagnostics | App launch, cloud scheduling, slot leases, reset policies, CLI or editor UX |
 | `packages/fliwright-core` | Reusable automation runtime, VM-service client protocol, shared models | CLI, MCP, editor UX, or in-app Dart instrumentation |
 | `packages/fliwright-bridge` | Flutter-side `ext.fliwright.*` instrumentation and app interaction | TypeScript orchestration or user-facing transports |
 | `packages/fliwright-vitest` | Vitest fixtures, hooks, reporters, test lifecycle integration | Core automation semantics or transport workflows |

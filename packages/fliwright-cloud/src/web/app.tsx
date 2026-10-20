@@ -1,19 +1,50 @@
+import {
+  createBrowserHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Link,
+  Outlet,
+  RouterProvider,
+  useLocation,
+  useNavigate,
+  useSearch,
+  type RouterHistory,
+} from '@tanstack/react-router';
+import { Badge as UiBadge } from './components/ui/badge.js';
+import { Card } from './components/ui/card.js';
+import { Label } from './components/ui/label.js';
+import { Input } from './components/ui/input.js';
+import { Button } from './components/ui/button.js';
+import { NativeSelect } from './components/ui/native-select.js';
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuTrigger,
+  NavigationMenuContent,
+  navigationMenuTriggerStyle,
+} from './components/ui/navigation-menu.js';
+import { Checkbox } from './components/ui/checkbox.js';
+import { Textarea } from './components/ui/textarea.js';
 import React, {
   useEffect,
   useState,
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { createRoot } from 'react-dom/client';
 import type { ReportView } from '../ReportStore.js';
 import type {
   ExecutionAttempt,
   ExecutionWorker,
   TestRequest,
-} from '../contracts.js';
-import { Icon, StageStrip } from './ui.js';
+} from '@fliwright/cloud-protocol';
+import { Icon, stageLabel } from './ui.js';
 import { Replay } from './Replay.js';
-import './style.css';
+import { api, useData } from './data.js';
+import { Devices, DeviceDetail, deviceFilters } from './Devices.js';
+import { TestBoard } from './TestBoard.js';
 
 type Target = {
   id: string;
@@ -58,6 +89,9 @@ const labels: Record<string, string> = {
   healthy: '在线',
   offline: '已离线',
   unseen: '尚未连接',
+  complete: '完整',
+  partial: '部分缺失',
+  disabled: '未采集',
 };
 const text = (v: unknown): string =>
   v === undefined || v === null
@@ -70,30 +104,38 @@ const text = (v: unknown): string =>
 const time = (v: number) => new Date(v).toLocaleString('zh-CN');
 const terminal = (state: string) =>
   ['completed', 'cancelled', 'infrastructure_failed'].includes(state);
-async function api<T>(
-  path: string,
-  method = 'GET',
-  body?: unknown,
-  key?: string,
-): Promise<T> {
-  const response = await fetch(path, {
-    method,
-    headers: {
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      ...(key ? { 'idempotency-key': key } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error ?? '请求失败');
-  return data as T;
-}
 function Badge({ value }: { value: string }) {
+  const tone = ['passed', 'healthy', 'idle', 'clean', 'published'].includes(
+    value,
+  )
+    ? 'bg-pass-bg text-pass-ink'
+    : ['failed', 'infrastructure_failed', 'publish_failed'].includes(value)
+      ? 'bg-fail-bg text-fail-ink'
+      : [
+            'running',
+            'preparing',
+            'assigned',
+            'busy',
+            'finalizing',
+            'staging',
+          ].includes(value)
+        ? 'bg-run-bg text-run-ink'
+        : ['quarantined', 'cancel_requested'].includes(value)
+          ? 'bg-warn-bg text-warn-ink'
+          : value === 'completed'
+            ? 'bg-done-bg text-done-ink'
+            : 'bg-idle-bg text-idle-ink';
   return (
-    <span className={`badge ${value}`}>
-      <span className="status-dot" aria-hidden="true" />
+    <UiBadge
+      variant="secondary"
+      className={`gap-1.5 whitespace-nowrap border-transparent ${tone}`}
+    >
+      <span
+        className="size-1.5 shrink-0 rounded-full bg-current"
+        aria-hidden="true"
+      />
       {labels[value] ?? value}
-    </span>
+    </UiBadge>
   );
 }
 function ErrorBox({ error }: { error: string }) {
@@ -106,35 +148,6 @@ function ErrorBox({ error }: { error: string }) {
 function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
 }
-function useData<T>(path: string, refresh = 0, enabled = true) {
-  const [data, setData] = useState<T>(),
-    [error, setError] = useState(''),
-    [version, setVersion] = useState(0);
-  useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    setData(undefined);
-    setError('');
-    const load = () =>
-      api<T>(path)
-        .then((value) => {
-          if (active) {
-            setData(value);
-            setError('');
-          }
-        })
-        .catch((e) => {
-          if (active) setError(e.message);
-        });
-    void load();
-    const timer = refresh ? setInterval(load, refresh) : undefined;
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [path, refresh, version, enabled]);
-  return { data, error, reload: () => setVersion((v) => v + 1) };
-}
 function PageTitle({
   eyebrow,
   title,
@@ -146,22 +159,21 @@ function PageTitle({
 }) {
   const descriptions: Record<string, string> = {
     'TEAM OVERVIEW': '统一查看测试运行、任务队列与设备状态。',
-    'RUN HISTORY': '每一次运行的状态、提交与测试结果。',
-    'TEST REPORTS': '浏览已完成的运行，查看步骤回放与归档证据。',
-    'EXECUTION QUEUE': '任务按提交顺序调度，同一设备同时只执行一个任务。',
+    'TEST REPORTS': '按测试结果浏览已完成的运行，点击卡片查看步骤回放与归档证据。',
+    'EXECUTION QUEUE': '从待测试到测试结果，状态自动更新。点击卡片查看详情。',
     'NEW EXECUTION': '选择应用、固定的 Git 提交、测试套件与场景。',
-    'EXECUTION WORKERS': '查看 Worker 心跳、设备占用与调度状态。',
+    'EXECUTION WORKERS': '查看执行主机心跳、检测工具诊断与槽位容量。',
     'APPLICATION TARGETS': '管理已注册应用及其测试套件与场景。',
   };
   return (
-    <div className="page-head">
+    <div className="flex flex-wrap items-start gap-3">
       <div>
-        <h1>{title}</h1>
+        <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         {descriptions[eyebrow] && (
           <p className="lede">{descriptions[eyebrow]}</p>
         )}
       </div>
-      <div className="actions">{children}</div>
+      <div className="ml-auto flex flex-wrap gap-2">{children}</div>
     </div>
   );
 }
@@ -177,49 +189,41 @@ function Layout({
     0,
     !shared,
   );
-  const { data: workers } = useData<ExecutionWorker[]>(
-    '/api/workers',
-    shared ? 0 : 5000,
-    !shared,
-  );
   const [theme, setTheme] = useState(() => {
     try {
-      return localStorage.getItem('cloud-theme') === 'dark' ? 'dark' : 'light';
+      return localStorage.getItem('cloud-theme') === 'light' ? 'light' : 'dark';
     } catch {
-      return 'light';
+      return 'dark';
     }
   });
-  const path = window.location.pathname;
-  const groups = [
-    {
-      name: '运行',
-      items: [
-        ['/', '概览', 'gauge'],
-        ['/runs', '运行记录', 'list'],
-        ['/queue', '测试队列', 'clock'],
-        ['/workers', '设备与 Worker', 'device'],
-      ],
-    },
-    { name: '报告', items: [['/reports', '测试报告', 'doc']] },
-    {
-      name: '管理',
-      items: [
-        ['/new', '提交测试', 'send'],
-        ['/targets', '应用配置', 'settings'],
-      ],
-    },
-  ];
-  const current = path.startsWith('/requests/')
-    ? '/runs'
-    : path.startsWith('/reports/')
-      ? '/reports'
-      : path;
+  const path = useLocation({ select: (location) => location.pathname });
+  const navigate = useNavigate();
+  const [navigation, setNavigation] = useState('');
+  const mainLinks = [
+    ['/queue', '测试任务'],
+  ] as const;
+  const configurationLinks = [
+    ['/devices', '设备管理', 'device', '管理测试设备与调度策略'],
+    ['/workers', 'Worker 主机', 'cpu', '查看执行主机与槽位状态'],
+    ['/targets', '应用配置', 'settings', '管理应用、测试套件与场景'],
+    ['/reports', '测试报告', 'doc', '查看已归档的测试结果与证据'],
+  ] as const;
+  const current = path.startsWith('/requests/') || path === '/runs'
+    ? '/queue'
+    : path.startsWith('/devices/')
+      ? '/devices'
+      : path.startsWith('/reports/')
+        ? '/reports'
+        : path;
   const title = shared
     ? '分享报告'
-    : (groups.flatMap((g) => g.items).find(([url]) => url === current)?.[1] ??
+    : ([...mainLinks, ...configurationLinks].find(([url]) => url === current)?.[1] ??
       '运行详情');
+  const configurationActive = configurationLinks.some(([url]) => url === current);
+  useEffect(() => setNavigation(''), [path]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    document.documentElement.classList.toggle('dark', theme === 'dark');
     try {
       localStorage.setItem('cloud-theme', theme);
     } catch {}
@@ -238,82 +242,92 @@ function Layout({
     return () => window.removeEventListener('keydown', key);
   }, []);
   return (
-    <div className="app">
+    <div className={`cloud-shell${['/runs', '/queue', '/reports'].includes(path) ? ' cloud-shell-board' : ''}`}>
       <a className="skip" href="#content">
         跳至内容
       </a>
-      <aside className="side">
-        <a className="brand" href={shared ? undefined : '/'}>
-          <span className="brand-mark">CT</span>
-          <span>
-            <span className="brand-name">云测平台</span>
-            <span className="brand-sub">Flutter 自动化测试</span>
-          </span>
-        </a>
-        <nav className="nav" aria-label="主导航">
+      <header className="app-header">
+        <div className="topbar">
+          <Link className="brand" to="/" aria-label="Fliwright Cloud 首页" disabled={shared}>
+            <span className="brand-mark" aria-hidden="true">Fw</span>
+            <span className="brand-name">Fliwright <span>Cloud</span></span>
+          </Link>
           {shared ? (
-            <div className="share-label">只读报告分享</div>
+            <span className="share-label">只读报告分享</span>
           ) : (
-            groups.map((group) => (
-              <div className="nav-group" key={group.name}>
-                <div className="nav-label">{group.name}</div>
-                {group.items.map(([url, label, icon]) => (
-                  <a
-                    className="nav-item"
-                    href={url}
-                    key={url}
-                    aria-current={current === url ? 'page' : undefined}
-                  >
-                    <Icon name={icon} />
-                    {label}
-                  </a>
+            <NavigationMenu
+              aria-label="主导航"
+              value={navigation}
+              onValueChange={setNavigation}
+              className="main-navigation shrink-0 flex-none"
+            >
+              <NavigationMenuList>
+                {mainLinks.map(([url, label]) => (
+                  <NavigationMenuItem key={url}>
+                    <NavigationMenuLink
+                      asChild
+                      active={current === url}
+                      className={navigationMenuTriggerStyle()}
+                    >
+                      <Link to={url}>{label}</Link>
+                    </NavigationMenuLink>
+                  </NavigationMenuItem>
                 ))}
-              </div>
-            ))
+                <NavigationMenuItem value="configuration">
+                  <NavigationMenuTrigger
+                    className={configurationActive ? 'configuration-active bg-primary/10 text-primary' : undefined}
+                  >
+                    配置
+                  </NavigationMenuTrigger>
+                  <NavigationMenuContent className="w-[260px] md:w-[260px]">
+                    <ul className="grid gap-1 p-2">
+                      {configurationLinks.map(([url, label, icon, description]) => (
+                        <li key={url}>
+                          <NavigationMenuLink
+                            asChild
+                            active={current === url}
+                            onSelect={() => setNavigation('')}
+                          >
+                            <Link
+                              to={url}
+                              className="configuration-link"
+                              onClick={() => setNavigation('')}
+                            >
+                              <Icon name={icon} />
+                              <span>
+                                <b>{label}</b>
+                                <small>{description}</small>
+                              </span>
+                            </Link>
+                          </NavigationMenuLink>
+                        </li>
+                      ))}
+                    </ul>
+                  </NavigationMenuContent>
+                </NavigationMenuItem>
+              </NavigationMenuList>
+            </NavigationMenu>
           )}
-        </nav>
-        <div className="side-foot">
-          <div className="worker-card">
-            {workers?.map((w) => (
-              <div className="worker-line" key={w.id}>
-                <span className={`connection-dot ${w.health}`} />
-                <span className="nm">{w.id}</span>
-                <span className="st">
-                  {w.paused ? '已暂停' : labels[w.health]}
-                </span>
-              </div>
-            ))}
-            <p className="side-note">
-              {shared
-                ? '受限访问 · 只读证据'
-                : me
-                  ? `${me.name} · ${me.role}`
-                  : '等待团队登录'}
-            </p>
-          </div>
-        </div>
-      </aside>
-      <div className="main">
-        <header className="topbar">
-          <div className="crumb">
-            <b>{title}</b>
-            {/\/(requests|reports)\//.test(path) && (
-              <>
-                <span className="sep">/</span>
-                <code title={path.split('/').pop()}>
-                  {path.split('/').pop()?.slice(0, 12)}
-                </code>
-              </>
-            )}
-          </div>
-          <div className="spacer" />
           {!shared && (
-            <form className="search" action="/runs">
+            <form
+              className="search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const search = String(
+                  new FormData(event.currentTarget).get('search') ?? '',
+                ).slice(0, 200);
+                void navigate({
+                  to: '/queue',
+                  search: { search: search || undefined },
+                });
+              }}
+            >
               <Icon name="search" />
-              <label className="sr" htmlFor="global-search">
+              <Label className="sr-only" htmlFor="global-search">
                 搜索任务或报告
-              </label>
-              <input
+              </Label>
+              <Input
+                className="pl-9 pr-10"
                 id="global-search"
                 type="search"
                 name="search"
@@ -323,20 +337,26 @@ function Layout({
               <kbd>/</kbd>
             </form>
           )}
-          <button
-            className="btn btn-quiet btn-icon"
+          <Button
+            variant="ghost"
+            size="icon"
             aria-label={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
             title={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           >
             <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-          </button>
+          </Button>
           {!shared && (
             <>
-              <a className="btn btn-accent" href="/new">
-                <Icon name="plus" />
-                提交测试
-              </a>
+              <Button asChild variant="default" className="submit-test">
+                <Link
+                  to="/new"
+                  aria-current={current === '/new' ? 'page' : undefined}
+                >
+                  <Icon name="plus" />
+                  <span>提交测试</span>
+                </Link>
+              </Button>
               <span
                 className="current-user"
                 title={me ? `${me.name} · ${me.role}` : '未登录'}
@@ -346,14 +366,30 @@ function Layout({
               </span>
             </>
           )}
-        </header>
-        <main className="view" id="content">
-          <div className="page">{children}</div>
-        </main>
-      </div>
+        </div>
+      </header>
+      <main className="cloud-content" id="content" tabIndex={-1}>
+        {/\/(requests|reports)\//.test(path) && (
+          <div className="crumb">
+            {shared ? (
+              <b>{title}</b>
+            ) : (
+              <Link to={current === '/reports' ? '/reports' : '/queue'}>
+                {title}
+              </Link>
+            )}
+            <span className="sep">/</span>
+            <code title={path.split('/').pop()}>
+              {path.split('/').pop()?.slice(0, 12)}
+            </code>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }
+
 function Requests({
   overview = false,
   reportsOnly = false,
@@ -363,16 +399,18 @@ function Requests({
   reportsOnly?: boolean;
   history?: boolean;
 }) {
-  const [state, setState] = useState(
-      reportsOnly ? 'completed' : !overview && !history ? 'queued' : '',
-    ),
-    [search, setSearch] = useState(
-      new URLSearchParams(window.location.search)
-        .get('search')
-        ?.slice(0, 200) ?? '',
-    ),
+  const urlSearch = useSearch({
+    strict: false,
+    select: (search) => search.search ?? '',
+  });
+  const state = reportsOnly ? 'completed' : '';
+  const [search, setSearch] = useState(urlSearch),
     [offset, setOffset] = useState(0),
     [target, setTarget] = useState('');
+  useEffect(() => {
+    setSearch(urlSearch);
+    setOffset(0);
+  }, [urlSearch]);
   const params = new URLSearchParams({
     limit: overview ? '8' : '25',
     offset: String(offset),
@@ -389,39 +427,27 @@ function Requests({
   const { data: workers } = useData<ExecutionWorker[]>('/api/workers', 5000);
   return (
     <>
-      <PageTitle
-        eyebrow={
-          overview
-            ? 'TEAM OVERVIEW'
-            : reportsOnly
-              ? 'TEST REPORTS'
-              : history
-                ? 'RUN HISTORY'
-                : 'EXECUTION QUEUE'
-        }
-        title={
-          overview
-            ? '概览'
-            : reportsOnly
-              ? '测试报告'
-              : history
-                ? '运行记录'
-                : '测试队列'
-        }
-      >
-        <a className="btn btn-accent" href="/new">
-          <Icon name="plus" />
-          提交测试
-        </a>
-      </PageTitle>
+      {!history && (
+        <PageTitle
+          eyebrow={overview ? 'TEAM OVERVIEW' : reportsOnly ? 'TEST REPORTS' : 'EXECUTION QUEUE'}
+          title={overview ? '概览' : reportsOnly ? '测试报告' : '测试任务'}
+        >
+          <Button asChild variant="default">
+            <Link to="/new">
+              <Icon name="plus" />
+              提交测试
+            </Link>
+          </Button>
+        </PageTitle>
+      )}
       {overview && (
-        <div className="stats">
-          <div>
+        <div className="stats [&>div>span]:text-xs [&>div>span]:text-muted-foreground [&_strong]:text-2xl [&_strong]:font-semibold [&_strong]:tabular-nums">
+          <Card className="grid gap-1 p-3">
             <span>等待执行</span>
             <strong>{data?.queue.length ?? '—'}</strong>
             <small>按提交顺序调度</small>
-          </div>
-          <div>
+          </Card>
+          <Card className="grid gap-1 p-3">
             <span>正在执行</span>
             <strong>
               {workers
@@ -429,8 +455,8 @@ function Requests({
                 .filter((s) => s.state === 'busy').length ?? '—'}
             </strong>
             <small>设备独占，避免任务冲突</small>
-          </div>
-          <div>
+          </Card>
+          <Card className="grid gap-1 p-3">
             <span>可用槽位</span>
             <strong>
               {workers
@@ -439,23 +465,24 @@ function Requests({
                 .filter((s) => s.state === 'idle').length ?? '—'}
             </strong>
             <small>专用模拟器</small>
-          </div>
-          <div>
+          </Card>
+          <Card className="grid gap-1 p-3">
             <span>累计任务</span>
             <strong>{data?.total ?? '—'}</strong>
             <small>原始结果与证据留存</small>
-          </div>
+          </Card>
         </div>
       )}
       {overview && <OverviewActivity />}
-      <section className="panel">
+      <section className="request-board">
         <div className="panel-heading">
           <h2>
-            {overview ? '最近运行' : reportsOnly ? '运行历史' : '全部任务'}
+            {overview ? '最近运行' : '测试看板'}
           </h2>
           {!overview && (
             <div className="filters">
-              <input
+              <Input
+                className="w-full sm:w-[240px]"
                 aria-label="搜索任务"
                 placeholder="搜索提交、分支或任务 ID"
                 value={search}
@@ -464,7 +491,7 @@ function Requests({
                   setOffset(0);
                 }}
               />
-              <select
+              <NativeSelect
                 aria-label="筛选应用"
                 value={target}
                 onChange={(e) => {
@@ -478,106 +505,44 @@ function Requests({
                     {t.name}
                   </option>
                 ))}
-              </select>
-              <select
-                aria-label="筛选状态"
-                value={state}
-                onChange={(e) => {
-                  setState(e.target.value);
-                  setOffset(0);
-                }}
-              >
-                <option value="">所有状态</option>
-                {[
-                  'queued',
-                  'running',
-                  'completed',
-                  'cancelled',
-                  'infrastructure_failed',
-                ].map((s) => (
-                  <option key={s} value={s}>
-                    {labels[s]}
-                  </option>
-                ))}
-              </select>
+              </NativeSelect>
             </div>
           )}
         </div>
         <ErrorBox error={error} />
-        {data?.items.length ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>运行 / 场景</th>
-                  <th>提交</th>
-                  <th>状态</th>
-                  <th>结果</th>
-                  <th>提交时间</th>
-                  <th>发起人</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <a href={`/requests/${r.id}`}>
-                        <code className="request-id">#{r.id.slice(0, 8)}</code>
-                        <b>
-                          {targets?.find((t) => t.id === r.input.targetId)
-                            ?.name ?? r.input.targetId}
-                        </b>
-                      </a>
-                      <small>
-                        {r.input.suite} · {r.input.scenario}
-                      </small>
-                    </td>
-                    <td>
-                      <code>{r.input.commit.slice(0, 8)}</code>
-                      <small>
-                        {r.input.source?.branch ?? r.id.slice(0, 8)}
-                      </small>
-                    </td>
-                    <td>
-                      <Badge value={r.state} />
-                      {r.state === 'queued' && (
-                        <small>排队第 {data.queue.indexOf(r.id) + 1} 位</small>
-                      )}
-                    </td>
-                    <td>
-                      <Badge value={r.verdict} />
-                    </td>
-                    <td className="num muted">{time(r.createdAt)}</td>
-                    <td>{r.actor}</td>
-                    <td>
-                      <a href={`/requests/${r.id}`}>查看 →</a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : !error ? (
-          <Empty>
-            {data ? '暂无测试任务，提交一次测试开始记录。' : '正在加载…'}
-          </Empty>
-        ) : null}
+        <div className="board-caption">
+          <span>状态自动流转 · 点击卡片查看详情</span>
+          <span>{data ? `本页 ${data.items.length} 条 · 共 ${data.total} 条` : error ? '加载失败，稍后自动重试' : '正在加载…'}</span>
+        </div>
+        {(data || !error) && <TestBoard
+          items={data?.items ?? []}
+          queue={data?.queue ?? []}
+          targets={targets ?? []}
+          loading={!data && !error}
+          filtered={Boolean(search || target || offset)}
+        />}
+        {data?.total === 0 && !error && (
+          <Empty>{search || target ? '没有匹配的测试，请调整筛选条件。' : '暂无测试任务，提交一次测试开始记录。'}</Empty>
+        )}
         {!overview && data && (
           <div className="pagination">
-            <span>共 {data.total} 条任务</span>
-            <button
+            <span>第 {Math.floor(offset / 25) + 1} / {Math.max(1, Math.ceil(data.total / 25))} 页 · 列内数量为本页统计</span>
+            <Button
+              variant="secondary"
+              size="default"
               disabled={offset === 0}
               onClick={() => setOffset(Math.max(0, offset - 25))}
             >
               上一页
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
+              size="default"
               disabled={offset + 25 >= data.total}
               onClick={() => setOffset(offset + 25)}
             >
               下一页
-            </button>
+            </Button>
           </div>
         )}
       </section>
@@ -590,78 +555,46 @@ function Requests({
   );
 }
 function OverviewActivity() {
-  const { data } = useData<{ items: Array<Omit<TestRequest, 'target'>> }>(
-    '/api/requests?state=running&limit=8',
-    3000,
-  );
   const { data: workers } = useData<ExecutionWorker[]>('/api/workers', 5000);
   return (
     <>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>正在运行</h2>
-          <span className="sub">阶段与状态自动更新</span>
-          <div className="right">
-            <a className="btn btn-sm" href="/queue">
-              查看队列
-            </a>
-          </div>
-        </div>
-        {data?.items.length ? (
-          data.items.map((r) => <LiveRun key={r.id} id={r.id} />)
-        ) : (
-          <Empty>当前没有正在执行的测试。</Empty>
-        )}
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>设备与 Worker</h2>
-          <span className="sub">{workers?.length ?? '—'} 台执行机</span>
-          <div className="right">
-            <a className="btn btn-sm" href="/workers">
-              全部设备
-            </a>
-          </div>
-        </div>
-        <div className="panel-body grid-3">
-          {workers?.map((w) => (
-            <div className="device-overview" key={w.id}>
-              <div className="rowline">
-                <Icon name="cpu" />
-                <b>{w.id}</b>
-                <Badge value={w.health} />
-              </div>
-              {w.slots.map((slot) => (
-                <div className="rowline" key={slot.id}>
-                  <Icon name="device" />
-                  <span>{slot.deviceId}</span>
-                  <Badge value={slot.state} />
-                </div>
-              ))}
+      <Card asChild>
+        <section className="overflow-hidden">
+          <div className="panel-head">
+            <h2>设备与 Worker</h2>
+            <span className="sub">{workers?.length ?? '—'} 台执行机</span>
+            <div className="right">
+              <Button asChild variant="secondary" size="sm">
+                <Link to="/workers">全部设备</Link>
+              </Button>
             </div>
-          ))}
-          {!workers?.length && <p className="hint">尚无设备信息。</p>}
-        </div>
-      </section>
+          </div>
+          <div className="panel-body grid-3">
+            {workers?.map((w) => (
+              <div className="device-overview" key={w.id}>
+                <div className="rowline">
+                  <Icon name="cpu" />
+                  <b>{w.id}</b>
+                  <Badge value={w.health} />
+                </div>
+                {w.slots.map((slot) => (
+                  <div className="rowline" key={slot.id}>
+                    <Icon name="device" />
+                    <span>{slot.deviceId}</span>
+                    <Badge value={slot.state} />
+                  </div>
+                ))}
+              </div>
+            ))}
+            {!workers?.length && <p className="hint">尚无设备信息。</p>}
+          </div>
+        </section>
+      </Card>
     </>
   );
 }
-function LiveRun({ id }: { id: string }) {
-  const { data } = useData<Detail>(`/api/requests/${id}`, 3000);
-  return data ? (
-    <div className="panel-body stack">
-      <div className="rowline">
-        <b>{data.input.scenario}</b>
-        <code>#{id.slice(0, 8)}</code>
-        <a className="btn btn-sm push-right" href={`/requests/${id}`}>
-          观察运行 <Icon name="chevron" />
-        </a>
-      </div>
-      <StageStrip stage={data.attempts[data.attempts.length - 1]?.stage} />
-    </div>
-  ) : null;
-}
 function NewRequest() {
+  const navigate = useNavigate();
   const { data: targets, error: loadError } = useData<Target[]>('/api/targets');
   const [targetId, setTarget] = useState(''),
     [suite, setSuite] = useState(''),
@@ -687,7 +620,7 @@ function NewRequest() {
         },
         crypto.randomUUID(),
       );
-      window.location.assign(`/requests/${r.id}`);
+      await navigate({ to: '/requests/$id', params: { id: r.id } });
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -696,80 +629,251 @@ function NewRequest() {
   return (
     <>
       <PageTitle eyebrow="NEW EXECUTION" title="提交测试任务" />
-      <section className="panel form-panel">
-        <h2>选择测试配置</h2>
-        <p>提交后进入队列，等待专用设备执行。</p>
-        <ErrorBox error={loadError || error} />
-        <form onSubmit={submit}>
-          <label>
-            应用
-            <select
-              value={target?.id ?? ''}
-              onChange={(e) => {
-                setTarget(e.target.value);
-                setSuite('');
-                setScenario('');
-              }}
-            >
-              {targets?.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Git commit SHA
-            <input
-              required
-              pattern="[0-9a-f]{40}"
-              placeholder="完整的 40 位提交 SHA"
-              value={commit}
-              onChange={(e) => setCommit(e.target.value.trim())}
-            />
-            <small>固定提交用于准确复现测试。</small>
-          </label>
-          <div className="form-row">
-            <label>
-              测试套件
-              <select
-                value={suite || target?.suites[0] || ''}
-                onChange={(e) => setSuite(e.target.value)}
+      <Card asChild>
+        <section className="form-panel overflow-hidden">
+          <h2>选择测试配置</h2>
+          <p>提交后进入队列，等待专用设备执行。</p>
+          <ErrorBox error={loadError || error} />
+          <form onSubmit={submit}>
+            <Label>
+              应用
+              <NativeSelect
+                value={target?.id ?? ''}
+                onChange={(e) => {
+                  setTarget(e.target.value);
+                  setSuite('');
+                  setScenario('');
+                }}
               >
-                {target?.suites.map((s) => (
-                  <option key={s}>{s}</option>
+                {targets?.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
                 ))}
-              </select>
-            </label>
-            <label>
-              测试场景
-              <select
-                value={scenario || target?.scenarios[0] || ''}
-                onChange={(e) => setScenario(e.target.value)}
+              </NativeSelect>
+            </Label>
+            <Label>
+              Git commit SHA
+              <Input
+                required
+                pattern="[0-9a-f]{40}"
+                placeholder="完整的 40 位提交 SHA"
+                value={commit}
+                onChange={(e) => setCommit(e.target.value.trim())}
+              />
+              <small>固定提交用于准确复现测试。</small>
+            </Label>
+            <div className="form-row">
+              <Label>
+                测试套件
+                <NativeSelect
+                  value={suite || target?.suites[0] || ''}
+                  onChange={(e) => setSuite(e.target.value)}
+                >
+                  {target?.suites.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </NativeSelect>
+              </Label>
+              <Label>
+                测试场景
+                <NativeSelect
+                  value={scenario || target?.scenarios[0] || ''}
+                  onChange={(e) => setScenario(e.target.value)}
+                >
+                  {target?.scenarios.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </NativeSelect>
+              </Label>
+            </div>
+            <div className="form-actions">
+              <Link to="/queue">返回测试任务</Link>
+              <Button
+                variant="default"
+                size="default"
+                type="submit"
+                disabled={busy || !target}
               >
-                {target?.scenarios.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="form-actions">
-            <a href="/queue">返回队列</a>
-            <button className="primary" disabled={busy || !target}>
-              {busy ? '正在提交…' : '提交并加入队列'}
-            </button>
-          </div>
-        </form>
-      </section>
+                {busy ? '正在提交…' : '提交并加入队列'}
+              </Button>
+            </div>
+          </form>
+        </section>
+      </Card>
+    </>
+  );
+}
+function RequestAction({
+  request,
+  onChange,
+}: {
+  request: Detail;
+  onChange: () => void;
+}) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const finished = terminal(request.state);
+  async function action() {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await api<{ id: string }>(
+        `/api/requests/${request.id}/${finished ? 'rerun' : 'cancel'}`,
+        'POST',
+        undefined,
+        finished ? crypto.randomUUID() : undefined,
+      );
+      if (finished)
+        await navigate({ to: '/requests/$id', params: { id: result.id } });
+      else onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <Button
+        variant={finished ? 'default' : 'destructive'}
+        size="default"
+        disabled={busy || request.state === 'cancel_requested'}
+        onClick={action}
+      >
+        <Icon name={finished ? 'refresh' : 'x'} />
+        {busy ? '处理中…' : finished ? '重新运行' : '取消任务'}
+      </Button>
+      <ErrorBox error={error} />
     </>
   );
 }
 function RequestDetail({ id }: { id: string }) {
-  const {
-    data: r,
-    error,
-    reload,
-  } = useData<Detail>(`/api/requests/${id}`, 2000);
+  const navigate = useNavigate();
+  const { data: r, error, reload } = useData<Detail>(`/api/requests/${id}`, 2000);
+  const latest = r?.attempts[r.attempts.length - 1];
+  const report = r?.reports.filter((p) => p.state === 'published').at(-1);
+  const reportId =
+    r && report && (terminal(r.state) || report.attemptId === latest?.attemptId)
+      ? report.id
+      : undefined;
+  useEffect(() => {
+    if (reportId)
+      void navigate({
+        to: '/reports/$id',
+        params: { id: reportId },
+        replace: true,
+      });
+  }, [navigate, reportId]);
+  if (reportId) return <Empty>正在打开测试报告…</Empty>;
+  return (
+    <>
+      <ErrorBox error={error} />
+      {!r && !error && <Empty>正在加载任务状态…</Empty>}
+      {r && (
+        <>
+          <Card asChild>
+            <section className="sum">
+              <div className="sum-top">
+                <div className="sum-title">
+                  <h1>
+                    {r.input.scenario}
+                    <span className="id" title={id}>
+                      #{id.slice(0, 8)}
+                    </span>
+                  </h1>
+                  <p className="sub">
+                    {r.input.targetId} · {r.input.suite}
+                  </p>
+                </div>
+                <div className="sum-acts">
+                  <Badge value={r.state} />
+                  <Badge value={r.verdict} />
+                  <Button asChild variant="secondary">
+                    <Link to="/queue">
+                      <Icon name="list" />
+                      返回测试任务
+                    </Link>
+                  </Button>
+                  <RequestAction request={r} onChange={reload} />
+                </div>
+              </div>
+              <div className="execution-status" role="status">
+                <span>
+                  {terminal(r.state)
+                    ? labels[r.state]
+                    : stageLabel(latest?.stage)}
+                </span>
+                {latest && <span>执行 #{latest.number}</span>}
+                {r.queuePosition > 0 && <span>队列第 {r.queuePosition} 位</span>}
+                <code title={r.input.commit}>{r.input.commit.slice(0, 8)}</code>
+                <span>{time(r.createdAt)}</span>
+              </div>
+            </section>
+          </Card>
+          {latest?.outcome?.error && (
+            <div className="note warn" role="alert">
+              <Icon name="alert" />
+              {latest.outcome.error}
+            </div>
+          )}
+          <Card asChild>
+            <section className="overflow-hidden">
+              <div className="panel-head">
+                <h2>测试报告</h2>
+              </div>
+              <Empty>
+                {terminal(r.state)
+                  ? '此运行没有已发布的报告。可查看执行尝试与运行动态了解原因。'
+                  : '任务执行中，报告发布后将自动打开测试报告。'}
+              </Empty>
+            </section>
+          </Card>
+          <RequestDiagnostics request={r} />
+        </>
+      )}
+    </>
+  );
+}
+function DiagnosticSection({
+  title,
+  className,
+  embedded,
+  open,
+  children,
+}: {
+  title: string;
+  className: string;
+  embedded: boolean;
+  open?: boolean;
+  children: ReactNode;
+}) {
+  return embedded ? (
+    <section className={`${className} diagnostic-section`}>
+      <h3>{title}</h3>
+      {children}
+    </section>
+  ) : (
+    <details className={className} open={open}>
+      <summary>{title}</summary>
+      {children}
+    </details>
+  );
+}
+function RequestDiagnostics({
+  request: r,
+  currentReportId,
+  panel,
+}: {
+  request: Detail;
+  currentReportId?: string;
+  panel?: 'run' | 'attempts' | 'events';
+}) {
+  const id = r.id;
+  const latest = r.attempts[r.attempts.length - 1];
+  const published = r.reports.filter((p) => p.state === 'published');
   const [events, setEvents] = useState<
     Array<{
       seq: number;
@@ -778,12 +882,10 @@ function RequestDetail({ id }: { id: string }) {
       data: Record<string, unknown>;
     }>
   >([]);
-  const [actionError, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [reportId, setReportId] = useState('');
   const [eventSearch, setEventSearch] = useState('');
   const [streamState, setStreamState] = useState('连接中');
   useEffect(() => {
+    if (panel && panel !== 'events') return;
     const stream = new EventSource(`/api/requests/${id}/events`);
     stream.onopen = () => setStreamState('已连接');
     stream.onerror = () => setStreamState('连接中断，正在重连');
@@ -798,295 +900,168 @@ function RequestDetail({ id }: { id: string }) {
       } catch {}
     };
     return () => stream.close();
-  }, [id]);
-  async function action(name: string) {
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      const result = await api<{ id: string }>(
-        `/api/requests/${id}/${name}`,
-        'POST',
-        undefined,
-        name === 'rerun' ? crypto.randomUUID() : undefined,
-      );
-      if (name === 'rerun') window.location.assign(`/requests/${result.id}`);
-      else reload();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  const latest = r?.attempts[r.attempts.length - 1];
-  const published = r?.reports.filter((p) => p.state === 'published') ?? [];
-  const activeReport =
-    published.find((p) => p.id === reportId) ?? published[published.length - 1];
+  }, [id, panel]);
   return (
     <>
-      <ErrorBox error={error || actionError} />
-      {!r && !error && <Empty>正在加载运行详情…</Empty>}
-      {r && (
-        <>
-          <section className="sum">
-            <div className="sum-top">
-              <div className="sum-title">
-                <h1>
-                  {r.input.scenario}
-                  <span className="id" title={id}>
-                    #{id.slice(0, 8)}
-                  </span>
-                </h1>
-                <p className="sub">
-                  {r.input.targetId} · {r.input.suite}
-                </p>
-              </div>
-              <div className="sum-acts">
-                <Badge value={r.state} />
-                <Badge value={r.verdict} />
-                <a className="btn" href="/runs">
-                  <Icon name="list" />
-                  返回列表
-                </a>
-                <button
-                  className={`btn ${terminal(r.state) ? 'btn-accent' : 'btn-danger'}`}
-                  disabled={busy || r.state === 'cancel_requested'}
-                  onClick={() => action(terminal(r.state) ? 'rerun' : 'cancel')}
+      {(!panel || panel === 'run') && (
+        <DiagnosticSection
+          className="run-info"
+          title="运行信息"
+          embedded={!!panel}
+        >
+          {published.length > 1 && (
+            <div className="report-switch">
+              <span>执行报告</span>
+              {published.map((report) => (
+                <Link
+                  key={report.id}
+                  to="/reports/$id"
+                  params={{ id: report.id }}
+                  aria-current={
+                    report.id === currentReportId ? 'page' : undefined
+                  }
                 >
-                  <Icon name={terminal(r.state) ? 'refresh' : 'x'} />
-                  {busy
-                    ? '处理中…'
-                    : terminal(r.state)
-                      ? '重新运行'
-                      : '取消任务'}
-                </button>
-              </div>
+                  执行 #
+                  {r.attempts.find((a) => a.attemptId === report.attemptId)
+                    ?.number ?? '—'}
+                </Link>
+              ))}
             </div>
-            <div className="sum-digest">
-              <div
-                className={`fact ${r.verdict === 'failed' ? 'is-fail' : r.verdict === 'passed' ? 'is-pass' : ''}`}
-              >
-                <span className="k">测试结果</span>
-                <span className="v">{labels[r.verdict]}</span>
-              </div>
-              <div className="fact">
-                <span className="k">执行尝试</span>
-                <span className="v">{r.attempts.length} 次</span>
-              </div>
-              <div className="fact">
-                <span className="k">报告归档</span>
-                <span className="v">{published.length} 份已发布</span>
-              </div>
-              <div className="fact">
-                <span className="k">设备清理</span>
-                <span className="v">
-                  {latest?.outcome
-                    ? labels[latest.outcome.cleanup]
-                    : '等待完成'}
+          )}
+          <div className="meta-grid">
+            {[
+              ['场景', r.input.scenario],
+              ['应用 / 套件', `${r.input.targetId} / ${r.input.suite}`],
+              ['分支', r.input.source?.branch ?? '—'],
+              ['Commit', r.input.commit],
+              ['发起人', r.actor],
+              ['提交时间', time(r.createdAt)],
+              [
+                'Worker / 槽位',
+                latest
+                  ? `${latest.workerId} / ${latest.slotId}`
+                  : '等待分配',
+              ],
+            ].map(([label, value]) => (
+              <div className="meta-cell" key={label}>
+                <span className="k">{label}</span>
+                <span className="v" title={value}>
+                  {value}
                 </span>
               </div>
-              {r.queuePosition > 0 && (
-                <div className="fact">
-                  <span className="k">队列位置</span>
-                  <span className="v">第 {r.queuePosition} 位</span>
-                </div>
-              )}
-            </div>
-            <div className="run-info">
-              <span className="info-label">运行信息</span>
-              <div className="meta-grid">
-                {[
-                  ['应用 / 套件', `${r.input.targetId} / ${r.input.suite}`],
-                  ['分支', r.input.source?.branch ?? '—'],
-                  ['Commit', r.input.commit],
-                  ['发起人', r.actor],
-                  ['提交时间', time(r.createdAt)],
-                  [
-                    'Worker / 槽位',
-                    latest
-                      ? `${latest.workerId} / ${latest.slotId}`
-                      : '等待分配',
-                  ],
-                ].map(([label, value]) => (
-                  <div className="meta-cell" key={label}>
-                    <span className="k">{label}</span>
-                    <span className="v" title={value}>
-                      {value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {r.input.source?.pipelineUrl &&
-                /^https?:/.test(r.input.source.pipelineUrl) && (
-                  <a
-                    href={r.input.source.pipelineUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    GitLab Pipeline ↗
-                  </a>
-                )}
-            </div>
-          </section>
-          <section className="panel">
-            <div className="panel-head">
-              <h2>执行阶段</h2>
-              <span className="sub">
-                {latest ? `执行 #${latest.number}` : '等待 Worker 领取任务'}
-              </span>
-              <div className="right">
-                {!terminal(r.state) && <Badge value={r.state} />}
-              </div>
-            </div>
-            <div className="panel-body">
-              <StageStrip
-                stage={
-                  latest?.stage === 'finished'
-                    ? ([...events].reverse().find((e) => e.kind === 'stage')
-                        ?.data.stage as string | undefined)
-                    : latest?.stage
-                }
-                completed={r.state === 'completed'}
-                failed={r.verdict === 'failed'}
-                stopped={terminal(r.state)}
-              />
-              {latest?.outcome?.error && (
-                <div className="note warn">
-                  <Icon name="alert" />
-                  {latest.outcome.error}
-                </div>
-              )}
-            </div>
-          </section>
-          {activeReport ? (
-            <>
-              <div className="report-switch">
-                <label htmlFor="execution-report">执行报告</label>
-                <select
-                  id="execution-report"
-                  value={activeReport.id}
-                  onChange={(e) => setReportId(e.target.value)}
-                >
-                  {published.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      执行 #
-                      {r.attempts.find((a) => a.attemptId === p.attemptId)
-                        ?.number ?? '—'}{' '}
-                      · {p.id.slice(0, 12)}
-                    </option>
-                  ))}
-                </select>
-                <a className="btn btn-sm" href={`/reports/${activeReport.id}`}>
-                  <Icon name="doc" />
-                  独立打开报告
-                </a>
-              </div>
-              <ReportContent
-                key={activeReport.id}
-                id={activeReport.id}
-                embedded
-              />
-            </>
-          ) : (
-            <section className="panel">
-              <div className="panel-head">
-                <h2>步骤回放</h2>
-              </div>
-              <Empty>
-                {terminal(r.state)
-                  ? '此运行没有已发布的报告。可查看执行尝试与运行动态了解原因。'
-                  : '任务执行中，报告发布后将在此展示步骤、截图与完整证据。'}
-              </Empty>
-            </section>
-          )}
-          <details
-            className="panel execution-attempts"
-            open={!published.length}
-          >
-            <summary>执行尝试 · {r.attempts.length} 次</summary>
-            {r.attempts.length ? (
-              r.attempts.map((a) => (
-                <div className="attempt-row" key={a.attemptId}>
-                  <div>
-                    <b>执行 #{a.number}</b>
-                    <small>
-                      {a.workerId} / {a.slotId}
-                    </small>
-                    <code>{a.attemptId}</code>
-                  </div>
-                  <div>
-                    <span className="hint">执行阶段</span>
-                    <b>{a.stage}</b>
-                    <small>generation {a.generation}</small>
-                  </div>
-                  <div>
-                    <Badge
-                      value={
-                        a.outcome?.verdict ?? a.result?.verdict ?? 'unknown'
-                      }
-                    />
-                    <small>{a.outcome?.error ?? a.result?.error}</small>
-                  </div>
-                  <div>
-                    <span className="hint">清理 / 发布</span>
-                    <small>
-                      {a.outcome
-                        ? `${labels[a.outcome.cleanup]} · ${labels[a.outcome.publication]}`
-                        : '等待完成'}
-                    </small>
-                    <small>
-                      {a.finishedAt
-                        ? `完成于 ${time(a.finishedAt)}`
-                        : `租约至 ${time(a.expiresAt)}`}
-                    </small>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <Empty>任务尚未分配。</Empty>
+            ))}
+          </div>
+          {r.input.source?.pipelineUrl &&
+            /^https?:/.test(r.input.source.pipelineUrl) && (
+              <a
+                href={r.input.source.pipelineUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                GitLab Pipeline ↗
+              </a>
             )}
-          </details>
-          <section className="panel">
-            <div className="panel-head">
-              <h2>运行动态</h2>
-              <span className="sub">
-                最近 {events.length} 条 · {streamState}
-              </span>
-              <div className="right">
-                <input
-                  className="input"
-                  aria-label="筛选运行动态"
-                  placeholder="筛选阶段 / 日志"
-                  value={eventSearch}
-                  onChange={(e) => setEventSearch(e.target.value)}
-                />
+        </DiagnosticSection>
+      )}
+      {(!panel || panel === 'attempts') && (
+        <DiagnosticSection
+          className="execution-attempts overflow-hidden"
+          title={`执行尝试 · ${r.attempts.length} 次`}
+          embedded={!!panel}
+          open={!published.length}
+        >
+          {r.attempts.length ? (
+            r.attempts.map((a) => (
+              <div className="attempt-row" key={a.attemptId}>
+                <div>
+                  <b>执行 #{a.number}</b>
+                  <small>
+                    {a.workerId} / {a.slotId}
+                  </small>
+                  <code>{a.attemptId}</code>
+                </div>
+                <div>
+                  <span className="hint">执行阶段</span>
+                  <b>{stageLabel(a.stage)}</b>
+                  <small>generation {a.generation}</small>
+                </div>
+                <div>
+                  <Badge
+                    value={
+                      a.outcome?.verdict ?? a.result?.verdict ?? 'unknown'
+                    }
+                  />
+                  <small>{a.outcome?.error ?? a.result?.error}</small>
+                </div>
+                <div>
+                  <span className="hint">清理 / 发布</span>
+                  <small>
+                    {a.outcome
+                      ? `${labels[a.outcome.cleanup]} · ${labels[a.outcome.publication]}`
+                      : '等待完成'}
+                  </small>
+                  <small>
+                    {a.finishedAt
+                      ? `完成于 ${time(a.finishedAt)}`
+                      : `租约至 ${time(a.expiresAt)}`}
+                  </small>
+                </div>
               </div>
+            ))
+          ) : (
+            <Empty>任务尚未分配。</Empty>
+          )}
+        </DiagnosticSection>
+      )}
+      {(!panel || panel === 'events') && (
+        <DiagnosticSection
+          className="runtime-events overflow-hidden"
+          title={panel ? '运行动态' : `运行动态 · 最近 ${events.length} 条`}
+          embedded={!!panel}
+        >
+          <div className="panel-head">
+            <span className="sub">
+              最近 {events.length} 条 · {streamState}
+            </span>
+            <div className="right">
+              <Input
+                aria-label="筛选运行动态"
+                placeholder="筛选阶段 / 日志"
+                value={eventSearch}
+                onChange={(e) => setEventSearch(e.target.value)}
+              />
             </div>
-            <div className="event-list">
-              {events.length ? (
-                events
-                  .filter((e) =>
-                    `${e.kind} ${text(e.data)}`
-                      .toLowerCase()
-                      .includes(eventSearch.toLowerCase()),
-                  )
-                  .map((e) => (
-                    <div className="event" key={e.seq}>
-                      <time>{new Date(e.at).toLocaleTimeString('zh-CN')}</time>
-                      <b>{e.kind === 'stage' ? text(e.data.stage) : e.kind}</b>
-                      <pre>
-                        {e.kind === 'log'
-                          ? text(e.data.text)
-                          : JSON.stringify(e.data, null, 2)}
-                      </pre>
-                    </div>
-                  ))
-              ) : (
-                <Empty>暂无运行事件。</Empty>
-              )}
-            </div>
-          </section>
-        </>
+          </div>
+          <div className="event-list">
+            {events.length ? (
+              events
+                .filter((e) =>
+                  `${e.kind} ${text(e.data)}`
+                    .toLowerCase()
+                    .includes(eventSearch.toLowerCase()),
+                )
+                .map((e) => (
+                  <div className="event" key={e.seq}>
+                    <time>
+                      {new Date(e.at).toLocaleTimeString('zh-CN')}
+                    </time>
+                    <b>
+                      {e.kind === 'stage'
+                        ? stageLabel(text(e.data.stage))
+                        : e.kind}
+                    </b>
+                    <pre>
+                      {e.kind === 'log'
+                        ? text(e.data.text)
+                        : JSON.stringify(e.data, null, 2)}
+                    </pre>
+                  </div>
+                ))
+            ) : (
+              <Empty>暂无运行事件。</Empty>
+            )}
+          </div>
+        </DiagnosticSection>
       )}
     </>
   );
@@ -1094,53 +1069,65 @@ function RequestDetail({ id }: { id: string }) {
 function ReportContent({
   id,
   shared = false,
-  embedded = false,
 }: {
   id: string;
   shared?: boolean;
-  embedded?: boolean;
 }) {
   const prefix = shared ? '/api/shared/reports' : '/api/reports';
   const { data: r, error } = useData<ReportView>(`${prefix}/${id}`);
+  const { data: request, error: requestError, reload } = useData<Detail>(
+    `/api/requests/${r?.requestId}`,
+    2000,
+    !shared && !!r,
+  );
   return (
     <>
-      {!embedded && (
-        <PageTitle
-          eyebrow={shared ? 'SHARED REPORT' : 'TEST REPORTS'}
-          title="测试报告"
-        >
-          {r && !shared && (
-            <a className="btn" href={`/requests/${r.requestId}`}>
-              <Icon name="list" />
-              运行详情
-            </a>
+      <header className="report-header">
+        <div className="report-heading">
+          <div className="report-identity">
+            <h1 title={r?.manifest.runId}>{r?.manifest.runId ?? id}</h1>
+            {r && (
+              <span className="inline-flex items-center">
+                <span className="sr-only">测试结果：</span>
+                <Badge value={r.manifest.status} />
+              </span>
+            )}
+          </div>
+          {r && (
+            <dl className="report-metadata">
+              <div>
+                <dt>证据完整性</dt>
+                <dd>{labels[r.manifest.evidenceStatus]}</dd>
+              </div>
+              <div>
+                <dt>保留至</dt>
+                <dd>
+                  <time dateTime={new Date(r.expiresAt).toISOString()}>
+                    {time(r.expiresAt)}
+                  </time>
+                </dd>
+              </div>
+            </dl>
           )}
-        </PageTitle>
-      )}
+        </div>
+        {!shared && (
+          <div className="rowline">
+            <Button asChild variant="secondary">
+              <Link to="/queue">
+                <Icon name="list" />
+                返回测试任务
+              </Link>
+            </Button>
+            {request && (
+              <RequestAction request={request} onChange={reload} />
+            )}
+          </div>
+        )}
+      </header>
       <ErrorBox error={error} />
       {!r && !error && <Empty>正在加载报告…</Empty>}
       {r && (
         <>
-          {!embedded && (
-            <div className="run-summary">
-              <div>
-                <span>运行标识</span>
-                <code>{r.manifest.runId}</code>
-              </div>
-              <div>
-                <span>测试结果</span>
-                <Badge value={r.manifest.status} />
-              </div>
-              <div>
-                <span>证据完整性</span>
-                <b>{r.manifest.evidenceStatus}</b>
-              </div>
-              <div>
-                <span>保留至</span>
-                <b>{time(r.expiresAt)}</b>
-              </div>
-            </div>
-          )}
           {r.issues.length > 0 && (
             <details className="evidence-issues">
               <summary>有 {r.issues.length} 项证据不可用</summary>
@@ -1154,8 +1141,40 @@ function ReportContent({
               {e.phase}: {e.message}
             </div>
           ))}
-          <Replay key={id} report={r} shared={shared} />
-          {!shared && <Shares id={id} />}
+          <Replay
+            key={id}
+            report={r}
+            shared={shared}
+            reportTabs={shared ? [] : [
+              ...([
+                ['run', '运行信息', 'doc'],
+                ['attempts', '执行尝试', 'refresh'],
+                ['events', '运行动态', 'clock'],
+              ] as const).map(([panel, label, icon]) => ({
+                id: `report-${panel}`,
+                label,
+                icon,
+                content: (
+                  <>
+                    <ErrorBox error={requestError} />
+                    {request ? (
+                      <RequestDiagnostics
+                        request={request}
+                        currentReportId={id}
+                        panel={panel}
+                      />
+                    ) : !requestError && <Empty>正在加载运行信息…</Empty>}
+                  </>
+                ),
+              })),
+              {
+                id: 'report-share',
+                label: '报告分享',
+                icon: 'link',
+                content: <Shares id={id} />,
+              },
+            ]}
+          />
         </>
       )}
     </>
@@ -1187,75 +1206,78 @@ function Shares({ id }: { id: string }) {
     }
   }
   return (
-    <section className="panel share-panel">
-      <div className="panel-heading">
-        <h2>报告分享</h2>
-        <span>只读 · 可撤销 · 内网访问</span>
-      </div>
-      <ErrorBox error={error || loadError} />
-      <div className="share-controls">
-        <select
-          aria-label="分享有效期"
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-        >
-          <option value={1}>有效期 1 天</option>
-          <option value={3}>有效期 3 天</option>
-          <option value={7}>有效期 7 天</option>
-        </select>
-        <label>
-          <input
-            type="checkbox"
-            checked={sensitive}
-            onChange={(e) => setSensitive(e.target.checked)}
-          />{' '}
-          包含日志、源码及 Trace（可能含敏感数据）
-        </label>
-        <button className="primary" onClick={create}>
-          生成分享链接
-        </button>
-      </div>
-      {url && (
-        <label className="share-url">
-          分享链接
-          <input
-            aria-label="分享链接"
-            readOnly
-            value={url}
-            onFocus={(e) => e.currentTarget.select()}
-          />
-          <small>链接只显示一次；有效期不会超过报告保留时间。</small>
-        </label>
-      )}
-      {shares?.map((s) => (
-        <div className="share-row" key={s.id}>
-          <code>{s.id.slice(0, 8)}</code>
-          <span>{time(s.expiresAt)}</span>
-          <span>
-            {s.revoked
-              ? '已撤销'
-              : s.expiresAt < Date.now()
-                ? '已过期'
-                : s.sensitive
-                  ? '完整范围'
-                  : '步骤与截图'}
-          </span>
-          <button
-            disabled={!!s.revoked}
-            onClick={async () => {
-              try {
-                await api(`/api/shares/${s.id}`, 'DELETE');
-                reload();
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-          >
-            撤销
-          </button>
+    <Card asChild className="border-0 rounded-none bg-transparent">
+      <section className="share-panel overflow-hidden">
+        <div className="panel-heading">
+          <h2>报告分享</h2>
+          <span>只读 · 可撤销 · 内网访问</span>
         </div>
-      ))}
-    </section>
+        <ErrorBox error={error || loadError} />
+        <div className="share-controls">
+          <NativeSelect
+            aria-label="分享有效期"
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+          >
+            <option value={1}>有效期 1 天</option>
+            <option value={3}>有效期 3 天</option>
+            <option value={7}>有效期 7 天</option>
+          </NativeSelect>
+          <Label>
+            <Checkbox
+              checked={sensitive}
+              onCheckedChange={(checked) => setSensitive(checked === true)}
+            />{' '}
+            包含日志、源码及 Trace（可能含敏感数据）
+          </Label>
+          <Button variant="default" size="default" onClick={create}>
+            生成分享链接
+          </Button>
+        </div>
+        {url && (
+          <Label className="share-url">
+            分享链接
+            <Input
+              aria-label="分享链接"
+              readOnly
+              value={url}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <small>链接只显示一次；有效期不会超过报告保留时间。</small>
+          </Label>
+        )}
+        {shares?.map((s) => (
+          <div className="share-row" key={s.id}>
+            <code>{s.id.slice(0, 8)}</code>
+            <span>{time(s.expiresAt)}</span>
+            <span>
+              {s.revoked
+                ? '已撤销'
+                : s.expiresAt < Date.now()
+                  ? '已过期'
+                  : s.sensitive
+                    ? '完整范围'
+                    : '步骤与截图'}
+            </span>
+            <Button
+              variant="secondary"
+              size="default"
+              disabled={!!s.revoked}
+              onClick={async () => {
+                try {
+                  await api(`/api/shares/${s.id}`, 'DELETE');
+                  reload();
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
+            >
+              撤销
+            </Button>
+          </div>
+        ))}
+      </section>
+    </Card>
   );
 }
 function Workers() {
@@ -1265,11 +1287,12 @@ function Workers() {
   );
   const [actionError, setError] = useState('');
   const { data: ops } = useData<{
+    events?: unknown[];
     storage: { freeBytes: number; reservedBytes: number };
   }>('/api/operations', 10000);
   return (
     <>
-      <PageTitle eyebrow="EXECUTION WORKERS" title="执行设备" />
+      <PageTitle eyebrow="EXECUTION WORKERS" title="Worker 主机" />
       <ErrorBox error={error || actionError} />
       {ops && (
         <div className="callout">
@@ -1278,43 +1301,64 @@ function Workers() {
         </div>
       )}
       {data?.map((w) => (
-        <section className="panel" key={w.id}>
-          <div className="panel-heading">
-            <div>
-              <h2>{w.id}</h2>
-              <Badge value={w.health} />
-              <small>
-                {w.seenAt ? `上次联系 ${time(w.seenAt)}` : '尚未连接'} ·{' '}
-                {w.paused ? '已暂停调度' : '允许领取任务'}
-              </small>
-            </div>
-            <button
-              onClick={async () => {
-                try {
-                  await api(`/api/workers/${w.id}/pause`, 'POST', {
-                    paused: !w.paused,
-                  });
-                  reload();
-                } catch (e) {
-                  setError((e as Error).message);
-                }
-              }}
-            >
-              {w.paused ? '恢复调度' : '暂停调度'}
-            </button>
-          </div>
-          {w.slots.map((s) => (
-            <div className="attempt-row" key={s.id}>
+        <Card asChild>
+          <section className="overflow-hidden" key={w.id}>
+            <div className="panel-heading">
               <div>
-                <b>{s.id}</b>
-                <small>{s.deviceId}</small>
+                <h2>{w.id}</h2>
+                <Badge value={w.health} />
+                <small>
+                  {w.seenAt ? `上次联系 ${time(w.seenAt)}` : '尚未连接'} ·{' '}
+                  {w.paused ? '已暂停调度' : '允许领取任务'}
+                </small>
               </div>
-              <Badge value={s.state} />
-              <span>应用：{s.targets.join(', ')}</span>
-              <span>generation {s.generation}</span>
+              {ops && (
+                <Button
+                  variant="secondary"
+                  size="default"
+                  onClick={async () => {
+                    try {
+                      await api(`/api/workers/${w.id}/pause`, 'POST', {
+                        paused: !w.paused,
+                      });
+                      reload();
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  }}
+                >
+                  {w.paused ? '恢复调度' : '暂停调度'}
+                </Button>
+              )}
             </div>
-          ))}
-        </section>
+            <div className="panel-body stack">
+              <Link to="/devices" search={{ worker: w.id }} className="link">
+                查看此主机的设备 →
+              </Link>
+              <small>
+                {w.inventory
+                  ? `最近检测 ${time(w.inventory.receivedAt)} · ${w.inventory.devices.length} 台设备${w.inventory.stale ? ' · 检测已过期' : ''}`
+                  : '尚未收到设备检测结果'}
+              </small>
+              {w.inventory?.diagnostics.map((d, i) => (
+                <p className="hint" key={i}>
+                  {d.source}：{d.message}
+                </p>
+              ))}
+            </div>
+            {w.slots.map((s) => (
+              <div className="attempt-row" key={s.id}>
+                <div>
+                  <b>{s.id}</b>
+                  <small>{s.deviceId}</small>
+                </div>
+                <Badge value={s.state} />
+                <span>应用：{s.targets.join(', ')}</span>
+                <span>generation {s.generation}</span>
+              </div>
+            ))}
+          </section>
+        </Card>
       ))}
       <div className="callout">
         暂停只阻止领取新任务。隔离设备需要运维在 Mac mini
@@ -1336,88 +1380,102 @@ function Targets() {
       <PageTitle eyebrow="APPLICATION TARGETS" title="应用配置" />
       <ErrorBox error={error} />
       {data?.map((t) => (
-        <section className="panel target-card" key={t.id}>
-          <h2>{t.name}</h2>
-          <p>{t.id}</p>
-          <div>
-            <span>测试套件</span>
-            {t.suites.map((s) => (
-              <code key={s}>{s}</code>
-            ))}
-          </div>
-          <div>
-            <span>测试场景</span>
-            {t.scenarios.map((s) => (
-              <code key={s}>{s}</code>
-            ))}
-          </div>
-          {me?.role === 'admin' && (
-            <button
-              onClick={() =>
-                setConfiguration(
-                  JSON.stringify(
-                    raw?.find((item) => (item as { id?: string }).id === t.id),
-                    null,
-                    2,
-                  ),
-                )
-              }
-            >
-              编辑配置
-            </button>
-          )}
-        </section>
+        <Card asChild>
+          <section className="target-card overflow-hidden" key={t.id}>
+            <h2>{t.name}</h2>
+            <p>{t.id}</p>
+            <div>
+              <span>测试套件</span>
+              {t.suites.map((s) => (
+                <code key={s}>{s}</code>
+              ))}
+            </div>
+            <div>
+              <span>测试场景</span>
+              {t.scenarios.map((s) => (
+                <code key={s}>{s}</code>
+              ))}
+            </div>
+            {me?.role === 'admin' && (
+              <Button
+                variant="secondary"
+                size="default"
+                onClick={() =>
+                  setConfiguration(
+                    JSON.stringify(
+                      raw?.find(
+                        (item) => (item as { id?: string }).id === t.id,
+                      ),
+                      null,
+                      2,
+                    ),
+                  )
+                }
+              >
+                编辑配置
+              </Button>
+            )}
+          </section>
+        </Card>
       ))}
       {me?.role === 'admin' && (
-        <section className="panel target-editor">
-          <h2>注册或更新应用</h2>
-          <p>
-            应用执行配置由管理员维护，任务提交人只能选择已注册的套件与场景。
-          </p>
-          <textarea
-            aria-label="应用配置 JSON"
-            rows={16}
-            value={configuration}
-            onChange={(e) => setConfiguration(e.target.value)}
-            placeholder="ApplicationTarget JSON"
-          />
-          <button
-            className="primary"
-            onClick={async () => {
-              try {
-                const target = JSON.parse(configuration);
-                await api(
-                  `/api/admin/targets/${encodeURIComponent(target.id)}`,
-                  'PUT',
-                  target,
-                );
-                setNotice('配置已保存；新任务使用更新后的配置。');
-              } catch (e) {
-                setNotice((e as Error).message);
-              }
-            }}
-          >
-            保存配置
-          </button>
-          <p role="status">{notice}</p>
-        </section>
+        <Card asChild>
+          <section className="target-editor overflow-hidden">
+            <h2>注册或更新应用</h2>
+            <p>
+              应用执行配置由管理员维护，任务提交人只能选择已注册的套件与场景。
+            </p>
+            <Textarea
+              aria-label="应用配置 JSON"
+              rows={16}
+              value={configuration}
+              onChange={(e) => setConfiguration(e.target.value)}
+              placeholder="ApplicationTarget JSON"
+            />
+            <Button
+              variant="default"
+              size="default"
+              onClick={async () => {
+                try {
+                  const target = JSON.parse(configuration);
+                  await api(
+                    `/api/admin/targets/${encodeURIComponent(target.id)}`,
+                    'PUT',
+                    target,
+                  );
+                  setNotice('配置已保存；新任务使用更新后的配置。');
+                } catch (e) {
+                  setNotice((e as Error).message);
+                }
+              }}
+            >
+              保存配置
+            </Button>
+            <p role="status">{notice}</p>
+          </section>
+        </Card>
       )}
     </>
   );
 }
 function ShareExchange() {
   const [error, setError] = useState('');
+  const [token] = useState(() => window.location.hash.slice(1));
+  const navigate = useNavigate();
   useEffect(() => {
-    const token = window.location.hash.slice(1);
-    history.replaceState(null, '', '/share');
-    if (!token) {
-      setError('分享链接缺少授权信息，请使用完整链接。');
-      return;
-    }
-    void api<{ url: string }>('/api/share/exchange', 'POST', { token })
-      .then((r) => window.location.replace(r.url))
-      .catch((e) => setError(e.message));
-  }, []);
+    // Remove the one-time credential from the address bar before exchanging it.
+    void (async () => {
+      await navigate({ to: '/share', hash: '', replace: true });
+      if (!token) {
+        setError('分享链接缺少授权信息，请使用完整链接。');
+        return;
+      }
+      const result = await api<{ url: string }>('/api/share/exchange', 'POST', {
+        token,
+      });
+      await navigate({ to: result.url, replace: true });
+    })().catch((e) => setError(e.message));
+  }, [navigate, token]);
   return (
     <>
       <PageTitle eyebrow="REPORT SHARING" title="打开分享报告" />
@@ -1426,30 +1484,125 @@ function ShareExchange() {
     </>
   );
 }
-function App() {
-  const path = window.location.pathname;
+
+function Shell() {
+  const path = useLocation({ select: (location) => location.pathname });
   const shared = path.startsWith('/shared/') || path === '/share';
-  let page: ReactNode;
-  if (path === '/') page = <Requests overview />;
-  else if (path === '/runs') page = <Requests history />;
-  else if (path === '/queue') page = <Requests />;
-  else if (path === '/reports') page = <Requests reportsOnly />;
-  else if (path === '/new') page = <NewRequest />;
-  else if (path === '/workers') page = <Workers />;
-  else if (path === '/targets') page = <Targets />;
-  else if (/^\/requests\/[a-zA-Z0-9_-]+$/.test(path))
-    page = <RequestDetail id={path.split('/')[2]} />;
-  else if (/^\/reports\/[a-zA-Z0-9_-]+$/.test(path))
-    page = <ReportContent id={path.split('/')[2]} />;
-  else if (/^\/shared\/reports\/[a-zA-Z0-9_-]+$/.test(path))
-    page = <ReportContent id={path.split('/')[3]} shared />;
-  else if (path === '/share') page = <ShareExchange />;
-  else
-    page = (
-      <Empty>
-        页面不存在。<a href="/">返回总览</a>
-      </Empty>
-    );
-  return <Layout shared={shared}>{page}</Layout>;
+  return (
+    <Layout shared={shared}>
+      <Outlet />
+    </Layout>
+  );
 }
-createRoot(document.getElementById('root')!).render(<App />);
+
+const rootRoute = createRootRoute({
+  component: Shell,
+  validateSearch: (search: Record<string, unknown>): { search?: string } => ({
+    search:
+      typeof search.search === 'string'
+        ? search.search.slice(0, 200)
+        : undefined,
+  }),
+  notFoundComponent: () => (
+    <Empty>
+      页面不存在。<Link to="/">返回总览</Link>
+    </Empty>
+  ),
+});
+const requestRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/requests/$id',
+  component: function RequestPage() {
+    const { id } = requestRoute.useParams();
+    return <RequestDetail key={id} id={id} />;
+  },
+});
+const reportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reports/$id',
+  component: function ReportPage() {
+    const { id } = reportRoute.useParams();
+    return <ReportContent key={id} id={id} />;
+  },
+});
+const sharedReportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/shared/reports/$id',
+  component: function SharedReportPage() {
+    const { id } = sharedReportRoute.useParams();
+    return <ReportContent key={id} id={id} shared />;
+  },
+});
+const routeTree = rootRoute.addChildren([
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/',
+    component: () => <Requests overview />,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/runs',
+    component: () => <Requests history />,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/queue',
+    component: () => <Requests />,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/reports',
+    component: () => <Requests reportsOnly />,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/new',
+    component: NewRequest,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/devices',
+    validateSearch: deviceFilters,
+    component: Devices,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/devices/$id',
+    component: DeviceDetail,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/workers',
+    component: Workers,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/targets',
+    component: Targets,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/share',
+    component: ShareExchange,
+  }),
+  requestRoute,
+  reportRoute,
+  sharedReportRoute,
+]);
+
+export function createCloudRouter(
+  history: RouterHistory = createBrowserHistory(),
+) {
+  return createRouter({ routeTree, history, scrollRestoration: true });
+}
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: ReturnType<typeof createCloudRouter>;
+  }
+}
+
+export function App() {
+  const [router] = useState(createCloudRouter);
+  return <RouterProvider router={router} />;
+}

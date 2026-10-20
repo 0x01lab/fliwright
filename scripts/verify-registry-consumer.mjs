@@ -12,6 +12,7 @@ if (!version) {
 }
 
 const packages = [
+  '@fliwright/devices',
   '@fliwright/core',
   '@fliwright/vitest',
   '@fliwright/cli',
@@ -55,12 +56,13 @@ try {
     '--eval',
     [
       "import { FliwrightDriver } from '@fliwright/core';",
+      "import { DeviceDiscovery } from '@fliwright/devices';",
       "import { test } from '@fliwright/vitest';",
       "import { defineConfig } from '@fliwright/cli';",
       "import { runCommand } from '@fliwright/cli/run';",
       "import { TddRuntime } from '@fliwright/tdd';",
       "import { riverpodPlugin } from '@fliwright/plugin-riverpod';",
-      'if (![FliwrightDriver, test, defineConfig, runCommand, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing registry export");',
+      'if (![DeviceDiscovery, FliwrightDriver, test, defineConfig, runCommand, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing registry export");',
     ].join('\n'),
   ], { cwd: consumer });
   console.log(`verified npm registry consumer for ${version}`);

@@ -16,7 +16,7 @@ export const groups = {
   session: 'Manage a reusable local connection',
 };
 export function commandGroup(path) {
-  if (['schema', 'init', 'doctor'].includes(path)) return 'setup';
+  if (['schema', 'init', 'doctor', 'devices.list'].includes(path)) return 'setup';
   if (['run', 'script', 'record'].includes(path)) return 'execution';
   if (path === 'generate-test' || path === 'tdd.validate-spec') return 'generation';
   if (path === 'devassist.cycle') return 'tdd';
@@ -29,6 +29,11 @@ const spec = {
   flows: [{ id: 'increment-flow', name: 'Increment the counter', steps: [{ action: 'tap', target: 'increment' }], expectedOutcome: [{ kind: 'text', target: 'count', equals: 'Count: 1' }] }],
 };
 export const commandDocs = {
+  'devices.list': doc('Discover local iOS and Android physical devices and simulators without a running app.',
+    'Use before choosing a device ID for a managed launch. Detection runs on the CLI host and does not use an inherited connection session.',
+    { 'devices[]': 'Native id, name, platform, kind, state and available OS/model information. Stopped Android AVD ids use avd:<name>; these cannot be passed to app launch.', 'diagnostics[]': 'Missing tools, failed commands, invalid output or unsupported host; other sources still return results.', scannedAt: 'ISO timestamp when the scan completed.' },
+    ['By default scans Android and, on macOS, iOS. Explicit iOS scans on other hosts return an unsupported-host diagnostic.', 'Requires Android platform-tools/emulator or Xcode. ANDROID_HOME, ANDROID_SDK_ROOT and standard SDK locations resolve Android executables.', 'Exit 0 means the scan completed; inspect diagnostics for partial detection. It does not boot, erase, pair or unlock devices.', 'An AVD is marked unknown if an offline or unidentified running emulator prevents proving it is stopped. Physical iOS devices unavailable to Xcode include a diagnostic detail.'],
+    [example('List host devices'), example('List Android devices', { platform: 'android' })], ['run', 'doctor']),
   schema: doc('Discover available commands or inspect one command’s machine contract.',
     'Read this first when a Skill needs exact current flags or structured input. The catalog is cheap and does not connect to Flutter.',
     { 'commands[]': 'Without path: command paths, summaries, effects and app/session requirements.', input: 'With path: strict JSON input schema.', output: 'JSON envelope schema; data remains command-specific and is not a complete data schema.', 'exitCodes / common': 'Exit meanings, cancellation behavior and common CLI flags.' },

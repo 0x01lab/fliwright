@@ -1,0 +1,4 @@
+{
+  "serverUrl": "https://cloud.example.com",
+  "tokenEnv": "FLIWRIGHT_CLOUD_WORKER_TOKEN"
+}

@@ -81,6 +81,8 @@ should be considered verified.
 
 ## Packages
 
+- `@fliwright/devices`: shared discovery of local iOS/Android physical devices and simulators; use `fliwright devices list --json` from the CLI.
+
 - `fliwright_bridge`: minimal Flutter instrumentation.
 - `@fliwright/core`: shared automation runtime.
 - `@fliwright/vitest`: test fixtures and lifecycle.
@@ -109,3 +111,9 @@ node scripts/verify-harness.mjs
 ```
 
 Real E2E smoke tests additionally require a running Flutter VM Service.
+
+### 云测部署
+
+[`@fliwright/cloud`](packages/fliwright-cloud/README.md) 集中运行队列、设备管理页面和报告服务。
+设备电脑使用独立 [`@fliwright/cloud-worker`](packages/fliwright-cloud-worker/README.md) CLI 常驻连接同一个 Server；
+Worker 调用 `@fliwright/devices` 检测本机 iOS/Android 真机与模拟器，双方通过 `@fliwright/cloud-protocol` 共享协议。

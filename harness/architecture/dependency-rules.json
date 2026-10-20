@@ -81,7 +81,8 @@
       "mayDependOn": [
         "@fliwright/core",
         "@fliwright/tdd",
-        "@fliwright/vitest"
+        "@fliwright/vitest",
+        "@fliwright/devices"
       ]
     },
     "fliwright-vscode": {
@@ -122,20 +123,71 @@
     "@fliwright/cloud": {
       "path": "packages/fliwright-cloud",
       "capabilities": [
-        "team test queue",
-        "Mac execution worker",
-        "browser reports and sharing"
+        "cloud queue and leases",
+        "device registry and administration",
+        "report storage and replay"
       ],
-      "responsibility": "Own self-hosted team execution scheduling, durable leases, registered targets, workers and immutable report delivery.",
+      "responsibility": "Own centralized scheduling, device policy management, report storage and browser administration.",
       "doesNotOwn": [
-        "automation primitives",
-        "Flutter bridge protocol",
-        "public video transport"
+        "host device discovery",
+        "local test execution",
+        "device reset policies"
       ],
       "mayDependOn": [
         "@fliwright/core",
         "@fliwright/cli",
-        "@fliwright/tdd"
+        "@fliwright/cloud-protocol"
+      ]
+    },
+    "@fliwright/devices": {
+      "path": "packages/fliwright-devices",
+      "capabilities": [
+        "host device discovery",
+        "iOS and Android device inventory"
+      ],
+      "responsibility": "Discover host iOS and Android physical devices and simulators through a shared read-only interface and normalize device state and tooling diagnostics.",
+      "doesNotOwn": [
+        "cloud scheduling and leases",
+        "device reset or app launch",
+        "CLI or editor UX",
+        "Flutter in-app instrumentation"
+      ],
+      "mayDependOn": []
+    },
+    "@fliwright/cloud-protocol": {
+      "path": "packages/fliwright-cloud-protocol",
+      "capabilities": [
+        "cloud wire contracts",
+        "cloud HTTP client"
+      ],
+      "responsibility": "Own Cloud/Worker wire contracts, upload path policy and HTTP client.",
+      "doesNotOwn": [
+        "host device discovery",
+        "server persistence",
+        "test execution"
+      ],
+      "mayDependOn": []
+    },
+    "@fliwright/cloud-worker": {
+      "path": "packages/fliwright-cloud-worker",
+      "capabilities": [
+        "host device reporting",
+        "test execution worker",
+        "worker CLI"
+      ],
+      "responsibility": "Own host device discovery and reporting, supervised test execution, cleanup and report upload. Cloud devDependency is only for HTTP integration tests.",
+      "doesNotOwn": [
+        "server persistence",
+        "browser UI",
+        "central scheduling"
+      ],
+      "mayDependOn": [
+        "@fliwright/cloud-protocol",
+        "@fliwright/core",
+        "@fliwright/cli",
+        "@fliwright/tdd",
+        "@fliwright/devices",
+        "@fliwright/cloud"
       ]
     }
   },

@@ -30,7 +30,7 @@ jobs:
         run: |
           expected="npm-v$(node -p "require('./packages/fliwright-cli/package.json').version")"
           test "${GITHUB_REF_NAME}" = "${expected}"
-          for manifest in packages/fliwright-{core,vitest,cli,tdd,plugin-riverpod}/package.json; do
+          for manifest in packages/fliwright-{devices,core,vitest,cli,tdd,plugin-riverpod}/package.json; do
             test "$(node -p "require('./${manifest}').version")" = "${GITHUB_REF_NAME#npm-v}"
           done
 
@@ -53,6 +53,7 @@ jobs:
               pnpm --filter "${package_name}" publish --no-git-checks
             fi
           }
+          publish_if_missing @fliwright/devices
           publish_if_missing @fliwright/core
           publish_if_missing @fliwright/vitest
           publish_if_missing @fliwright/plugin-riverpod

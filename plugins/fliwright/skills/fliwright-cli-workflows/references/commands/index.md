@@ -4,7 +4,7 @@ purpose: Progressive CLI command routing for Skills
 
 # Fliwright CLI command index
 
-64 commands, one page per leaf command. Read [common conventions](./common.md) once, then open only the relevant command pages. Parameters and schemas are generated from the command registry; semantic guidance is maintained with the CLI package.
+65 commands, one page per leaf command. Read [common conventions](./common.md) once, then open only the relevant command pages. Parameters and schemas are generated from the command registry; semantic guidance is maintained with the CLI package.
 
 ## Choose a workflow
 
@@ -29,6 +29,7 @@ purpose: Progressive CLI command routing for Skills
 | [schema](./command-schema.md) | Discover available commands or inspect one command’s machine contract. |
 | [init](./command-init.md) | Create project configuration, example tests/scripts and optional Flutter bridge setup. |
 | [doctor](./command-doctor.md) | Check local tooling, configuration and the Flutter automation connection. |
+| [devices list](./command-devices.list.md) | Discover local iOS and Android physical devices and simulators without a running app. |
 
 ## Run tests and scripts in CI
 
