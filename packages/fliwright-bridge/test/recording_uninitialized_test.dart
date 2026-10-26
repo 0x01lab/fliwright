@@ -11,6 +11,8 @@ void main() {
         .invoke('ext.fliwright.handshake', {'protocolVersion': '2'});
     expect(handshake['bridgeCapabilities'],
         containsPair('recordingBeforeDispatchTarget', false));
+    expect(handshake['bridgeCapabilities'],
+        containsPair('fullPageScreenshot', true));
     final start = await FliwrightBridge.registry.invoke(
         'ext.fliwright.startRecording',
         {'protocolVersion': '2', 'sessionId': 'owner'});

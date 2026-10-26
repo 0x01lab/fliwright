@@ -7,6 +7,34 @@ server {
   ssl_certificate /PRIVATE/PATH/fullchain.pem;
   ssl_certificate_key /PRIVATE/PATH/privkey.pem;
   client_max_body_size 32m;
+  # One-time host enrollment has its own code authentication; no browser SSO.
+  location = /api/worker/pair {
+    proxy_pass http://127.0.0.1:4780;
+    proxy_set_header X-Cloud-User "";
+    proxy_set_header X-Cloud-Proxy-Secret "";
+    proxy_set_header Host $host;
+    access_log off;
+  }
+  # Workers authenticate the Upgrade with Bearer tokens, without browser SSO.
+  location = /api/worker/connect {
+    proxy_pass http://127.0.0.1:4780;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Authorization $http_authorization;
+    proxy_set_header X-Cloud-User "";
+    proxy_set_header X-Cloud-Proxy-Secret "";
+    proxy_set_header Host $host;
+    proxy_buffering off;
+    proxy_read_timeout 90s;
+  }
+  # GitLab authenticates Push Hooks with its project-specific Secret Token.
+  location ^~ /api/webhooks/gitlab/ {
+    proxy_pass http://127.0.0.1:4780;
+    proxy_set_header X-Cloud-User "";
+    proxy_set_header X-Cloud-Proxy-Secret "";
+    proxy_set_header Host $host;
+  }
   location /oauth2/ {
     proxy_pass http://127.0.0.1:4180;
     proxy_set_header Host $host;

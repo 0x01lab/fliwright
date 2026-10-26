@@ -15,13 +15,10 @@ it('advertises the local executor device identity when claiming a server slot', 
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const { vi } = await import('vitest');
-  const { CloudClient } = await import('@fliwright/cloud-protocol');
   const { createWorker } = await import('../src/worker.js');
   const root = mkdtempSync(join(tmpdir(), 'claim-identity-'));
   vi.stubEnv('TEST_CLAIM_TOKEN', 'synthetic-claim-token');
-  const request = vi
-    .spyOn(CloudClient.prototype, 'request')
-    .mockResolvedValue(null);
+  const request = vi.fn().mockResolvedValue(null);
   try {
     const worker = createWorker(
       workerConfigSchema.parse({
@@ -33,11 +30,13 @@ it('advertises the local executor device identity when claiming a server slot', 
         root,
         resetCommands: [{ program: 'true', args: [] }],
       }),
+      { request } as never,
     );
     expect(await worker.runOnce()).toBe(false);
     expect(request).toHaveBeenCalledWith('/api/worker/claim', {
       method: 'POST',
       body: { slotId: 'phone', deviceId: 'native-device' },
+      signal: undefined,
     });
   } finally {
     vi.restoreAllMocks();

@@ -49,6 +49,19 @@ const reasons: Record<DeviceBlocker, string> = {
   busy: '正在执行任务',
   quarantined: '槽位已隔离',
 };
+const filterOptions = {
+  platform: ['ios', 'android'],
+  kind: ['physical', 'simulator'],
+  connection: [...Object.keys(states), 'missing', 'stale'],
+  scheduling: [
+    'ready',
+    'unmanaged',
+    'blocked',
+    'disabled',
+    'busy',
+    'quarantined',
+  ],
+} as const;
 const name = (d: ManagedDevice) => d.settings.alias || d.observation.name;
 const time = (v: number) => new Date(v).toLocaleString('zh-CN');
 type Filters = {
@@ -69,8 +82,14 @@ export function deviceFilters(search: Record<string, unknown>): Filters {
     'connection',
     'scheduling',
   ] as const) {
-    if (typeof search[key] === 'string' && search[key])
-      result[key] = search[key].slice(0, 200);
+    if (typeof search[key] !== 'string' || !search[key]) continue;
+    if (
+      key !== 'search' &&
+      key !== 'worker' &&
+      !(filterOptions[key] as readonly string[]).includes(search[key])
+    )
+      continue;
+    result[key] = search[key].slice(0, 200);
   }
   return result;
 }
@@ -103,9 +122,14 @@ function Readiness({
   );
 }
 export function Devices() {
-  const { data, error } = useData<ManagedDevice[]>('/api/devices', 3000);
-  const filters = useSearch({ strict: false }) as Filters;
+  const { data, error } = useData<ManagedDevice[]>('/api/devices', 0, true, '/api/device-events');
+  const filters = deviceFilters(useSearch({ strict: false }));
   const navigate = useNavigate();
+  const workers = [...new Set(data?.map((d) => d.workerId))];
+  const workerFilter =
+    filters.worker && workers.includes(filters.worker)
+      ? filters.worker
+      : undefined;
   const filter = (key: keyof Filters, value: string) =>
     void navigate({
       to: '/devices',
@@ -121,7 +145,7 @@ export function Devices() {
           .includes(query)) &&
       (!filters.platform || filters.platform === d.observation.platform) &&
       (!filters.kind || filters.kind === d.observation.kind) &&
-      (!filters.worker || filters.worker === d.workerId) &&
+      (!workerFilter || workerFilter === d.workerId) &&
       (!filters.connection ||
         (filters.connection === 'missing'
           ? !d.present
@@ -196,11 +220,11 @@ export function Devices() {
         </NativeSelect>
         <NativeSelect
           aria-label="Worker"
-          value={filters.worker ?? ''}
+          value={workerFilter ?? ''}
           onChange={(e) => filter('worker', e.target.value)}
         >
           <option value="">全部主机</option>
-          {[...new Set(data?.map((d) => d.workerId))].map((w) => (
+          {workers.map((w) => (
             <option key={w}>{w}</option>
           ))}
         </NativeSelect>
@@ -303,7 +327,7 @@ export function Devices() {
         )}
       </Card>
       <p className="hint">
-        检测结果每 30 秒上报，90
+        设备变化自动上报并刷新，每 30 秒校准一次；90
         秒未更新后停止新任务分配。暂停设备仅影响后续任务。
       </p>
     </>
@@ -313,7 +337,9 @@ export function DeviceDetail() {
   const { id } = useParams({ strict: false }) as { id: string };
   const { data, error, update } = useData<ManagedDevice>(
     `/api/devices/${encodeURIComponent(id)}`,
-    3000,
+    0,
+    true,
+    '/api/device-events',
   );
   const { data: me } = useData<{ role: string }>('/api/me');
   const { data: targets } =
@@ -399,10 +425,10 @@ export function DeviceDetail() {
             />
           </div>
           <Card className="p-3 stack">
-            <h2>执行环境部署</h2>
+            <h2>执行环境</h2>
             <p>
-              保存纳管配置和槽位后，请在主机为该设备部署独立 Worker
-              进程，使用独立工作目录和设备重置策略。进程必须持续上报匹配的设备标识，才会显示为可调度。
+              在主机启动一次 fliwright-worker run 后，保存允许的应用即可自动同步执行环境。
+              槽位和独立运行目录自动创建，无需逐设备部署进程。
             </p>
             <dl className="grid grid-cols-2 gap-2 text-xs">
               <dt>workerId</dt>
@@ -411,7 +437,7 @@ export function DeviceDetail() {
               </dd>
               <dt>slotId</dt>
               <dd>
-                <code>{data.settings.slotId || '先配置槽位'}</code>
+                <code>{data.settings.slotId || '纳管后自动分配'}</code>
               </dd>
               <dt>deviceId</dt>
               <dd>
@@ -419,9 +445,9 @@ export function DeviceDetail() {
               </dd>
             </dl>
             <p className="hint">
-              每个进程使用独立工作目录（root），配置 resetCommands 后运行
-              fliwright-cloud-worker run。Android AVD
-              启动后请使用当前原生设备标识。未启动的模拟器需先在主机启动；隔离槽位需确认清理并重置后恢复。
+              iOS 模拟器自动启动，测试前后重启并保留设备数据。其他设备使用主机配置的重置策略。
+              若一直等待执行进程，请确认主机运行的是 run，而非仅发现设备的 discover。
+              隔离槽位仍需在主机清理并恢复。
             </p>
           </Card>
         </>
@@ -521,7 +547,11 @@ function DeviceSettingsForm({
             <Checkbox
               id="device-managed"
               checked={settings.managed}
-              onCheckedChange={(value) => set('managed', value === true)}
+              onCheckedChange={(value) => {
+                setDirty(true);
+                setSettings(current => ({ ...current, managed: value === true,
+                  enabled: value === true && !current.managed ? true : current.enabled }));
+              }}
             />
             纳入平台管理
           </Label>
@@ -533,14 +563,16 @@ function DeviceSettingsForm({
             />
             允许分配新任务
           </Label>
-          <Label htmlFor="device-slot">执行槽位 ID</Label>
+          <details><summary>高级配置：执行槽位</summary>
+          <Label htmlFor="device-slot">执行槽位 ID（留空自动分配）</Label>
           <Input
             id="device-slot"
-            placeholder="例如 ios-phone-01"
+            placeholder="留空自动分配"
             pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}"
             value={settings.slotId ?? ''}
             onChange={(e) => set('slotId', e.target.value || null)}
           />
+          </details>
           <div className="stack">
             <Label>允许的应用</Label>
             {targets.map((target) => (
@@ -548,14 +580,14 @@ function DeviceSettingsForm({
                 <Checkbox
                   aria-label={`允许应用 ${target.name}`}
                   checked={settings.targets.includes(target.id)}
-                  onCheckedChange={(checked) =>
-                    set(
-                      'targets',
-                      checked === true
-                        ? [...settings.targets, target.id]
-                        : settings.targets.filter((id) => id !== target.id),
-                    )
-                  }
+                  onCheckedChange={(checked) => {
+                    setDirty(true);
+                    setNotice('');
+                    setSettings(current => ({ ...current,
+                      ...(checked === true ? { managed: true, enabled: true } : {}),
+                      targets: checked === true ? [...current.targets, target.id] : current.targets.filter(id => id !== target.id),
+                    }));
+                  }}
                 />
                 {target.name}
               </Label>

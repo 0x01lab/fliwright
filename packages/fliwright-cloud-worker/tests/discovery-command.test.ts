@@ -1,6 +1,7 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   mkdtempSync,
   rmSync,
@@ -8,6 +9,7 @@ import {
   readFileSync,
   writeFileSync,
   symlinkSync,
+  statSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,7 +20,17 @@ import { createHash } from 'node:crypto';
 const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 
-it.skipIf(process.platform === 'win32').each(['discover', 'run'])(
+it('registers the fliwright-worker executable', () => {
+  const manifest = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+  ) as { bin?: Record<string, string> };
+
+  expect(manifest.bin).toEqual({ 'fliwright-worker': 'fliwright-worker' });
+  const executable = fileURLToPath(new URL('../fliwright-worker', import.meta.url));
+  expect(statSync(executable).mode & 0o111).not.toBe(0);
+});
+
+it.skipIf(process.platform === 'win32').each(['discover', 'run', 'host'])(
   '%s reports a host without loading Cloud Server and shuts down cleanly',
   async (command) => {
     const root = mkdtempSync(join(tmpdir(), 'cloud-discover-command-'));
@@ -33,7 +45,7 @@ it.skipIf(process.platform === 'win32').each(['discover', 'run'])(
           scenarios: ['clean'],
         },
       ],
-      [
+      command !== 'run' ? [] : [
         {
           id: 'host',
           slots:
@@ -49,7 +61,7 @@ it.skipIf(process.platform === 'win32').each(['discover', 'run'])(
       publicUrl: 'http://localhost',
       proxySecret: 'test-proxy',
       publicationSecret: 'test-publication',
-      users: {},
+      users: { admin: 'admin' },
       ciTokens: [],
       workerTokens: [
         { workerId: 'host', hash: digest('test-discovery-token') },
@@ -63,9 +75,12 @@ it.skipIf(process.platform === 'win32').each(['discover', 'run'])(
     });
     server.addHook('onResponse', async (req, reply) => {
       requested.push(req.url);
-      if (req.url === '/api/worker/devices' && reply.statusCode === 200)
-        received();
+
     });
+    const report = store.recordDeviceInventory.bind(store);
+    vi.spyOn(store, 'recordDeviceInventory').mockImplementation((...args) => { report(...args); received(); });
+    const claim = vi.spyOn(store, 'claim');
+    const scanClaim = vi.spyOn(store, 'claimCatalogScan');
     const serverUrl = await server.listen({ host: '127.0.0.1', port: 0 });
     let child: ReturnType<typeof spawn> | undefined;
     try {
@@ -108,19 +123,47 @@ it.skipIf(process.platform === 'win32').each(['discover', 'run'])(
           ],
           { encoding: 'utf8' },
         ),
-      ).toContain('fliwright-cloud-worker');
+      ).toContain('fliwright-worker');
+      expect(
+        execFileSync(
+          process.execPath,
+          ['--import', join(root, 'isolate.mjs'), join(root, 'main.js')],
+          { encoding: 'utf8' },
+        ),
+      ).toContain('Usage: fliwright-worker');
       const tool = join(root, 'native-tool');
       writeFileSync(
         tool,
         `#!${process.execPath}\nconst arg=process.argv[2]; console.log(arg==='-list-avds'?'Pixel_API':arg==='simctl'?JSON.stringify({devices:{}}):arg==='xcdevice'?'[]':'List of devices attached');`,
         { mode: 0o700 },
       );
+      let pairedConfig: Record<string, unknown> | undefined;
+      if (command === 'discover' || command === 'host') {
+        const response = await server.inject({ method: 'POST', url: '/api/worker-pairings', headers: { 'x-cloud-proxy-secret': 'test-proxy', 'x-cloud-user': 'admin', origin: 'http://localhost' }, payload: { workerId: 'host' } });
+        expect(response.statusCode).toBe(200);
+        const pairDirectory = join(root, 'paired');
+        const pairing = spawn(process.execPath, ['--import', join(root, 'isolate.mjs'), join(root, 'main.js'), 'pair', serverUrl, pairDirectory], { stdio: ['pipe', 'pipe', 'pipe'] });
+        let output = '';
+        pairing.stdout.on('data', data => { output += data; });
+        pairing.stderr.on('data', data => { output += data; });
+        const exit = once(pairing, 'exit');
+        pairing.stdin.end(response.json().code + '\n');
+        expect(await exit).toEqual([0, null]);
+        pairedConfig = JSON.parse(readFileSync(join(pairDirectory, 'worker.json'), 'utf8'));
+        const saved = JSON.parse(readFileSync(join(pairDirectory, 'credentials.json'), 'utf8'));
+        expect(saved.workerId).toBe('host');
+        expect(output).toContain('配对成功');
+        expect(output).not.toContain(saved.token);
+        expect(output).not.toContain(response.json().code);
+        expect(statSync(join(pairDirectory, 'credentials.json')).mode & 0o777).toBe(0o600);
+        requested.length = 0;
+      }
       const config = join(root, 'discovery.json');
       writeFileSync(
         config,
         JSON.stringify({
           serverUrl,
-          tokenEnv: 'TEST_CLOUD_DISCOVERY_TOKEN',
+          ...(pairedConfig ?? { tokenEnv: 'TEST_CLOUD_DISCOVERY_TOKEN' }),
           deviceTools: { adb: tool, emulator: tool, xcrun: tool },
           ...(command === 'run'
             ? {
@@ -128,7 +171,6 @@ it.skipIf(process.platform === 'win32').each(['discover', 'run'])(
                 slotId: 'phone',
                 deviceId: 'native-device',
                 root: join(root, 'worker'),
-                pollMs: 500,
                 resetCommands: [
                   { program: 'must-not-reset-without-a-task', args: [] },
                 ],
@@ -142,7 +184,7 @@ it.skipIf(process.platform === 'win32').each(['discover', 'run'])(
           '--import',
           join(root, 'isolate.mjs'),
           join(root, 'main.js'),
-          command,
+          command === 'host' ? 'run' : command,
           config,
         ],
         {
@@ -174,16 +216,18 @@ it.skipIf(process.platform === 'win32').each(['discover', 'run'])(
         settings: { managed: false },
         observation: { avdName: 'Pixel_API', state: 'shutdown' },
       });
-      expect(requested).toContain('/api/worker/devices');
-      expect(
-        requested.every(
-          (path) =>
-            path === '/api/worker/devices' ||
-            (command === 'run' && path === '/api/worker/claim'),
-        ),
-      ).toBe(true);
-      if (command === 'discover')
-        expect(requested).toEqual(['/api/worker/devices']);
+      // Device inventory and task control use WSS; no repeated HTTP control requests.
+      expect(requested).toEqual([]);
+      if (command === 'discover') {
+        expect(claim).not.toHaveBeenCalled();
+        expect(scanClaim).not.toHaveBeenCalled();
+      } else {
+        // Let initial inventory/connection notifications settle, then cross the old 2s polling interval.
+        await delay(100);
+        const calls = [claim.mock.calls.length, scanClaim.mock.calls.length];
+        await delay(2200);
+        expect([claim.mock.calls.length, scanClaim.mock.calls.length]).toEqual(calls);
+      }
       const exited = once(child, 'exit');
       child.kill('SIGTERM');
       expect(await exited).toEqual([0, null]);

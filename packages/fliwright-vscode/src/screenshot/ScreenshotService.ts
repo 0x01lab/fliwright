@@ -4,14 +4,16 @@ import type { FliwrightDriver } from '@fliwright/core';
 export interface ScreenshotPreview {
   dataUri: string;
   mimeType: 'image/png';
+  fullPage?: boolean;
 }
 
 export class ScreenshotService {
-  async capture(driver: FliwrightDriver): Promise<ScreenshotPreview> {
-    const bytes = await driver.page.screenshot({ pixelRatio: 1 });
+  async capture(driver: FliwrightDriver, options?: { fullPage?: boolean }): Promise<ScreenshotPreview> {
+    const bytes = await driver.page.screenshot({ pixelRatio: 1, ...(options?.fullPage ? { fullPage: true } : {}) });
     return {
       dataUri: `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`,
       mimeType: 'image/png',
+      ...(options?.fullPage ? { fullPage: true } : {}),
     };
   }
 }
@@ -20,10 +22,11 @@ export class ScreenshotPreviewPanel implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
 
   show(preview: ScreenshotPreview): void {
+    const title = preview.fullPage ? 'Fliwright Long Screenshot' : 'Fliwright Screenshot';
     if (!this.panel) {
       this.panel = vscode.window.createWebviewPanel(
         'fliwright.screenshotPreview',
-        'Fliwright Screenshot',
+        title,
         vscode.ViewColumn.Beside,
         {
           enableScripts: true,
@@ -37,7 +40,8 @@ export class ScreenshotPreviewPanel implements vscode.Disposable {
       this.panel.reveal(vscode.ViewColumn.Beside);
     }
 
-    this.panel.webview.html = screenshotHtml();
+    this.panel.title = title;
+    this.panel.webview.html = screenshotHtml(preview.fullPage === true);
     void this.panel.webview.postMessage(screenshotMessage(preview));
   }
 
@@ -55,7 +59,7 @@ function screenshotMessage(preview: ScreenshotPreview): { type: 'screenshot'; ba
   };
 }
 
-function screenshotHtml(): string {
+function screenshotHtml(fullPage: boolean): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -68,14 +72,14 @@ function screenshotHtml(): string {
       margin: 0;
       min-height: 100vh;
       display: flex;
-      align-items: center;
+      align-items: ${fullPage ? 'flex-start' : 'center'};
       justify-content: center;
       background: var(--vscode-editor-background);
       color: var(--vscode-editor-foreground);
     }
     img {
       max-width: 100vw;
-      max-height: 100vh;
+      max-height: ${fullPage ? 'none' : '100vh'};
       object-fit: contain;
     }
     .empty {

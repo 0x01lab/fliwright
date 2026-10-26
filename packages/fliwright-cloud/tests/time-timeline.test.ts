@@ -215,3 +215,98 @@ it('keeps playback controls in the timeline and updates the preview when steppin
     container.remove();
   }
 });
+
+it('plays recorded time linearly per frame, resumes and changes speed without jumping, and stops at the end', async () => {
+  const { Replay } = await import('../src/web/Replay.js');
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  let now = 0, frameId = 0;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    callbacks.set(++frameId, callback);
+    return frameId;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
+  const advance = async (elapsed: number) => {
+    now += elapsed;
+    const pending = [...callbacks.values()];
+    callbacks.clear();
+    await act(async () => pending.forEach((callback) => callback(now)));
+  };
+  const nodes: ReplayNode[] = [
+    { id: 'first', title: 'First', kind: 'step', status: 'passed',
+      startedAt: '2026-10-19T01:00:00Z', endedAt: '2026-10-19T01:00:04Z' },
+    { id: 'last', title: 'Last', kind: 'step', status: 'passed',
+      startedAt: '2026-10-19T01:00:04Z', endedAt: '2026-10-19T01:00:10Z' },
+  ];
+  const report = {
+    id: 'report', requestId: 'request', files: [], issues: [], expiresAt: 0, report: {},
+    manifest: { schemaVersion: 1 as const, runId: 'run', status: 'passed' as const,
+      evidenceStatus: 'complete' as const, tests: [] },
+    tests: [{ testId: 'test', attemptId: 'one', result: {}, trace: {}, issues: [],
+      timeline: { nodes, startedAt: nodes[0].startedAt, endedAt: nodes[1].endedAt } }],
+  };
+  try {
+    await act(async () => root.render(React.createElement(Replay, { report })));
+    const handle = container.querySelector<HTMLButtonElement>('.trace-playhead')!;
+    const time = () => Number(handle.getAttribute('aria-valuenow'));
+    const play = () => Array.from(container.querySelectorAll<HTMLButtonElement>('.replay-toolbar button'))
+      .find((button) => /播放|暂停/.test(button.textContent ?? ''))!;
+    await act(async () => play().click());
+    for (let i = 1; i <= 10; i++) {
+      await advance(16.5);
+      expect(time()).toBeCloseTo(16.5 * i);
+      expect(parseFloat(container.querySelector<HTMLElement>('.trace-cursor')!.style.left)).toBeCloseTo(time() / 100);
+      expect(handle.style.left).toBe(container.querySelector<HTMLElement>('.trace-cursor')!.style.left);
+    }
+    expect(container.querySelector('.replay-current b')!.textContent).toBe('1. First');
+    await act(async () => play().click());
+    expect(callbacks.size).toBe(0);
+    await advance(1000);
+    expect(time()).toBe(165);
+    await act(async () => play().click());
+    await advance(100);
+    expect(time()).toBe(265);
+    const speed = container.querySelector<HTMLSelectElement>('[aria-label="回放速度"]')!;
+    await act(async () => {
+      speed.value = '2';
+      speed.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(time()).toBe(265);
+    await advance(100);
+    expect(time()).toBe(465);
+    // A slow frame catches up using elapsed wall time, including across steps.
+    await advance(2000);
+    expect(time()).toBe(4465);
+    expect(container.querySelector('.replay-current b')!.textContent).toBe('2. Last');
+    await advance(5000);
+    expect(time()).toBe(10000);
+    expect(play().textContent).toContain('播放');
+    expect(callbacks.size).toBe(0);
+    await act(async () => play().click());
+    expect(time()).toBe(0);
+    await advance(100);
+    expect(time()).toBe(200);
+    // Pointer down pauses immediately, before the first drag movement.
+    handle.setPointerCapture = vi.fn();
+    await act(async () => handle.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, pointerId: 1, button: 0, clientX: 10,
+    })));
+    expect(play().textContent).toContain('播放');
+    expect(callbacks.size).toBe(0);
+    await advance(100);
+    expect(time()).toBe(200);
+    await act(async () => handle.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 1 })));
+    await act(async () => play().click());
+    expect(callbacks.size).toBe(1);
+  } finally {
+    await act(async () => root.unmount());
+    expect(callbacks.size).toBe(0);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    container.remove();
+  }
+});

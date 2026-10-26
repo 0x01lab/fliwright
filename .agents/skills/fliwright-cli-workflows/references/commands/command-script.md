@@ -31,6 +31,7 @@ Use for an app task stored as a TypeScript script, such as data setup or a repea
 | `keepAppAlive` | `--keep-app-alive` | boolean | no | — | Retain the managed app when this command releases its runtime. Does not grant ownership of an attached app. |
 | `test` | `--test` | string | no | — | Vitest file pattern to select automation tests. (minLength=1) |
 | `testName` | `--test-name` | string | no | — | Test-name selection or generated test name; see this command’s usage. (minLength=1) |
+| `caseSelection` | `--case-selection` | object | no | — | Internal exact Vitest case selection resolved from a trusted catalog. Includes stable case id, checkout-relative file, full title path and duplicate ordinal; does not accept a name regular expression. |
 | `vmUrl` | `--vm-url` | string | no | — | Dart VM Service websocket URL. Omit to use project/environment endpoint resolution where supported. (minLength=1) |
 | `reporter` | `--reporter` | "pretty" \| "json" \| "junit" | no | — | Human/JSON/JUnit stdout rendering. With --json, only json is accepted. |
 | `timeout` | `--timeout` | integer | no | — | Milliseconds for the test runner, target wait or extended action, depending on the command. (exclusiveMinimum=0) |
@@ -101,6 +102,37 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
     "testName": {
       "type": "string",
       "minLength": 1
+    },
+    "caseSelection": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "titlePath": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "duplicateIndex": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "caseId",
+        "file",
+        "titlePath",
+        "duplicateIndex"
+      ],
+      "additionalProperties": false
     },
     "vmUrl": {
       "type": "string",

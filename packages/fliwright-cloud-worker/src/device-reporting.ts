@@ -2,12 +2,11 @@ import {
   DeviceDiscovery,
   type DeviceDiscoveryOptions,
 } from '@fliwright/devices';
-import { setTimeout as delay } from 'node:timers/promises';
-import type { CloudClient } from '@fliwright/cloud-protocol';
+import type { CloudRequestClient } from '@fliwright/cloud-protocol';
 
-/** Host inventory reporting runs independently of execution heartbeats and slot polling. */
+/** Event-driven host inventory reporting; periodic reconciliation also renews freshness. */
 export async function reportWorkerDevices(
-  client: CloudClient,
+  client: CloudRequestClient,
   options: {
     signal: AbortSignal;
     tools?: DeviceDiscoveryOptions['tools'];
@@ -15,23 +14,41 @@ export async function reportWorkerDevices(
   },
 ): Promise<void> {
   const discovery = new DeviceDiscovery({ tools: options.tools });
-  while (!options.signal.aborted) {
-    try {
-      const inventory = await discovery.scan({ signal: options.signal });
-      options.signal.throwIfAborted();
-      await client.request('/api/worker/devices', {
-        method: 'POST',
-        body: inventory,
-        signal: AbortSignal.any([options.signal, AbortSignal.timeout(15000)]),
-      });
-    } catch {
+  let pending = true;
+  let resume: (() => void) | undefined;
+  const invalidate = () => { pending = true; resume?.(); };
+  const stopConnections = client.onConnected?.(invalidate);
+  const stopWatching = discovery.watch(invalidate, { signal: options.signal });
+  const timer = setInterval(invalidate, options.intervalMs ?? 30000);
+  options.signal.addEventListener('abort', invalidate, { once: true });
+  try {
+    while (!options.signal.aborted) {
+      if (!pending) {
+        await new Promise<void>((resolve) => {
+          resume = resolve;
+          if (pending || options.signal.aborted) resolve();
+        });
+        resume = undefined;
+      }
       if (options.signal.aborted) break;
-      console.warn(
-        'Device inventory report failed; previous inventory will become stale.',
-      );
+      pending = false;
+      try {
+        const inventory = await discovery.scan({ signal: options.signal });
+        options.signal.throwIfAborted();
+        await client.request('/api/worker/devices', {
+          method: 'POST',
+          body: inventory,
+          signal: AbortSignal.any([options.signal, AbortSignal.timeout(15000)]),
+        });
+      } catch {
+        if (options.signal.aborted) break;
+        console.warn('Device inventory report failed; previous inventory will become stale.');
+      }
     }
-    await delay(options.intervalMs ?? 30000, undefined, {
-      signal: options.signal,
-    }).catch(() => {});
+  } finally {
+    clearInterval(timer);
+    stopWatching();
+    stopConnections?.();
+    options.signal.removeEventListener('abort', invalidate);
   }
 }

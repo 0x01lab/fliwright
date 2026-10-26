@@ -4,7 +4,7 @@
   <key>Label</key><string>com.fliwright.cloud.worker.ios</string>
   <key>ProgramArguments</key><array>
     <string>/ABSOLUTE/PATH/TO/node</string>
-    <string>/ABSOLUTE/PATH/TO/fliwright/packages/fliwright-cloud-worker/dist/main.js</string>
+    <string>/Users/cloud/services/fliwright-worker/fliwright-worker</string>
     <string>run</string><string>/Users/cloud/.config/fliwright-cloud/worker-ios.json</string>
   </array>
   <key>EnvironmentVariables</key><dict>

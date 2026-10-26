@@ -84,6 +84,7 @@ describe('VS Code manifest', () => {
       'fliwright.copyStateProviderValue',
       'fliwright.openRiverpodSetupHelp',
       'fliwright.takeScreenshot',
+      'fliwright.takeLongScreenshot',
     ]) {
       expect(commands.has(command), command).toBe(true);
     }
@@ -128,6 +129,9 @@ describe('VS Code manifest', () => {
       .map((entry: { command: string }) => entry.command);
 
     expect(devicesTitleActions).toContain('fliwright.takeScreenshot');
+    expect(devicesTitleActions).toContain('fliwright.takeLongScreenshot');
+    expect(manifest.contributes.commands.find((entry: { command: string }) => entry.command === 'fliwright.takeLongScreenshot'))
+      .toMatchObject({ title: 'Fliwright: Take Long App Screenshot', icon: '$(expand-all)' });
   });
 
   it('contributes the separate WebSocket mock view', () => {

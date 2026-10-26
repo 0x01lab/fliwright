@@ -1,5 +1,5 @@
 {
-  "dataRoot": "/Users/cloud/Library/Application Support/FliwrightCloud/server",
+  "dataRoot": "./data",
   "host": "127.0.0.1",
   "port": 4780,
   "publicUrl": "https://cloud.example.internal",
@@ -7,7 +7,7 @@
   "publicationSecret": "env:FLIWRIGHT_CLOUD_PUBLICATION_SECRET",
   "users": { "YOUR_GITLAB_USERNAME": "admin" },
   "ciTokens": [{ "name": "gitlab", "hash": "REPLACE_WITH_SHA256_OF_CI_TOKEN" }],
-  "workerTokens": [{ "workerId": "mac-mini", "hash": "REPLACE_WITH_SHA256_OF_WORKER_TOKEN" }],
+  "workerTokens": [],
   "targets": [{
     "id": "app", "name": "Flutter App", "repository": "git@gitlab.example.internal:team/app.git",
     "projectPath": ".", "entry": "lib/main_fliwright.dart",
@@ -19,7 +19,7 @@
     ],
     "flutterArgs": ["--debug"], "timeoutMs": 1800000
   }],
-  "workers": [{ "id": "mac-mini", "slots": [{ "id": "ios", "deviceId": "REPLACE_WITH_DEDICATED_SIMULATOR_UDID", "targets": ["app"] }] }],
+  "workers": [],
   "retentionDays": 30,
   "minFreeBytes": 1073741824,
   "maxStorageBytes": 107374182400

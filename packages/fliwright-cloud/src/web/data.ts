@@ -17,7 +17,7 @@ export async function api<T>(
   if (!response.ok) throw new Error(data.error ?? '请求失败');
   return data as T;
 }
-export function useData<T>(path: string, refresh = 0, enabled = true) {
+export function useData<T>(path: string, refresh = 0, enabled = true, events?: string) {
   const [data, setData] = useState<T>(),
     [error, setError] = useState(''),
     [version, setVersion] = useState(0);
@@ -26,24 +26,32 @@ export function useData<T>(path: string, refresh = 0, enabled = true) {
     let active = true;
     setData(undefined);
     setError('');
-    const load = () =>
-      api<T>(path)
-        .then((value) => {
-          if (active) {
-            setData(value);
-            setError('');
-          }
-        })
-        .catch((e) => {
-          if (active) setError(e.message);
-        });
+    let loading = false;
+    let pending = false;
+    const load = async () => {
+      if (!active) return;
+      if (loading) { pending = true; return; }
+      loading = true;
+      try {
+        const value = await api<T>(path);
+        if (active) { setData(value); setError(''); }
+      } catch (e) {
+        if (active) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        loading = false;
+        if (pending && active) { pending = false; void load(); }
+      }
+    };
     void load();
+    const source = events ? new EventSource(events) : undefined;
+    if (source) source.onmessage = () => { void load(); };
     const timer = refresh ? setInterval(load, refresh) : undefined;
     return () => {
       active = false;
       clearInterval(timer);
+      source?.close();
     };
-  }, [path, refresh, version, enabled]);
+  }, [path, refresh, version, enabled, events]);
   return {
     data,
     error,

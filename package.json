@@ -3,6 +3,12 @@
   "private": true,
   "packageManager": "pnpm@11.5.3",
   "scripts": {
+    "cloud:init": "node packages/fliwright-cloud/fliwright-cloud init",
+    "cloud:start": "node packages/fliwright-cloud/fliwright-cloud server",
+    "cloud:health": "node packages/fliwright-cloud/fliwright-cloud health",
+    "cloud:deploy": "node scripts/deploy-cloud.mjs server",
+    "cloud:deploy-worker": "node scripts/deploy-cloud.mjs worker",
+    "cloud:worker": "node packages/fliwright-cloud-worker/fliwright-worker",
     "build": "pnpm -r run build",
     "test": "pnpm --filter './packages/*' -r run test",
     "lint": "pnpm -r run lint",

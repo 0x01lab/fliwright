@@ -83,6 +83,16 @@ it('preserves business failure when upload fails and resets before releasing', a
   });
   expect(calls.indexOf('reset')).toBeLessThan(calls.indexOf('finish'));
 });
+
+it('records publication and device cleanup independently after a failed test run', async () => {
+  const { worker, root } = setup();
+  await worker.runOnce();
+  const events = readFileSync(join(root, 'spool', 'attempt', 'worker-timeline.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  expect(events.filter(event => event.payload.type === 'span.started').map(event => event.payload.phase)).toEqual([
+    'processes.stop', 'report.publish', 'device.reset.after',
+  ]);
+  expect(events.filter(event => event.payload.type === 'span.finished').map(event => event.payload.status)).toEqual(['succeeded', 'succeeded', 'succeeded']);
+});
 it('aborts on cancellation, waits for owned termination and quarantines on reset failure', async () => {
   let outcome: Outcome | undefined;
   const { worker, calls } = setup({
@@ -133,4 +143,35 @@ it('keeps local spool and ownership journal when completion cannot be acknowledg
   expect(existsSync(join(root, 'slot.lock'))).toBe(true);
   const state = JSON.parse(readFileSync(join(root, 'slot.lock'), 'utf8'));
   expect(state.lease.attemptId).toBe('attempt');
+});
+
+it.each(['cancelled', 'lost'] as const)('reacts to a pushed %s notification without waiting for a heartbeat', async (reason) => {
+  let notify: (reason: 'lost' | 'cancelled') => void = () => {};
+  let detached = false;
+  let outcome: Outcome | undefined;
+  const { worker, root, calls, deps } = setup({
+    watchLease: (_lease, listener) => { notify = listener; return () => { detached = true; }; },
+    execute: async (_lease, _directory, signal) => {
+      const stopped = new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      notify(reason);
+      await stopped;
+      return { verdict: 'interrupted' };
+    },
+    heartbeat: async () => { throw new Error('must react before scheduled heartbeat'); },
+    finish: async (_lease, result) => { outcome = result; },
+  });
+  worker.options.heartbeatMs = 60000;
+  if (reason === 'lost') {
+    await expect(worker.runOnce()).rejects.toThrow(/ownership lost/i);
+    expect(existsSync(join(root, 'slot.lock'))).toBe(true);
+    expect(outcome).toBeUndefined();
+  } else {
+    // Finalization still confirms the cancellation with a heartbeat.
+    deps.heartbeat = async () => ({ cancelRequested: true });
+    await worker.runOnce();
+    expect(outcome).toMatchObject({ verdict: 'interrupted', cleanup: 'clean' });
+    expect(existsSync(join(root, 'slot.lock'))).toBe(false);
+  }
+  expect(calls).toContain('reset');
+  expect(detached).toBe(true);
 });

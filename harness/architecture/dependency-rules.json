@@ -158,9 +158,10 @@
       "path": "packages/fliwright-cloud-protocol",
       "capabilities": [
         "cloud wire contracts",
-        "cloud HTTP client"
+        "cloud HTTP client",
+        "cloud WebSocket control client"
       ],
-      "responsibility": "Own Cloud/Worker wire contracts, upload path policy and HTTP client.",
+      "responsibility": "Own Cloud/Worker wire contracts, upload path policy, WebSocket control client and HTTP upload/CI client.",
       "doesNotOwn": [
         "host device discovery",
         "server persistence",
@@ -175,7 +176,7 @@
         "test execution worker",
         "worker CLI"
       ],
-      "responsibility": "Own host device discovery and reporting, supervised test execution, cleanup and report upload. Cloud devDependency is only for HTTP integration tests.",
+      "responsibility": "Own host device discovery and reporting, supervised test execution, cleanup and report upload. Cloud devDependency is only for network integration tests.",
       "doesNotOwn": [
         "server persistence",
         "browser UI",

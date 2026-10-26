@@ -5,11 +5,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { CloudStore, digest } from './CloudStore.js';
 import { createCloudServer } from './server.js';
 import {
-  serverConfigSchema,
+  loadServerConfig,
   clientConfigSchema,
   loadJson,
   credential,
 } from './config.js';
+import { initializeCloud } from './deployment.js';
 import {
   CloudClient,
   passesGitLabGate,
@@ -24,6 +25,35 @@ function installStop() {
   process.once('SIGINT', () => stop.abort());
 }
 async function main() {
+  if (!command || command === '--help' || command === '-h') {
+    console.log(`Usage: fliwright-cloud <command> [config.json]
+
+Commands:
+  init [directory]  Create private local configuration (default: .fliwright/cloud)
+  server [config]   Start Cloud in the foreground; stop with Ctrl+C or SIGTERM
+  health [config]   Check the configured server's health
+  hash-token        Hash FLIWRIGHT_CLOUD_TOKEN
+  submit <config> <request.json> <idempotency-key>
+  wait <config> <request-id>
+  cancel <config> <request-id>
+  backup <config> <new-backup-directory>
+
+Server config: explicit argument, FLIWRIGHT_CLOUD_CONFIG, then .fliwright/cloud/server.json.
+Relative dataRoot paths resolve beside server.json, independently of the working directory.
+init enables loopback-only local access. For a team deployment, remove localUser and configure HTTPS identity proxying.`);
+    return;
+  }
+  if (!['init', 'server', 'health', 'hash-token', 'submit', 'wait', 'cancel', 'backup'].includes(command)) {
+    console.error('Unknown cloud command. Run fliwright-cloud --help.');
+    process.exitCode = 1;
+    return;
+  }
+  if (command === 'init') {
+    const configPath = initializeCloud(path);
+    console.log(`Cloud configuration created: ${configPath}`);
+    console.log('Start: fliwright-cloud server (or pass this config path)');
+    return;
+  }
   if (command === 'hash-token') {
     const value = process.env.FLIWRIGHT_CLOUD_TOKEN;
     if (!value || value.length < 16)
@@ -31,12 +61,23 @@ async function main() {
     console.log(digest(value));
     return;
   }
-  if (!path)
+  if (command === 'health') {
+    const config = loadServerConfig(path);
+    const host = config.host === '0.0.0.0' ? '127.0.0.1' : config.host === '::' ? '::1' : config.host;
+    const response = await fetch(`http://${host.includes(':') ? `[${host}]` : host}:${config.port}/healthz`, {
+      signal: AbortSignal.timeout(5000), redirect: 'error',
+    });
+    if (!response.ok || (await response.json() as { status?: string }).status !== 'ok')
+      throw new Error('Cloud health check failed');
+    console.log('Cloud health: ok');
+    return;
+  }
+  if (!path && command !== 'server')
     throw new Error(
       'Usage: fliwright-cloud <server|submit|wait|cancel|backup> <config.json> [request.json|requestId|backupDirectory]',
     );
   if (command === 'server') {
-    const config = serverConfigSchema.parse(loadJson(path));
+    const config = loadServerConfig(path);
     mkdirSync(config.dataRoot, { recursive: true, mode: 0o700 });
     const store = new CloudStore(join(config.dataRoot, 'cloud.sqlite'));
     store.configure(config.targets, config.workers);
@@ -53,14 +94,15 @@ async function main() {
       },
       { once: true },
     );
-    await server.listen({ host: config.host, port: config.port });
+    try { await server.listen({ host: config.host, port: config.port }); }
+    catch (error) { await server.close(); store.close(); throw error; }
     console.log(
-      `Cloud management server listening on ${config.host}:${config.port}`,
+      `Cloud management server listening on ${config.host}:${config.port} (${config.publicUrl})`,
     );
     return;
   }
   if (command === 'backup') {
-    const config = serverConfigSchema.parse(loadJson(path)),
+    const config = loadServerConfig(path),
       destination = args[0];
     if (!destination || existsSync(destination))
       throw new Error('Provide a new backup directory');
@@ -81,7 +123,7 @@ async function main() {
     );
     return;
   }
-  const config = clientConfigSchema.parse(loadJson(path)),
+  const config = clientConfigSchema.parse(loadJson(path!)),
     client = new CloudClient(config.serverUrl, credential(config.tokenEnv));
   if (command === 'submit') {
     if (!args[0] || !args[1])
@@ -134,7 +176,11 @@ async function main() {
   }
   throw new Error('Unknown cloud command');
 }
-main().catch(() => {
+main().catch((error: unknown) => {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+  if (code === 'EEXIST') console.error('Configuration already exists; existing configuration and secrets were preserved.');
+  else if (code === 'ENOENT') console.error('Configuration or runtime file not found. Run fliwright-cloud init or set FLIWRIGHT_CLOUD_CONFIG.');
+  else if (code === 'EADDRINUSE') console.error('Cloud port is already in use. Stop the existing instance or change port and publicUrl in server.json.');
   console.error(
     'Cloud operation failed. Check configuration, credentials and server diagnostics.',
   );

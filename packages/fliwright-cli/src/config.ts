@@ -5,6 +5,7 @@ import { mergeFliwrightConfig, readFliwrightEnvironment, resolveFliwrightProject
 import type { FliwrightPathsConfig, FliwrightProjectConfig, FliwrightRecordingConfig, ResolvedFliwrightConfig, ScenarioExecutionMode, TestScenario } from '@fliwright/core';
 
 export interface FliwrightCliConfig {
+  suites?: Record<string, string>;
   vmServiceUrl?: string;
   timeout: number;
   screenshot: 'file' | 'base64' | 'off';

@@ -12,7 +12,9 @@ import {
 import { join, dirname } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
-import type { ExecutionLease, Outcome } from '@fliwright/cloud-protocol';
+import type { ExecutionLease, Outcome, WorkerTimelineBatch, WorkerTimelineClock, WorkerTimelineFinish, WorkerStopReason } from '@fliwright/cloud-protocol';
+import { WorkerTimelineRecorder } from './WorkerTimelineRecorder.js';
+import type { WorkerTimelineChannel } from './WorkerTimelineChannel.js';
 
 export interface ExecutionResult {
   verdict: Outcome['verdict'];
@@ -21,21 +23,25 @@ export interface ExecutionResult {
   error?: string;
 }
 export interface WorkerDependencies {
-  claim(): Promise<ExecutionLease | null>;
+  claim(signal?: AbortSignal): Promise<ExecutionLease | null>;
+  watchLease?(lease: ExecutionLease, listener: (reason: 'lost' | 'cancelled') => void): () => void;
   heartbeat(
     lease: ExecutionLease,
     stage: string,
+    timelineClock?: WorkerTimelineClock,
   ): Promise<{ cancelRequested: boolean }>;
   execute(
     lease: ExecutionLease,
     directory: string,
     signal: AbortSignal,
     onStage: (stage: string) => void,
+    timeline: WorkerTimelineRecorder,
   ): Promise<ExecutionResult>;
   stopOwned(directory: string): Promise<void>;
-  reset(): Promise<void>;
-  publish(lease: ExecutionLease, directory: string): Promise<string>;
-  finish(lease: ExecutionLease, outcome: Outcome): Promise<unknown>;
+  reset(timeline?: WorkerTimelineRecorder, parentSpanId?: string): Promise<void>;
+  publish(lease: ExecutionLease, directory: string, timeline?: WorkerTimelineChannel, parentSpanId?: string): Promise<string>;
+  finish(lease: ExecutionLease, outcome: Outcome, timeline?: WorkerTimelineFinish): Promise<unknown>;
+  recordTimeline?(batch: WorkerTimelineBatch, signal: AbortSignal): Promise<{ ackSeq: number }>;
   recordResult?(
     lease: ExecutionLease,
     result: Pick<Outcome, 'verdict' | 'infrastructure' | 'error'>,
@@ -95,7 +101,7 @@ export class WorkerAgent {
     writeJournal(lock, journal);
     let lease: ExecutionLease | null;
     try {
-      lease = await this.deps.claim();
+      lease = await this.deps.claim(signal);
     } catch (e) {
       rmSync(lock, { force: true });
       throw e;
@@ -122,17 +128,27 @@ export class WorkerAgent {
     let stopError: unknown;
     let stopPromise: Promise<void> | undefined;
     let stageWrites = Promise.resolve();
+    let stopReason: WorkerStopReason = 'shutdown';
+    const recording = new WorkerTimelineRecorder(directory, lease, { send: this.deps.recordTimeline?.bind(this.deps) });
+    const abortExecution = (reason: WorkerStopReason) => {
+      stopReason = reason;
+      recording.stopping(reason);
+      if (reason === 'lease_lost') recording.stopSending();
+      controller.abort(Object.assign(new Error(`Worker execution stopped: ${reason}`), { workerStopReason: reason }));
+    };
+    try {
     const heartbeat = async (stage: string) => {
       if (lost) return;
       try {
-        const response = await this.deps.heartbeat(lease!, stage);
+        const response = await this.deps.heartbeat(lease!, stage, recording.clock());
+        void recording.flush();
         if (response.cancelRequested) {
           cancelled = true;
-          controller.abort();
+          abortExecution('cancelled');
         }
       } catch {
         lost = true;
-        controller.abort();
+        abortExecution('lease_lost');
       }
     };
     const recordStage = (stage: string) => {
@@ -141,17 +157,24 @@ export class WorkerAgent {
       stageWrites = stageWrites.then(() => heartbeat(stage));
     };
     const stop = () => {
-      stopPromise ??= this.deps.stopOwned(directory).catch((e) => {
+      stopPromise ??= recording.channel.run('processes.stop', () => this.deps.stopOwned(directory)).then(() => {
+        recording.interrupt('executor', stopReason);
+      }).catch((e) => {
         stopError = e;
       });
     };
     controller.signal.addEventListener('abort', stop, { once: true });
-    const outerAbort = () => controller.abort();
+    const unwatch = this.deps.watchLease?.(lease, reason => {
+      if (reason === 'lost') lost = true;
+      else cancelled = true;
+      abortExecution(reason === 'lost' ? 'lease_lost' : 'cancelled');
+    });
+    const outerAbort = () => abortExecution('shutdown');
     signal?.addEventListener('abort', outerAbort, { once: true });
-    if (signal?.aborted) controller.abort();
+    if (signal?.aborted) abortExecution('shutdown');
     const timer = setTimeout(() => {
       timeout = true;
-      controller.abort();
+      abortExecution('timeout');
     }, lease.request.target.timeoutMs);
     const beats = (async () => {
       while (!heartbeatStop.signal.aborted) {
@@ -175,6 +198,7 @@ export class WorkerAgent {
         directory,
         controller.signal,
         recordStage,
+        recording,
       );
     } catch {
       result = {
@@ -205,12 +229,13 @@ export class WorkerAgent {
         });
       } catch {
         lost = true;
-        controller.abort();
+        abortExecution('lease_lost');
       }
     await stopPromise;
     // Always verify process termination, including after a successful executor exit.
     try {
-      await this.deps.stopOwned(directory);
+      await recording.channel.run('processes.stop', () => this.deps.stopOwned(directory));
+      recording.interrupt('executor', controller.signal.aborted ? stopReason : 'process_exit');
     } catch (e) {
       stopError = e;
     }
@@ -219,7 +244,7 @@ export class WorkerAgent {
     await stageWrites;
     if (!lost && result.bundleDir)
       try {
-        await this.deps.publish(lease, result.bundleDir);
+        await recording.channel.run('report.publish', spanId => this.deps.publish(lease, result.bundleDir!, recording.channel, spanId));
         publication = 'published';
       } catch {
         publication = 'publish_failed';
@@ -227,7 +252,7 @@ export class WorkerAgent {
     let cleanup: Outcome['cleanup'] = 'failed';
     if (!stopError)
       try {
-        await this.deps.reset();
+        await recording.channel.run('device.reset.after', spanId => this.deps.reset(recording, spanId));
         cleanup = 'clean';
       } catch {
         /* quarantine */
@@ -235,6 +260,7 @@ export class WorkerAgent {
     heartbeatStop.abort();
     await beats;
     signal?.removeEventListener('abort', outerAbort);
+    unwatch?.();
     const outcome: Outcome = {
       verdict: result.verdict,
       publication,
@@ -251,13 +277,15 @@ export class WorkerAgent {
       throw new Error(
         'Worker lease ownership lost; slot remains locked for recovery',
       );
-    await this.deps.finish(lease, outcome);
+    await recording.flush();
+    await this.deps.finish(lease, outcome, recording.summary());
     if (cleanup === 'failed')
       throw new Error(
         'Device cleanup failed; slot remains locked for recovery',
       );
     rmSync(lock, { force: true });
     return true;
+    } finally { recording.close(); }
   }
   async recover() {
     const lock = join(this.options.root, 'slot.lock');

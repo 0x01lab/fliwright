@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { z } from 'zod';
 import {
   CloudClient,
+  WorkerControlClient,
   CloudError,
   safeArtifactPath,
   type ExecutionLease,
@@ -19,6 +20,8 @@ import {
 import { credential, type workerConfigSchema } from './config.js';
 import { createHash } from 'node:crypto';
 import { WorkerAgent, writeJournal } from './WorkerAgent.js';
+import type { WorkerTimelineChannel } from './WorkerTimelineChannel.js';
+import { recordWorkerTimelineMessage } from './worker-timeline-ipc.js';
 import {
   runCommandProcess,
   spawnExecution,
@@ -31,39 +34,43 @@ const digest = (value: Buffer) =>
   createHash('sha256').update(value).digest('hex');
 
 type WorkerSettings = z.infer<typeof workerConfigSchema>;
-export function createWorker(config: WorkerSettings) {
+export function createWorker(config: WorkerSettings, control: WorkerControlClient) {
   if (process.platform === 'win32')
     throw new Error('Mac/Unix workers require owned process groups');
-  const client = new CloudClient(config.serverUrl, credential(config.tokenEnv));
+  const client = new CloudClient(config.serverUrl, credential(config));
   let logAttempt: string | undefined;
   let readLogs: (() => string | undefined) | undefined;
   return new WorkerAgent(config, {
-    claim: () =>
-      client.request<ExecutionLease | null>('/api/worker/claim', {
+    claim: (signal) =>
+      control.request<ExecutionLease | null>('/api/worker/claim', {
         method: 'POST',
         body: { slotId: config.slotId, deviceId: config.deviceId },
+        signal,
       }),
-    heartbeat: (lease, stage) => {
+    watchLease: (lease, listener) => control.watchLease(lease, listener),
+    heartbeat: (lease, stage, timelineClock) => {
       if (logAttempt !== lease.attemptId) {
         logAttempt = lease.attemptId;
         readLogs = createLogTail(join(config.root, 'spool', lease.attemptId), [
-          credential(config.tokenEnv),
+          credential(config),
         ]);
       }
-      return client.request('/api/worker/heartbeat', {
+      return control.request('/api/worker/heartbeat', {
         method: 'POST',
-        body: { ...leaseKey(lease), stage, log: readLogs?.() },
+        body: { ...leaseKey(lease), stage, log: readLogs?.(), timelineClock },
       });
     },
-    execute: (lease, directory, signal, onStage) =>
+    recordTimeline: (batch, signal) => control.request('/api/worker/timeline', { method: 'POST', body: batch, signal }),
+    execute: (lease, directory, signal, onStage, timeline) =>
       spawnExecution(lease, directory, signal, onStage, {
         mainFile: fileURLToPath(new URL('./main.js', import.meta.url)),
         flutterBin: config.flutterBin,
         resetCommands: config.resetCommands,
         allowedEnv: config.allowedEnv.filter((k) => k !== config.tokenEnv),
+        timeline,
       }),
     stopOwned: stopOwnedProcesses,
-    reset: async () => {
+    reset: async (timeline, parentSpanId) => {
       // Reset runs as its own recorded group too; a crashed reset cannot race recovery.
       const resetDir = join(config.root, 'reset');
       const { mkdirSync } = await import('node:fs');
@@ -75,6 +82,7 @@ export function createWorker(config: WorkerSettings) {
         commands: config.resetCommands,
         deviceId: config.deviceId,
         directory: resetDir,
+        parentSpanId,
       });
       const child = spawn(
         process.execPath,
@@ -92,6 +100,7 @@ export function createWorker(config: WorkerSettings) {
         },
       );
       if (!child.pid) throw new Error('Reset process failed to launch');
+      child.on('message', message => recordWorkerTimelineMessage(child, message, timeline, 'reset'));
       const complete = new Promise<void>((resolve, reject) => {
         child.on('error', reject);
         child.on('close', (code) =>
@@ -110,25 +119,26 @@ export function createWorker(config: WorkerSettings) {
       }, 300000);
       try {
         await complete;
-        await stopOwnedProcesses(resetDir);
       } finally {
         clearTimeout(timer);
+        await stopOwnedProcesses(resetDir);
+        timeline?.interrupt('reset', 'process_exit');
       }
     },
-    publish: (lease, directory) => publishBundle(client, lease, directory),
+    publish: (lease, directory, timeline, parentSpanId) => publishBundle(client, lease, directory, timeline, parentSpanId),
     recordResult: (lease, result) =>
-      client.request('/api/worker/result', {
+      control.request('/api/worker/result', {
         method: 'POST',
         body: { ...leaseKey(lease), result },
       }),
-    finish: (lease, outcome) =>
-      client.request('/api/worker/finish', {
+    finish: (lease, outcome, timeline) =>
+      control.request('/api/worker/finish', {
         method: 'POST',
-        body: { ...leaseKey(lease), outcome },
+        body: { ...leaseKey(lease), outcome, timeline },
       }),
     recover: async (evidence) => {
       await stopOwnedProcesses(join(config.root, 'reset'));
-      return client.request('/api/worker/recover', {
+      return control.request('/api/worker/recover', {
         method: 'POST',
         body: { slotId: config.slotId, evidence },
       });
@@ -145,7 +155,10 @@ export async function publishBundle(
   client: CloudClient,
   lease: ExecutionLease,
   directory: string,
+  timeline?: WorkerTimelineChannel,
+  parentSpanId?: string,
 ) {
+  const prepare = async () => {
   const files: Array<{ path: string; size: number; sha256: string }> = [];
   const walk = (dir: string, prefix = '') => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -180,6 +193,11 @@ export async function publishBundle(
     });
     writeJournal(journalPath, publication);
   }
+  return { publication, files };
+  };
+  const { publication, files } = timeline
+    ? await timeline.run('report.publish', prepare, { parentSpanId, operation: 'publication.prepare' })
+    : await prepare();
   const signal = AbortSignal.timeout(120000);
   const retry = async (fn: () => Promise<unknown>) => {
     for (let attempt = 0; ; attempt++) {
@@ -211,18 +229,20 @@ export async function publishBundle(
         },
       ),
     );
-  await retry(() =>
+  const commit = () => retry(() =>
     client.request(`/api/publications/${publication.id}/commit`, {
       method: 'POST',
       publicationToken: publication.token,
       signal,
     }),
   );
+  if (timeline) await timeline.run('report.publish', commit, { parentSpanId, operation: 'publication.commit' });
+  else await commit();
   return publication.id;
 }
 /** Retry retained upload capabilities without re-running a test or changing its verdict. */
 export async function retrySpool(config: WorkerSettings) {
-  const client = new CloudClient(config.serverUrl, credential(config.tokenEnv)),
+  const client = new CloudClient(config.serverUrl, credential(config)),
     spool = join(config.root, 'spool');
   if (!existsSync(spool)) return;
   for (const entry of readdirSync(spool, { withFileTypes: true }))

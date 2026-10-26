@@ -32,6 +32,7 @@
         "packages/fliwright-cli/src/capabilities/form.ts",
         "packages/fliwright-cli/src/capabilities/interaction.ts",
         "packages/fliwright-cli/src/capabilities/session.ts",
+        "packages/fliwright-cli/src/catalog.ts",
         "packages/fliwright-cli/src/commands/app-inspect.ts",
         "packages/fliwright-cli/src/commands/app.ts",
         "packages/fliwright-cli/src/commands/artifact-query.ts",
@@ -98,7 +99,7 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "4b691498ff19d863ed6f51148145e5ee1dcc75d5fa60e24f19b1307d054e0455"
+      "sourceFingerprint": "25841543edf088a02355fda2639cc0c016729d2b952a23dca341432cadf69dba"
     },
     {
       "name": "@fliwright/cloud",
@@ -123,19 +124,27 @@
       "sourceFiles": [
         "packages/fliwright-cloud/src/CloudStore.ts",
         "packages/fliwright-cloud/src/ReportStore.ts",
+        "packages/fliwright-cloud/src/WorkerTimelineStore.ts",
         "packages/fliwright-cloud/src/config.ts",
+        "packages/fliwright-cloud/src/deployment.ts",
+        "packages/fliwright-cloud/src/device-events.ts",
         "packages/fliwright-cloud/src/index.ts",
         "packages/fliwright-cloud/src/main.ts",
+        "packages/fliwright-cloud/src/project-setup.ts",
         "packages/fliwright-cloud/src/server.ts",
         "packages/fliwright-cloud/src/web/Devices.tsx",
+        "packages/fliwright-cloud/src/web/Projects.tsx",
         "packages/fliwright-cloud/src/web/Replay.tsx",
         "packages/fliwright-cloud/src/web/TestBoard.tsx",
         "packages/fliwright-cloud/src/web/TimeTimeline.tsx",
+        "packages/fliwright-cloud/src/web/WorkerExecutionTimeline.tsx",
+        "packages/fliwright-cloud/src/web/WorkerPairing.tsx",
         "packages/fliwright-cloud/src/web/app.tsx",
         "packages/fliwright-cloud/src/web/components/ui/badge.tsx",
         "packages/fliwright-cloud/src/web/components/ui/button.tsx",
         "packages/fliwright-cloud/src/web/components/ui/card.tsx",
         "packages/fliwright-cloud/src/web/components/ui/checkbox.tsx",
+        "packages/fliwright-cloud/src/web/components/ui/dialog.tsx",
         "packages/fliwright-cloud/src/web/components/ui/input.tsx",
         "packages/fliwright-cloud/src/web/components/ui/label.tsx",
         "packages/fliwright-cloud/src/web/components/ui/native-select.tsx",
@@ -149,15 +158,19 @@
         "packages/fliwright-cloud/src/web/lib/utils.ts",
         "packages/fliwright-cloud/src/web/main.tsx",
         "packages/fliwright-cloud/src/web/replay-model.ts",
-        "packages/fliwright-cloud/src/web/ui.tsx"
+        "packages/fliwright-cloud/src/web/ui.tsx",
+        "packages/fliwright-cloud/src/worker-control.ts"
       ],
       "publicExports": [
         "CloudServerOptions",
         "CloudStore",
         "createCloudServer",
+        "initializeCloud",
+        "loadServerConfig",
         "ReportStore",
         "ReportView",
-        "Role"
+        "Role",
+        "WorkerTimelineStore"
       ],
       "packageEntrypoints": [
         "."
@@ -165,13 +178,13 @@
       "binaryEntrypoints": [
         "fliwright-cloud"
       ],
-      "sourceFingerprint": "8ef249b51c67be95643eacc5160f764f684408bf0848034363313668a22652a1"
+      "sourceFingerprint": "56648cb0986b238a560da435fdafc9be7b154c524c3b8e10c84384a3b652d1c7"
     },
     {
       "name": "@fliwright/cloud-protocol",
       "path": "packages/fliwright-cloud-protocol",
       "kind": "typescript",
-      "responsibility": "Own Cloud/Worker wire contracts, upload path policy and HTTP client.",
+      "responsibility": "Own Cloud/Worker wire contracts, upload path policy, WebSocket control client and HTTP upload/CI client.",
       "doesNotOwn": [
         "host device discovery",
         "server persistence",
@@ -180,31 +193,37 @@
       "mayDependOn": [],
       "ownedCapabilities": [
         "cloud wire contracts",
-        "cloud HTTP client"
+        "cloud HTTP client",
+        "cloud WebSocket control client"
       ],
       "sourceFiles": [
         "packages/fliwright-cloud-protocol/src/CloudClient.ts",
+        "packages/fliwright-cloud-protocol/src/WorkerControlClient.ts",
         "packages/fliwright-cloud-protocol/src/artifacts.ts",
         "packages/fliwright-cloud-protocol/src/contracts.ts",
-        "packages/fliwright-cloud-protocol/src/index.ts"
+        "packages/fliwright-cloud-protocol/src/index.ts",
+        "packages/fliwright-cloud-protocol/src/worker-control.ts",
+        "packages/fliwright-cloud-protocol/src/worker-pairing.ts",
+        "packages/fliwright-cloud-protocol/src/worker-timeline.ts"
       ],
       "publicExports": [
         "CloudClient",
         "GitLabGateRequest",
         "passesGitLabGate",
-        "safeArtifactPath"
+        "safeArtifactPath",
+        "WorkerControlClient"
       ],
       "packageEntrypoints": [
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "6f8dd652f677d36005c02af13bfc01e02f2c896045b6c22baa3767b02731d259"
+      "sourceFingerprint": "3488727819a46b23f29f24184a28c2f02619795fdff0e8f559f7fad718788480"
     },
     {
       "name": "@fliwright/cloud-worker",
       "path": "packages/fliwright-cloud-worker",
       "kind": "typescript",
-      "responsibility": "Own host device discovery and reporting, supervised test execution, cleanup and report upload. Cloud devDependency is only for HTTP integration tests.",
+      "responsibility": "Own host device discovery and reporting, supervised test execution, cleanup and report upload. Cloud devDependency is only for network integration tests.",
       "doesNotOwn": [
         "server persistence",
         "browser UI",
@@ -225,32 +244,55 @@
       ],
       "sourceFiles": [
         "packages/fliwright-cloud-worker/src/WorkerAgent.ts",
+        "packages/fliwright-cloud-worker/src/WorkerTimelineChannel.ts",
+        "packages/fliwright-cloud-worker/src/WorkerTimelineRecorder.ts",
+        "packages/fliwright-cloud-worker/src/catalog-scanner.ts",
         "packages/fliwright-cloud-worker/src/config.ts",
         "packages/fliwright-cloud-worker/src/device-reporting.ts",
         "packages/fliwright-cloud-worker/src/executor.ts",
+        "packages/fliwright-cloud-worker/src/host.ts",
         "packages/fliwright-cloud-worker/src/index.ts",
+        "packages/fliwright-cloud-worker/src/local-packages.ts",
         "packages/fliwright-cloud-worker/src/main.ts",
+        "packages/fliwright-cloud-worker/src/pairing.ts",
         "packages/fliwright-cloud-worker/src/processes.ts",
+        "packages/fliwright-cloud-worker/src/worker-timeline-ipc.ts",
         "packages/fliwright-cloud-worker/src/worker.ts"
       ],
       "publicExports": [
+        "collectCheckoutCatalog",
         "createWorker",
         "discoveryConfigSchema",
+        "executeCatalogScan",
         "ExecutionResult",
+        "executorSettings",
+        "hostConfigSchema",
+        "installLocalPackages",
+        "pairWorker",
+        "readWorkerTimelineLog",
         "reportWorkerDevices",
         "retrySpool",
+        "runCatalogScanner",
+        "runHostWorker",
+        "scanEnvironment",
+        "scanFailureSummary",
+        "scanProcess",
+        "secureCatalogCheckout",
+        "SpanOptions",
         "WorkerAgent",
         "WorkerAgentOptions",
         "workerConfigSchema",
-        "WorkerDependencies"
+        "WorkerDependencies",
+        "WorkerTimelineChannel",
+        "WorkerTimelineRecorder"
       ],
       "packageEntrypoints": [
         "."
       ],
       "binaryEntrypoints": [
-        "fliwright-cloud-worker"
+        "fliwright-worker"
       ],
-      "sourceFingerprint": "05c228fe44fb5f04c2c429bd63b42e3aca5748028b479d0a15d20b6dddf1f01c"
+      "sourceFingerprint": "a3bd2d7533954c864d32536435a00724e10ea49ef9d3e8d4caa0711b8d89ff94"
     },
     {
       "name": "@fliwright/core",
@@ -937,7 +979,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "ad980932929836d18a73f7cb9e2c5d3603e61d2a7f0c5382b0cb38810e9b7968"
+      "sourceFingerprint": "b59e0becfc5164be025417a6038a9c56c02d0299296077a33e1c28f261b4d44d"
     },
     {
       "name": "@fliwright/devices",
@@ -958,6 +1000,7 @@
       "sourceFiles": [
         "packages/fliwright-devices/src/DeviceDiscovery.ts",
         "packages/fliwright-devices/src/commands.ts",
+        "packages/fliwright-devices/src/device-changes.ts",
         "packages/fliwright-devices/src/index.ts",
         "packages/fliwright-devices/src/types.ts"
       ],
@@ -976,7 +1019,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "bbfe12378a405957080a5d1430380c0e66bc930316346a97de3f9093ad2f8b22"
+      "sourceFingerprint": "8a1b2191fa06cebd77116eddf185a9725b65a5aebaf6cad7f2b13987e92d179c"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -1010,7 +1053,7 @@
       "publicExports": [],
       "packageEntrypoints": [],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "4a49ac0500ef23765fc20fe31e45d290e1f7b136fa56d18e7b7cd4280f4a6d7d"
+      "sourceFingerprint": "59b532f07ac6a5e9685e54e1abdbcef22c5689dae2a2d2b4f0d20d3384dc7e31"
     },
     {
       "name": "@fliwright/plugin-riverpod",
@@ -1041,7 +1084,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "3ecceec2425896d4144b1a2e7d7f0375fca809218a392bd9c01e1ecf0dbead6f"
+      "sourceFingerprint": "37bee3579c80b2224e927e40d195fe39bd021ea2b39dd723bc791a37badd6f6b"
     },
     {
       "name": "@fliwright/tdd",
@@ -1202,7 +1245,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "7cda695d469d3b89fdd0fca743975b3aba13bd4f5a99ab656969fadfa045c7ba"
+      "sourceFingerprint": "05d349b10d3b987e208791d06e826130576333d5d3da7f9bc69964c3cbc229d4"
     },
     {
       "name": "@fliwright/vitest",
@@ -1269,7 +1312,7 @@
         "./runner"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "1463ac7a6f0ad482016e578cc3731d9bc2d9c877a1e28a0119f94f66ce65c608"
+      "sourceFingerprint": "4e7d100fbe9946993412a9ade61649fe984d664139769f03845ffd262e06f1b8"
     },
     {
       "name": "fliwright_bridge",
@@ -1482,7 +1525,7 @@
         "ext.fliwright.websocket.push",
         "ext.fliwright.websocket.setRules"
       ],
-      "sourceFingerprint": "2e80ba5a0120d94afdada63b26be05588797b472d49363f47117f401e7955b31"
+      "sourceFingerprint": "0b53e187b178c704ab85eb6319de2a6257049092f174212cd43edd43a7ace1f0"
     },
     {
       "name": "fliwright_bridge_riverpod",
@@ -1507,7 +1550,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-bridge-riverpod/lib/fliwright_bridge_riverpod.dart"
       ],
-      "sourceFingerprint": "4ec85f23b19130f46a6954d96dfe5cbf9be158392686e8585b2c26ad3e174b18"
+      "sourceFingerprint": "e84f1f8443fb804f09cf9ef79829cda657c3576078e399777b4ac8a35cab64f9"
     },
     {
       "name": "fliwright_design_qa",
@@ -1575,7 +1618,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-design-qa/lib/fliwright_design_qa.dart"
       ],
-      "sourceFingerprint": "f2b2f732c54377d6f49f672958712ba493aa159015c16d57729ab3d0e63dca8b"
+      "sourceFingerprint": "16f7701f3628d931b3d204b9d0d46085240a5614ca944a768a1ff6df2383a1ef"
     },
     {
       "name": "fliwright-vscode",
@@ -1765,6 +1808,7 @@
         "fliwright.stopRecording",
         "fliwright.stopSandbox",
         "fliwright.stopTests",
+        "fliwright.takeLongScreenshot",
         "fliwright.takeScreenshot",
         "fliwright.tddTakeOver",
         "fliwright.unwatchStateProvider",
@@ -1783,7 +1827,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "1c174d5d4107c1be2452214c98b284371133639f0d9ed64a00c804d43ab97e3d"
+      "sourceFingerprint": "9f1f12f3b83fed4b152b89ff1cca7092b9f6d2701aa37db1660d588578932771"
     }
   ]
 }

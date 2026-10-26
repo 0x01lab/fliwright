@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { runTool } from './commands.js';
+import { watchDeviceChanges } from './device-changes.js';
 import type { DeviceDiscoveryOptions, DeviceInventory, DeviceScanOptions, DiscoveredDevice, DiscoverySource } from './types.js';
 
 class InvalidOutput extends Error {}
@@ -37,6 +38,14 @@ export class DeviceDiscovery {
   constructor(options: DeviceDiscoveryOptions = {}) {
     this.host = options.hostPlatform ?? process.platform;
     this.tools = { adb: androidTool('adb', this.host), emulator: androidTool('emulator', this.host), xcrun: 'xcrun', ...options.tools };
+  }
+
+  /** Observe native device changes. Notifications are coalesced for 150ms; rescan for state.
+   * Failed observers retry automatically. Dispose or abort to stop all observers.
+   * Keep periodic scans for platforms/tools without complete native notifications.
+   */
+  watch(changed: () => void, options: { signal?: AbortSignal } = {}): () => void {
+    return watchDeviceChanges(this.tools, this.host, changed, options.signal);
   }
 
   /** Detect devices without launching apps or booting, erasing, pairing or unlocking devices. Cancellation rejects. */

@@ -1,3 +1,4 @@
+import { WorkerPairing } from './WorkerPairing.js';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -31,6 +32,8 @@ import { Textarea } from './components/ui/textarea.js';
 import React, {
   useEffect,
   useState,
+  createContext,
+  useContext,
   type FormEvent,
   type ReactNode,
 } from 'react';
@@ -38,13 +41,18 @@ import type { ReportView } from '../ReportStore.js';
 import type {
   ExecutionAttempt,
   ExecutionWorker,
+  Project,
+  TestCatalog,
   TestRequest,
 } from '@fliwright/cloud-protocol';
 import { Icon, stageLabel } from './ui.js';
 import { Replay } from './Replay.js';
 import { api, useData } from './data.js';
 import { Devices, DeviceDetail, deviceFilters } from './Devices.js';
+import { Projects } from './Projects.js';
 import { TestBoard } from './TestBoard.js';
+import { WorkerExecutionTimeline } from './WorkerExecutionTimeline.js';
+import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs.js';
 
 type Target = {
   id: string;
@@ -52,6 +60,7 @@ type Target = {
   suites: string[];
   scenarios: string[];
 };
+const RoleContext = createContext<string | undefined>(undefined);
 type Detail = Omit<TestRequest, 'target' | 'attempts'> & {
   attempts: ExecutionAttempt[];
   reports: Array<{
@@ -71,6 +80,7 @@ const labels: Record<string, string> = {
   cancel_requested: '正在取消',
   completed: '已完成',
   cancelled: '已取消',
+  superseded: '已被新提交替代',
   infrastructure_failed: '执行异常',
   passed: '通过',
   failed: '失败',
@@ -103,7 +113,7 @@ const text = (v: unknown): string =>
         : JSON.stringify(v);
 const time = (v: number) => new Date(v).toLocaleString('zh-CN');
 const terminal = (state: string) =>
-  ['completed', 'cancelled', 'infrastructure_failed'].includes(state);
+  ['completed', 'cancelled', 'superseded', 'infrastructure_failed'].includes(state);
 function Badge({ value }: { value: string }) {
   const tone = ['passed', 'healthy', 'idle', 'clean', 'published'].includes(
     value,
@@ -205,7 +215,7 @@ function Layout({
   const configurationLinks = [
     ['/devices', '设备管理', 'device', '管理测试设备与调度策略'],
     ['/workers', 'Worker 主机', 'cpu', '查看执行主机与槽位状态'],
-    ['/targets', '应用配置', 'settings', '管理应用、测试套件与场景'],
+    ['/projects', '项目', 'box', '管理仓库、测试目录与自动运行'],
     ['/reports', '测试报告', 'doc', '查看已归档的测试结果与证据'],
   ] as const;
   const current = path.startsWith('/requests/') || path === '/runs'
@@ -384,7 +394,7 @@ function Layout({
             </code>
           </div>
         )}
-        {children}
+        <RoleContext.Provider value={me?.role}>{children}</RoleContext.Provider>
       </main>
     </div>
   );
@@ -819,6 +829,7 @@ function RequestDetail({ id }: { id: string }) {
               {latest.outcome.error}
             </div>
           )}
+          <WorkerExecutionTimeline requestId={id} attempts={r.attempts} />
           <Card asChild>
             <section className="overflow-hidden">
               <div className="panel-head">
@@ -930,6 +941,11 @@ function RequestDiagnostics({
           )}
           <div className="meta-grid">
             {[
+              ['来源', r.source?.kind ?? 'manual'],
+              ['配置 / 目录版本', `${r.configRevision ?? '—'} / ${r.catalogId ?? '—'}`],
+              ['测试选择', r.selection?.mode === 'case' ? r.selection.titlePath?.join(' › ') ?? r.selection.caseId ?? '—' : 'suite'],
+              ['自动策略版本', String(r.autoPolicyRevision ?? '—')],
+              ['替代任务', r.supersededBy ?? '—'],
               ['场景', r.input.scenario],
               ['应用 / 套件', `${r.input.targetId} / ${r.input.suite}`],
               ['分支', r.input.source?.branch ?? '—'],
@@ -1073,6 +1089,7 @@ function ReportContent({
   id: string;
   shared?: boolean;
 }) {
+  const [reportView, setReportView] = useState('tests');
   const prefix = shared ? '/api/shared/reports' : '/api/reports';
   const { data: r, error } = useData<ReportView>(`${prefix}/${id}`);
   const { data: request, error: requestError, reload } = useData<Detail>(
@@ -1141,10 +1158,15 @@ function ReportContent({
               {e.phase}: {e.message}
             </div>
           ))}
+          {!shared && r.executionAttemptId && <Tabs value={reportView} onValueChange={setReportView} className="report-view-tabs">
+            <TabsList aria-label="报告视图"><TabsTrigger value="tests"><Icon name="play" />测试回放</TabsTrigger><TabsTrigger value="worker"><Icon name="cpu" />Worker 执行</TabsTrigger></TabsList>
+          </Tabs>}
+          <div className="report-view-pane" hidden={!shared && reportView === 'worker' && !!r.executionAttemptId}>
           <Replay
             key={id}
             report={r}
             shared={shared}
+            active={shared || reportView === 'tests'}
             reportTabs={shared ? [] : [
               ...([
                 ['run', '运行信息', 'doc'],
@@ -1175,6 +1197,10 @@ function ReportContent({
               },
             ]}
           />
+          </div>
+          {!shared && r.executionAttemptId && <div className="report-worker-pane" hidden={reportView !== 'worker'}>
+            <WorkerExecutionTimeline requestId={r.requestId} executionAttemptId={r.executionAttemptId} />
+          </div>}
         </>
       )}
     </>
@@ -1281,6 +1307,7 @@ function Shares({ id }: { id: string }) {
   );
 }
 function Workers() {
+  const role = useContext(RoleContext);
   const { data, error, reload } = useData<ExecutionWorker[]>(
     '/api/workers',
     3000,
@@ -1293,6 +1320,7 @@ function Workers() {
   return (
     <>
       <PageTitle eyebrow="EXECUTION WORKERS" title="Worker 主机" />
+      <WorkerPairing role={role} />
       <ErrorBox error={error || actionError} />
       {ops && (
         <div className="callout">
@@ -1364,97 +1392,6 @@ function Workers() {
         暂停只阻止领取新任务。隔离设备需要运维在 Mac mini
         上确认进程终止并重置设备后恢复。
       </div>
-    </>
-  );
-}
-function Targets() {
-  const { data, error } = useData<Target[]>('/api/targets');
-  const { data: me } = useData<{ role: string }>('/api/me');
-  const [configuration, setConfiguration] = useState(''),
-    [notice, setNotice] = useState('');
-  const { data: raw } = useData<unknown[]>(
-    me?.role === 'admin' ? '/api/admin/targets' : '/api/targets',
-  );
-  return (
-    <>
-      <PageTitle eyebrow="APPLICATION TARGETS" title="应用配置" />
-      <ErrorBox error={error} />
-      {data?.map((t) => (
-        <Card asChild>
-          <section className="target-card overflow-hidden" key={t.id}>
-            <h2>{t.name}</h2>
-            <p>{t.id}</p>
-            <div>
-              <span>测试套件</span>
-              {t.suites.map((s) => (
-                <code key={s}>{s}</code>
-              ))}
-            </div>
-            <div>
-              <span>测试场景</span>
-              {t.scenarios.map((s) => (
-                <code key={s}>{s}</code>
-              ))}
-            </div>
-            {me?.role === 'admin' && (
-              <Button
-                variant="secondary"
-                size="default"
-                onClick={() =>
-                  setConfiguration(
-                    JSON.stringify(
-                      raw?.find(
-                        (item) => (item as { id?: string }).id === t.id,
-                      ),
-                      null,
-                      2,
-                    ),
-                  )
-                }
-              >
-                编辑配置
-              </Button>
-            )}
-          </section>
-        </Card>
-      ))}
-      {me?.role === 'admin' && (
-        <Card asChild>
-          <section className="target-editor overflow-hidden">
-            <h2>注册或更新应用</h2>
-            <p>
-              应用执行配置由管理员维护，任务提交人只能选择已注册的套件与场景。
-            </p>
-            <Textarea
-              aria-label="应用配置 JSON"
-              rows={16}
-              value={configuration}
-              onChange={(e) => setConfiguration(e.target.value)}
-              placeholder="ApplicationTarget JSON"
-            />
-            <Button
-              variant="default"
-              size="default"
-              onClick={async () => {
-                try {
-                  const target = JSON.parse(configuration);
-                  await api(
-                    `/api/admin/targets/${encodeURIComponent(target.id)}`,
-                    'PUT',
-                    target,
-                  );
-                  setNotice('配置已保存；新任务使用更新后的配置。');
-                } catch (e) {
-                  setNotice((e as Error).message);
-                }
-              }}
-            >
-              保存配置
-            </Button>
-            <p role="status">{notice}</p>
-          </section>
-        </Card>
-      )}
     </>
   );
 }
@@ -1577,8 +1514,13 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({
     getParentRoute: () => rootRoute,
+    path: '/projects',
+    component: Projects,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
     path: '/targets',
-    component: Targets,
+    component: Projects,
   }),
   createRoute({
     getParentRoute: () => rootRoute,

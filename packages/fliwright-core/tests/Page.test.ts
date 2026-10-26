@@ -205,6 +205,41 @@ describe('Page', () => {
     });
   });
 
+  it('returns the stitched full-page PNG from the bridge', async () => {
+    const sendRequest = vi.fn(async (method: string) => method === 'ext.fliwright.handshake'
+      ? { bridgeCapabilities: { fullPageScreenshot: true } }
+      : { success: true, screenshot: Buffer.from('long-png').toString('base64') });
+    const page = new Page(sendRequest);
+    expect((await page.screenshotFullPage({ pixelRatio: 2 })).toString()).toBe('long-png');
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', { fullPage: 'true', pixelRatio: '2' });
+  });
+
+  it('supports fullPage through screenshot and rejects incomplete captures', async () => {
+    const sendRequest = vi.fn(async (method: string) => method === 'ext.fliwright.handshake'
+      ? { bridgeCapabilities: { fullPageScreenshot: true } }
+      : { success: false, error: 'Full-page screenshot exceeds maxHeight' });
+    const page = new Page(sendRequest);
+    await expect(page.screenshot({ fullPage: true, scrollable: 'key=feed', maxHeight: 5000 }))
+      .rejects.toThrow('exceeds maxHeight');
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.screenshot', {
+      pixelRatio: '1.0', fullPage: 'true', scrollable: 'key=feed', maxHeight: '5000',
+    });
+    sendRequest.mockClear();
+    await expect(page.screenshot({ fullPage: true, rect: { x: 0, y: 0, width: 10, height: 10 } }))
+      .rejects.toThrow('rect');
+    expect(sendRequest).not.toHaveBeenCalled();
+  });
+
+  it('rejects an outdated bridge before it can scroll and return legacy segments', async () => {
+    const sendRequest = vi.fn(async (method: string) => method === 'ext.fliwright.handshake'
+      ? { bridgeCapabilities: { rootRenderViewScreenshot: true } }
+      : { success: true, segments: ['first-screen', 'second-screen'], segmentCount: 2 });
+    await expect(new Page(sendRequest).screenshot({ fullPage: true }))
+      .rejects.toThrow('Update fliwright_bridge in the Flutter app');
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.handshake', { protocolVersion: '2' });
+    expect(sendRequest).not.toHaveBeenCalledWith('ext.fliwright.screenshot', expect.anything());
+  });
+
   it('viewport returns logical dimensions from the screenshot extension', async () => {
     const sendRequest = vi.fn().mockResolvedValue({
       success: true,

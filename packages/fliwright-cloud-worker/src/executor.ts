@@ -9,6 +9,7 @@ import {
   VmServiceEndpointResolver,
   waitForVmServiceEndpoint,
   type VmServiceEndpoint,
+  type VmServiceAcquisitionRequest,
 } from '@fliwright/core';
 import {
   runCommand,
@@ -30,7 +31,9 @@ import {
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { runCommandProcess } from './processes.js';
 import { writeJournal, type ExecutionResult } from './WorkerAgent.js';
-import type { ExecutionLease } from '@fliwright/cloud-protocol';
+import { workerPhaseStage, type ExecutionLease, type WorkerPhase } from '@fliwright/cloud-protocol';
+import { executorTimeline } from './worker-timeline-ipc.js';
+import { secureCatalogCheckout } from './catalog-scanner.js';
 
 /** Flutter's machine process inherits the executor's durable, owned process group. */
 class OwnedFlutterTransport implements DaemonTransport {
@@ -50,6 +53,7 @@ class OwnedFlutterTransport implements DaemonTransport {
     private cwd: string,
     private log: string,
     private signal: AbortSignal,
+    private observe?: (message: DaemonMessage) => void,
   ) {}
   async connect() {}
   async request<T>(
@@ -102,6 +106,7 @@ class OwnedFlutterTransport implements DaemonTransport {
     });
   }
   private dispatch(message: DaemonMessage) {
+    this.observe?.(message);
     if (message.id !== undefined) {
       const p = this.pending.get(Number(message.id));
       this.pending.delete(Number(message.id));
@@ -153,6 +158,11 @@ export async function executeJob(
     checkout = join(directory, 'checkout'),
     runsRoot = join(directory, 'runs');
   const stage = (value: string) => process.send?.({ stage: value });
+  const telemetry = executorTimeline(), timeline = telemetry.channel;
+  const phase = <T>(name: WorkerPhase, action: (spanId?: string) => Promise<T>) => {
+    stage(workerPhaseStage(name));
+    return timeline.run(name, action, { signal });
+  };
   const command = (program: string, args: string[], cwd = directory) =>
     runCommandProcess({ program, args }, cwd, log, signal);
   let daemon: FlutterDaemonController | undefined;
@@ -160,16 +170,16 @@ export async function executeJob(
   let finalizationFailed = false;
   let outcome: ExecutionResult = { verdict: 'unknown' };
   try {
-    stage('checkout');
-    await command('git', [
+    const project = await phase('repository.checkout', async parentSpanId => {
+    await timeline.run('repository.checkout', () => command('git', [
       'clone',
       '--no-checkout',
       '--no-hardlinks',
       '--',
       target.repository,
       checkout,
-    ]);
-    await command(
+    ]), { parentSpanId, operation: 'clone', signal });
+    await timeline.run('repository.checkout', () => command(
       'git',
       [
         '-c',
@@ -180,8 +190,8 @@ export async function executeJob(
         lease.request.input.commit,
       ],
       checkout,
-    );
-    await command(
+    ), { parentSpanId, operation: 'fetch', signal });
+    await timeline.run('repository.checkout', () => command(
       'git',
       [
         '-c',
@@ -191,23 +201,27 @@ export async function executeJob(
         lease.request.input.commit,
       ],
       checkout,
-    );
-    if (
-      (await command('git', ['rev-parse', 'HEAD'], checkout)) !==
+    ), { parentSpanId, operation: 'checkout', signal });
+    await timeline.run('repository.checkout', async () => {
+    if ((await command('git', ['rev-parse', 'HEAD'], checkout)) !==
       lease.request.input.commit
-    )
-      throw new Error('Checkout identity mismatch');
+    ) throw new Error('Checkout identity mismatch');
+    }, { parentSpanId, operation: 'verify_sha', signal });
+    await secureCatalogCheckout(checkout);
     const project = resolve(checkout, target.projectPath),
       actual = realpathSync(project),
       rel = relative(realpathSync(checkout), actual);
     if (isAbsolute(rel) || rel === '..' || rel.startsWith('../'))
       throw new Error('Project escapes registered checkout');
-    stage('install');
-    for (const cmd of target.install)
-      await runCommandProcess(cmd, project, log, signal);
-    stage('reset_before');
-    for (const cmd of job.resetCommands)
-      await runCommandProcess(
+    return project;
+    });
+    if (target.install.length) await phase('dependencies.install', async parentSpanId => {
+      for (const [commandIndex, cmd] of target.install.entries())
+        await timeline.run('dependencies.install', () => runCommandProcess(cmd, project, log, signal), { parentSpanId, operation: 'command', commandIndex, signal });
+    });
+    if (job.resetCommands.length) await phase('device.reset.before', async parentSpanId => {
+    for (const [commandIndex, cmd] of job.resetCommands.entries())
+      await timeline.run('device.reset.before', () => runCommandProcess(
         {
           ...cmd,
           args: cmd.args.map((a) => a.replaceAll('{deviceId}', lease.deviceId)),
@@ -215,10 +229,15 @@ export async function executeJob(
         directory,
         log,
         signal,
-      );
-    stage('launch');
+      ), { parentSpanId, operation: 'command', commandIndex, signal });
+    });
+    let launchSpanId: string | undefined;
     daemon = new FlutterDaemonController(
-      new OwnedFlutterTransport(job.flutterBin, project, log, signal),
+      new OwnedFlutterTransport(job.flutterBin, project, log, signal, message => {
+        if (message.event === 'app.start') void timeline.milestone('app.process_started', launchSpanId);
+        if (message.event === 'app.started') void timeline.milestone('app.started', launchSpanId);
+        if (message.event === 'app.debugPort') void timeline.milestone('vm.endpoint_observed', launchSpanId);
+      }),
     );
     const source = new FlutterDaemonEndpointSource({
       controller: daemon,
@@ -228,10 +247,21 @@ export async function executeJob(
       flutterArgs: target.flutterArgs,
       scope: 'execution-worker',
     });
-    const resolver = new VmServiceEndpointResolver([source], {
+    const resolver = new VmServiceEndpointResolver([{
+      name: source.name,
+      acquire: (request: VmServiceAcquisitionRequest) => phase('app.launch', spanId => {
+        launchSpanId = spanId;
+        return source.acquire(request);
+      }),
+    }], {
       persistWorkspaceCache: false,
       verify: (endpoint: VmServiceEndpoint) =>
-        waitForVmServiceEndpoint(endpoint, { signal, timeoutMs: 30000 }),
+        phase('app.verify', async () => {
+          const health = await waitForVmServiceEndpoint(endpoint, { signal, timeoutMs: 30000 });
+          if (health.status !== 'ok' || target.requiredCapabilities.some(capability => health.bridgeCapabilities?.[capability] !== true))
+            throw new Error('Required VM Service or Bridge capabilities are unavailable');
+          return health;
+        }),
     });
     const endpoint = await resolver.acquire({
       scope: 'execution-worker',
@@ -239,11 +269,17 @@ export async function executeJob(
       requiredCapabilities: target.requiredCapabilities,
     });
     stage('running');
+    const testsSpan = await timeline.startSpan('tests.run');
     try {
       result = await runCommand({
         cwd: project,
         vmUrl: endpoint.url,
-        testPattern: target.suites[lease.request.input.suite],
+        testPattern: lease.request.selection?.mode === 'case'
+          ? lease.request.selection.file!
+          : target.suites[lease.request.input.suite],
+        ...(lease.request.selection?.mode === 'case'
+          ? { caseSelection: { caseId: lease.request.selection.caseId!, file: lease.request.selection.file!, titlePath: lease.request.selection.titlePath!, duplicateIndex: lease.request.selection.duplicateIndex! } }
+          : {}),
         scenario: lease.request.input.scenario,
         scenarioMode: 'managed-start',
         runsRoot,
@@ -255,8 +291,19 @@ export async function executeJob(
       if (e instanceof RunFinalizationError) {
         result = e.runnerResult;
         finalizationFailed = true;
-      } else throw e;
+      } else {
+        await timeline.finishSpan(testsSpan, signal.aborted ? 'interrupted' : 'failed', {
+          reason: signal.aborted ? 'shutdown' : undefined,
+          error: { code: 'runner_failed', message: 'Test runner failed' },
+        });
+        throw e;
+      }
     }
+    await timeline.finishSpan(testsSpan, result.runnerErrors?.length || finalizationFailed ? 'failed' : 'succeeded', {
+      testVerdict: result.status === 'running' ? 'unknown' : result.status ?? (result.passed ? 'passed' : 'failed'),
+      runId: result.artifacts?.runId,
+      ...(result.runnerErrors?.length || finalizationFailed ? { error: { code: 'runner_failed' as const, message: 'Test runner failed' } } : {}),
+    });
     await endpoint.dispose();
     outcome.verdict =
       result.status === 'running'
@@ -268,7 +315,6 @@ export async function executeJob(
     }
     if (finalizationFailed)
       outcome.error = 'Artifact finalization failed; original verdict retained';
-    stage('export');
     const runId =
       result.artifacts?.runId ??
       readdirSync(runsRoot, { withFileTypes: true }).find((d) =>
@@ -276,6 +322,7 @@ export async function executeJob(
       )?.name;
     if (runId)
       try {
+        await phase('artifacts.export', async () => {
         const bundle = join(directory, 'bundle');
         await artifactsExportCommand({
           cwd: project,
@@ -286,6 +333,7 @@ export async function executeJob(
         });
         captureSources(bundle, project);
         outcome.bundleDir = bundle;
+        });
       } catch {
         outcome.error = 'Artifact export failed; original verdict retained';
       }
@@ -297,8 +345,12 @@ export async function executeJob(
         'Preparation, launch or execution failed; inspect Worker diagnostics',
     };
   } finally {
-    await daemon?.dispose();
-    writeJournal(join(directory, 'result.json'), outcome);
+    try { if (daemon) await timeline.run('processes.stop', () => daemon!.dispose()); }
+    catch { outcome.error ??= 'Flutter process disposal failed; supervisor termination required'; }
+    finally {
+      telemetry.dispose();
+      writeJournal(join(directory, 'result.json'), outcome);
+    }
   }
   return outcome;
 }

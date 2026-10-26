@@ -19,3 +19,5 @@ export { verifyRecordingReplay, type RecordingReplayOptions, type RecordingRepla
 
 export { artifactsExportCommand, artifactsShowCommand, type ArtifactOptions } from './commands/artifacts.js';
 export { artifactReferences, type ArtifactReference } from './ArtifactReferences.js';
+
+export { collectCatalog, collectedCases, catalogCaseId, type CatalogCase, type CatalogSelection } from './catalog.js';

@@ -14,6 +14,9 @@ inspection into one native VS Code sidebar.
 - Apply and clear local API mock rules from `.fliwright/mocks`.
 - Generate and fill form data from `.fliwright/forms` rules.
 - Inspect screenshots, run history, failure context, and traces.
+- Use **Take Long App Screenshot** (expand icon beside the camera in the Devices toolbar) to preview vertical scroll content as one PNG. The preview scrolls vertically and the app's original scroll position is restored. Capture requires one visible, non-reversed vertical scroll view; nested scrolling and sticky headers are unsupported.
+- Long capture isolates the scroll viewport's painted content, so floating bottom tabs and other sibling overlays are excluded without leaving gaps in the list. Ordinary viewport screenshots still include them.
+- Long screenshots require the updated `fliwright_bridge` to be loaded in the running Flutter app; installing the VSIX alone does not update it. Hot reload or relaunch the app after updating the bridge. Capturing scrolls the live viewport, so brief visible jumps are expected; an outdated bridge is rejected before scrolling.
 - List, read, watch, copy, and override Riverpod providers exposed by the
   Fliwright bridge.
 

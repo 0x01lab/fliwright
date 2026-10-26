@@ -2,6 +2,8 @@ import { waitForVmServiceEndpoint } from '@fliwright/core';
 import { z } from 'zod';
 import { FlutterDaemonController, SubprocessDaemonTransport } from '@fliwright/tdd';
 import { CommandRegistry, CliError, type CommandContext } from '../CommandRegistry.js';
+import { collectCatalog } from '../catalog.js';
+import { loadConfig } from '../config.js';
 import { runCommand } from '../commands/run.js';
 import { initCommand } from '../commands/init.js';
 import { doctorCommand } from '../commands/doctor.js';
@@ -39,7 +41,11 @@ export function registerFinite(registry: CommandRegistry, deps: FiniteDeps = {})
     if (input.strict && data.checks.some((check) => check.required && check.status !== 'passed')) throw new CliError('ENVIRONMENT_INVALID', 'Required environment checks failed.', 3, data);
     return data;
   }, ['environment-probe']);
-  const runFields = { deviceId: str, target: str, flutterArgs: z.array(z.string()).optional(), keepAppAlive: bool, test: str, testName: str, ...connection, reporter: z.enum(['pretty', 'json', 'junit']).optional(), timeout: positive,
+  add('catalog', { suites: z.record(z.string().min(1)).optional() }, async (input, context) => {
+    const config = await loadConfig(context.cwd);
+    return collectCatalog({ cwd: context.cwd, suites: input.suites ?? config.suites ?? { tests: `${config.testDir}/**/*.test.ts` } });
+  }, ['trusted-project-import'], { description: 'Collect test catalog without running test or hook bodies', needsApp: false });
+  const runFields = { deviceId: str, target: str, flutterArgs: z.array(z.string()).optional(), keepAppAlive: bool, test: str, testName: str, caseSelection: z.object({ caseId: z.string().regex(/^[a-f0-9]{64}$/), file: z.string().min(1), titlePath: z.array(z.string()).min(1), duplicateIndex: z.number().int().nonnegative() }).strict().optional(), ...connection, reporter: z.enum(['pretty', 'json', 'junit']).optional(), timeout: positive,
     screenshot: z.enum(['file', 'base64', 'off']).optional(), recordingMode: z.enum(['standard', 'full', 'off']).optional(),
     output: str, junitOutput: str, runsRoot: str, scenario: str };
   const run = async (input: any, context: CommandContext) => {
@@ -80,7 +86,7 @@ export function registerFinite(registry: CommandRegistry, deps: FiniteDeps = {})
   add('app.source-map', { ...connection, ...snapshot, includeFramework: bool, limit: positive }, withContext(inspect.appSourceMapCommand), [], { needsApp: true });
   add('app.diagnostics', { ...connection, ...diagnostics }, withContext(inspect.appDiagnosticsCommand), ['diagnostic-subscriptions'], { needsApp: true });
   add('app.reload', { ...connection, ...snapshot, includeScreenshot: bool, screenshotPixelRatio: number }, withContext(inspect.appReloadCommand), ['app-reload', 'snapshot-refs'], { needsApp: true });
-  add('app.screenshot', { ...connection, output: str, pixelRatio: z.number().finite().positive().optional() }, withContext(appScreenshotCommand), ['image-file'], { needsApp: true });
+  add('app.screenshot', { ...connection, output: str, pixelRatio: z.number().finite().positive().optional(), fullPage: bool, scrollable: str, maxHeight: z.number().finite().positive().optional() }, withContext(appScreenshotCommand), ['image-file'], { needsApp: true });
   add('app.debug-snapshot', { ...connection, ...snapshot, output: str, includeScreenshot: bool, pixelRatio: z.number().positive().optional(), includeDiagnostics: bool,
     diagnosticLimit: positive, includeMockStatus: bool, mockRecentCallsLimit: positive, includeSourceMap: bool, sourceMapLimit: positive }, withContext(inspect.appDebugSnapshotCommand), ['snapshot-refs', 'optional-image-file'], { needsApp: true });
   add('app.interact', { ...connection, ...target, operation: z.enum(['tap', 'type', 'navigate', 'wait', 'drag', 'action']), value: z.union([z.string(), z.number()]).optional(),

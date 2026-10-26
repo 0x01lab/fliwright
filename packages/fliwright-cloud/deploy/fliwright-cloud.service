@@ -1,0 +1,18 @@
+[Unit]
+Description=Fliwright Cloud Server
+After=network.target
+
+[Service]
+Type=simple
+User=fliwright
+Group=fliwright
+EnvironmentFile=/etc/fliwright-cloud/server.env
+ExecStart=/usr/bin/node /opt/fliwright-cloud/fliwright-cloud server /etc/fliwright-cloud/server.json
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+UMask=0077
+StateDirectory=fliwright-cloud
+
+[Install]
+WantedBy=multi-user.target

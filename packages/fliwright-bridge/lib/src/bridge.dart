@@ -219,6 +219,7 @@ class FliwrightBridge {
           'recordingFocusedInputController': true,
           'screenshotWaitForFrame': true,
           'rootRenderViewScreenshot': true,
+          'fullPageScreenshot': true,
           'recordingScreenshotSampler': true,
           'timelineContext': true,
           'captureFrame': true,

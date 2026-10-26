@@ -18,6 +18,14 @@ it('returns one JSON error and usage exit before touching an app for invalid ope
   expect(JSON.parse(result.stdout)).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
 });
 
+it('advertises full-page screenshot options in the CLI schema', async () => {
+  const result = await executeCli(['schema', 'app.screenshot', '--json']);
+  expect(result.exitCode).toBe(0);
+  expect(JSON.parse(result.stdout).data.input.properties).toMatchObject({
+    fullPage: { type: 'boolean' }, scrollable: { type: 'string' }, maxHeight: { type: 'number' },
+  });
+});
+
 it('returns Commander parse failures in the machine contract', async () => {
   const result = await executeCli(['app', 'observe', '--unknown', '--json']);
   expect(result.exitCode).toBe(2);

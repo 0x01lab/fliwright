@@ -4,6 +4,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CloudStore, digest } from '../src/CloudStore.js';
 import { createCloudServer } from '../src/server.js';
+import { WorkerControlClient, CloudError } from '@fliwright/cloud-protocol';
+async function workerRpc(server: ReturnType<typeof createCloudServer>, token: string, path: string, body: unknown) {
+  if (!server.server.listening) await server.listen({ host: '127.0.0.1', port: 0 });
+  const address = server.server.address() as import('node:net').AddressInfo;
+  const client = new WorkerControlClient(`http://127.0.0.1:${address.port}`, token);
+  try {
+    const data = await client.request(path, { body });
+    return { statusCode: 200, json: () => data as any };
+  } catch (error) {
+    return { statusCode: error instanceof CloudError ? error.statusCode : 401, json: () => ({}) as any };
+  } finally { client.close(); }
+}
 const clean: Array<() => Promise<unknown> | void> = [];
 afterEach(async () => {
   for (const f of clean.splice(0).reverse()) await f();
@@ -52,6 +64,7 @@ function setup() {
     users: { alice: 'member', ops: 'operator', admin: 'admin' },
     ciTokens: [{ name: 'gitlab', hash: digest('ci-token') }],
     workerTokens: [{ workerId: 'mac', hash: digest('worker-token') }],
+    repositoryHosts: ['git.example.com'],
     minFreeBytes: 0,
   });
   clean.push(() => server.close());
@@ -80,23 +93,9 @@ it('accepts device inventories only from the owning worker and keeps discovery s
     ],
   };
   const send = (token: string, payload: unknown = inventory) =>
-    server.inject({
-      method: 'POST',
-      url: '/api/worker/devices',
-      headers: { authorization: `Bearer ${token}` },
-      payload,
-    });
-  expect((await send('ci-token')).statusCode).toBe(403);
-  expect(
-    (
-      await server.inject({
-        method: 'POST',
-        url: '/api/worker/devices',
-        headers: browser('admin'),
-        payload: inventory,
-      })
-    ).statusCode,
-  ).toBe(403);
+    workerRpc(server, token, '/api/worker/devices', payload);
+  expect((await send('ci-token')).statusCode).toBe(401);
+  expect((await server.inject({ method: 'POST', url: '/api/worker/devices', headers: browser('admin'), payload: inventory })).statusCode).toBe(404);
   expect(
     (await send('worker-token', { ...inventory, workerId: 'another-worker' }))
       .statusCode,
@@ -132,6 +131,72 @@ it('accepts device inventories only from the owning worker and keeps discovery s
     (await send('worker-token', { ...inventory, devices: [] })).statusCode,
   ).toBe(200);
   expect(store.listWorkers()[0].inventory?.devices).toEqual([]);
+});
+it('manages projects with admin writes, monotonic revisions, case catalog checks and signed push deduplication', async () => {
+  const { server, store, browser } = setup();
+  const create = (headers: Record<string, string>, payload: unknown) => server.inject({ method: 'POST', url: '/api/projects', headers, payload });
+  const project = {
+    id: 'web', name: 'Web', repository: 'https://git.example.com/team/web.git', defaultBranch: 'main', projectPath: '.', entry: 'lib/main.dart',
+    suites: { smoke: '.fliwright/tests/smoke.test.ts' }, scenarios: ['clean'], requiredCapabilities: [], install: [], flutterArgs: [], timeoutMs: 60000,
+    configRevision: 1, repositoryCredentialRef: null, webhookSecretDigest: null, webhookStatus: 'disabled',
+    autoRun: { enabled: false, branch: 'main', selections: [{ suite: 'smoke', scenario: 'clean' }], revision: 1 },
+  };
+  const { id: _id, configRevision: _revision, webhookSecretDigest: _secret, webhookStatus: _status, autoRun: _policy, ...creation } = project;
+  expect((await create(browser(), creation)).statusCode).toBe(403);
+  expect((await create(browser('admin'), { ...creation, repository: 'https://localhost/team/web.git' })).statusCode).toBe(400);
+  expect((await create(browser('admin'), { ...creation, repository: 'https://[fc00::1]/team/web.git' })).statusCode).toBe(400);
+  const response = await create(browser('admin'), creation);
+  expect(response.statusCode).toBe(201);
+  const id = response.json().id;
+  expect(id).toMatch(/^project-[a-f0-9]{24}$/);
+  const created = (await server.inject({ url: `/api/projects/${id}`, headers: browser() })).json();
+  expect(created).not.toHaveProperty('webhookSecretDigest');
+  const update = await server.inject({ method: 'PUT', url: `/api/projects/${id}`, headers: browser('admin'), payload: { ...project, id, name: 'Web App' } });
+  expect(update.json()).toMatchObject({ name: 'Web App', configRevision: 2, autoRun: { revision: 1 } });
+  const scan = await server.inject({ method: 'POST', url: `/api/projects/${id}/scans`, headers: browser('ops'), payload: { commit: 'c'.repeat(40) } });
+  expect(scan.json()).toMatchObject({ status: 'queued', configRevision: 2 });
+  await server.inject({ method: 'PUT', url: `/api/projects/${id}/auto-run`, headers: browser('admin'), payload: { enabled: true, branch: 'main', selections: [{ suite: 'smoke', scenario: 'clean' }] } });
+  const token = (await server.inject({ method: 'POST', url: `/api/projects/${id}/webhook-secret`, headers: browser('admin') })).json().token;
+  const push = { object_kind: 'push', ref: 'refs/heads/main', checkout_sha: 'd'.repeat(40), before: 'e'.repeat(40), after: 'd'.repeat(40), project: { id: 1, web_url: 'https://git.example.com/team/web' } };
+  const webhook = (delivery: string) => server.inject({ method: 'POST', url: `/api/webhooks/gitlab/${id}`, headers: { 'x-gitlab-token': token, 'x-gitlab-event': 'Push Hook', 'x-gitlab-event-uuid': delivery }, payload: push });
+  expect((await webhook('delivery-1')).statusCode).toBe(202);
+  expect((await webhook('delivery-1')).json()).toMatchObject({ accepted: true, duplicate: true });
+  expect(store.branchHead(id, 'main')).toBeUndefined(); // Remote HEAD is verified by the scan worker.
+  expect(store.queue().length).toBe(0);
+});
+it('keeps scenario-free catalogs browsable and bases readiness on discovered scenarios', async () => {
+  const { server, store, browser } = setup();
+  const publish = (commit: string, scenarios: Array<{ name: string; fingerprint: string }>) => {
+    store.createCatalogScan('app', commit);
+    const lease = store.claimCatalogScan('mac')!;
+    const file = 'proof.test.ts', titlePath = ['proof'];
+    store.finishCatalogScan('mac', lease.scan.scanId, lease.token, {
+      catalogId: lease.scan.scanId, projectId: 'app', commit, configRevision: 1,
+      status: 'ready', createdAt: Date.now(), scannerVersion: 'test', fliwrightVersion: 'test', scenarios,
+      suites: [{ id: 'smoke', pattern: '*.test.ts', files: [file], cases: [{ file, titlePath, duplicateIndex: 0, caseId: digest(JSON.stringify([file, titlePath, 0])) }] }],
+    });
+  };
+  publish('a'.repeat(40), []);
+  const status = (await server.inject({ url: '/api/projects/app/status', headers: browser() })).json();
+  expect(status.blockers).toContain('仓库尚未声明运行场景，可浏览用例；运行前请在 fliwright.config.ts 中声明场景');
+  expect((await server.inject({ url: '/api/projects/app/catalogs', headers: browser() })).json()[0].suites[0].cases).toHaveLength(1);
+  expect((await server.inject({ method: 'POST', url: '/api/projects/app/ready', headers: browser('admin'), payload: {} })).statusCode).toBe(409);
+  publish('b'.repeat(40), [{ name: 'guest', fingerprint: digest('guest') }]);
+  expect((await server.inject({ method: 'POST', url: '/api/projects/app/ready', headers: browser('admin'), payload: {} })).statusCode).toBe(200);
+  expect((await server.inject({ url: '/api/projects/app/status', headers: browser() })).json().ready).toBe(true);
+});
+it('creates a project from only its repository URL and keeps identifiers server generated', async () => {
+  const { server, browser } = setup();
+  const create = (payload: unknown) => server.inject({ method: 'POST', url: '/api/projects', headers: browser('admin'), payload });
+  const first = await create({ repository: ' https://git.example.com/group/subgroup/my-app.git/ ' });
+  expect(first.statusCode).toBe(201);
+  expect(first.json()).toMatchObject({ name: 'my-app', repository: 'https://git.example.com/group/subgroup/my-app.git', defaultBranch: 'main', projectPath: '.', entry: 'lib/main.dart', suites: { smoke: '.fliwright/tests/**/*.test.ts' }, scenarios: ['clean'], autoRun: { enabled: false, branch: 'main' } });
+  const second = await create({ repository: 'git@git.example.com:other/my-app.git', name: 'Custom name', defaultBranch: 'develop' });
+  expect(second.statusCode).toBe(201);
+  expect(second.json()).toMatchObject({ name: 'Custom name', repository: 'ssh://git@git.example.com/other/my-app.git', defaultBranch: 'develop', autoRun: { branch: 'develop' } });
+  expect(second.json().id).not.toBe(first.json().id);
+  expect((await create({ repository: 'https://git.example.com/group/app', id: 'chosen-by-client' })).statusCode).toBe(400);
+  expect((await create({ repository: 'https://git.example.com/group/app/-/issues' })).statusCode).toBe(400);
 });
 it('separates proxy, CI and worker identities and protects mutations against CSRF', async () => {
   const { server, browser } = setup();
@@ -175,22 +240,16 @@ it('separates proxy, CI and worker identities and protects mutations against CSR
   });
   expect(submitted.statusCode).toBe(201);
   const id = submitted.json().id;
-  expect(
-    (
-      await server.inject({
-        method: 'POST',
-        url: '/api/worker/claim',
-        headers: { authorization: 'Bearer ci-token' },
-        payload: { slotId: 'ios', deviceId: 'device' },
-      })
-    ).statusCode,
-  ).toBe(403);
-  const claimed = await server.inject({
-    method: 'POST',
-    url: '/api/worker/claim',
-    headers: { authorization: 'Bearer worker-token' },
-    payload: { slotId: 'ios', deviceId: 'device' },
-  });
+  const unboundRequests = await server.inject({ url: '/api/requests?projectId=app', headers: browser() });
+  expect(unboundRequests.json().items.map((item: { id: string }) => item.id)).not.toContain(id);
+  const legacyFilter = await server.inject({ url: '/api/requests?targetId=app', headers: browser() });
+  expect(legacyFilter.json().items.map((item: { id: string }) => item.id)).toContain(id);
+  const bound = await server.inject({ method: 'POST', url: '/api/requests', headers: { ...browser(), 'idempotency-key': 'bound-key' }, payload: { ...input, projectId: 'app' } });
+  expect(bound.statusCode).toBe(201);
+  const projectRequests = await server.inject({ url: '/api/requests?projectId=app', headers: browser() });
+  expect(projectRequests.json().items).toEqual(expect.arrayContaining([expect.objectContaining({ id: bound.json().id, projectId: 'app' })]));
+  expect((await workerRpc(server, 'ci-token', '/api/worker/claim', { slotId: 'ios', deviceId: 'device' })).statusCode).toBe(401);
+  const claimed = await workerRpc(server, 'worker-token', '/api/worker/claim', { slotId: 'ios', deviceId: 'device' });
   expect(claimed.json().request.id).toBe(id);
   expect(
     (

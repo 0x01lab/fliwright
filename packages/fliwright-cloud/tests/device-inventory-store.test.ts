@@ -35,7 +35,7 @@ it('upgrades version-one databases and persists inventory independently of worke
       inventory: { ...inventory, receivedAt: 1000, stale: true },
     });
     expect(store.db.prepare('PRAGMA user_version').get()).toMatchObject({
-      user_version: 3,
+      user_version: 8,
     });
   } finally {
     store.close();

@@ -8,8 +8,16 @@ let root: Root, container: HTMLDivElement;
 let role = 'operator',
   failSave = false;
 let device: ManagedDevice;
+let subscriptions: Array<{ url: string; onmessage: null | (() => void); close: ReturnType<typeof vi.fn> }>;
+
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  subscriptions = [];
+  vi.stubGlobal('EventSource', class {
+    onmessage: null | (() => void) = null;
+    close = vi.fn();
+    constructor(public url: string) { subscriptions.push(this); }
+  });
   role = 'operator';
   failSave = false;
   device = {
@@ -112,7 +120,19 @@ it('opens the unified list, restores URL filters and navigates to device detail 
   );
   expect(container.querySelector('h1')?.textContent).toBe('iPhone');
   expect(container.querySelector('header.app-header')).toBe(shell);
-  expect(container.textContent).toContain('独立工作目录');
+  expect(container.textContent).toContain('自动同步');
+});
+it('ignores unsupported and stale URL filters instead of hiding devices behind all options', async () => {
+  await mount('/devices?connection=connected&worker=retired-host');
+  expect(container.querySelector('a[href="/devices/phone"]')?.textContent).toBe(
+    'iPhone',
+  );
+  expect(
+    container.querySelector<HTMLSelectElement>('[aria-label="连接状态"]')?.value,
+  ).toBe('');
+  expect(
+    container.querySelector<HTMLSelectElement>('[aria-label="Worker"]')?.value,
+  ).toBe('');
 });
 it('saves enrollment and application settings, showing deployment readiness', async () => {
   await mount('/devices/phone');
@@ -120,9 +140,6 @@ it('saves enrollment and application settings, showing deployment readiness', as
   await fill('#device-slot', 'phone-slot');
   await act(async () =>
     container.querySelector<HTMLButtonElement>('#device-managed')!.click(),
-  );
-  await act(async () =>
-    container.querySelector<HTMLButtonElement>('#device-enabled')!.click(),
   );
   await act(async () =>
     container
@@ -147,6 +164,14 @@ it('saves enrollment and application settings, showing deployment readiness', as
   });
   expect(container.textContent).toContain('配置已保存');
   expect(container.textContent).toContain('等待执行进程');
+});
+it('enrolls and enables a device when an application is selected, leaving slot allocation automatic', async () => {
+  await mount('/devices/phone');
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="允许应用 App"]')!.click());
+  await act(async () => container.querySelector('form[data-device-settings]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const saved = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === 'PUT')!;
+  expect(JSON.parse(String(saved[1]?.body))).toMatchObject({ managed: true, enabled: true, targets: ['app'], slotId: null });
+  expect(container.textContent).toContain('留空自动分配');
 });
 it('keeps edits after a save error and renders management controls read-only for members', async () => {
   await mount('/devices/phone');
@@ -181,9 +206,7 @@ it('refreshes untouched settings while preserving local unsaved edits', async ()
       ...device,
       settings: { ...device.settings, alias: 'Updated elsewhere' },
     };
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
-    });
+    await act(async () => { subscriptions.at(-1)!.onmessage?.(); });
     expect(
       container.querySelector<HTMLInputElement>('#device-alias')?.value,
     ).toBe('Updated elsewhere');
@@ -192,9 +215,7 @@ it('refreshes untouched settings while preserving local unsaved edits', async ()
       ...device,
       settings: { ...device.settings, tags: ['remote-tag'] },
     };
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
-    });
+    await act(async () => { subscriptions.at(-1)!.onmessage?.(); });
     expect(
       container.querySelector<HTMLInputElement>('#device-tags')?.value,
     ).toBe('local-tag');
@@ -203,13 +224,53 @@ it('refreshes untouched settings while preserving local unsaved edits', async ()
       ...device,
       settings: { ...device.settings, alias: 'Another update' },
     };
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
-    });
+    await act(async () => { subscriptions.at(-1)!.onmessage?.(); });
     expect(
       container.querySelector<HTMLInputElement>('#device-alias')?.value,
     ).toBe('Local unsaved');
   } finally {
     vi.useRealTimers();
   }
+});
+
+
+it('updates list and detail on pushed device changes and closes subscriptions when leaving', async () => {
+  await mount('/devices');
+  expect(subscriptions[0]?.url).toBe('/api/device-events');
+  device = { ...device, observation: { ...device.observation, state: 'offline' } };
+  await act(async () => { subscriptions[0].onmessage?.(); });
+  expect(container.querySelector('tbody')?.textContent).toContain('离线');
+  await act(async () => container.querySelector<HTMLAnchorElement>('a[href="/devices/phone"]')!.click());
+  expect(subscriptions[0].close).toHaveBeenCalledOnce();
+  expect(subscriptions[1]?.url).toBe('/api/device-events');
+  await fill('#device-alias', 'Local unsaved');
+  device = { ...device, observation: { ...device.observation, state: 'online' } };
+  await act(async () => { subscriptions[1].onmessage?.(); });
+  expect(container.textContent).toContain('在线');
+  expect(container.querySelector<HTMLInputElement>('#device-alias')?.value).toBe('Local unsaved');
+  await act(async () => container.querySelector<HTMLAnchorElement>('a[href="/devices"]')!.click());
+  expect(subscriptions[1].close).toHaveBeenCalledOnce();
+});
+
+it('coalesces pushed changes during an in-flight refresh and reads the latest device state afterward', async () => {
+  await mount('/devices');
+  const originalFetch = globalThis.fetch;
+  let finish!: (value: unknown) => void;
+  let refreshes = 0;
+  vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {
+    if (url !== '/api/devices') return originalFetch(url, options);
+    refreshes++;
+    if (refreshes === 1) return new Promise(resolve => { finish = resolve; });
+    return Promise.resolve({ ok: true, json: async () => [device] });
+  }));
+  await act(async () => { subscriptions[0].onmessage?.(); });
+  device = { ...device, observation: { ...device.observation, state: 'unauthorized' } };
+  await act(async () => {
+    subscriptions[0].onmessage?.();
+    subscriptions[0].onmessage?.();
+  });
+  expect(refreshes).toBe(1);
+  await act(async () => { finish({ ok: true, json: async () => [] }); });
+  expect(refreshes).toBe(2);
+  expect(container.querySelector('tbody')?.textContent).toContain('未授权');
 });

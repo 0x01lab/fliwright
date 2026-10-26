@@ -1,4 +1,4 @@
 {
   "serverUrl": "https://cloud.example.com",
-  "tokenEnv": "FLIWRIGHT_CLOUD_WORKER_TOKEN"
+  "credentialFile": "/PRIVATE/PATH/cloud-worker/credentials.json"
 }

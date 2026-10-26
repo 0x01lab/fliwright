@@ -12,6 +12,8 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { writeJournal } from './WorkerAgent.js';
 import type { ExecutionLease } from '@fliwright/cloud-protocol';
+import type { WorkerTimelineRecorder } from './WorkerTimelineRecorder.js';
+import { recordWorkerTimelineMessage } from './worker-timeline-ipc.js';
 
 /** Bounded, incremental diagnostics; never read an entire build log into memory. */
 export function createLogTail(directory: string, secrets: string[] = []) {
@@ -172,9 +174,9 @@ export async function runCommandProcess(
         resolve(stdout.trim());
       else
         reject(
-          new Error(
+          Object.assign(new Error(
             `Registered command failed (${command.program}, exit ${code}); inspect local diagnostics`,
-          ),
+          ), { exitCode: code }),
         );
     });
   });
@@ -193,9 +195,11 @@ export async function spawnExecution(
       acceptExitCodes?: number[];
     }>;
     allowedEnv?: string[];
+    timeline?: WorkerTimelineRecorder;
   },
 ) {
   signal.throwIfAborted();
+  const prepareSpan = await options.timeline?.channel.startSpan('execution.prepare');
   const jobPath = join(directory, 'job.json');
   writeJournal(jobPath, {
     lease,
@@ -204,6 +208,7 @@ export async function spawnExecution(
     resetCommands: options.resetCommands,
   });
   let child: ChildProcess | undefined;
+  let ready = false;
   return new Promise<import('./WorkerAgent.js').ExecutionResult>(
     (resolve, reject) => {
       child = spawn(process.execPath, [options.mainFile, 'execute', jobPath], {
@@ -222,7 +227,9 @@ export async function spawnExecution(
         appendFileSync(join(directory, 'executor.log'), chunk, { mode: 0o600 }),
       );
       child.on('message', (message) => {
+        recordWorkerTimelineMessage(child!, message, options.timeline);
         if (message && typeof message === 'object') {
+          if ('ready' in message && message.ready === true && !ready) { ready = true; void options.timeline?.channel.finishSpan(prepareSpan, 'succeeded'); }
           if ('stage' in message && typeof message.stage === 'string')
             onStage(message.stage);
           if ('done' in message && message.done === true)
@@ -238,10 +245,14 @@ export async function spawnExecution(
         }
       });
       child.on('error', (e) => {
+        void options.timeline?.channel.finishSpan(prepareSpan, 'failed', { error: { code: 'preparation_failed', message: 'Execution preparation failed' } });
         signal.removeEventListener('abort', abort);
         reject(e);
       });
       child.on('close', () => {
+        if (!ready) void options.timeline?.channel.finishSpan(prepareSpan, signal.aborted ? 'interrupted' : 'failed', {
+          reason: signal.aborted ? 'shutdown' : 'process_exit', error: { code: 'preparation_failed', message: 'Execution preparation failed' },
+        });
         signal.removeEventListener('abort', abort);
         try {
           resolve(

@@ -66,6 +66,7 @@
     "onCommand:fliwright.discoverVmService",
     "onCommand:fliwright.agentWorkflow",
     "onCommand:fliwright.takeScreenshot",
+    "onCommand:fliwright.takeLongScreenshot",
     "onCommand:fliwright.createMockConfig",
     "onCommand:fliwright.createWebSocketMockProfile",
     "onCommand:fliwright.createWebSocketMockProfileFromCall",
@@ -221,6 +222,11 @@
         "command": "fliwright.takeScreenshot",
         "title": "Fliwright: Take App Screenshot",
         "icon": "$(device-camera)"
+      },
+      {
+        "command": "fliwright.takeLongScreenshot",
+        "title": "Fliwright: Take Long App Screenshot",
+        "icon": "$(expand-all)"
       },
       {
         "command": "fliwright.reloadMocks",
@@ -618,6 +624,11 @@
           "command": "fliwright.takeScreenshot",
           "when": "view == fliwright.devices",
           "group": "navigation@5"
+        },
+        {
+          "command": "fliwright.takeLongScreenshot",
+          "when": "view == fliwright.devices",
+          "group": "navigation@6"
         },
         {
           "command": "fliwright.reloadMocks",

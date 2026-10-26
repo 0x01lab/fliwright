@@ -42,6 +42,7 @@ export interface ReportPublication {
 export interface ReportView {
   id: string;
   requestId: string;
+  executionAttemptId?: string;
   manifest: RunManifest;
   report: unknown;
   tests: Array<{
@@ -450,7 +451,7 @@ export class ReportStore {
       throw new CloudError(403, 'Artifact outside share scope');
     return this.read(p, join(this.root, 'bundles', id), path);
   }
-  view(id: string, sensitive: boolean): ReportView {
+  view(id: string, sensitive: boolean, includeExecutionAttempt = false): ReportView {
     const p = this.published(id),
       root = join(this.root, 'bundles', id);
     const manifest = runManifestSchema.parse(this.json(p, root, 'run.json'));
@@ -490,6 +491,7 @@ export class ReportStore {
     return {
       id,
       requestId: p.requestId,
+      ...(includeExecutionAttempt ? { executionAttemptId: p.attemptId } : {}),
       manifest: sensitive
         ? manifest
         : {

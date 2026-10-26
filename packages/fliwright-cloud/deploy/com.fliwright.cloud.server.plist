@@ -4,14 +4,16 @@
   <key>Label</key><string>com.fliwright.cloud.server</string>
   <key>ProgramArguments</key><array>
     <string>/ABSOLUTE/PATH/TO/node</string>
-    <string>/ABSOLUTE/PATH/TO/fliwright/packages/fliwright-cloud/dist/main.js</string>
+    <string>/Users/cloud/services/fliwright-cloud/fliwright-cloud</string>
     <string>server</string><string>/Users/cloud/.config/fliwright-cloud/server.json</string>
   </array>
   <key>EnvironmentVariables</key><dict>
     <key>FLIWRIGHT_CLOUD_PROXY_SECRET</key><string>REPLACE_IN_PRIVATE_COPY</string>
     <key>FLIWRIGHT_CLOUD_PUBLICATION_SECRET</key><string>REPLACE_IN_PRIVATE_COPY</string>
   </dict>
-  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ExitTimeOut</key><integer>60</integer>
+  <key>Umask</key><integer>63</integer>
   <key>ThrottleInterval</key><integer>30</integer>
   <key>StandardOutPath</key><string>/Users/cloud/Library/Logs/fliwright-cloud-server.log</string>
   <key>StandardErrorPath</key><string>/Users/cloud/Library/Logs/fliwright-cloud-server-error.log</string>

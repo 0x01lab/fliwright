@@ -1,10 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, lstatSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import { z } from 'zod';
-import { commandSchema } from '@fliwright/cloud-protocol';
-export const workerConfigSchema = z
+import { workerPairingCredentialSchema, commandSchema } from '@fliwright/cloud-protocol';
+const workerConfigObject = z
   .object({
     serverUrl: z.string().url(),
-    tokenEnv: z.string().min(1),
+    tokenEnv: z.string().min(1).optional(),
+    credentialFile: z.string().refine(isAbsolute, 'Credential path must be absolute').optional(),
     workerId: z.string().min(1),
     slotId: z.string().min(1),
     deviceId: z.string().min(1),
@@ -25,22 +27,48 @@ export const workerConfigSchema = z
         }),
       )
       .min(1),
+    repositoryCredentialHomes: z.record(z.string().min(1)).default({}),
     allowedEnv: z.array(z.string()).default([]),
-    pollMs: z.number().int().min(500).default(2000),
     heartbeatMs: z.number().int().min(500).max(10000).default(5000),
   })
   .strict();
+export interface WorkerAuthSettings {
+  serverUrl: string;
+  tokenEnv?: string;
+  credentialFile?: string;
+  workerId?: string;
+}
+const hasOneCredential = (config: WorkerAuthSettings) => Boolean(config.tokenEnv) !== Boolean(config.credentialFile);
+export const workerConfigSchema = workerConfigObject.refine(hasOneCredential, 'Configure exactly one credential source');
 /** Host-only discovery uses the authenticated Worker identity, without an executor. */
-export const discoveryConfigSchema = workerConfigSchema.pick({
+export const discoveryConfigSchema = workerConfigObject.pick({
   serverUrl: true,
   tokenEnv: true,
+  credentialFile: true,
   deviceTools: true,
-});
+}).refine(hasOneCredential, 'Configure exactly one credential source');
+/** A paired host follows Cloud device bindings without duplicating slot configuration. */
+export const hostConfigSchema = workerConfigObject.pick({
+  serverUrl: true, tokenEnv: true, credentialFile: true, deviceTools: true,
+  flutterBin: true, repositoryCredentialHomes: true, allowedEnv: true, heartbeatMs: true,
+}).extend({
+  root: z.string().min(1).optional(),
+  resetCommands: workerConfigObject.shape.resetCommands.optional(),
+}).refine(hasOneCredential, 'Configure exactly one credential source');
 export const loadJson = (path: string): unknown =>
   JSON.parse(readFileSync(path, 'utf8'));
-export function credential(name: string) {
-  const token = process.env[name];
-  if (!token || token.length < 16)
-    throw new Error(`Missing service credential in ${name}`);
+/** Resolve service credentials only in the supervisor, never in executor jobs. */
+export function credential(config: WorkerAuthSettings) {
+  if (config.credentialFile) {
+    const stat = lstatSync(config.credentialFile);
+    if (!stat.isFile() || (process.platform !== 'win32' && ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.())))
+      throw new Error('Credential file must be private and owned by the current user');
+    const saved = workerPairingCredentialSchema.extend({ serverUrl: z.string().url() }).parse(loadJson(config.credentialFile));
+    if (new URL(saved.serverUrl).origin !== new URL(config.serverUrl).origin || (config.workerId && saved.workerId !== config.workerId))
+      throw new Error('Credential does not belong to this server or Worker');
+    return saved.token;
+  }
+  const token = config.tokenEnv ? process.env[config.tokenEnv] : undefined;
+  if (!token || token.length < 16) throw new Error('Missing Worker service credential');
   return token;
 }

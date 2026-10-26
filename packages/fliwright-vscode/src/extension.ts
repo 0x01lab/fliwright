@@ -542,6 +542,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         screenshotPreviewPanel.show(preview);
       });
     }),
+    vscode.commands.registerCommand('fliwright.takeLongScreenshot', async () => {
+      await runCommand('Take Long App Screenshot', async () => {
+        const preview = await withWindowProgress('Capturing long screenshot…', () =>
+          screenshotService.capture(session.connectedDriver, { fullPage: true }));
+        screenshotPreviewPanel.show(preview);
+      });
+    }),
     vscode.commands.registerCommand('fliwright.createMockConfig', async () => {
       await runCommand('Create Mock Config', async () => {
         const root = requireWorkspaceRoot();

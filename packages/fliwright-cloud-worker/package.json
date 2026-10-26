@@ -35,10 +35,11 @@
     "@fliwright/cloud": "workspace:*"
   },
   "bin": {
-    "fliwright-cloud-worker": "dist/main.js"
+    "fliwright-worker": "fliwright-worker"
   },
   "files": [
     "dist",
+    "fliwright-worker",
     "README.md",
     "deploy"
   ]

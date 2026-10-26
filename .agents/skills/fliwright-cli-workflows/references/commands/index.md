@@ -4,7 +4,7 @@ purpose: Progressive CLI command routing for Skills
 
 # Fliwright CLI command index
 
-65 commands, one page per leaf command. Read [common conventions](./common.md) once, then open only the relevant command pages. Parameters and schemas are generated from the command registry; semantic guidance is maintained with the CLI package.
+66 commands, one page per leaf command. Read [common conventions](./common.md) once, then open only the relevant command pages. Parameters and schemas are generated from the command registry; semantic guidance is maintained with the CLI package.
 
 ## Choose a workflow
 
@@ -39,6 +39,12 @@ purpose: Progressive CLI command routing for Skills
 | [script](./command-script.md) | Execute one automation script through the same runner and evidence pipeline as run. |
 | [record](./command-record.md) | Capture user interactions and produce recording, flow and automation draft evidence. |
 
+## Discover project tests without connecting to an app
+
+| Command | Purpose |
+| --- | --- |
+| [catalog](./command-catalog.md) | Collect configured suite files, named scenarios and dynamically registered Vitest cases without starting Flutter or running test/hook bodies. |
+
 ## Inspect and interact with a running app
 
 | Command | Purpose |
@@ -50,7 +56,7 @@ purpose: Progressive CLI command routing for Skills
 | [app source-map](./command-app.source-map.md) | Map current UI elements back to Flutter source locations. |
 | [app diagnostics](./command-app.diagnostics.md) | Read, subscribe to or clear buffered app diagnostic events. |
 | [app reload](./command-app.reload.md) | Hot reload Dart code and capture the resulting UI and diagnostics. |
-| [app screenshot](./command-app.screenshot.md) | Save a PNG screenshot of the current app UI. |
+| [app screenshot](./command-app.screenshot.md) | Save a viewport screenshot or a stitched vertical long PNG. |
 | [app debug-snapshot](./command-app.debug-snapshot.md) | Collect a structural snapshot plus independent debug evidence channels. |
 | [app interact](./command-app.interact.md) | Perform one tap, text entry, navigation, wait, drag or extended action. |
 

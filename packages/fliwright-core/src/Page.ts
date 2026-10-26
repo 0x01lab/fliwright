@@ -506,20 +506,45 @@ export class Page {
    * Take a screenshot of the current Flutter app screen.
    *
    * @param options.pixelRatio - Device pixel ratio for the screenshot (default: 1.0)
-   * @param options.rect - Crop to a specific logical-pixel region.
+   * @param options.rect - Crop to a specific logical-pixel region (viewport only).
+   * @param options.fullPage - Stitch vertical scroll content into one PNG; restores the original offset.
    * @returns A Buffer containing the PNG image data
    */
   async screenshot(options?: {
     pixelRatio?: number;
+    /** Capture the full vertical scroll content, excluding fixed page chrome. */
+    fullPage?: boolean;
+    /** Selector for one scroll view when the page has several. */
+    scrollable?: string;
+    /** Maximum logical image height; exceeding it fails rather than truncates (default: 20000). */
+    maxHeight?: number;
     rect?: { x: number; y: number; width: number; height: number };
     /** Wait for route transitions and animations before capturing. */
     waitForAnimations?: boolean;
     /** Maximum time to wait for animations when enabled. */
     settleTimeout?: number;
   }): Promise<Buffer> {
+    if (options?.fullPage && options.rect) throw new Error('fullPage cannot be combined with rect');
+    if (!options?.fullPage && (options?.scrollable != null || options?.maxHeight != null)) {
+      throw new Error('scrollable and maxHeight require fullPage');
+    }
+    for (const [name, value] of [['pixelRatio', options?.pixelRatio], ['maxHeight', options?.maxHeight]] as const) {
+      if (value != null && (!Number.isFinite(value) || value <= 0)) throw new Error(`${name} must be finite and positive`);
+    }
+    if (options?.fullPage) {
+      const handshake = await this.sendRequest('ext.fliwright.handshake', { protocolVersion: '2' }) as {
+        bridgeCapabilities?: { fullPageScreenshot?: boolean };
+      };
+      if (handshake?.bridgeCapabilities?.fullPageScreenshot !== true) {
+        throw new Error('Long screenshot unavailable: Update fliwright_bridge in the Flutter app, then hot reload or restart the app. Updating the VS Code extension alone does not update the running app.');
+      }
+    }
     const params: Record<string, unknown> = {
       pixelRatio: options?.pixelRatio?.toString() ?? '1.0',
     };
+    if (options?.fullPage) params.fullPage = 'true';
+    if (options?.scrollable != null) params.scrollable = options.scrollable;
+    if (options?.maxHeight != null) params.maxHeight = options.maxHeight.toString();
     if (options?.waitForAnimations) params.waitForAnimations = 'true';
     if (options?.settleTimeout != null) params.settleTimeout = options.settleTimeout.toString();
     if (options?.rect) params.rect = JSON.stringify(options.rect);
@@ -541,47 +566,18 @@ export class Page {
   }
 
   /**
-   * Capture a full-page screenshot by scrolling through the content.
-   * Returns a single stitched PNG Buffer.
-   *
-   * This works by finding the scrollable content's total extent, capturing
-   * viewport-sized segments, and concatenating them vertically.
-   *
-   * @param options.pixelRatio - Device pixel ratio (default: 1.0)
-   * @returns A Buffer containing the full-page PNG image
+   * Capture vertical scroll content as a single stitched PNG, restoring the original offset.
+   * Requires the bridge's fullPageScreenshot capability; older bridges fail before scrolling.
+   * The live viewport moves during capture, so visible jumps are expected.
+   * Lazy lists are rendered one viewport at a time. Capture uses the scroll viewport's
+   * own layer, excluding fixed page chrome and sibling overlays such as floating tabs.
+   * Multiple scroll views require a selector; reverse/nested scrolling and sticky
+   * headers are unsupported. Content must remain stable during capture.
+   * Fails if content exceeds maxHeight (default 20000 logical pixels), 64M output
+   * pixels, 32768 pixels per dimension, or 200 segments; never returns a partial image.
    */
-  async screenshotFullPage(options?: { pixelRatio?: number }): Promise<Buffer> {
-    const pixelRatio = options?.pixelRatio ?? 1.0;
-    const result = (await this.sendRequest('ext.fliwright.screenshot', {
-      pixelRatio: pixelRatio.toString(),
-      fullPage: 'true',
-    })) as {
-      success: boolean;
-      segments?: string[];
-      segmentWidth?: number;
-      segmentHeight?: number;
-      totalHeight?: number;
-      error?: string;
-    };
-
-    if (!result.success || !result.segments?.length) {
-      throw new Error(`screenshotFullPage failed: ${result.error ?? 'unknown error'}`);
-    }
-
-    // If only one segment, return it directly.
-    if (result.segments.length === 1) {
-      return Buffer.from(result.segments[0], 'base64');
-    }
-
-    // Stitch segments: decode each PNG, determine height from the first,
-    // and concatenate pixel rows.
-    const segmentBuffers = result.segments.map((s) => Buffer.from(s, 'base64'));
-
-    // For simplicity, concatenate raw PNG bytes sequentially.
-    // A proper stitch would use sharp/pngjs, but for now we return
-    // the first segment and log that stitching needs a dedicated library.
-    // TODO: Implement proper PNG stitching when a dependency is added.
-    return segmentBuffers[0];
+  async screenshotFullPage(options?: { pixelRatio?: number; scrollable?: string; maxHeight?: number }): Promise<Buffer> {
+    return this.screenshot({ ...options, fullPage: true });
   }
 
   // ── Navigation ──────────────────────────────────────────────

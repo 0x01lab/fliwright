@@ -21,6 +21,7 @@ import { Icon, ResultIcon } from './ui.js';
 import { TimeTimeline } from './TimeTimeline.js';
 import {
   artifactPath,
+  buildTimeAxis,
   durationLabel,
   durationMs,
   matchesStep,
@@ -144,9 +145,11 @@ export function Replay({
   report,
   shared = false,
   reportTabs = [],
+  active = true,
 }: {
   report: ReportView;
   shared?: boolean;
+  active?: boolean;
   reportTabs?: Array<{
     id: string;
     label: string;
@@ -159,6 +162,7 @@ export function Replay({
   const [filter, setFilter] = useState<StepFilter>('all');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [playing, setPlaying] = useState(false);
+  useEffect(() => { if (!active) setPlaying(false); }, [active]);
   const [speed, setSpeed] = useState(1);
   const [tab, setTab] = useState('details');
   const [imageIndex, setImageIndex] = useState(0);
@@ -195,6 +199,8 @@ export function Replay({
     steps[0];
   const index = node ? steps.indexOf(node) : -1;
   const visible = steps.filter((n) => matchesStep(n, filter));
+  const playbackAxis = buildTimeAxis(nodes, attempt?.timeline ?? {});
+  const canPlay = playbackAxis.entries.length > 0 && playbackAxis.durationMs > 0;
   const selectedRow = useRef<HTMLDivElement>(null);
   const resultPath =
     report.manifest.tests
@@ -241,6 +247,14 @@ export function Replay({
     setSelection(id);
     setImageIndex(0);
   };
+  const togglePlayback = () => {
+    if (!canPlay) return;
+    if (!playing) {
+      setFilter('all');
+      setCollapsed(new Set());
+    }
+    setPlaying((value) => !value);
+  };
   const move = (direction: number) => {
     const position = visible.findIndex((n) => n.id === node?.id);
     const next = visible[position + direction];
@@ -270,16 +284,6 @@ export function Replay({
     )
       list.scrollTop = Math.max(0, row.offsetTop - list.clientHeight / 2);
   }, [selection, filter, attemptIndex]);
-  useEffect(() => {
-    if (!playing) return;
-    const timer = setTimeout(() => {
-      const position = visible.findIndex((n) => n.id === node?.id);
-      const next = visible[position + 1];
-      if (next) choose(next.id);
-      else setPlaying(false);
-    }, 1200 / speed);
-    return () => clearTimeout(timer);
-  }, [playing, node?.id, filter, speed, attemptIndex]);
   const changeFilter = (value: StepFilter) => {
     setFilter(value);
     setPlaying(false);
@@ -327,7 +331,7 @@ export function Replay({
           if (e.key === ' ') {
             if (/BUTTON|A/.test(target.tagName)) return;
             e.preventDefault();
-            if (visible.length) setPlaying((p) => !p);
+            togglePlayback();
           }
         }}
         tabIndex={0}
@@ -516,6 +520,13 @@ export function Replay({
               bounds={attempt?.timeline ?? {}}
               selectedId={node?.id}
               selectedScreenshotIndex={imageIndex}
+              playback={{
+                playing,
+                speed,
+                onSelect: choose,
+                onPause: () => setPlaying(false),
+                onEnd: () => setPlaying(false),
+              }}
               screenshots={(step) => screenshotPaths(step, base, report.files).map(fileUrl)}
               controls={
                 <div className="replay-toolbar" role="group" aria-label="时间轴回放控制">
@@ -532,16 +543,8 @@ export function Replay({
                   <Button
                     variant="default"
                     size="sm"
-                    disabled={!visible.length}
-                    onClick={() => {
-                      if (
-                        !playing &&
-                        node === visible[visible.length - 1] &&
-                        visible[0]
-                      )
-                        choose(visible[0].id);
-                      setPlaying((p) => !p);
-                    }}
+                    disabled={!canPlay}
+                    onClick={togglePlayback}
                   >
                     <Icon name={playing ? 'pause' : 'play'} />
                     {playing ? '暂停' : '播放'}

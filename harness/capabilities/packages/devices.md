@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/devices"
 path: "packages/fliwright-devices"
-source_fingerprint: "bbfe12378a405957080a5d1430380c0e66bc930316346a97de3f9093ad2f8b22"
+source_fingerprint: "8a1b2191fa06cebd77116eddf185a9725b65a5aebaf6cad7f2b13987e92d179c"
 generated: true
 ---
 
@@ -49,5 +49,6 @@ Discover host iOS and Android physical devices and simulators through a shared r
 
 - `packages/fliwright-devices/src/DeviceDiscovery.ts`
 - `packages/fliwright-devices/src/commands.ts`
+- `packages/fliwright-devices/src/device-changes.ts`
 - `packages/fliwright-devices/src/index.ts`
 - `packages/fliwright-devices/src/types.ts`

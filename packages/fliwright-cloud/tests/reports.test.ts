@@ -138,6 +138,8 @@ it('stages resumable files, rejects tampering, commits once and preserves histor
     publication: 'published',
   });
   expect(reports.view(p.id, true).manifest.status).toBe('failed');
+  expect(reports.view(p.id, true, true).executionAttemptId).toBe(lease.attemptId);
+  expect(reports.view(p.id, true).executionAttemptId).toBeUndefined();
   expect(
     reports.view(p.id, false).tests[0].timeline.nodes[0].metadata,
   ).toBeUndefined();

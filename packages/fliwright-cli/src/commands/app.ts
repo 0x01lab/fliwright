@@ -131,12 +131,12 @@ export async function appInteractCommand(options: AppInteractOptions, deps: AppS
 }
 
 export async function appScreenshotCommand(
-  options: AppSessionOptions & { output?: string; pixelRatio?: number },
+  options: AppSessionOptions & { output?: string; pixelRatio?: number; fullPage?: boolean; scrollable?: string; maxHeight?: number },
   deps: AppSessionDeps = {},
 ) {
   return withAppSession(options, async ({ driver }) => {
     const output = await inspectionOutput(options, 'screenshot');
-    const screenshot = await driver.page.screenshot({ pixelRatio: options.pixelRatio });
+    const screenshot = await driver.page.screenshot({ pixelRatio: options.pixelRatio, fullPage: options.fullPage, scrollable: options.scrollable, maxHeight: options.maxHeight });
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, screenshot);
     return { path: output, bytes: screenshot.byteLength };

@@ -35,3 +35,14 @@ Cloud inventory freshness, registration, slot leases, scheduling and reset polic
 remain with the cloud package. Scanning never creates execution slots.
 
 CLI: `fliwright devices list --json` or `fliwright devices list --platform ios --json`.
+
+
+## Device change notifications
+
+`discovery.watch(changed, { signal })` returns a disposal function. It observes
+Android `adb track-devices`, iOS `xcdevice observe --both` on macOS, AVD directory
+changes and CoreSimulator device state files. Notifications are coalesced for
+150ms; call `scan()` to read normalized inventory. Native observers retry after
+failure. Abort or dispose to release child processes and filesystem watchers.
+Keep periodic scans for state transitions without complete native notifications
+and to surface tool diagnostics; notifications alone do not certify readiness.

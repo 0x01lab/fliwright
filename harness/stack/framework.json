@@ -182,7 +182,8 @@
         "@tanstack/react-router": "^1.170.45",
         "d3-scale": "^4.0.2",
         "@fliwright/cloud-protocol": "workspace:*",
-        "@radix-ui/react-navigation-menu": "^1.4.1"
+        "@radix-ui/react-navigation-menu": "^1.4.1",
+        "ws": "^8.17.0"
       },
       "devDependencies": {
         "@types/node": "^26.0.1",
@@ -194,7 +195,8 @@
         "tailwindcss": "^4.3.1",
         "@tailwindcss/vite": "^4.3.1",
         "happy-dom": "^21.0.3",
-        "@types/d3-scale": "^4.0.9"
+        "@types/d3-scale": "^4.0.9",
+        "@types/ws": "^8.5.10"
       }
     },
     "packages/fliwright-devices/package.json": {
@@ -231,12 +233,14 @@
         "node": ">=26.0.0"
       },
       "dependencies": {
-        "zod": "^3.25.76"
+        "zod": "^3.25.76",
+        "ws": "^8.17.0"
       },
       "devDependencies": {
         "@types/node": "^26.0.1",
         "typescript": "^5.5.0",
-        "vitest": "5.0.5"
+        "vitest": "5.0.5",
+        "@types/ws": "^8.5.10"
       }
     }
   },

@@ -63,6 +63,9 @@ beforeEach(() => {
         };
       }
       else if (path.startsWith('/api/requests/')) {
+        if (path.endsWith('/worker-timeline')) {
+          data = { schemaVersion: 1, requestId: 'original', executionAttemptId: path.split('/')[5], workerId: 'mac', slotId: 'ios', deviceId: 'device', executionStatus: 'finished', testVerdict: 'passed', quality: 'complete', revision: 1, cursor: 0, observedOffsetMs: 0, spans: [], milestones: [], issues: [] };
+        } else {
         data = {
           id: path.split('/')[3],
           input: {
@@ -80,10 +83,12 @@ beforeEach(() => {
           queuePosition: 0,
           ...requestOverrides[path.split('/')[3]],
         };
+        }
       } else if (/^\/api\/(shared\/)?reports\/[^/]+$/.test(path)) {
         data = {
           id: path.split('/').pop(),
           requestId: 'original',
+          ...(!path.startsWith('/api/shared/') ? { executionAttemptId: `attempt-${path.split('/').pop()}` } : {}),
           expiresAt: 1,
           manifest: {
             runId: 'run',
@@ -207,7 +212,7 @@ it('keeps a single test tasks entry beside the logo and opens configuration with
   expect(header.querySelector('.brand')?.getAttribute('href')).toBe('/');
   const trigger = await openConfiguration();
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
-  for (const url of ['/devices', '/workers', '/targets', '/reports']) {
+  for (const url of ['/devices', '/workers', '/projects', '/reports']) {
     expect(nav.querySelector(`a[href="${url}"]`)).not.toBeNull();
   }
   await act(async () => {
@@ -478,6 +483,25 @@ it('keeps historical reports open instead of redirecting them to the latest repo
   ).toBe('page');
   expect(await click('a[href="/reports/newer"]')).toBe(true);
   expect(window.location.pathname).toBe('/reports/newer');
+});
+
+it('keeps Replay mounted across Worker view switches and binds a historical report to its own execution', async () => {
+  requestOverrides.original = { attempts: [{ attemptId: 'latest', number: 2 }], reports: [publishedReport('older'), publishedReport('newer')] };
+  await mount('/reports/older');
+  const replay = container.querySelector('.replay-panel');
+  const tabs = container.querySelector('[aria-label="报告视图"]')!;
+  const workerTab = Array.from(tabs.querySelectorAll('button')).find(button => button.textContent?.includes('Worker'))!;
+  await act(async () => workerTab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+  expect(container.querySelector('.report-view-pane')?.hasAttribute('hidden')).toBe(true);
+  expect(container.querySelector('.report-worker-pane')?.hasAttribute('hidden')).toBe(false);
+  expect(container.querySelector('.replay-panel')).toBe(replay);
+  const testTab = Array.from(tabs.querySelectorAll('button')).find(button => button.textContent?.includes('测试回放'))!;
+  await act(async () => testTab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+  expect(container.querySelector('.report-view-pane')?.hasAttribute('hidden')).toBe(false);
+  expect(container.querySelector('.replay-panel')).toBe(replay);
+  const calls = vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('/worker-timeline'));
+  expect(calls).toContain('/api/requests/original/attempts/attempt-older/worker-timeline');
+  expect(calls.some(url => url.includes('/latest/'))).toBe(false);
 });
 
 it('keeps diagnostics available when a run has no published report', async () => {

@@ -1,5 +1,5 @@
 import { Button } from './components/ui/button.js';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './ui.js';
 import {
   buildTimeAxis,
@@ -26,7 +26,7 @@ const elapsed = (value: number) =>
 const frameWidth = 112;
 const frameHeight = 160;
 
-/** A trace overview backed by recorded timestamps, shared by team and share views. */
+/** Recorded-time playback uses animation frames for a linear playhead at the selected speed. */
 export function TimeTimeline({
   nodes,
   bounds,
@@ -35,6 +35,7 @@ export function TimeTimeline({
   screenshots,
   selectedScreenshotIndex = 0,
   controls,
+  playback,
 }: {
   nodes: ReplayNode[];
   bounds: { startedAt?: unknown; endedAt?: unknown };
@@ -43,8 +44,15 @@ export function TimeTimeline({
   screenshots?: (node: ReplayNode) => string[];
   selectedScreenshotIndex?: number;
   controls?: React.ReactNode;
+  playback?: {
+    playing: boolean;
+    speed: number;
+    onSelect: (id: string) => void;
+    onPause: () => void;
+    onEnd: () => void;
+  };
 }) {
-  const axis = buildTimeAxis(nodes, bounds);
+  const axis = useMemo(() => buildTimeAxis(nodes, bounds), [nodes, bounds]);
   const [zoom, setZoom] = useState(1);
   const [hover, setHover] = useState<{ time: number }>();
   const [cursor, setCursor] = useState<{ id: string; time: number }>();
@@ -67,6 +75,43 @@ export function TimeTimeline({
   const selected = axis.entries.find((entry) => entry.node.id === selectedId);
   const cursorTime =
     cursor?.id === selectedId ? cursor?.time : selected?.startMs;
+  // Keep per-frame updates inside the timeline. The preview only needs to
+  // render again when playback reaches a different operation.
+  const playbackState = useRef({ axis, playback, time: cursorTime ?? 0, selectedId });
+  playbackState.current = { axis, playback, time: cursorTime ?? 0, selectedId };
+  const playing = playback?.playing ?? false;
+  const speed = playback?.speed ?? 1;
+  useEffect(() => {
+    if (!playing) return;
+    const duration = playbackState.current.axis.durationMs;
+    if (!duration) {
+      playbackState.current.playback?.onEnd();
+      return;
+    }
+    const initialTime = playbackState.current.time >= duration ? 0 : playbackState.current.time;
+    const startedAt = performance.now();
+    let activeId = playbackState.current.selectedId;
+    const update = (time: number) => {
+      const state = playbackState.current;
+      const node = stepAtTime(state.axis, time);
+      if (!node) return;
+      setCursor({ id: node.id, time });
+      if (node.id !== activeId) {
+        activeId = node.id;
+        state.playback?.onSelect(node.id);
+      }
+    };
+    update(initialTime);
+    let frame: number;
+    const advance = (timestamp: number) => {
+      const time = Math.min(duration, initialTime + (timestamp - startedAt) * speed);
+      update(time);
+      if (time >= duration) playbackState.current.playback?.onEnd();
+      else frame = requestAnimationFrame(advance);
+    };
+    frame = requestAnimationFrame(advance);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, speed, axis.durationMs]);
   const timeScale = createTimeScale(axis.durationMs);
   const percent = (value: number) => `${timeScale(value)}%`;
   const intervalWidth = (start: number, end: number) =>
@@ -78,7 +123,7 @@ export function TimeTimeline({
       : 0;
   };
   useEffect(() => {
-    if (drag.current) return;
+    if (drag.current || playing) return;
     const bar = selectedFrame.current ?? selectedBar.current,
       container = viewport.current;
     if (!bar || !container) return;
@@ -88,7 +133,16 @@ export function TimeTimeline({
       container.scrollLeft += box.left - view.left - container.clientWidth / 3;
     if (box.top < view.top + 36 || box.bottom > view.bottom)
       container.scrollTop += box.top - view.top - container.clientHeight / 2;
-  }, [selectedId, selectedScreenshotIndex, zoom, surfaceWidth]);
+  }, [selectedId, selectedScreenshotIndex, zoom, surfaceWidth, playing]);
+  useEffect(() => {
+    if (!playing || !surface.current || !viewport.current) return;
+    const container = viewport.current;
+    const view = container.getBoundingClientRect();
+    const rect = surface.current.getBoundingClientRect();
+    const x = rect.left + timeScale(cursorTime ?? 0) / 100 * rect.width;
+    if (x > view.right - 12) container.scrollLeft += x - view.right + 12;
+    else if (x < view.left + 12) container.scrollLeft += x - view.left - 12;
+  }, [playing, cursorTime, zoom, surfaceWidth]);
   const seek = (time: number) => {
     time = Math.max(0, Math.min(axis.durationMs, Math.round(time)));
     const node = stepAtTime(axis, time);
@@ -100,21 +154,24 @@ export function TimeTimeline({
   const actionsHeight = Math.max(1, axis.lanes) * 12 + 8;
   // Keep each image anchored to its step's completion time. Pack nearby images
   // into separate rows without distorting the shared time scale.
-  const frameLaneEnds: number[] = [];
-  const frames = axis.entries.flatMap((entry) =>
-    (screenshots?.(entry.node) ?? []).map((url, imageIndex) => ({
-      entry, url, imageIndex, time: entry.endMs,
-    })),
-  ).sort((a, b) => a.time - b.time).map((frame) => {
-    const x = timeScale(frame.time) / 100 * surfaceWidth;
-    const left = Math.max(0, Math.min(x - frameWidth / 2, surfaceWidth - frameWidth));
-    let lane = frameLaneEnds.findIndex((end) => end + 8 <= left);
-    if (lane < 0) lane = frameLaneEnds.length;
-    frameLaneEnds[lane] = left + frameWidth;
-    return { ...frame, left, lane };
-  });
+  const { frames, frameLaneCount } = useMemo(() => {
+    const frameLaneEnds: number[] = [];
+    const frames = axis.entries.flatMap((entry) =>
+      (screenshots?.(entry.node) ?? []).map((url, imageIndex) => ({
+        entry, url, imageIndex, time: entry.endMs,
+      })),
+    ).sort((a, b) => a.time - b.time).map((frame) => {
+      const x = timeScale(frame.time) / 100 * surfaceWidth;
+      const left = Math.max(0, Math.min(x - frameWidth / 2, surfaceWidth - frameWidth));
+      let lane = frameLaneEnds.findIndex((end) => end + 8 <= left);
+      if (lane < 0) lane = frameLaneEnds.length;
+      frameLaneEnds[lane] = left + frameWidth;
+      return { ...frame, left, lane };
+    });
+    return { frames, frameLaneCount: frameLaneEnds.length };
+  }, [axis, screenshots, surfaceWidth]);
   const frameLaneHeight = frameHeight + 8;
-  const height = actionsHeight + (frames.length ? frameLaneEnds.length * frameLaneHeight + 8 : 0);
+  const height = actionsHeight + (frames.length ? frameLaneCount * frameLaneHeight + 8 : 0);
   return (
     <section className="trace-timeline" aria-label="执行时间轴">
       <div className="trace-heading">
@@ -196,6 +253,7 @@ export function TimeTimeline({
                   title="拖动手柄调整当前时间；方向键微调，Home / End 跳到起止时间"
                   onPointerDown={(e) => {
                     if (e.button !== 0 || !surface.current) return;
+                    playback?.onPause();
                     const rect = surface.current.getBoundingClientRect();
                     drag.current = {
                       pointerId: e.pointerId,
@@ -341,7 +399,6 @@ export function TimeTimeline({
               </div>
             </div>
           </div>
-
         </>
       ) : (
         <div className="empty compact">

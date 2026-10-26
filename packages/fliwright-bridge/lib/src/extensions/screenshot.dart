@@ -34,12 +34,23 @@ class ScreenshotExtension {
       });
     }
 
-    // Full-page screenshot: scroll through the content in segments.
-    if (fullPage) {
-      return await _fullPageScreenshot(root, pixelRatio);
+    if (!pixelRatio.isFinite || pixelRatio <= 0) {
+      return {
+        'success': false,
+        'error': 'pixelRatio must be finite and positive'
+      };
     }
-
+    if (fullPage && params.containsKey('rect')) {
+      return {
+        'success': false,
+        'error': 'fullPage cannot be combined with rect'
+      };
+    }
     if (waitForFrame) await _waitForFrame();
+    if (fullPage) {
+      return _captureSafely(
+          () => _fullPageScreenshot(registry, root, pixelRatio, params));
+    }
 
     // Viewport screenshots always capture the composited Flutter view. This
     // avoids accidentally snapshotting a nested repaint boundary from an older
@@ -63,9 +74,28 @@ class ScreenshotExtension {
   static Future<Map<String, dynamic>> _captureRenderView(
     double pixelRatio,
   ) async {
+    final image = await _captureRenderViewImage(pixelRatio);
+    try {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes == null) throw StateError('Failed to encode screenshot');
+      final size = _currentViewportSize()!;
+      return {
+        'success': true,
+        'format': 'png',
+        'screenshot': base64Encode(bytes.buffer.asUint8List()),
+        'width': size.width,
+        'height': size.height,
+        'pixelRatio': pixelRatio,
+      };
+    } finally {
+      image.dispose();
+    }
+  }
+
+  static Future<ui.Image> _captureRenderViewImage(double pixelRatio) async {
     final renderViews = RendererBinding.instance.renderViews;
     if (renderViews.isEmpty) {
-      return {'success': false, 'error': 'No render view available'};
+      throw StateError('No render view available');
     }
 
     final renderView = renderViews.firstWhere(
@@ -80,19 +110,16 @@ class ScreenshotExtension {
     final height = renderView.size.height;
     final viewPixelRatio = renderView.configuration.devicePixelRatio;
     if (layer == null) {
-      return {'success': false, 'error': 'Render view has no layer'};
+      throw StateError('Render view has no layer');
     }
     if (layer is! OffsetLayer) {
-      return {
-        'success': false,
-        'error': 'Render view layer is not an OffsetLayer',
-      };
+      throw StateError('Render view layer is not an OffsetLayer');
     }
     if (width <= 0 || height <= 0) {
-      return {'success': false, 'error': 'Render view has zero size'};
+      throw StateError('Render view has zero size');
     }
     if (viewPixelRatio <= 0) {
-      return {'success': false, 'error': 'Render view has invalid pixel ratio'};
+      throw StateError('Render view has invalid pixel ratio');
     }
 
     final physicalWidth = (width * viewPixelRatio).ceil();
@@ -106,25 +133,12 @@ class ScreenshotExtension {
     } finally {
       scene.dispose();
     }
-    final image = pixelRatio == viewPixelRatio
-        ? physicalImage
-        : await _resizeImage(physicalImage, outputWidth, outputHeight);
-    if (!identical(image, physicalImage)) physicalImage.dispose();
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    image.dispose();
-
-    if (byteData == null) {
-      return {'success': false, 'error': 'Failed to encode screenshot'};
+    if (pixelRatio == viewPixelRatio) return physicalImage;
+    try {
+      return await _resizeImage(physicalImage, outputWidth, outputHeight);
+    } finally {
+      physicalImage.dispose();
     }
-
-    return {
-      'success': true,
-      'format': 'png',
-      'screenshot': base64Encode(byteData.buffer.asUint8List()),
-      'width': width,
-      'height': height,
-      'pixelRatio': pixelRatio,
-    };
   }
 
   static Future<ui.Image> _resizeImage(
@@ -141,91 +155,237 @@ class ScreenshotExtension {
       ui.Paint(),
     );
     final picture = recorder.endRecording();
-    final image = await picture.toImage(width, height);
-    picture.dispose();
-    return image;
+    try {
+      return await picture.toImage(width, height);
+    } finally {
+      picture.dispose();
+    }
   }
 
-  /// Captures a full-page screenshot by scrolling through scrollable content
-  /// in viewport-sized segments.
-  ///
-  /// Returns `{ segments: [base64...], segmentWidth, segmentHeight,
-  ///           totalHeight, segmentCount }` so the caller can stitch them.
+  /// Paint each newly exposed strip once. Stitching belongs in the bridge so
+  /// every caller receives the same PNG without a host-side image dependency.
   static Future<Map<String, dynamic>> _fullPageScreenshot(
+    ExtensionRegistry registry,
     Element root,
     double pixelRatio,
+    Map<String, String> params,
   ) async {
-    // Find a ScrollPosition in the widget tree to determine total extent.
-    final scrollInfo = _findScrollExtent(root);
-    final viewportSize = _currentViewportSize();
-    if (viewportSize == null) {
-      return {'success': false, 'error': 'No render view available'};
+    final maxHeight = double.tryParse(params['maxHeight'] ?? '20000');
+    if (maxHeight == null || !maxHeight.isFinite || maxHeight <= 0) {
+      throw ArgumentError('maxHeight must be finite and positive');
     }
-    final viewportHeight = viewportSize.height;
-    final totalHeight = scrollInfo.totalExtent > viewportHeight
-        ? scrollInfo.totalExtent
-        : viewportHeight;
+    Element searchRoot = root;
+    final selector = params['scrollable'];
+    if (selector != null) {
+      final resolved = await registry.invoke('ext.fliwright.resolve', {
+        'selector': selector,
+        'strict': 'true',
+        'limit': '2',
+        'visible': 'hitTestable',
+      });
+      final matches = resolved['matches'] as List?;
+      if (resolved['error'] != null || matches == null || matches.length != 1) {
+        throw StateError(
+            'scrollable must resolve to one visible scroll view: ${resolved['error'] ?? selector}');
+      }
+      final id = matches.single['id'].toString();
+      Element? target;
+      void locate(Element element) {
+        if (element.hashCode.toString() == id) target = element;
+        element.debugVisitOnstageChildren(locate);
+      }
 
-    final segmentCount = (totalHeight / viewportHeight).ceil();
-    final segments = <String>[];
-
-    // Capture each segment by scrolling and taking a screenshot.
-    final scrollController = scrollInfo.controller;
-    for (var i = 0; i < segmentCount; i++) {
-      // Scroll to the start of this segment.
-      if (scrollController != null) {
-        final offset = (i * viewportHeight).toDouble();
-        // Use jumpTo via dynamic dispatch (ScrollController is common).
-        try {
-          (scrollController as dynamic).jumpTo(
-            offset.clamp(
-              0.0,
-              (scrollController as dynamic).position.maxScrollExtent as double,
-            ),
-          );
-        } catch (_) {
-          // If jumpTo fails, try animateTo.
-          try {
-            await (scrollController as dynamic).animateTo(
-              offset,
-              duration: const Duration(milliseconds: 100),
-              curve: Curves.linear,
-            );
-          } catch (_) {
-            // Cannot scroll — just capture what's visible.
-          }
+      locate(root);
+      if (target == null)
+        throw StateError('Scrollable target is no longer mounted');
+      searchRoot = target!;
+    }
+    final viewSize = _currentViewportSize();
+    if (viewSize == null) throw StateError('No render view available');
+    final viewRect = Offset.zero & viewSize;
+    final candidates = <ScrollableState>[];
+    void visit(Element element) {
+      if (element is StatefulElement && element.state is ScrollableState) {
+        final state = element.state as ScrollableState;
+        final box = state.context.findRenderObject();
+        if (box is RenderBox &&
+            box.hasSize &&
+            (box.localToGlobal(Offset.zero) & box.size).overlaps(viewRect)) {
+          candidates.add(state);
         }
       }
+      element.debugVisitOnstageChildren(visit);
+    }
 
-      await _waitForFrame();
+    visit(searchRoot);
+    if (candidates.isEmpty) {
+      if (selector != null)
+        throw StateError('No visible scroll view in $selector');
+      if (viewSize.height > maxHeight)
+        throw StateError('Full-page screenshot exceeds maxHeight');
+      _checkImageSize(viewSize.width, viewSize.height, pixelRatio);
+      return _captureRenderView(pixelRatio);
+    }
+    if (candidates.length != 1) {
+      throw StateError(
+          'Multiple or nested scroll views: specify scrollable to select one');
+    }
+    final state = candidates.single;
+    final position = state.position;
+    if (position.axisDirection != AxisDirection.down) {
+      throw StateError(
+          'Full-page screenshots require a non-reversed vertical scroll view');
+    }
+    final box = state.context.findRenderObject()! as RenderBox;
+    void checkHeaders(RenderObject object) {
+      if (object is RenderSliverPinnedPersistentHeader ||
+          object is RenderSliverFloatingPersistentHeader) {
+        throw StateError(
+            'Sticky or floating headers are unsupported in full-page screenshots');
+      }
+      object.visitChildren(checkHeaders);
+    }
 
-      final result = await _captureSafely(() => _captureRenderView(pixelRatio));
-      if (result['success'] == true && result['screenshot'] != null) {
-        segments.add(result['screenshot'] as String);
+    checkHeaders(box);
+    final viewport = _findViewport(box);
+    if (viewport == null || !viewport.isRepaintBoundary) {
+      throw StateError('Scroll viewport has no isolated capture layer');
+    }
+    final rect = box.localToGlobal(Offset.zero) & box.size;
+    if (!viewRect.contains(rect.topLeft) ||
+        rect.right > viewRect.right ||
+        rect.bottom > viewRect.bottom ||
+        rect.width <= 0 ||
+        rect.height <= 0) {
+      throw StateError('The entire scroll viewport must be visible');
+    }
+    final originalOffset = position.pixels;
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder)..scale(pixelRatio);
+    var covered = 0.0;
+    var count = 0;
+    try {
+      position.jumpTo(position.minScrollExtent);
+      while (true) {
+        await _waitForFrame();
+        if (!state.mounted || !position.hasContentDimensions) {
+          throw StateError('Scroll view changed during screenshot');
+        }
+        final currentBox = state.context.findRenderObject();
+        if (currentBox != box ||
+            box.size != rect.size ||
+            viewport.size != rect.size ||
+            box.localToGlobal(Offset.zero) != rect.topLeft ||
+            (position.viewportDimension - rect.height).abs() > 0.01) {
+          throw StateError(
+              'Scroll viewport geometry changed or is unsupported');
+        }
+        final totalHeight =
+            position.maxScrollExtent - position.minScrollExtent + rect.height;
+        if (!totalHeight.isFinite || totalHeight > maxHeight) {
+          throw StateError(
+              'Full-page screenshot exceeds maxHeight ($maxHeight)');
+        }
+        _checkImageSize(rect.width, totalHeight, pixelRatio);
+        if (++count > 200)
+          throw StateError('Full-page screenshot exceeds 200 segments');
+        final offset = position.pixels - position.minScrollExtent;
+        final overlap = covered - offset;
+        final stripHeight = rect.height - overlap;
+        if (overlap < -0.01 || stripHeight <= 0) {
+          throw StateError(
+              'Scroll view made no progress or changed content during screenshot');
+        }
+        final captureOffset = position.pixels;
+        // Snapshot only the viewport's retained layer. Cropping the root scene
+        // also includes sibling overlays (floating tabs/FABs), hiding content
+        // and repeating those controls at every stitching seam.
+        final image = await _captureScrollViewport(viewport, pixelRatio);
+        try {
+          if (!state.mounted ||
+              !identical(state.position, position) ||
+              position.pixels != captureOffset) {
+            throw StateError('Scroll view changed during screenshot');
+          }
+          canvas.drawImageRect(
+            image,
+            Rect.fromLTWH(0, overlap * pixelRatio, rect.width * pixelRatio,
+                stripHeight * pixelRatio),
+            Rect.fromLTWH(0, covered, rect.width, stripHeight),
+            ui.Paint(),
+          );
+        } finally {
+          image.dispose();
+        }
+        covered += stripHeight;
+        if (position.pixels >= position.maxScrollExtent - 0.01) break;
+        position.jumpTo((position.minScrollExtent + covered)
+            .clamp(position.minScrollExtent, position.maxScrollExtent));
+      }
+      final picture = recorder.endRecording();
+      late final ui.Image image;
+      try {
+        image = await picture.toImage(
+            (rect.width * pixelRatio).ceil(), (covered * pixelRatio).ceil());
+      } finally {
+        picture.dispose();
+      }
+      try {
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (bytes == null)
+          throw StateError('Failed to encode full-page screenshot');
+        return {
+          'success': true,
+          'format': 'png',
+          'screenshot': base64Encode(bytes.buffer.asUint8List()),
+          'width': rect.width,
+          'height': covered,
+          'pixelRatio': pixelRatio,
+        };
+      } finally {
+        image.dispose();
+      }
+    } finally {
+      if (recorder.isRecording) recorder.endRecording().dispose();
+      if (state.mounted && identical(state.position, position)) {
+        position.jumpTo(originalOffset);
+        await _waitForFrame();
       }
     }
+  }
 
-    // Restore scroll position to top.
-    if (scrollController != null) {
-      try {
-        (scrollController as dynamic).jumpTo(0.0);
-      } catch (_) {}
+  static RenderBox? _findViewport(RenderObject root) {
+    if (root is RenderBox && root is RenderAbstractViewport) {
+      return root;
     }
+    RenderBox? result;
+    root.visitChildren((child) {
+      result ??= _findViewport(child);
+    });
+    return result;
+  }
 
-    final failedSegments = segmentCount - segments.length;
-    return {
-      'success': failedSegments == 0,
-      if (failedSegments > 0)
-        'error':
-            'Failed to capture $failedSegments of $segmentCount screenshot segments',
-      'format': 'png',
-      'segments': segments,
-      'segmentWidth': viewportSize.width,
-      'segmentHeight': viewportHeight,
-      'totalHeight': totalHeight,
-      'segmentCount': segments.length,
-      'pixelRatio': pixelRatio,
-    };
+  static Future<ui.Image> _captureScrollViewport(
+      RenderBox viewport, double pixelRatio) async {
+    // The protected layer getter is also available in profile/release, unlike
+    // debugLayer. Never detach or repaint the live tree to remove overlays.
+    // ignore: invalid_use_of_protected_member
+    final layer = viewport.layer;
+    if (layer is! OffsetLayer) {
+      throw StateError('Scroll viewport has no isolated capture layer');
+    }
+    return layer.toImage(Offset.zero & viewport.size, pixelRatio: pixelRatio);
+  }
+
+  static void _checkImageSize(double width, double height, double pixelRatio) {
+    final pixelWidth = (width * pixelRatio).ceil();
+    final pixelHeight = (height * pixelRatio).ceil();
+    if (pixelWidth > 32768 ||
+        pixelHeight > 32768 ||
+        pixelWidth * pixelHeight > 64000000) {
+      throw StateError(
+          'Full-page screenshot exceeds image size limit; reduce pixelRatio or content size');
+    }
   }
 
   static Future<Map<String, dynamic>> _captureSafely(
@@ -252,48 +412,6 @@ class ScreenshotExtension {
       return null;
     }
     return renderView.size;
-  }
-
-  /// Result of searching the widget tree for scroll extent information.
-  static _ScrollInfo _findScrollExtent(Element root) {
-    dynamic controller;
-    double maxExtent = 0;
-
-    void visitor(Element element) {
-      final widget = element.widget;
-      // Check for ScrollView / ScrollController via dynamic dispatch.
-      try {
-        final c = (widget as dynamic).controller;
-        if (c != null) {
-          controller = c;
-          try {
-            final me = (c as dynamic).position.maxScrollExtent as double;
-            if (me > maxExtent) maxExtent = me;
-          } catch (_) {}
-        }
-      } catch (_) {}
-
-      // Also check the render object for scroll extent.
-      final ro = element.findRenderObject();
-      if (ro != null) {
-        try {
-          final me = (ro as dynamic).maxScrollExtent as double;
-          if (me > maxExtent) maxExtent = me;
-        } catch (_) {}
-        try {
-          final me = (ro as dynamic).extentAfter as double;
-          if (me > maxExtent) maxExtent = me;
-        } catch (_) {}
-      }
-
-      element.visitChildren(visitor);
-    }
-
-    root.visitChildren(visitor);
-    return _ScrollInfo(
-      controller: controller,
-      totalExtent: maxExtent > 0 ? maxExtent : 0,
-    );
   }
 
   /// Crops a screenshot result to the specified logical-pixel rect.
@@ -364,10 +482,4 @@ class ScreenshotExtension {
   static Future<void> _waitForFrame() async {
     await WidgetsBinding.instance.endOfFrame;
   }
-}
-
-class _ScrollInfo {
-  final dynamic controller;
-  final double totalExtent;
-  const _ScrollInfo({required this.controller, required this.totalExtent});
 }

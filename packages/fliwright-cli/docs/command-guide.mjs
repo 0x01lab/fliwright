@@ -6,6 +6,7 @@ const doc = (summary, use, result, notes, examples, related) => ({ summary, use,
 export const groups = {
   setup: 'Discover commands and prepare a project',
   execution: 'Run tests and scripts in CI',
+  catalog: 'Discover project tests without connecting to an app',
   app: 'Inspect and interact with a running app',
   scenario: 'Prepare a named app baseline',
   mock: 'Select HTTP response scenarios and inspect calls',
@@ -18,6 +19,7 @@ export const groups = {
 export function commandGroup(path) {
   if (['schema', 'init', 'doctor', 'devices.list'].includes(path)) return 'setup';
   if (['run', 'script', 'record'].includes(path)) return 'execution';
+  if (path === 'catalog') return 'catalog';
   if (path === 'generate-test' || path === 'tdd.validate-spec') return 'generation';
   if (path === 'devassist.cycle') return 'tdd';
   return path.split('.')[0];
@@ -29,6 +31,11 @@ const spec = {
   flows: [{ id: 'increment-flow', name: 'Increment the counter', steps: [{ action: 'tap', target: 'increment' }], expectedOutcome: [{ kind: 'text', target: 'count', equals: 'Count: 1' }] }],
 };
 export const commandDocs = {
+  catalog: doc('Collect configured suite files, named scenarios and dynamically registered Vitest cases without starting Flutter or running test/hook bodies.',
+    'Use on an isolated, trusted checkout to create a commit-scoped test catalog. Module top-level code is imported by Vitest and must be treated as executable repository code.',
+    { suites: 'Configured suite id, glob, file list and collected cases with stable duplicate ordinals.', scenarios: 'Configured scenario names and content fingerprints.', scannerVersion: 'Catalog collection implementation version.' },
+    ['Discovers all named scenarios from fliwright.config.ts; projects without scenario declarations still produce a browsable test catalog with an empty scenario list.', 'Requires the project Vitest dependency. Collection imports test modules; hooks and test bodies are not run. Run in an isolated process with no device or service credentials.', 'No VM Service, Flutter launch, reset, screenshot, or app bridge is used.'],
+    [example('Collect the default project catalog')], ['run']),
   'devices.list': doc('Discover local iOS and Android physical devices and simulators without a running app.',
     'Use before choosing a device ID for a managed launch. Detection runs on the CLI host and does not use an inherited connection session.',
     { 'devices[]': 'Native id, name, platform, kind, state and available OS/model information. Stopped Android AVD ids use avd:<name>; these cannot be passed to app launch.', 'diagnostics[]': 'Missing tools, failed commands, invalid output or unsupported host; other sources still return results.', scannedAt: 'ISO timestamp when the scan completed.' },
@@ -92,10 +99,10 @@ export const commandDocs = {
     { reloaded: 'Whether reload succeeded.', durationMs: 'Elapsed reload/capture time.', exceptions: 'Collected failures.', snapshot: 'Post-reload snapshot when available.', screenshot: 'Optional PNG path, not base64 image data.' },
     ['includeScreenshot defaults to false. screenshotPixelRatio controls its scale.', 'Failed reload or captured exceptions exit 3 with partial data. Structural changes may require tdd sync restart with managed ownership.'],
     [example('Reload and save an evidence image', { includeScreenshot: true }, session)], ['app.snapshot', 'tdd.sync', 'app.diagnostics']),
-  'app.screenshot': doc('Save a PNG screenshot of the current app UI.', 'Use when the Skill needs a visual artifact to inspect or compare.',
+  'app.screenshot': doc('Save a viewport screenshot or a stitched vertical long PNG.', 'Use when the Skill needs a visual artifact to inspect or compare.',
     { path: 'Written PNG path; default is a unique capture in cacheRoot/inspect (project default .fliwright/cache/inspect).', bytes: 'PNG byte length.' },
-    ['Creates parent directories and replaces the target file. Read the image at data.path with the agent’s image tool.'],
-    [example('Save a named screenshot', { output: '.fliwright/artifacts/counter.png', pixelRatio: 1 }, session)], ['app.snapshot', 'app.debug-snapshot', 'flow.review-capture-runtime']),
+    ['Creates parent directories and replaces the target file. Read the image at data.path with the agent’s image tool.', 'fullPage scrolls a single visible vertical scroll view and stitches its content, excluding fixed page chrome; restores the original scroll offset. Use scrollable to select one view when multiple exist. The scroll viewport is captured directly, excluding sibling overlays such as floating bottom tabs and floating action buttons. Reverse scrolling, nested scrolling and sticky headers are unsupported.', 'Capture fails rather than truncates above maxHeight (default 20000 logical pixels), 64M output pixels, 32768 pixels per dimension, or 200 segments. Dynamic content must remain stable during capture.'],
+    [example('Save a named screenshot', { output: '.fliwright/artifacts/counter.png', pixelRatio: 1 }, session), example('Save a long screenshot of a list', { output: '.fliwright/artifacts/feed.png', fullPage: true, scrollable: 'key=feed', maxHeight: 12000 }, session)], ['app.snapshot', 'app.debug-snapshot', 'flow.review-capture-runtime']),
   'app.debug-snapshot': doc('Collect a structural snapshot plus independent debug evidence channels.', 'Use when a failure needs UI, diagnostics, mock state, source locations and recent run context together.',
     { snapshot: 'Required structural capture.', 'diagnostics / mock / sourceMap / screenshot': 'Optional channel results.', 'lastFailures / tdd': 'Saved failure context and local TDD status.', 'partial / errors': 'Whether optional sections failed, and which ones.' },
     ['Diagnostics and mock status are enabled unless false; screenshot and sourceMap require opt-in.', 'ok:true can accompany partial:true. Inspect errors before drawing conclusions. Failure of the required structural snapshot fails the command.', 'Screenshot output is a file path. App context fields are also merged into data.'],

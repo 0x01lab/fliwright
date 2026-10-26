@@ -139,6 +139,9 @@ importers:
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
+      ws:
+        specifier: ^8.17.0
+        version: 8.21.0
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -158,6 +161,9 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.7
         version: 18.3.7(@types/react@18.3.31)
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
       happy-dom:
         specifier: ^21.0.3
         version: 21.0.3
@@ -176,6 +182,9 @@ importers:
 
   packages/fliwright-cloud-protocol:
     dependencies:
+      ws:
+        specifier: ^8.17.0
+        version: 8.21.0
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -183,6 +192,9 @@ importers:
       '@types/node':
         specifier: ^26.0.1
         version: 26.0.1
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
       typescript:
         specifier: ^5.5.0
         version: 5.9.3

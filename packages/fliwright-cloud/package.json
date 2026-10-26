@@ -13,7 +13,7 @@
     }
   },
   "bin": {
-    "fliwright-cloud": "dist/main.js"
+    "fliwright-cloud": "fliwright-cloud"
   },
   "engines": {
     "node": ">=26.0.0"
@@ -43,7 +43,8 @@
     "@tanstack/react-router": "^1.170.45",
     "d3-scale": "^4.0.2",
     "@fliwright/cloud-protocol": "workspace:*",
-    "@radix-ui/react-navigation-menu": "^1.4.1"
+    "@radix-ui/react-navigation-menu": "^1.4.1",
+    "ws": "^8.17.0"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",
@@ -55,10 +56,12 @@
     "tailwindcss": "^4.3.1",
     "@tailwindcss/vite": "^4.3.1",
     "happy-dom": "^21.0.3",
-    "@types/d3-scale": "^4.0.9"
+    "@types/d3-scale": "^4.0.9",
+    "@types/ws": "^8.5.10"
   },
   "files": [
     "dist",
+    "fliwright-cloud",
     "README.md",
     "deploy"
   ]

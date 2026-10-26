@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "1c174d5d4107c1be2452214c98b284371133639f0d9ed64a00c804d43ab97e3d"
+source_fingerprint: "9f1f12f3b83fed4b152b89ff1cca7092b9f6d2701aa37db1660d588578932771"
 generated: true
 ---
 
@@ -107,6 +107,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.stopRecording`
 - `fliwright.stopSandbox`
 - `fliwright.stopTests`
+- `fliwright.takeLongScreenshot`
 - `fliwright.takeScreenshot`
 - `fliwright.tddTakeOver`
 - `fliwright.unwatchStateProvider`

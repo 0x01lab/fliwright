@@ -7,7 +7,7 @@ source: packages/fliwright-cli/src/registry
 
 # fliwright app screenshot
 
-Save a PNG screenshot of the current app UI.
+Save a viewport screenshot or a stitched vertical long PNG.
 
 ## When to use
 
@@ -18,6 +18,8 @@ Use when the Skill needs a visual artifact to inspect or compare.
 - A running Flutter app with fliwright_bridge; attach with vmUrl/project configuration or use a connection session.
 - No persistent session required. See usage for finite/session variants.
 - Creates parent directories and replaces the target file. Read the image at data.path with the agent’s image tool.
+- fullPage scrolls a single visible vertical scroll view and stitches its content, excluding fixed page chrome; restores the original scroll offset. Use scrollable to select one view when multiple exist. The scroll viewport is captured directly, excluding sibling overlays such as floating bottom tabs and floating action buttons. Reverse scrolling, nested scrolling and sticky headers are unsupported.
+- Capture fails rather than truncates above maxHeight (default 20000 logical pixels), 64M output pixels, 32768 pixels per dimension, or 200 segments. Dynamic content must remain stable during capture.
 
 ## Input
 
@@ -26,6 +28,9 @@ Use when the Skill needs a visual artifact to inspect or compare.
 | `vmUrl` | `--vm-url` | string | no | — | Dart VM Service websocket URL. Omit to use project/environment endpoint resolution where supported. (minLength=1) |
 | `output` | `--output` | string | no | — | PNG destination; otherwise a unique file in configured cacheRoot/inspect (default .fliwright/cache/inspect). (minLength=1) |
 | `pixelRatio` | `--pixel-ratio` | number | no | — | Runtime screenshot scale. (exclusiveMinimum=0) |
+| `fullPage` | `--full-page` | boolean | no | — | Capture vertical scroll content as one long PNG; default false. |
+| `scrollable` | `--scrollable` | string | no | — | Selector for a visible scroll view, for example key=feed; requires fullPage. (minLength=1) |
+| `maxHeight` | `--max-height` | number | no | — | Maximum long screenshot height in logical pixels (default 20000); requires fullPage. Exceeding the limit fails. (exclusiveMinimum=0) |
 
 Requiredness/defaults above come from the input schema. Conditional requirements and effective implementation defaults are explained above; “—” means no Zod default. Every command also accepts [common options](./common.md#common-options). JSON keys use camelCase; flags use kebab-case. Positional fields are supplied positionally or in --input, not as flags.
 
@@ -37,6 +42,12 @@ Examples assume a project with Fliwright installed. Replace app-specific keys, s
 
 ```sh
 fliwright app screenshot --output '.fliwright/artifacts/counter.png' --pixel-ratio '1' --session "$SESSION_ID" --json
+```
+
+### Save a long screenshot of a list
+
+```sh
+fliwright app screenshot --output '.fliwright/artifacts/feed.png' --full-page 'true' --scrollable 'key=feed' --max-height '12000' --session "$SESSION_ID" --json
 ```
 
 ## Result
@@ -69,6 +80,17 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
       "minLength": 1
     },
     "pixelRatio": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "fullPage": {
+      "type": "boolean"
+    },
+    "scrollable": {
+      "type": "string",
+      "minLength": 1
+    },
+    "maxHeight": {
       "type": "number",
       "exclusiveMinimum": 0
     }

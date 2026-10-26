@@ -17,6 +17,8 @@ async function run() {
     'fliwright.stopRecording',
     'fliwright.insertRecordedTest',
     'fliwright.refreshStateProviders',
+    'fliwright.takeScreenshot',
+    'fliwright.takeLongScreenshot',
   ]) {
     assert.ok(commands.includes(command), `${command} should be registered`);
   }

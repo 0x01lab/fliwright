@@ -26,6 +26,7 @@ import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 
 export interface RunOptions {
   testPattern?: string;
+  caseSelection?: import('../catalog.js').CatalogSelection;
   testName?: string;
   vmUrl?: string;
   reporter?: 'pretty' | 'json' | 'junit';
@@ -115,6 +116,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
   const vitestResult = await runVitest({
     testPattern,
     testName: options.testName,
+    caseSelection: options.caseSelection,
     vmUrl,
     cwd,
     timeout,
@@ -159,6 +161,7 @@ interface RunVitestOptions {
   recordingReplay?: boolean;
   sharedConfig?: ResolvedFliwrightConfig;
   testPattern: string,
+  caseSelection?: import('../catalog.js').CatalogSelection;
   testName?: string;
   vmUrl: string;
   cwd: string;
@@ -190,8 +193,8 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
   const reportDirectory = await mkdtemp(join(tmpdir(), 'fliwright-vitest-report-'));
   const rawReportPath = join(reportDirectory, 'report.json');
   const bootstrap = `
-    const { readFile, writeFile } = await import('node:fs/promises');
-    const { startVitest, JsonReporter } = await import(${JSON.stringify(vitestUrl)});
+    const { readFile, writeFile, realpath } = await import('node:fs/promises');
+    const { startVitest, createVitest, JsonReporter } = await import(${JSON.stringify(vitestUrl)});
     class RunReporter extends JsonReporter {
       runnerErrors = [];
       recoveryAttempts = [];
@@ -218,14 +221,30 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
       }
     }
 
-    const context = await startVitest('test', ${JSON.stringify(filters)}, {
+    const settings = {
       ${isGlob || isFile ? `include: ${JSON.stringify([options.testPattern])},` : ''}
       run: true, reporters: [new RunReporter({ outputFile: ${JSON.stringify(rawReportPath)} })], testTimeout: ${JSON.stringify(options.timeout)},
       ${options.testName ? `testNamePattern: ${JSON.stringify(options.testName)},` : ''}
-    }, { plugins: [{ name: 'fliwright-runner', config(config) {
+    };
+    const viteOptions = { plugins: [{ name: 'fliwright-runner', config(config) {
       return { test: { runner: config.test?.runner ?? ${JSON.stringify(runnerPath)} } };
-    } }] });
-    await context?.close();
+    } }] };
+    let context;
+    try {
+      ${options.caseSelection ? `
+      const { collectedCases } = await import(${JSON.stringify(resolveRuntime('@fliwright/cli/run'))});
+      context = await createVitest(settings, viteOptions);
+      await context.standalone();
+      const result = await context.collect(${JSON.stringify(filters)}, { staticParse: false });
+      if (result.unhandledErrors.length) throw new Error('Case collection failed');
+      const selection = ${JSON.stringify(options.caseSelection)};
+      const selected = collectedCases(result.testModules, await realpath(${JSON.stringify(options.cwd)})).filter(item =>
+        item.caseId === selection.caseId && item.file === selection.file &&
+        item.duplicateIndex === selection.duplicateIndex && JSON.stringify(item.titlePath) === JSON.stringify(selection.titlePath));
+      if (selected.length !== 1) throw new Error('Frozen catalog case no longer matches collection');
+      await context.runTestSpecifications([selected[0].test.toTestSpecification()]);
+      ` : `context = await startVitest('test', ${JSON.stringify(filters)}, settings, viteOptions);`}
+    } finally { await context?.close(); }
   `;
   const args = ['--input-type=module', '--eval', bootstrap];
 
@@ -438,7 +457,8 @@ export async function finalizeRunArtifacts(
     screenshot: 'file' | 'base64' | 'off';
     testPattern: string;
     recordingMode?: 'standard' | 'full' | 'off';
-    testName?: string;
+    caseSelection?: import('../catalog.js').CatalogSelection;
+  testName?: string;
   },
 ): Promise<CliRunResult> {
   try {

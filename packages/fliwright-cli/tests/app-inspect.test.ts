@@ -3,9 +3,19 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appDebugSnapshotCommand, appReloadCommand, appSourceMapCommand } from '../src/commands/app-inspect.js';
+import { appScreenshotCommand } from '../src/commands/app.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 const snapshot = { snapshot: 'ready', refs: [], groupId: 'g', count: 0 };
+it('saves a long screenshot and forwards capture options', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fliwright-long-')); roots.push(root);
+  const screenshot = vi.fn(async () => Buffer.from('long-png'));
+  const driver = { page: { screenshot } };
+  const result = await appScreenshotCommand({ cwd: root, fullPage: true, scrollable: 'key=feed', maxHeight: 5000, pixelRatio: 2 },
+    { sessionProvider: async () => ({ driver: driver as never, vmServiceUrl: 'ws://debug/ws' }) });
+  expect(await readFile(result.path, 'utf8')).toBe('long-png');
+  expect(screenshot).toHaveBeenCalledWith({ fullPage: true, scrollable: 'key=feed', maxHeight: 5000, pixelRatio: 2 });
+});
 it('preserves required snapshot and marks failed optional debug channels as partial', async () => {
   const driver = { page: { snapshot: async () => snapshot, context: async () => ({ route: '/cart' }), screenshot: vi.fn() } };
   const result = await appDebugSnapshotCommand({}, { sessionProvider: async () => ({ driver: driver as never, vmServiceUrl: 'ws://debug/ws' }) });
