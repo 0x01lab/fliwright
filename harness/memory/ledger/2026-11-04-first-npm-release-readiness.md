@@ -23,3 +23,9 @@ Registry consumer dependencies use plain versions. Load the Vitest fixture
 inside an actual Vitest run rather than importing its test API from standalone
 Node. Authentication and package-management queries cannot prove npm publish
 permission; only an authorized registry publish verifies that operation.
+
+Nested Vitest CLI assertions must strip terminal control sequences before
+matching summary text: GitHub Actions enables colors and splits visible words
+with ANSI escapes. Test outcomes and artifact assertions remain unchanged.
+Flutter consumers of the local Riverpod adapter must override its hosted bridge
+dependency to the same local bridge checkout to avoid conflicting sources.
