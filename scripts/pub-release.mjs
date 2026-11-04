@@ -63,11 +63,11 @@ export async function prepareRelease(release, fetchRegistry = fetch) {
   return false;
 }
 
-async function runFlutter(args, options) {
+export async function runFlutter(args, options) {
   console.log(`flutter ${args.join(' ')} (${options.cwd})`);
   try {
     const { stdout, stderr } = await execFileAsync('flutter', args, {
-      ...options, timeout: 180_000, maxBuffer: 10 * 1024 * 1024,
+      ...options, signal: options.signal ?? AbortSignal.timeout(180_000), maxBuffer: 10 * 1024 * 1024,
     });
     process.stdout.write(stdout);
     process.stderr.write(stderr);

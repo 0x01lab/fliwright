@@ -1,12 +1,28 @@
 import assert from 'node:assert/strict';
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { checkHostedDependencies, prepareRelease, resolveRelease, verifyPublishedPackage } from './pub-release.mjs';
+import { checkHostedDependencies, prepareRelease, resolveRelease, runFlutter, verifyPublishedPackage } from './pub-release.mjs';
 
 const names = ['fliwright_bridge', 'fliwright_bridge_riverpod', 'fliwright_design_qa'];
 const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), { status });
+
+test('a timed out Flutter command fails even if its signal handler exits successfully', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'fliwright-pub-command-'));
+  try {
+    await symlink(process.execPath, join(cwd, 'flutter'));
+    await assert.rejects(runFlutter([
+      '-e', 'process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000);',
+    ], {
+      cwd,
+      env: { ...process.env, PATH: `${cwd}:${process.env.PATH}` },
+      signal: AbortSignal.timeout(200),
+    }), /abort/i);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
 
 test('routes all package tags and rejects mismatched identities and versions', async () => {
   for (const name of names) {
