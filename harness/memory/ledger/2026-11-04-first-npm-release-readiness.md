@@ -29,3 +29,7 @@ matching summary text: GitHub Actions enables colors and splits visible words
 with ANSI escapes. Test outcomes and artifact assertions remain unchanged.
 Flutter consumers of the local Riverpod adapter must override its hosted bridge
 dependency to the same local bridge checkout to avoid conflicting sources.
+
+Host executor lifecycle tests supply deterministic device inventory. An iOS
+simulator fixture must not rely on the test host being macOS; Linux correctly
+omits iOS discovery even when given an xcrun fixture.

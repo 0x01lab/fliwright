@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CloudStore, createCloudServer } from '@fliwright/cloud';
+import { DeviceDiscovery } from '@fliwright/devices';
 import { createHash } from 'node:crypto';
 import { hostConfigSchema } from '../src/config.js';
 import { runHostWorker } from '../src/host.js';
@@ -15,6 +16,13 @@ it('a paired host starts and stops isolated executors when web device bindings c
   const stop = new AbortController();
   let running: Promise<void> | undefined;
   vi.stubEnv('TEST_HOST_TOKEN', 'test-host-private-token');
+  // Host lifecycle is independent of the OS running this test. iOS discovery
+  // itself is covered by the devices package against native tool fixtures.
+  vi.spyOn(DeviceDiscovery.prototype, 'scan').mockResolvedValue({
+    scannedAt: new Date().toISOString(), diagnostics: [],
+    devices: [{ id: 'sim-uuid', name: 'iPhone', platform: 'ios', kind: 'simulator', state: 'online' }],
+  });
+  vi.spyOn(DeviceDiscovery.prototype, 'watch').mockReturnValue(() => {});
   const claims = vi.spyOn(store, 'claim');
   const assignments = vi.spyOn(store, 'workerAssignments');
   try {
