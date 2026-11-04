@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const integration = resolve(directory, '../src/index.ts');
@@ -57,7 +58,7 @@ describe('whole-test endpoint lease', () => {
       child.stderr.on('data', (chunk) => { output += chunk; });
       const code = await new Promise((resolveCode, reject) => { child.once('error', reject); child.once('close', resolveCode); });
       expect(code, output).toBe(1);
-      expect(output).toContain('1 failed | 1 passed');
+      expect(stripVTControlCharacters(output)).toContain('1 failed | 1 passed');
       expect((await readFile(join(root, 'setup.jsonl'), 'utf8')).trim()).toBe(JSON.stringify('after preparation failure'));
       const results = (await readFile(join(root, 'sessions.jsonl'), 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
       expect(results).toHaveLength(2);
@@ -202,7 +203,7 @@ describe('whole-test endpoint lease', () => {
       child.stderr.on('data', (chunk) => { output += chunk; });
       const code = await new Promise((resolveCode, reject) => { child.once('error', reject); child.once('close', resolveCode); });
       expect(code, output).toBe(0);
-      expect(output).toContain('2 passed');
+      expect(stripVTControlCharacters(output)).toContain('2 passed');
     } finally { await rm(root, { recursive: true, force: true }); }
   }, 15_000);
 
@@ -247,7 +248,7 @@ describe('whole-test endpoint lease', () => {
       child.stderr.on('data', (chunk) => { output += chunk; });
       const code = await new Promise((resolveCode, reject) => { child.once('error', reject); child.once('close', resolveCode); });
       expect(code, output).toBe(1);
-      expect(output).toContain('3 failed | 7 passed | 2 skipped');
+      expect(stripVTControlCharacters(output)).toContain('3 failed | 7 passed | 2 skipped');
       const { readdir } = await import('node:fs/promises');
       const results: Array<{ testName: string; status: string; flaky: boolean }> = [];
       for (const id of await readdir(join(root, 'runs/run-outcomes/tests'))) {

@@ -2,6 +2,7 @@ name: Continuous integration
 
 on:
   pull_request:
+  workflow_call:
   push:
     branches:
       - main
@@ -20,7 +21,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26
 
       - name: Validate Harness
         if: github.event_name == 'pull_request'
@@ -40,14 +41,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm docs:cli:check
       - run: pnpm lint
-      - run: pnpm test
+      - run: pnpm --workspace-concurrency=1 --filter './packages/*' -r run test --maxWorkers=2
       - run: pnpm plugin:check -- --strict-plugin --skip-cli
       - run: pnpm package:check
       - uses: actions/upload-artifact@v4
@@ -107,17 +108,14 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @fliwright/core build
-      - run: pnpm --filter @fliwright/vitest build
-      - run: pnpm --filter @fliwright/tdd build
-      - run: pnpm --filter @fliwright/cli build
+      - run: pnpm --filter @fliwright/cli... build
       - run: pnpm --filter @fliwright/e2e-tests test
         env:
           FLIWRIGHT_E2E_ARTIFACTS: ${{ github.workspace }}/e2e-artifacts
@@ -128,3 +126,22 @@ jobs:
           path: e2e-artifacts/
           include-hidden-files: true
           if-no-files-found: ignore
+
+  quality-gate:
+    name: CI quality gate
+    if: always()
+    needs: [harness, typescript, dart, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every quality job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'JS'
+          const jobs = JSON.parse(process.env.RESULTS);
+          const failed = Object.entries(jobs).filter(([, job]) => job.result !== 'success');
+          if (failed.length) {
+            console.error('Required jobs did not pass:', failed.map(([name, job]) => `${name}: ${job.result}`).join(', '));
+            process.exit(1);
+          }
+          JS

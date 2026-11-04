@@ -26,7 +26,7 @@ try {
     name: 'fliwright-registry-consumer',
     private: true,
     type: 'module',
-    dependencies: Object.fromEntries(packages.map((name) => [name, `${name}@${version}`])),
+    dependencies: Object.fromEntries(packages.map((name) => [name, version])),
     devDependencies: { vitest: '5.0.5' },
   }, null, 2)}\n`);
 
@@ -57,13 +57,25 @@ try {
     [
       "import { FliwrightDriver } from '@fliwright/core';",
       "import { DeviceDiscovery } from '@fliwright/devices';",
-      "import { test } from '@fliwright/vitest';",
       "import { defineConfig } from '@fliwright/cli';",
       "import { runCommand } from '@fliwright/cli/run';",
       "import { TddRuntime } from '@fliwright/tdd';",
       "import { riverpodPlugin } from '@fliwright/plugin-riverpod';",
-      'if (![DeviceDiscovery, FliwrightDriver, test, defineConfig, runCommand, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing registry export");',
+      'if (![DeviceDiscovery, FliwrightDriver, defineConfig, runCommand, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing registry export");',
     ].join('\n'),
+  ], { cwd: consumer });
+  await writeFile(join(consumer, 'vitest.config.mjs'), [
+    "import { fliwrightPreset } from '@fliwright/vitest/preset';",
+    "export default fliwrightPreset({ test: { include: ['registry-entry.test.mjs'] } });",
+  ].join('\n'));
+  await writeFile(join(consumer, 'registry-entry.test.mjs'), [
+    "import { test } from '@fliwright/vitest';",
+    "import { expect } from 'vitest';",
+    "test('loads the registry Vitest fixture', () => { expect(typeof test).toBe('function'); });",
+  ].join('\n'));
+  await execFileAsync(process.execPath, [
+    join(consumer, 'node_modules', 'vitest', 'vitest.mjs'),
+    'run', 'registry-entry.test.mjs',
   ], { cwd: consumer });
   console.log(`verified npm registry consumer for ${version}`);
 } finally {
