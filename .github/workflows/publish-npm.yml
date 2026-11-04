@@ -9,8 +9,19 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
 jobs:
+  quality:
+    uses: ./.github/workflows/release-gate.yml
+    permissions:
+      contents: read
+
   publish:
+    needs: quality
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +30,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
@@ -34,8 +45,9 @@ jobs:
             test "$(node -p "require('./${manifest}').version")" = "${GITHUB_REF_NAME#npm-v}"
           done
 
+      - run: pnpm build
       - run: pnpm lint
-      - run: pnpm test
+      - run: pnpm --workspace-concurrency=1 --filter './packages/*' -r run test --maxWorkers=2
       - run: pnpm package:check
 
       - name: Publish in dependency order with provenance

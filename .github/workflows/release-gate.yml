@@ -1,0 +1,19 @@
+name: Release quality gate
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  release-ref:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require a release tag from main history
+        run: |
+          test "${GITHUB_REF_TYPE}" = tag
+          git merge-base --is-ancestor HEAD origin/main
+  quality:
+    needs: release-ref
+    uses: ./.github/workflows/ci.yml

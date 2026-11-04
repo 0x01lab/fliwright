@@ -123,6 +123,14 @@ a dry run, and then `flutter pub publish --force`.
 
 ## npm
 
+Push `npm-v<version>` only after the release changes are merged to main. The npm
+workflow verifies main ancestry and reruns all CI jobs through the reusable
+release gate. It builds packages before lint/tests, checks tarballs, publishes
+in dependency order, then installs the exact versions in a clean npm consumer.
+The `CI quality gate` aggregates every required job and rejects failures or
+skipped jobs. Package tests run sequentially with two workers for stable timing.
+
+
 The public TypeScript packages are published by `.github/workflows/publish-npm.yml`
 from a matching `npm-v<version>` tag. The workflow verifies that all six public
 package versions match, runs lint, tests, builds, tarball checks, clean npm/pnpm
