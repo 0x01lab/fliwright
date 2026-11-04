@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: 26
 
+      - name: Test pub.dev release tooling
+        run: node --test scripts/pub-release.test.mjs
+
       - name: Validate Harness
         if: github.event_name == 'pull_request'
         run: node scripts/verify-harness.mjs --base "${{ github.event.pull_request.base.sha }}"

@@ -8,65 +8,60 @@ on:
       - 'fliwright_design_qa-v*'
 
 permissions:
-  id-token: write
   contents: read
 
+concurrency:
+  group: pub-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  quality:
+    uses: ./.github/workflows/release-gate.yml
+
   publish:
+    needs: quality
+    timeout-minutes: 45
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      # Provisions OIDC credentials; Flutter below supplies the matching Dart SDK.
+      - uses: dart-lang/setup-dart@v1
 
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - uses: dart-lang/setup-dart@v1
-
-      - name: Resolve package
+      - name: Validate release and check existing version
         id: package
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF_NAME}" == fliwright_bridge_riverpod-v* ]]; then
-            pkg="fliwright-bridge-riverpod"
-          elif [[ "${GITHUB_REF_NAME}" == fliwright_design_qa-v* ]]; then
-            pkg="fliwright-design-qa"
-          elif [[ "${GITHUB_REF_NAME}" == fliwright_bridge-v* ]]; then
-            pkg="fliwright-bridge"
-          else
-            echo "Unsupported tag: ${GITHUB_REF_NAME}" >&2
-            exit 1
-          fi
-          echo "dir=packages/${pkg}" >> "$GITHUB_OUTPUT"
+        run: node scripts/pub-release.mjs prepare
+
+      - name: Verify dependencies resolve from pub.dev without local overrides
+        if: steps.package.outputs.published != 'true'
+        run: node scripts/pub-release.mjs check-dependencies
 
       - name: Install dependencies
+        if: steps.package.outputs.published != 'true'
         working-directory: ${{ steps.package.outputs.dir }}
         run: flutter pub get
 
-      - name: Verify tag matches package version
-        working-directory: ${{ steps.package.outputs.dir }}
-        shell: bash
-        run: |
-          tag_version="${GITHUB_REF_NAME##*-v}"
-          package_version="$(awk '/^version:[[:space:]]*/ { print $2; exit }' pubspec.yaml)"
-          if [[ -z "${package_version}" || "${tag_version}" != "${package_version}" ]]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match ${package_version:-unknown} in pubspec.yaml." >&2
-            exit 1
-          fi
-
-      - name: Analyze
-        working-directory: ${{ steps.package.outputs.dir }}
-        run: flutter analyze .
-
-      - name: Test
-        working-directory: ${{ steps.package.outputs.dir }}
-        run: flutter test
-
       - name: Publish dry run
+        if: steps.package.outputs.published != 'true'
         working-directory: ${{ steps.package.outputs.dir }}
         run: flutter pub publish --dry-run
 
       - name: Publish to pub.dev
+        if: steps.package.outputs.published != 'true'
         working-directory: ${{ steps.package.outputs.dir }}
         run: flutter pub publish --force
+
+      - name: Verify published package in a clean Flutter consumer
+        run: node scripts/pub-release.mjs verify

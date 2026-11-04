@@ -55,71 +55,94 @@ release. It uses `xvfb` for the VS Code integration test on the Linux runner.
 
 ## pub.dev
 
-Packages prepared for pub.dev:
+| Package | Directory | pub.dev tag pattern |
+| --- | --- | --- |
+| `fliwright_bridge` | `packages/fliwright-bridge` | `fliwright_bridge-v{{version}}` |
+| `fliwright_bridge_riverpod` | `packages/fliwright-bridge-riverpod` | `fliwright_bridge_riverpod-v{{version}}` |
+| `fliwright_design_qa` (Labs) | `packages/fliwright-design-qa` | `fliwright_design_qa-v{{version}}` |
 
-- `packages/fliwright-bridge`
-- `packages/fliwright-bridge-riverpod`
-- `packages/fliwright-design-qa` (Labs; published independently)
+Publish `fliwright_bridge` first. Both optional packages require a hosted bridge
+version satisfying their `pubspec.yaml` constraint (currently `^0.1.0`). Their
+local `pubspec_overrides.yaml` files are development conveniences and do not
+make the dependency available to pub.dev consumers.
 
-Publish order matters. Publish `fliwright_bridge` first, then
-`fliwright_bridge_riverpod` and `fliwright_design_qa`, because both optional
-packages depend on `fliwright_bridge: ^0.1.0`.
+### First publication and authentication
 
-Before the first release:
-
-1. Run a local dry run for each package:
-
-```bash
-cd packages/fliwright-bridge
-dart pub publish --dry-run
-
-cd ../fliwright-bridge-riverpod
-dart pub publish --dry-run
-
-cd ../fliwright-design-qa
-dart pub publish --dry-run
-```
-
-2. Publish each package manually once:
+[pub.dev requires the first version of each package to be published manually](https://dart.dev/tools/pub/automated-publishing).
+Use a clean checkout of the intended main commit. For each package, run
+`flutter pub get`, `flutter analyze .`, `flutter test`, and
+`flutter pub publish --dry-run` before publishing. From the repository root:
 
 ```bash
-cd packages/fliwright-bridge
-dart pub publish
-
-cd ../fliwright-bridge-riverpod
-dart pub publish
-
-cd ../fliwright-design-qa
-dart pub publish
+(cd packages/fliwright-bridge && flutter pub publish)
 ```
 
-3. In each package page on pub.dev, configure automated publishing for this
-   GitHub repository and workflow: `.github/workflows/publish-pub.yml`.
-   Use these tag patterns:
-
-```text
-fliwright_bridge-v{{version}}
-fliwright_bridge_riverpod-v{{version}}
-fliwright_design_qa-v{{version}}
-```
-
-Automated publish tags:
+Complete the browser authentication with the Google account that will own the
+package. Wait for the bridge to be available, then check the dependent packages
+against pub.dev without local path overrides before publishing them:
 
 ```bash
-git tag fliwright_bridge-v0.1.0
-git push origin fliwright_bridge-v0.1.0
+GITHUB_REF_NAME=fliwright_bridge_riverpod-v0.1.0 node scripts/pub-release.mjs check-dependencies
+(cd packages/fliwright-bridge-riverpod && flutter pub publish)
 
-git tag fliwright_bridge_riverpod-v0.1.0
-git push origin fliwright_bridge_riverpod-v0.1.0
-
-git tag fliwright_design_qa-v0.1.0
-git push origin fliwright_design_qa-v0.1.0
+GITHUB_REF_NAME=fliwright_design_qa-v0.1.0 node scripts/pub-release.mjs check-dependencies
+(cd packages/fliwright-design-qa && flutter pub publish)
 ```
 
-The `publish-pub.yml` workflow is tag-only because pub.dev rejects automated
-publishing from non-tag GitHub Actions events. It installs Flutter, uses GitHub
-OIDC (`id-token: write`) for pub.dev, runs `flutter analyze .`, `flutter test`,
-a dry run, and then `flutter pub publish --force`.
+In **each package's Admin → Automated publishing** settings, enable GitHub
+Actions publishing, set the repository to `0x01lab/fliwright`, and enter its
+exact tag pattern from the table above. This requires uploader access to the
+package or admin access to its verified publisher. No long-lived GitHub secret
+is needed: `.github/workflows/publish-pub.yml` uses `dart-lang/setup-dart@v1`
+and `id-token: write` to provision temporary OIDC credentials. `NPM_TOKEN`
+does not authenticate pub.dev. If requiring a GitHub deployment environment
+on pub.dev, configure the same `environment` on the publish job first.
+
+### Subsequent releases and reruns
+
+Update the package version and changelog, merge to main after CI passes, then
+push its matching tag. For example, after changing the bridge to `0.1.1`:
+
+```bash
+git tag fliwright_bridge-v0.1.1 <merged-main-commit>
+git push origin fliwright_bridge-v0.1.1
+```
+
+The workflow requires the tagged commit to belong to main history and reruns
+the complete reusable release gate, including Flutter analysis/tests, package
+dry runs and the Flutter E2E smoke. Only then can the publish job run. It:
+
+1. Checks that tag, package name and manifest version agree, then queries the
+   exact pub.dev version. Registry errors fail the job; only 404 means missing.
+   A package that has never been published produces first-publication guidance.
+2. For a missing version of an existing package, resolves the release manifest
+   in a temporary directory with an isolated cache and no local overrides or
+   lockfile. This blocks dependent releases until a compatible hosted bridge
+   version exists. It then runs a dry run and `flutter pub publish --force`.
+3. Installs the exact released version in a fresh Flutter consumer from
+   `https://pub.dev`, using an isolated cache, analyzes the consumer, and runs
+   a test importing the public entry point and referencing its public API.
+   Installation retries up to ten times with fifteen-second delays to tolerate
+   registry propagation. API analysis/test failures fail immediately.
+
+Push dependent tags only after a required bridge release succeeds. Each tag is
+an independent workflow run; pushing all tags together does not establish a
+dependency order. Repeated runs of the same tag are serialized. An already
+published exact version skips upload but still runs the full release gate and
+consumer verification, so a run that failed after upload can be retried safely.
+The same applies to tags for manually published first versions.
+
+To rerun the public consumer check locally, without publishing anything:
+
+```bash
+GITHUB_REF_NAME=fliwright_bridge-v0.1.0 node scripts/pub-release.mjs verify
+```
+
+Release-tooling regression tests run in CI and can be run without Flutter:
+
+```bash
+node --test scripts/pub-release.test.mjs
+```
 
 ## npm
 
