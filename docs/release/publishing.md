@@ -20,38 +20,46 @@ The extension is published from `packages/fliwright-vscode`.
 Before the first release:
 
 1. Create or choose a Visual Studio Marketplace publisher named `fliwright`.
-2. Create a Marketplace personal access token with extension publish access.
-3. Add the token to GitHub Actions as `VSCE_PAT`.
-4. Confirm `packages/fliwright-vscode/package.json` has the intended
+2. In the publisher's Marketplace management page, add a Trusted Publishing
+   policy for GitHub owner `0x01lab`, repository `fliwright`, and workflow
+   `release-vscode.yml` (with no GitHub environment).
+3. Confirm `packages/fliwright-vscode/package.json` has the intended
    `publisher`, `displayName`, `description`, `categories`, `keywords`, `icon`,
    `repository`, `bugs`, and `homepage`.
 
 The GitHub Actions workflow expects the repository to be hosted at
-`0x01lab/fliwright`, the Marketplace publisher to be `fliwright`, and the
-repository secret to be named `VSCE_PAT`. The token is never stored in the
-repository. The workflow publishes only after the release tag exactly matches
-the manifest version.
+`0x01lab/fliwright` and the Marketplace publisher to be `fliwright`. Its publish
+job requests a GitHub OIDC token with `id-token: write`, which Marketplace
+exchanges under that Trusted Publishing policy. No `VSCE_PAT` secret is needed.
+The workflow publishes only after the release tag exactly matches the manifest
+version. Configure the Marketplace policy before pushing the first tag.
 
-Manual package and publish:
+Manual release verification:
 
 ```bash
+pnpm --filter fliwright-vscode... build
 pnpm --filter fliwright-vscode run lint
 pnpm --filter fliwright-vscode run test
 pnpm --filter fliwright-vscode run package
-VSCE_PAT=... pnpm --filter fliwright-vscode run publish:vsce
+pnpm --filter fliwright-vscode run test:vsix
 ```
 
-Automated publish after updating the manifest version and changelog:
+After merging the workflow, manifest version, and changelog into `main`, create
+the tag on that reviewed commit to publish through GitHub Actions:
 
 ```bash
 git tag vscode-v0.2.0
 git push origin vscode-v0.2.0
 ```
 
-The `release-vscode.yml` workflow validates the tag/version match, verifies the
-Marketplace credential, runs lint, unit, and VS Code integration tests, packages
-the VSIX, publishes it with `vsce`, and uploads the VSIX to the matching GitHub
-release. It uses `xvfb` for the VS Code integration test on the Linux runner.
+The `release-vscode.yml` workflow validates the tag/version match, builds the
+extension and its workspace dependencies, runs lint and unit tests, then tests
+both the development extension and the installed VSIX under VS Code. It publishes
+with `vsce --oidc` and uploads the VSIX to the matching GitHub release. It checks
+whether the exact version already exists in Marketplace, so retrying a failed
+GitHub asset upload does not republish that version. Both VS Code tests use
+`xvfb` on the Linux runner. After the first tag run, verify the Marketplace
+listing and the GitHub release asset.
 
 ## pub.dev
 
