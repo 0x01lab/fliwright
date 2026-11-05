@@ -45,7 +45,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: node --test scripts/tests/publish-vscode.test.mjs
+      - run: node --test scripts/tests/*.test.mjs
       - run: pnpm build
       - run: pnpm docs:cli:check
       - run: pnpm lint
