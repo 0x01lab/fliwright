@@ -1,7 +1,46 @@
 # Publishing Fliwright
 
 This guide covers the public release paths for the Fliwright npm packages,
-Flutter/Dart packages, and VS Code extension.
+Flutter/Dart packages, VS Code extension, and Codex plugin.
+
+## Codex plugin
+
+The `release-codex-plugin.yml` workflow publishes the plugin bundle from
+`plugins/fliwright` when a `codex-v<version>` tag is pushed. The tag suffix must
+exactly match `plugins/fliwright/.codex-plugin/plugin.json`.
+
+Before releasing:
+
+1. Update the canonical Skills in `.agents/skills`, then run `pnpm plugin:sync`.
+2. Bump the plugin manifest to a distinct version for each published change.
+3. Run `node --test scripts/tests/release-codex-plugin.test.mjs` and
+   `node scripts/check-codex-plugin.mjs --strict-plugin --skip-cli`.
+4. Merge the workflow, release scripts and plugin bundle into `main`.
+5. On that reviewed commit, push the matching release tag:
+
+   ```bash
+   version=$(node -p "require('./plugins/fliwright/.codex-plugin/plugin.json').version")
+   git tag "codex-v${version}"
+   git push origin "codex-v${version}"
+   ```
+
+The shared `release-gate.yml` requires the tagged commit in `main` history and
+reruns the complete CI on that commit. After it succeeds, the publish job uses
+Node 26, runs release-tooling tests, validates the manifest and bundled
+Skill/source consistency, and packages the plugin root including its hidden
+`.codex-plugin/plugin.json`, Skills and resources.
+
+The workflow creates a GitHub Release with generated notes, a plugin `.tar.gz`
+bundle and its `.sha256` checksum. Versions such as `1.2.3-rc.1` create a
+prerelease; build metadata such as `+codex.20261105` does not. The files are also
+retained as a workflow artifact before Release creation. A failed Release upload
+can be retried by rerunning the workflow.
+
+To verify a downloaded archive, run `shasum -a 256 -c <bundle>.sha256` in its
+download directory. The workflow uses the automatic `GITHUB_TOKEN` with
+`contents: write` scoped to the publish job; no additional publishing secret is
+needed. Marketplace installation follows the configured marketplace source ref;
+creating a Release does not change that source ref or submit a directory listing.
 
 ## Release assets
 
