@@ -1,5 +1,6 @@
+import { writeFliwrightConfigSnapshot } from '@fliwright/core';
 import * as path from 'node:path';
-import { rm } from 'node:fs/promises';
+import { access, readFile, rm } from 'node:fs/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Uri, workspace, __setConfiguration } from 'vscode';
 import { TestDiscoveryService } from '../src/runner/TestDiscoveryService.js';
@@ -32,7 +33,7 @@ it('discovers tests and scripts from shared paths and re-reads environment overr
     'qa/checks/**/*.test.ts', 'qa/tasks/**/*.script.ts', 'qa/tasks/**/*.js',
     'qa/tasks/**/*.mjs', 'qa/tasks/**/*.cjs',
   ]);
-  vi.stubEnv('FLIWRIGHT_CONFIG', JSON.stringify({ paths: { tests: 'env/checks' } }));
+  vi.stubEnv('FLIWRIGHT_CONFIG_PATH', writeFliwrightConfigSnapshot({ paths: { tests: 'env/checks' } }));
   await tests.discover(Uri.file(root));
   expect(find.mock.calls.at(-1)![0].pattern).toBe('env/checks/**/*.test.ts');
 });
@@ -45,6 +46,24 @@ it('preserves explicitly configured editor globs', async () => {
   expect(find.mock.calls.map(([pattern]) => pattern.pattern)).toEqual([
     'custom/**/*.spec.ts', 'tools/*.ts', 'tools/*.mjs',
   ]);
+});
+
+it('discovers test files when composed scenarios select shared and Item mock sources', async () => {
+  await writeText(root, 'fliwright.config.ts', `export default { scenarios: {
+    base: { name: 'base', layers: [{ kind: 'mocks', sources: [
+      { name: 'shared', directory: '.fliwright/mocks', files: ['api/user.json'] },
+    ], rules: [{ source: 'shared', method: 'POST', endpoint: '/user', rule: 'ready' }] }] },
+    review: { name: 'review', extends: ['base'], layers: [{ kind: 'mocks', sources: [
+      { name: 'item', directory: '.fliwright/test-plans/437/mocks', files: ['api/user.json'] },
+    ], rules: [{ source: 'item', method: 'POST', endpoint: '/user', rule: 'review', replace: true }] }] },
+  } };`);
+  const uri = Uri.file(path.join(root, '.fliwright/tests/review.test.ts'));
+  const find = vi.spyOn(workspace, 'findFiles').mockResolvedValue([uri]);
+
+  await expect(new TestDiscoveryService().discover(Uri.file(root))).resolves.toEqual([
+    { kind: 'testFile', uri, label: 'review.test.ts' },
+  ]);
+  expect(find.mock.calls[0][0].pattern).toBe('.fliwright/tests/**/*.test.ts');
 });
 
 it('saves and lists recordings and flows under the same configured directories', async () => {
@@ -66,11 +85,31 @@ it('saves and lists recordings and flows under the same configured directories',
 
 it('resolves absolute storage paths without nesting them under the workspace', async () => {
   const recordings = path.join(root, 'absolute', 'captures');
-  vi.stubEnv('FLIWRIGHT_CONFIG', JSON.stringify({ paths: { recordings } }));
+  vi.stubEnv('FLIWRIGHT_CONFIG_PATH', writeFliwrightConfigSnapshot({ paths: { recordings } }));
   const persistence = new RecordingPersistenceService();
   const saved = await persistence.save(Uri.file(root), {
     status: 'preview', rawEventCount: 0, operationCount: 0, frames: [],
   }, 'capture');
   expect(saved.fsPath).toBe(path.join(recordings, 'capture'));
   expect(await persistence.list(Uri.file(root))).toHaveLength(1);
+});
+
+it('keeps recording evidence local and shares a flow without machine-specific target paths', async () => {
+  await writeText(root, 'fliwright.config.ts', 'export default {};');
+  const local = await createWorkspace();
+  vi.stubEnv('FLIWRIGHT_RUNTIME_ROOT', local);
+  const persistence = new RecordingPersistenceService();
+  const flow = { version: 1 as const, id: 'shared', createdAt: 'now', updatedAt: 'now',
+    source: { kind: 'recording' as const, targetFile: path.join(root, '.fliwright/tests/shared.test.ts') }, nodes: [], edges: [] };
+  const recording = await persistence.save(Uri.file(root), {
+    status: 'preview', rawEventCount: 0, operationCount: 0, frames: [], flow,
+  }, 'capture');
+  const flowFile = await persistence.saveProjectFlow(Uri.file(root), flow);
+  expect(recording.fsPath).toBe(path.join(local, 'recordings/capture'));
+  expect((await persistence.list(Uri.file(root))).map(item => item.recordingDir.fsPath)).toEqual([recording.fsPath]);
+  expect(flowFile.fsPath).toBe(path.join(root, '.fliwright/flows/shared.flow.json'));
+  const shared = JSON.parse(await readFile(flowFile.fsPath, 'utf8'));
+  expect(shared.source.targetFile).toBe('.fliwright/tests/shared.test.ts');
+  await expect(access(path.join(root, '.fliwright/recordings'))).rejects.toThrow();
+  await rm(local, { recursive: true, force: true });
 });

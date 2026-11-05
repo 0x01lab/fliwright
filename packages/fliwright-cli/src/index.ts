@@ -10,11 +10,15 @@ import { registerTdd } from './registry/tdd.js';
 import { registerFlow } from './registry/flow.js';
 import { registerFinite } from './registry/finite.js';
 import { registerDevices } from './registry/devices.js';
+import { registerNative } from './registry/native.js';
+export { prepareNativeRun, type ManagedNativeRun, type ManagedNativeGrant, type ManagedNativeLaunch } from './ManagedNativeRun.js';
+export { withFlutterAndroidApk, type FlutterAndroidBuildOptions, type FlutterAndroidApk } from './FlutterAndroidBuild.js';
 
 export function createRegistry(): CommandRegistry {
   const registry = new CommandRegistry();
   registerFinite(registry);
   registerDevices(registry);
+  registerNative(registry);
   registerFlow(registry);
   registerTdd(registry);
   registerSessions(registry);

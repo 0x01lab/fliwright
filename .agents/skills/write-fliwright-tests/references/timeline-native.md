@@ -13,7 +13,7 @@ import { test, script, expect } from '@fliwright/vitest';
 | `test` | E2E verification that should pass/fail in CI | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
 | `script` | Automation tasks, account setup, data entry, cleanup flows | `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` |
 
-Both write `tests/<testId>/attempts/<attemptId>/timeline.json` and `logs/events.jsonl` beneath `<runsRoot>/<runId>/`. `<runsRoot>` 默认是 `<project>/.fliwright/runs`；覆盖规则见 [CLI conventions](../../fliwright-cli-workflows/references/commands/common.md#ci-evidence)。`test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions. 直接 Vitest 运行先配置 [fliwrightPreset](./getting-started.md)。
+Both write `timeline.json` and `logs/events.jsonl` beneath `<runsRoot>/<runId>/tests/<testId>/attempts/<attemptId>/`. `<runsRoot>` 默认是 `~/.fliwright/<project-path>/runs`；项目路径编码、配置与环境覆盖规则见 [CLI conventions](../../fliwright-cli-workflows/references/commands/common.md#ci-evidence)。`test` can require at least one timeline assertion when configured with `requireAssertions`; `script` never requires assertions. 直接 Vitest 运行先配置 [fliwrightPreset](./getting-started.md)。
 
 ## Standard Test Shape
 

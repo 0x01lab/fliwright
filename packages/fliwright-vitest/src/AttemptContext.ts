@@ -4,7 +4,7 @@ import {
   RunArtifactStore, RunProgressJournal, TimelineArtifactStore, TimelineRecorder, projectRunTrace, resolveFliwrightRunsRoot,
   mergeFliwrightConfig, readFliwrightEnvironment,
 } from '@fliwright/core';
-import type { FliwrightLogger, RecordingMode, RunSession, RunSessionResult, TimelineRunMode, TimelineNode, TimelineData } from '@fliwright/core';
+import type { FliwrightLogger, RecordingMode, RunSession, RunSessionResult, TimelineRunMode, TimelineNode, TimelineData, ScenarioDevicePreparation } from '@fliwright/core';
 import type { RunnerTask } from 'vitest';
 import { FinalizationBudget } from './FinalizationBudget.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -14,6 +14,11 @@ type AttemptTask = RunnerTask & { [attemptKey]?: AttemptContext };
 
 /** Shared by the runner and fixture module, including separate Vitest module graphs. */
 export class AttemptContext {
+  managedApp?: import('@fliwright/core').ManagedAppAttemptEndpoint;
+  androidReadback?: import('@fliwright/core').AndroidAppReadbackReport;
+  managedAppDriver?: Promise<import('@fliwright/core').FliwrightDriver>;
+  cleanupManagedAppDriver?: (signal: AbortSignal) => Promise<void>;
+  devicePreparation?: ScenarioDevicePreparation;
   recorder: TimelineRecorder;
   artifactStore: TimelineArtifactStore;
   runStore: RunArtifactStore;
@@ -195,7 +200,7 @@ export class AttemptContext {
           if (signal.aborted) return;
           const evidence = await this.session.checkpoint({ kind, reason: 'failure', operationId: node.id });
           if (signal.aborted) return;
-          this.recorder.addArtifacts(node.id, (evidence.artifactPaths ?? []).map((path) => ({ kind, path })));
+          this.recorder.addArtifacts(node.id, (evidence.artifactPaths ?? []).map((path) => ({ kind, path, metadata: evidence.artifactMetadata })));
         }
       });
       await this.finalizeStep('Failure projection', async (signal) => { await this.onFailure?.(error, node, signal); });

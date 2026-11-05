@@ -48,7 +48,7 @@ export interface LoadedRun {
 /**
  * Reads timeline run data from run directories.
  *
- * Reads the configured project runsRoot; defaults to <workspace>/.fliwright/runs.
+ * Reads the configured project runsRoot; defaults to ~/.fliwright/<project-path>/runs.
  * Attempts own their timeline, logs, trace and evidence. Historical roots are
  * never selected implicitly.
  */

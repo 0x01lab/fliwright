@@ -1,10 +1,11 @@
 import { join } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { createJiti } from 'jiti';
-import { mergeFliwrightConfig, readFliwrightEnvironment, resolveFliwrightProjectRoot, resolveFliwrightRunsRoot, resolveFliwrightCacheRoot } from '@fliwright/core';
-import type { FliwrightPathsConfig, FliwrightProjectConfig, FliwrightRecordingConfig, ResolvedFliwrightConfig, ScenarioExecutionMode, TestScenario } from '@fliwright/core';
+import { mergeFliwrightConfig, readFliwrightEnvironment, resolveFliwrightProjectRoot, resolveFliwrightRunsRoot, resolveFliwrightCacheRoot, resolveFliwrightPath } from '@fliwright/core';
+import type { FliwrightPathsConfig, FliwrightProjectConfig, FliwrightRecordingConfig, ResolvedFliwrightConfig, ScenarioExecutionMode, TestScenario, NativeConfig } from '@fliwright/core';
 
 export interface FliwrightCliConfig {
+  native?: NativeConfig;
   suites?: Record<string, string>;
   vmServiceUrl?: string;
   timeout: number;
@@ -32,7 +33,10 @@ export function defineConfig(overrides: Partial<FliwrightCliConfig> = {}): Fliwr
   const shared = mergeFliwrightConfig({ project: { ...overrides,
     paths: { ...overrides.paths, ...(overrides.testDir ? { tests: overrides.testDir } : {}) },
   } });
-  return { ...DEFAULTS, ...overrides, ...shared, testDir: shared.paths.tests };
+  // Keep the machine-local recording default unresolved until the target project is known.
+  const { recordings: _recordings, ...paths } = shared.paths;
+  return { ...DEFAULTS, ...overrides, ...shared, testDir: shared.paths.tests,
+    paths: { ...paths, ...(overrides.paths?.recordings ? { recordings: overrides.paths.recordings } : {}) } };
 }
 
 export async function loadConfig(projectDir: string): Promise<FliwrightCliConfig> {
@@ -57,10 +61,16 @@ export async function resolveProjectConfig(
   environment: Record<string, string | undefined> = process.env,
 ): Promise<FliwrightCliConfig & ResolvedFliwrightConfig> {
   const project = await loadConfig(projectDir);
-  const shared = mergeFliwrightConfig({ project, environment: readFliwrightEnvironment(environment), explicit });
   const projectRoot = resolveFliwrightProjectRoot(projectDir);
+  const shared = mergeFliwrightConfig({ project, environment: readFliwrightEnvironment(environment), explicit, projectRoot, environmentSource: environment });
+  shared.paths.recordings = resolveFliwrightPath(shared.paths.recordings, projectRoot);
   return { ...project, ...shared, testDir: shared.paths.tests,
-    runsRoot: resolveFliwrightRunsRoot({ projectRoot, runsRoot: shared.runsRoot, env: {} }),
-    cacheRoot: resolveFliwrightCacheRoot({ projectRoot, cacheRoot: shared.cacheRoot }),
+    runsRoot: resolveFliwrightRunsRoot({ projectRoot, runsRoot: shared.runsRoot, env: environment }),
+    cacheRoot: resolveFliwrightCacheRoot({ projectRoot, cacheRoot: shared.cacheRoot, env: environment }),
   };
+}
+
+/** Resolve an ESM dependency from the target project without evaluating it. */
+export function resolveProjectImport(specifier: string, projectDir: string): string {
+  return createJiti(join(projectDir, 'package.json'), { fsCache: false }).esmResolve(specifier);
 }

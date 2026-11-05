@@ -1,4 +1,4 @@
-// Adapted from shadcn/ui (new-york); owned locally for the cloud console.
+// Adapted from shadcn/ui (radix-mira); owned locally for the cloud console.
 'use client';
 
 import * as React from 'react';
@@ -34,7 +34,7 @@ const Slider = React.forwardRef<
       <SliderPrimitive.Thumb
         aria-label={ariaLabel}
         aria-valuetext={ariaValueText}
-        className="block h-4 w-4 rounded-full border border-primary/50 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+        className="block h-4 w-4 rounded-full border border-primary/50 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50"
       />
     </SliderPrimitive.Root>
   ),

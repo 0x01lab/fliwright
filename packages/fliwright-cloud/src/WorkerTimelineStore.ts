@@ -1,5 +1,5 @@
 import {
-  CloudError, workerTimelineBatchSchema, workerTimelineClockSchema, workerErrorMessages,
+  CloudError, workerTimelineBatchSchema, workerTimelineClockSchema, workerErrorMessage,
   type ExecutionAttempt, type WorkerTimelineClock, type WorkerTimelineEvent, type WorkerTimelineFinish,
   type WorkerTimelineSpan, type WorkerTimelineSummary, type WorkerTimelineView,
 } from '@fliwright/cloud-protocol';
@@ -23,10 +23,11 @@ function project(events: WorkerTimelineEvent[], terminal: boolean) {
       if (spans.has(p.spanId)) throw new CloudError(409, 'Duplicate Worker span');
       const parent = p.parentSpanId ? spans.get(p.parentSpanId) : undefined;
       if (p.parentSpanId && (!parent || parent.status !== 'running' || parent.parentSpanId)) throw new CloudError(409, 'Invalid Worker parent span');
-      if ((p.operation && (!parent || parent.phase !== p.phase || !operationPhases[p.operation]?.includes(p.phase))) || (parent && !p.operation))
+      const nativeAttemptChild = parent?.phase === 'native.attempt' && p.phase.startsWith('native.') && p.phase !== 'native.attempt';
+      if ((p.operation && (!parent || parent.phase !== p.phase || !operationPhases[p.operation]?.includes(p.phase))) || (parent && !p.operation && !nativeAttemptChild))
         throw new CloudError(409, 'Invalid Worker operation');
       if (p.commandIndex !== undefined && p.operation !== 'command') throw new CloudError(409, 'Command index requires a command operation');
-      spans.set(p.spanId, { id: p.spanId, parentSpanId: p.parentSpanId, phase: p.phase, operation: p.operation,
+      spans.set(p.spanId, { id: p.spanId, parentSpanId: p.parentSpanId, phase: p.phase, attemptOrdinal: p.attemptOrdinal, operation: p.operation,
         commandIndex: p.commandIndex, status: 'running', startedAt: event.recordedAt, startMs: event.offsetMs, startSeq: event.seq });
     } else if (p.type === 'span.finished') {
       const span = spans.get(p.spanId);
@@ -63,7 +64,7 @@ export class WorkerTimelineStore {
       const fresh: WorkerTimelineEvent[] = [];
       for (const raw of batch.events) {
         const event: WorkerTimelineEvent = { ...raw, payload: raw.payload.type === 'span.finished' && raw.payload.error
-          ? { ...raw.payload, error: { code: raw.payload.error.code, message: workerErrorMessages[raw.payload.error.code] } } : raw.payload };
+          ? { ...raw.payload, error: { code: raw.payload.error.code, message: workerErrorMessage(raw.payload.error.code, raw.payload.error.message) } } : raw.payload };
         if (Math.abs(Date.parse(event.recordedAt) - (Date.parse(batch.originAt) + event.offsetMs)) > 1)
           throw new CloudError(409, 'Worker clock does not match origin');
         if (event.seq <= summary.ackSeq) {

@@ -9,7 +9,9 @@ const defaultPluginPath = path.join(root, 'plugins/fliwright');
 const pluginCreatorRoot = path.join(os.homedir(), '.codex/skills/.system/plugin-creator');
 const skillCreatorRoot = path.join(os.homedir(), '.codex/skills/.system/skill-creator');
 const bundledSkillNames = [
+  'gitlab-test-plan',
   'fliwright-cli-workflows',
+  'fliwright-agent-memory',
   'fliwright-tdd',
   'write-fliwright-mock-rules',
   'write-fliwright-tests',

@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitLab 验收测试计划"
+  short_description: "按 GitLab 验收清单生成测试计划，组合 Fliwright 编写脚本并绑定用例"
+  default_prompt: "使用 $gitlab-test-plan 读取这个 GitLab Item，按验收标准生成结构化测试用例和覆盖清单。"

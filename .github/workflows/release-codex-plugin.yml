@@ -1,0 +1,57 @@
+name: Release Codex plugin
+
+on:
+  push:
+    tags:
+      - 'codex-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-plugin-release
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    uses: ./.github/workflows/release-gate.yml
+    permissions:
+      contents: read
+
+  publish:
+    needs: quality
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - name: Test plugin release tooling
+        run: node --test scripts/tests/release-codex-plugin.test.mjs
+
+      - name: Validate Codex plugin bundle
+        run: node scripts/check-codex-plugin.mjs --strict-plugin --skip-cli
+
+      - name: Verify release tag and package plugin
+        id: bundle
+        run: node scripts/release-codex-plugin.mjs "$RUNNER_TEMP/codex-plugin-release"
+
+      - name: Preserve release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-plugin-${{ steps.bundle.outputs.version }}
+          path: ${{ runner.temp }}/codex-plugin-release/*
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/codex-plugin-release/*
+          fail_on_unmatched_files: true
+          prerelease: ${{ steps.bundle.outputs.prerelease == 'true' }}
+          generate_release_notes: true

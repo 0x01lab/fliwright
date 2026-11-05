@@ -82,7 +82,7 @@ Refresh the installed contract with `fliwright schema doctor --json`. That comma
 
 ## Related commands
 
-- [init](./command-init.md) — Create project configuration, example tests/scripts and optional Flutter bridge setup.
+- [init](./command-init.md) — Initialize project dependencies, Flutter bridge scaffolding and optional project-local Codex Skills.
 - [app status](./command-app.status.md) — Verify a live app connection and read its Dart SDK identity.
 - [run](./command-run.md) — Run selected Vitest automation tests and save canonical run evidence.
 - [Command index](./index.md)

@@ -55,7 +55,7 @@ By default, Fliwright writes structured JSONL logs to:
 <runsRoot>/<runId>/logs/events.jsonl
 ```
 
-`<runsRoot>` 默认是 `<project>/.fliwright/runs`；配置与环境覆盖规则见 [CLI conventions](../../fliwright-cli-workflows/references/commands/common.md#ci-evidence)。直接 Vitest 运行需先配置 [fliwrightPreset](./getting-started.md)。The terminal is quiet unless you opt in. This keeps Vitest/CLI JSON output parseable.
+`<runsRoot>` 默认是 `~/.fliwright/<project-path>/runs`；项目路径编码、配置与环境覆盖规则见 [CLI conventions](../../fliwright-cli-workflows/references/commands/common.md#ci-evidence)。直接 Vitest 运行需先配置 [fliwrightPreset](./getting-started.md)。The terminal is quiet unless you opt in. This keeps Vitest/CLI JSON output parseable.
 
 ## Config
 

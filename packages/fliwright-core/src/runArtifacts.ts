@@ -4,6 +4,8 @@ import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 
+export const FLIWRIGHT_RUNTIME_ROOT_ENV = 'FLIWRIGHT_RUNTIME_ROOT';
+
 export const FLIWRIGHT_RUNS_ROOT_ENV = 'FLIWRIGHT_RUNS_ROOT';
 
 export interface ProjectRunsRootResult {
@@ -42,15 +44,36 @@ export function resolveFliwrightProjectRoot(start = process.cwd()): string {
   }
 }
 
-export function resolveFliwrightRunsRoot(options: ResolveFliwrightRunsRootOptions = {}): string {
+/** Resolve a configured path against the project, expanding a leading home shorthand. */
+export function resolveFliwrightPath(value: string, projectRoot = resolveFliwrightProjectRoot(), homeDir = homedir()): string {
+  if (value === '~') return homeDir;
+  if (/^~[/\\]/.test(value)) return resolve(homeDir, value.slice(2));
+  return resolve(projectRoot, value);
+}
+
+/** Machine-local partition; authored assets stay under the project's .fliwright directory. */
+export function resolveFliwrightRuntimeRoot(options: Omit<ResolveFliwrightRunsRootOptions, 'runsRoot'> = {}): string {
   const env = options.env ?? process.env;
-  return resolve(options.projectRoot ?? resolveFliwrightProjectRoot(),
-    options.runsRoot ?? env[FLIWRIGHT_RUNS_ROOT_ENV] ?? '.fliwright/runs');
+  const projectRoot = options.projectRoot ?? env.FLIWRIGHT_PROJECT_ROOT ?? resolveFliwrightProjectRoot();
+  const configured = env[FLIWRIGHT_RUNTIME_ROOT_ENV];
+  return configured
+    ? resolveFliwrightPath(configured, projectRoot, options.homeDir)
+    : projectRunsRoot(projectRoot, options).rootDir;
+}
+
+export function resolveFliwrightRunsRoot(options: ResolveFliwrightRunsRootOptions = {}): string {
+  const configured = options.runsRoot ?? (options.env ?? process.env)[FLIWRIGHT_RUNS_ROOT_ENV];
+  return configured
+    ? resolveFliwrightPath(configured, options.projectRoot ?? (options.env ?? process.env).FLIWRIGHT_PROJECT_ROOT, options.homeDir)
+    : join(resolveFliwrightRuntimeRoot(options), 'runs');
 }
 
 /** Resolve reusable and temporary data independently of the run history. */
-export function resolveFliwrightCacheRoot(options: { cacheRoot?: string; projectRoot?: string } = {}): string {
-  return resolve(options.projectRoot ?? resolveFliwrightProjectRoot(), options.cacheRoot ?? '.fliwright/cache');
+export function resolveFliwrightCacheRoot(options: Omit<ResolveFliwrightRunsRootOptions, 'runsRoot'> & { cacheRoot?: string } = {}): string {
+  const configured = options.cacheRoot ?? (options.env ?? process.env).FLIWRIGHT_CACHE_ROOT;
+  return configured
+    ? resolveFliwrightPath(configured, options.projectRoot ?? (options.env ?? process.env).FLIWRIGHT_PROJECT_ROOT, options.homeDir)
+    : join(resolveFliwrightRuntimeRoot(options), 'cache');
 }
 
 export async function ensureFliwrightRunsRoot(
@@ -67,8 +90,8 @@ export function projectRunsRoot(
   options: { homeDir?: string } = {},
 ): ProjectRunsRootResult {
   const home = options.homeDir ?? homedir();
-  const hash = sanitizeProjectPathName(projectPath);
-  const rootDir = join(home, '.fliwright', 'projects', hash);
+  const hash = sanitizeProjectPathName(resolve(projectPath));
+  const rootDir = join(home, '.fliwright', hash);
   const runsDir = join(rootDir, 'runs');
   return { hash, rootDir, runsDir };
 }
@@ -94,7 +117,5 @@ export function projectRunsRootCandidates(
 }
 
 export function sanitizeProjectPathName(projectPath: string): string {
-  const normalized = projectPath.replace(/\\/g, '/').replace(/\/+/g, '/');
-  const name = normalized.replace(/\//g, '-').replace(/^-+|-+$/g, '');
-  return name || 'project';
+  return projectPath.replace(/[/\\]/g, '-') || 'project';
 }

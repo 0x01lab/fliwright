@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { copyRecordingArtifacts, flowFileName, parseRecordingManifest, type FliwrightFlowDocument, type RecordingManifest } from '@fliwright/core';
+import { toProjectFlowDocument, copyRecordingArtifacts, flowFileName, parseRecordingManifest, type FliwrightFlowDocument, type RecordingManifest } from '@fliwright/core';
 import { loadWorkspaceConfig, resolveWorkspacePath } from '../config.js';
 import type { RecordingSession } from '../types.js';
 
@@ -57,7 +57,7 @@ export class RecordingPersistenceService {
     const flowUri = vscode.Uri.joinPath(flowsRoot, flowFileName(flow.id));
     await vscode.workspace.fs.writeFile(
       flowUri,
-      Buffer.from(`${JSON.stringify(flow, null, 2)}\n`, 'utf8'),
+      Buffer.from(`${JSON.stringify(toProjectFlowDocument(flow, workspaceRoot.fsPath), null, 2)}\n`, 'utf8'),
     );
     return flowUri;
   }

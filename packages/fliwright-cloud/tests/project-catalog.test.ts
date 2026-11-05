@@ -39,6 +39,39 @@ it('retains catalogs without scenarios and runs only scenarios discovered in the
     .toMatchObject({ input: { scenario: 'guest' } });
   expect(() => store.submitProject({ ...input, commit: sha('b'), catalogId: next.scan.scanId }, 'member', 'stale')).toThrow(/Unknown catalog/);
 });
+it('queues suites and exact cases without scenarios, including catalogs that declare optional scenarios', () => {
+  const { store } = setup();
+  store.updateProject('app', { ...store.project('app'), scenarios: [] });
+  for (const [index, scenarios] of [[], [{ name: 'guest', fingerprint: digest('guest') }]].entries()) {
+    const commit = sha(index === 0 ? 'a' : 'b');
+    store.createCatalogScan('app', commit);
+    const lease = store.claimCatalogScan('worker')!, value = { ...catalog(lease), scenarios };
+    store.finishCatalogScan('worker', lease.scan.scanId, lease.token, value);
+    const input = { projectId: 'app', commit, catalogId: value.catalogId, suite: 'smoke' };
+    const suite = store.submitProject({ ...input, mode: 'suite' }, 'member', `suite-${index}`);
+    expect(suite.input).not.toHaveProperty('scenario');
+    const exact = store.submitProject({ ...input, mode: 'case', caseId: value.suites[0]!.cases[1]!.caseId }, 'member', `case-${index}`);
+    expect(exact.selection).toMatchObject({ mode: 'case', duplicateIndex: 1 });
+    expect(exact.selection).not.toHaveProperty('scenario');
+    expect(store.rerun(exact.id, 'member', `rerun-${index}`).input).not.toHaveProperty('scenario');
+    expect(() => store.submitProject({ ...input, mode: 'suite', scenario: 'missing' }, 'member', `invalid-${index}`)).toThrow(/Unknown catalog/);
+  }
+});
+it('automatically queues and supersedes direct runs without requiring catalog scenarios', () => {
+  const { store, advance } = setup();
+  store.updateProject('app', { ...store.project('app'), scenarios: [], autoRun: { enabled: true, branch: 'main', selections: [{ suite: 'smoke' }], revision: 1 } });
+  const policyRevision = store.project('app').autoRun.revision;
+  for (const commit of [sha('a'), sha('b')]) {
+    store.createCatalogScan('app', commit, { branch: 'main', deliveryId: commit, policyRevision });
+    const lease = store.claimCatalogScan('worker')!;
+    store.finishCatalogScan('worker', lease.scan.scanId, lease.token, { ...catalog(lease), scenarios: [] }, commit);
+    advance(1);
+  }
+  expect(store.queue()).toHaveLength(1);
+  expect(store.queue()[0]!.input).toMatchObject({ commit: sha('b'), suite: 'smoke' });
+  expect(store.queue()[0]!.input).not.toHaveProperty('scenario');
+  expect(store.listRequests({ projectId: 'app' }).items.some(item => item.state === 'superseded')).toBe(true);
+});
 it('fences scan leases independently of device slots, freezes config and retains catalogs', () => {
   const { store, advance } = setup();
   const scan = store.createCatalogScan('app', sha('a'));

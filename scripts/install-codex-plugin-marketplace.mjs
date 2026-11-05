@@ -12,7 +12,6 @@ if (options.help) {
 }
 
 const marketplace = resolveMarketplace(options.marketplacePath);
-const marketplaceRoot = marketplace.root;
 const marketplacePath = marketplace.manifestPath;
 
 if (!fs.existsSync(marketplacePath)) {
@@ -40,7 +39,7 @@ if (!Array.isArray(manifest.plugins) || manifest.plugins.length === 0) {
   process.exit(1);
 }
 
-const command = ['plugin', 'marketplace', 'add', marketplaceRoot];
+const command = ['plugin', 'marketplace', 'add', 'https://github.com/0x01lab/fliwright.git', '--ref', 'main'];
 
 if (options.dryRun) {
   console.log(`Marketplace: ${manifest.name}`);
@@ -60,7 +59,7 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
-console.log(`Registered local marketplace: ${manifest.name}`);
+console.log(`Registered public Git marketplace: ${manifest.name}`);
 
 function parseArgs(argv) {
   const parsed = {
@@ -103,8 +102,7 @@ function resolveMarketplace(rawPath) {
     return { root: candidateRoot, manifestPath };
   }
 
-  // Accept the old --path .agents/plugins form, but register the repository
-  // root that Codex uses to discover the nested marketplace manifest.
+  // Accept the old --path .agents/plugins form when locating the manifest.
   if (path.basename(candidateRoot) === 'plugins' && path.basename(path.dirname(candidateRoot)) === '.agents') {
     const repositoryRoot = path.dirname(path.dirname(candidateRoot));
     return {
@@ -120,7 +118,7 @@ function printHelp() {
   console.log(`Usage: node scripts/install-codex-plugin-marketplace.mjs [options]
 
 Options:
-  --path <repository-root>   Repository root containing .agents/plugins/marketplace.json.
+  --path <repository-root>   Validate a marketplace manifest from this root; registration uses the public GitHub repository.
   --dry-run                  Print the Codex command without registering.
   --help, -h                 Show this help.
 `);

@@ -1,0 +1,35 @@
+{
+  "name": "@fliwright/test-plan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic GitLab snapshot, acceptance traceability and test plan helpers for Skills.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "test-plan": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^5.5.0",
+    "vitest": "5.0.5"
+  }
+}

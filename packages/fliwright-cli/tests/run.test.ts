@@ -1,3 +1,4 @@
+import { resolveFliwrightRunsRoot } from '@fliwright/core';
 import { describe, it, expect, vi } from 'vitest';
 import { getEventListeners } from 'node:events';
 import { createServer } from 'node:net';
@@ -10,6 +11,32 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { DeviceDiscovery } from '@fliwright/devices';
+
+it('loads multi-megabyte scenarios by path across CLI, preset, fork and descendant process boundaries', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fliwright-cli-large-config-'));
+  try {
+    await writeFile(join(root, 'fliwright.config.ts'), `export default { recording: { mode: 'off' }, cacheRoot: 'cache',
+      scenarios: { large: { name: 'large', layers: [{ kind: 'storage', seed: { payload: 'x'.repeat(2 * 1024 * 1024) } }] } } };`);
+    await writeFile(join(root, 'vitest.config.mjs'), `import { fliwrightPreset } from ${JSON.stringify(import.meta.resolve('@fliwright/vitest/preset'))};
+      export default fliwrightPreset({ projectRoot: ${JSON.stringify(root)}, test: { pool: 'forks', maxWorkers: 1 } });`);
+    await writeFile(join(root, 'proof.test.mjs'), `import { test, expect } from 'vitest';
+      import { readFileSync } from 'node:fs';
+      import { spawnSync } from 'node:child_process';
+      test('large scenarios arrive intact without environment payloads', () => {
+        expect(process.env.FLIWRIGHT_CONFIG).toBeUndefined();
+        expect(process.env.FLIWRIGHT_SCENARIOS).toBeUndefined();
+        const config = JSON.parse(readFileSync(process.env.FLIWRIGHT_CONFIG_PATH, 'utf8'));
+        expect(config.scenarios.large.layers[0].seed.payload.length).toBe(2 * 1024 * 1024);
+        const child = spawnSync(process.execPath, ['-e', 'process.exit(0)']);
+        expect(child.error).toBeUndefined();
+        expect(child.status).toBe(0);
+      });`);
+    const result = await runCommand({ cwd: root, testPattern: 'proof.test.mjs', runsRoot: join(root, 'runs'), print: false },
+      { resolveVmUrl: async () => 'ws://unused' });
+    expect(result, result.stderr).toMatchObject({ passed: true, totalTests: 1, passedTests: 1 });
+  } finally { await rm(root, { recursive: true, force: true }); }
+}, 20000);
 
 function isolatedEnv(home: string): NodeJS.ProcessEnv {
   return {
@@ -35,6 +62,47 @@ async function withIsolatedHome<T>(fn: (home: string) => Promise<T>): Promise<T>
 }
 
 describe('runCommand', () => {
+  it('persists caller-supplied tested release identity in canonical and exported results even when tests fail', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fliwright-run-release-'));
+    try {
+      await writeFile(join(root, 'release.test.mjs'), `import { test, expect } from 'vitest'; test('release failure evidence', () => expect(1).toBe(2));`);
+      const release = { app: 'Exio', version: '2.8.0', build: '437', commit: 'tested-commit', platform: 'iOS', environment: 'mock simulator' };
+      const device = { id: 'selected-simulator', name: 'QA phone', model: 'iPhone 17 Pro', platform: 'ios' as const, kind: 'simulator' as const, osVersion: '26.0' };
+      const scan = vi.spyOn(DeviceDiscovery.prototype, 'scan').mockResolvedValue({ scannedAt: '2026-11-03T01:00:00Z', diagnostics: [],
+        devices: [{ ...device, state: 'online' }, { id: 'other-device', name: 'Other phone', platform: 'android', kind: 'physical', state: 'online' }] });
+      const run = await runCommand({ cwd: root, runsRoot: join(root, 'runs'), testPattern: 'release.test.mjs', release, deviceId: device.id, print: false },
+        { resolveVmUrl: async () => 'ws://unused' });
+      expect(run).toMatchObject({ passed: false, release });
+      const saved = JSON.parse(await readFile(run.artifacts!.reportPath!, 'utf8'));
+      expect(saved.release).toEqual(release);
+      expect(scan).toHaveBeenCalled();
+      expect(saved.device).toEqual(device);
+      const output = join(root, 'portable');
+      await artifactsExportCommand({ runsRoot: join(root, 'runs'), runId: run.artifacts!.runId, output, allowPartial: true });
+      expect(JSON.parse(await readFile(join(output, 'report.json'), 'utf8')).release).toEqual(release);
+      expect(JSON.parse(await readFile(join(output, 'report.json'), 'utf8')).device).toEqual(device);
+    } finally { vi.restoreAllMocks(); await rm(root, { recursive: true, force: true }); }
+  }, 15000);
+
+  it('runs without scenario preparation when explicitly disabled by Cloud', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fliwright-direct-run-'));
+    vi.stubEnv('FLIWRIGHT_DEFAULT_SCENARIO', 'configured-mocks');
+    try {
+      await writeFile(join(root, 'fliwright.config.ts'), `export default { defaultScenario: 'configured-mocks', scenarios: { 'configured-mocks': { name: 'configured-mocks', layers: [{ kind: 'mocks', directory: '.fliwright/mocks' }] } } };`);
+      await writeFile(join(root, 'direct.test.mjs'), `import { readFileSync } from 'node:fs';
+
+        import { test, expect } from 'vitest';
+        test('no scenario selected for direct run', () => {
+          const config = JSON.parse(readFileSync(process.env.FLIWRIGHT_CONFIG_PATH, 'utf8'));
+          expect(config.defaultScenario).toBeUndefined();
+          expect(process.env.FLIWRIGHT_DEFAULT_SCENARIO).toBe('');
+          expect(config.scenarios['configured-mocks']).toBeDefined();
+        });
+      `);
+      const result = await runCommand({ cwd: root, runsRoot: join(root, 'runs'), testPattern: 'direct.test.mjs', scenario: null, print: false }, { resolveVmUrl: async () => 'ws://unused' });
+      expect(result).toMatchObject({ passed: true, passedTests: 1 });
+    } finally { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }
+  }, 15000);
   it.skipIf(process.platform === 'win32')('keeps the runner in a cloud supervisor process group when requested', async () => {
     const root=await mkdtemp(join(tmpdir(),'fliwright-inherit-group-'));
     try {
@@ -479,11 +547,12 @@ describe('runCommand', () => {
         import { fliwrightPreset } from ${JSON.stringify(import.meta.resolve('@fliwright/vitest/preset'))};
         export default { test: { ...fliwrightPreset({ recording: { mode: 'standard', failureCaptureBudgetMs: 9999 } }).test, maxWorkers: 1 } };
       `);
-      await writeFile(join(root, 'checks/config.test.ts'), `
+      await writeFile(join(root, 'checks/config.test.ts'), `import { readFileSync } from 'node:fs';
+
         import { test } from ${JSON.stringify(import.meta.resolve('@fliwright/vitest'))};
         import { strict as assert } from 'node:assert';
         test('shared fixture config', async ({ timeline }) => {
-          const config = JSON.parse(process.env.FLIWRIGHT_CONFIG);
+          const config = JSON.parse(readFileSync(process.env.FLIWRIGHT_CONFIG_PATH, 'utf8'));
           assert.equal(config.recording.mode, ${JSON.stringify(explicitMode ?? 'off')});
           assert.equal(config.recording.requireAssertions, false);
           assert.equal(config.recording.testFinalScreenshots, false);
@@ -612,7 +681,7 @@ describe('runCommand', () => {
         resolveVmUrl: async () => 'ws://mock-vm:8181/ws',
         onVmResolved: (url) => { capturedUrl = url; },
       });
-      expect(runResult.artifacts!.outputDir).toContain(join(tmpDir, '.fliwright/runs'));
+      expect(runResult.artifacts!.outputDir).toContain(resolveFliwrightRunsRoot({ projectRoot: tmpDir }));
       await expect(stat(runResult.artifacts!.reportPath!)).resolves.toBeDefined();
       return runResult;
     });
@@ -621,7 +690,7 @@ describe('runCommand', () => {
     expect(result.passed).toBe(true);
     expect(result.totalTests).toBe(1);
     expect(result.artifacts?.reportPath).toBeDefined();
-    expect(result.artifacts!.outputDir).toContain(join(tmpDir, '.fliwright', 'runs'));
+    expect(result.artifacts!.outputDir).not.toContain(tmpDir + '/');
 
     await rm(tmpDir, { recursive: true, force: true });
   });
@@ -1174,7 +1243,7 @@ describe('runCommand', () => {
 
     let expectedHomeRoot = '';
     const result = await withIsolatedHome(async (home) => {
-      expectedHomeRoot = join(tmpDir, '.fliwright/runs');
+      expectedHomeRoot = resolveFliwrightRunsRoot({ projectRoot: tmpDir });
       const run = await runCommand({
         testPattern: 'timeline.test.ts',
         reporter: 'json',

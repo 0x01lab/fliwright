@@ -4,14 +4,17 @@
 
 ## 前端 UI
 
-云测控制台使用 React、Tailwind CSS 4 和本地维护的 shadcn/ui（new-york）组件。
-基础组件位于 `src/web/components/ui/`，主题令牌与回放专用布局位于
-`src/web/style.css`；Vite 通过 `@tailwindcss/vite` 编译样式。
+云测控制台使用 React、Tailwind CSS 4 和本地维护的 shadcn/ui（radix-mira）组件。
+基础组件位于 `src/web/components/ui/`，统一使用 radix-mira 的紧凑尺寸、语义颜色和焦点样式。
+主题令牌位于 `src/web/theme.css`；`style.css` 仅引入 Tailwind 和主题，不定义业务选择器。
+页面、看板、回放和时间轴使用基础组件与 Tailwind utilities 组合；时间轴运行时坐标保留为行内数值。
+`data-ui` 仅作为局部布局组合与测试定位的稳定标记。Vite 通过 `@tailwindcss/vite` 编译样式。
 `components.json` 记录组件配置，新增组件沿用该目录和 `cn()` 工具，
 相对导入遵守仓库 ESM 的 `.js` 约定。
 
 表单使用 shadcn Native Select 保留原生选项、表单值和校验；
-复选框、时间轴滑块与证据标签页使用 Radix primitives。
+弹窗、复选框、时间轴滑块与证据标签页使用 Radix primitives。
+项目与场景弹窗由 shadcn Dialog 组合，统一管理焦点、Escape、背景滚动锁定和提交期间的关闭限制。
 明暗主题沿用 `data-theme` 和 `cloud-theme` 本地偏好；状态颜色独立于测试结论。
 
 整体采用单行顶部导航与下方全宽工作区，使用本地维护的 shadcn Navigation Menu
@@ -159,7 +162,7 @@ pnpm cloud:worker discover /PRIVATE/PATH/new-worker/worker.json
 pnpm cloud:worker run /PRIVATE/PATH/worker-ios.json
 ```
 
-复制本包 `deploy/server.example.json`、`deploy/client.example.json` 和 Worker 包 `deploy/worker.example.json` 到仓库外的私有配置目录，替换所有占位符，配置/日志/spool 仅让运行账户读取。server 和 Worker 的 deviceId 必须一致。target 的 suite/scenario 应与应用 `fliwright.config.ts` 中命名组合的 `TestScenario` 对应；认证状态通过应用的 `auth.seedLoggedIn` 准备。Worker 每次新建 checkout；安装命令需要保证 Flutter 和 TypeScript 依赖及所需构建已准备好。
+复制本包 `deploy/server.example.json`、`deploy/client.example.json` 和 Worker 包 `deploy/worker.example.json` 到仓库外的私有配置目录，替换所有占位符，配置/日志/spool 仅让运行账户读取。server 和 Worker 的 deviceId 必须一致。target 的 suite 应与应用测试路径对应；scenario 可选，指定时必须匹配 `fliwright.config.ts` 中的命名 `TestScenario`；认证状态通过应用的 `auth.seedLoggedIn` 准备。Worker 每次新建 checkout；安装命令需要保证 Flutter 和 TypeScript 依赖及所需构建已准备好。
 
 管理员通过应用配置页面/API 注册应用，SQLite 为注册配置的持久来源；JSON targets 只在首次注册时播种，不覆盖网页修改。每次提交保存目标快照，后续配置变化不影响已排队请求。Worker 与初始槽位只在首次注册该 Worker 时播种。后续设备配置以 SQLite 为准，启动文件不会覆盖网页修改或重新创建已解绑槽位；新增应用后在设备详情页授权，无须重启服务。主机移除须暂停 Worker 并撤销其凭据，删除启动配置不会隐式暂停或删除已登记主机。
 
@@ -240,13 +243,15 @@ node packages/fliwright-cloud/dist/main.js backup /PRIVATE/PATH/server.json /NEW
 
 管理员在「项目」创建和编辑仓库配置；项目设置是后续唯一的 Cloud 写入配置源。旧 SQLite `targets` 记录在 migration 中转成同 ID Project，历史任务和报告保持原有快照。旧 `/api/admin/targets` 写接口已移除；`/api/targets` 仅提供脱敏只读视图供旧运行表单使用。初始部署 JSON `targets` 只用于引导新数据库迁移，之后可从 server 配置移除。
 
-创建项目只需填写 GitLab 项目主页或 HTTPS / SSH 克隆地址。服务端自动生成项目 ID，名称从 URL 中的仓库名推导；默认配置为 `main` 分支、仓库根目录、`lib/main.dart` 入口、`smoke` 套件和 `clean` 场景。展开可选配置可以调整名称、分支等设置；这些是预填默认值，不会通过 GitLab API 自动读取仓库元数据。
+创建项目只需填写 GitLab 项目主页或 HTTPS / SSH 克隆地址。服务端自动生成项目 ID，名称从 URL 中的仓库名推导；默认配置为 `main` 分支、仓库根目录、`lib/main.dart` 入口、`smoke` 套件，不预设场景。展开可选配置可以调整名称、分支等设置；这些是预填默认值，不会通过 GitLab API 自动读取仓库元数据。
 
 配对后在主机运行一次 `fliwright-worker run worker.json`，然后在网页为设备选择允许的应用并保存：设备自动纳管、启用并生成稳定槽位，本机自动创建独立执行目录和执行器。已有纳管设备缺少槽位时会在同步时补齐，无需手填 slotId、deviceId 或重复部署进程。iOS 模拟器默认重启并保留数据；其他设备的重置命令在主机配置。设备应用范围也自动成为该主机的扫描范围；纯扫描主机可额外配置 `catalogProjects`。Cloud 的 `repositoryHosts` 必须列出允许访问的 Git 主机；Worker 的 `repositoryCredentialHomes` 将 Project 凭据引用映射到本机只读 Git/SSH credential helper。Cloud 只保存引用与 Webhook token 摘要，不接收仓库凭据明文。
 
 项目页扫描默认分支或完整 40 位 SHA，浏览固定 commit/config revision 的 Catalog；管理员检查后显式确认 ready。operator 可请求和取消扫描，member 可浏览目录及提交已扫描版本的 suite/case。case 使用 Catalog 中重复序号校验并映射到 Vitest task ID，不能通过浏览器提供文件路径或正则扩大运行范围。提交需要 Idempotency-Key，Worker 保存项目配置快照。
 
-GitLab 自动运行默认关闭。管理员在项目设置选择默认分支及 suite/scenario 组合并生成一次性 Secret Token；GitLab Webhook 使用 Push events 和显示的 endpoint。重复 delivery 去重；事件 SHA 先扫描，Worker 用只读 Git 凭据核对分支当前 HEAD，再按事件 SHA 固定 Catalog。旧排队自动任务标记 superseded 并关联新任务；已领取任务和手动请求保留。失联扫描租约在 30 秒后过期，单项目最多排队 100 个扫描。扫描进程的模块顶层副作用仍可能执行，因此仅绑定团队授权仓库；部署主机还应使用网络防火墙限制出站 Git 主机。
+运行场景不是就绪或提交的必需条件。手动运行默认「直接运行（无场景）」，自动运行也可仅选择套件。请求省略 `scenario` 时，Worker 不应用仓库或环境中的默认场景、不自动加载 Mock 规则；测试自身仍可声明场景或按需设置 Mock。显式选择命名场景时继续校验它存在于选定 Catalog，并按原有规则准备环境。
+
+GitLab 自动运行默认关闭。管理员在项目设置选择分支和 suite，可选配命名 scenario并生成一次性 Secret Token；GitLab Webhook 使用 Push events 和显示的 endpoint。重复 delivery 去重；事件 SHA 先扫描，Worker 用只读 Git 凭据核对分支当前 HEAD，再按事件 SHA 固定 Catalog。旧排队自动任务标记 superseded 并关联新任务；已领取任务和手动请求保留。失联扫描租约在 30 秒后过期，单项目最多排队 100 个扫描。扫描进程的模块顶层副作用仍可能执行，因此仅绑定团队授权仓库；部署主机还应使用网络防火墙限制出站 Git 主机。
 
 运行记录包含来源、固定 commit、selection、config/catalog revision 和自动策略 revision。真实 GitLab 凭据、仓库主机 allowlist、出站网络策略以及专用设备上的 push 到报告链路必须在部署环境单独验收。
 

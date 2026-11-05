@@ -19,6 +19,9 @@ Use for finite verification and CI. Attach to an app with --vm-url, or launch an
 - No persistent session required. See usage for finite/session variants.
 - vmUrl and deviceId are mutually exclusive. Without either, configured endpoint resolution/discovery is used.
 - The named --scenario is prepared before each attempt, including retries. Strict startup isolation needs a managed app with waiting bootstrap.
+- With native automation enabled, the supervisor waits for the first selected attempt before launching the app; there is no bootstrap launch or initial VM URL requirement. Static skips cause no app launch. Every managed attempt stops and relaunches the app, including retries and tests without a device layer, then uses its new verified endpoint and VM process binding. Attach and ordinary Flutter managed runs still resolve an initial endpoint. Android emulator native runs require native.tools.apkAnalyzer; the first actual attempt builds/installs one Debug APK and later attempts launch the same verified installation without flutter run. This installed path rejects keepAppAlive. Physical Android and iOS keep the existing launcher. Unconfirmed connection/process cleanup fails the run and quarantines the device; ordinary managed keepAppAlive retains the final app.
+- Device scenario requiredCapabilities are checked before managed launch and Bridge connection, and again on every retry. Native automation must be enabled. Device baseline, permission, media and camera-source mutations remain unimplemented and fail setup before platform work.
+- Native preparation capability failures name only a known capability and its unsupported/unverified/not-ready/missing state. Later attempts remain fenced and retain the original sanitized preparation failure. Check live device.capabilities() and the first failure instead of replaying writes. iOS native.fill.basic and native.fill.unicode remain unverified; an input test file does not establish device support.
 - --timeout is the test timeout in milliseconds; --deadline bounds the whole command, including launch and finalization.
 - --output writes a JSON report; --junit-output writes XML independently. --json cannot be combined with a non-JSON --reporter.
 - Managed apps stop at completion unless keepAppAlive is true. --session does not route run through the connection host.
@@ -42,8 +45,9 @@ Use for finite verification and CI. Attach to an app with --vm-url, or launch an
 | `recordingMode` | `--recording-mode` | "standard" \| "full" \| "off" | no | — | Runner timeline/recording evidence level. |
 | `output` | `--output` | string | no | — | Write the JSON run report here. Use junitOutput for XML. (minLength=1) |
 | `junitOutput` | `--junit-output` | string | no | — | Path for a separate JUnit XML report, including failed runs. (minLength=1) |
-| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default <project>/.fliwright/runs. Relative paths use the project root. (minLength=1) |
+| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default ~/.fliwright/<project-path>/runs. Relative paths use the project root. (minLength=1) |
 | `scenario` | `--scenario` | string | no | — | Named composed TestScenario in fliwright.config; resolve it before execution. (minLength=1) |
+| `release` | `--release` | object | no | — | JSON object with confirmed app/version/build/commit/platform/environment for the tested build. Unknown fields may be omitted. Preserved in real run results and exports; never inferred from source or independently attested. |
 
 Requiredness/defaults above come from the input schema. Conditional requirements and effective implementation defaults are explained above; “—” means no Zod default. Every command also accepts [common options](./common.md#common-options). JSON keys use camelCase; flags use kebab-case. Positional fields are supplied positionally or in --input, not as flags.
 
@@ -63,6 +67,26 @@ fliwright run --vm-url "$VM_URL" --test '.fliwright/tests/**/*.test.ts' --scenar
 fliwright run --device-id 'DEVICE_ID' --target 'lib/main_fliwright.dart' --test '.fliwright/tests/counter.test.ts' --json
 ```
 
+### Record confirmed tested-build metadata
+
+```sh
+cat > 'fliwright-run-input.json' <<'JSON'
+{
+  "vmUrl": "$VM_URL",
+  "test": ".fliwright/tests/checkout.test.ts",
+  "release": {
+    "app": "My App",
+    "version": "2.8.0",
+    "build": "20800",
+    "commit": "TESTED_COMMIT",
+    "platform": "iOS",
+    "environment": "staging"
+  }
+}
+JSON
+fliwright run --input 'fliwright-run-input.json' --json
+```
+
 ## Result
 
 With --json, read the versioned envelope’s ok and data fields. The following describes data, not the outer envelope. “(data)” means a value returned directly, not a wrapper property.
@@ -74,6 +98,8 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 | runnerErrors | Collection, process or runtime failures, distinct from assertions. |
 | failures | Assertion context and evidence. |
 | artifacts | runId, outputDir and report/manifest/screenshot/timeline paths. |
+| release | Explicit tested-build metadata supplied by the caller and saved in canonical report.json, including failed runs and portable exports. This is not binary provenance attestation. |
+| device | Snapshot of the explicitly selected device: id, name, model, platform, kind and osVersion when available. Preserved in report.json and portable exports; attach runs do not guess a device from host inventory. |
 
 ## Effects and failure handling
 
@@ -190,6 +216,36 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
     "scenario": {
       "type": "string",
       "minLength": 1
+    },
+    "release": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
@@ -203,6 +259,7 @@ Refresh the installed contract with `fliwright schema run --json`. That command 
 
 - [doctor](./command-doctor.md) — Check local tooling, configuration and the Flutter automation connection.
 - [scenario list](./command-scenario.list.md) — List named scenarios declared in project configuration.
+- [artifacts report](./command-artifacts.report.md) — Generate an offline App release test review report grouped by GitLab Item.
 - [artifacts failures](./command-artifacts.failures.md) — Extract saved assertion failures and runner errors from a run.
 - [artifacts export](./command-artifacts.export.md) — Export a saved run and its referenced evidence to a directory.
 - [Command index](./index.md)

@@ -21,12 +21,13 @@
  * an optional integration point (the runtime can call its own writer, or a thin CLI-side hook can
  * serialize `runtime.snapshot()` here). The panel degrades gracefully when nothing writes.
  */
+import { resolveFliwrightRuntimeRoot } from '@fliwright/core';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { TddLoopSnapshot } from './TddLoopViewModel.js';
 
-/** Default status file location, relative to the workspace root. */
-export const DEFAULT_TDD_STATUS_RELATIVE_PATH = path.join('.fliwright', 'tdd-status.json');
+/** Default status file location, relative to the machine-local project partition. */
+export const DEFAULT_TDD_STATUS_RELATIVE_PATH = path.join('runtime', 'tdd-status.json');
 
 /**
  * Read-only source of TDD Loop snapshots. Implementations MUST NOT drive the app — only read.
@@ -39,7 +40,7 @@ export interface TddLoopStatusSource {
 
 /**
  * File-backed read-only source. Reads (and tolerates the absence of) the JSON snapshot written by
- * an external party at `<workspaceRoot>/.fliwright/tdd-status.json` by default.
+ * an external party at `~/.fliwright/<project-path>/runtime/tdd-status.json` by default.
  */
 export class FileTddLoopStatusSource implements TddLoopStatusSource {
   private readonly filePath: string;
@@ -48,7 +49,7 @@ export class FileTddLoopStatusSource implements TddLoopStatusSource {
     workspaceRoot: string | undefined,
     private readonly relativePath: string = DEFAULT_TDD_STATUS_RELATIVE_PATH,
   ) {
-    this.filePath = workspaceRoot ? path.join(workspaceRoot, relativePath) : '';
+    this.filePath = workspaceRoot ? path.join(resolveFliwrightRuntimeRoot({ projectRoot: workspaceRoot }), relativePath) : '';
   }
 
   async read(): Promise<TddLoopSnapshot | undefined> {

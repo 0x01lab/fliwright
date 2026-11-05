@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "9f1f12f3b83fed4b152b89ff1cca7092b9f6d2701aa37db1660d588578932771"
+source_fingerprint: "56c84b2b542549ecda281315c9d8f5dc4240d990ac6d59a8c3e85a7383fdb210"
 generated: true
 ---
 
@@ -159,6 +159,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/scripts/ScriptRunner.ts`
 - `packages/fliwright-vscode/src/scripts/VitestScriptConfig.ts`
 - `packages/fliwright-vscode/src/session/FliwrightSession.ts`
+- `packages/fliwright-vscode/src/session/VmServiceConnectionController.ts`
 - `packages/fliwright-vscode/src/session/VmServiceDiscovery.ts`
 - `packages/fliwright-vscode/src/state/StateInjectionService.ts`
 - `packages/fliwright-vscode/src/state/StateProviderDocumentProvider.ts`
@@ -189,6 +190,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/websocket/WebSocketMockService.ts`
 - `packages/fliwright-vscode/src/webview/FailurePanel.ts`
 - `packages/fliwright-vscode/src/webview/RecordingPanel.ts`
+- `packages/fliwright-vscode/src/webview/components/BrandMark.tsx`
 - `packages/fliwright-vscode/src/webview/components/ui/badge.tsx`
 - `packages/fliwright-vscode/src/webview/components/ui/button.tsx`
 - `packages/fliwright-vscode/src/webview/components/ui/input.tsx`

@@ -32,7 +32,7 @@ it('reports effective settings and the actually resolved Vitest preset without e
   expect(checks.find((item) => item.name === 'Recording configuration')).toMatchObject({ passed: true,
     message: expect.stringMatching(/mode=full.*scenarios=saved.*environment/) });
   expect(checks.find((item) => item.name === 'Automation paths')?.message).toContain('tests=qa/checks');
-  expect(checks.find((item) => item.name === 'Automation paths')?.message).toContain('recordings=qa/captures');
+  expect(checks.find((item) => item.name === 'Automation paths')?.message).toContain(`recordings=${join(root, 'qa/captures')}`);
   expect(checks.find((item) => item.name === 'Vitest recording preset')).toMatchObject({ passed: true,
     message: expect.stringContaining('qa/checks/**/*.test.ts') });
   expect(resolveVmUrl).toHaveBeenCalledWith(expect.objectContaining({ cwd: root, configUrl: 'ws://project/ws', verify: true }));

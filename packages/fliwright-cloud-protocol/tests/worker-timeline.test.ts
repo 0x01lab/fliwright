@@ -19,6 +19,17 @@ it('accepts a separate Worker event contract without accepting test nodes or arb
   expect(workerTimelineEventSchema.safeParse({ ...event, offsetMs: -1 }).success).toBe(false);
 });
 
+it('accepts versioned native attempt groups while retaining version 1 compatibility', () => {
+  const attempt = { ...event, schemaVersion: 2, payload: {
+    type: 'span.started', spanId: 'native-attempt-1', phase: 'native.attempt', attemptOrdinal: 1,
+  } };
+  expect(workerTimelineEventSchema.parse(attempt)).toEqual(attempt);
+  expect(workerTimelineEventSchema.safeParse({ ...attempt, schemaVersion: 1 }).success).toBe(false);
+  expect(workerTimelineEventSchema.safeParse({ ...attempt, payload: { ...attempt.payload, attemptOrdinal: 0 } }).success).toBe(false);
+  expect(workerTimelineEventSchema.safeParse({ ...attempt, payload: { ...attempt.payload, attemptKey: 'private-key' } }).success).toBe(false);
+  expect(workerTimelineEventSchema.parse(event)).toEqual(event);
+});
+
 it('bounds event batches and keeps a failed test verdict separate from successful runner completion', () => {
   const finished = { ...event, seq: 2, payload: {
     type: 'span.finished', spanId: 'tests', status: 'succeeded', testVerdict: 'failed', runId: 'run',

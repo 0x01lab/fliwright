@@ -2,6 +2,10 @@ import type { TimelineNode } from '@fliwright/core';
 import { scaleLinear } from 'd3-scale';
 
 export type ReplayNode = TimelineNode & { durationMs?: number };
+export function evidenceLabel(artifact: { kind: string; metadata?: Record<string, unknown> }): string {
+  const surface = artifact.metadata?.surface;
+  return `${surface === 'native' ? '原生 ' : surface === 'flutter' ? 'Flutter ' : ''}${artifact.kind}`;
+}
 export type StepFilter = 'all' | 'failed' | 'screenshots' | 'slow';
 
 export interface TimeEntry {

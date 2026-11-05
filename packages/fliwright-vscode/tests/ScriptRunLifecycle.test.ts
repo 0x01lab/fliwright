@@ -27,12 +27,13 @@ it.each(['editor', 'terminal', 'editor support', 'terminal support'] as const)('
           project: async ({}, use) => { await use('project fixture'); },
         });`);
     }
-    await writeFile(join(root, file), `import { script } from '${support ? '../support/app-script.js' : '@fliwright/vitest'}';
+    await writeFile(join(root, file), `import { readFileSync } from 'node:fs';
+import { script } from '${support ? '../support/app-script.js' : '@fliwright/vitest'}';
       import assert from 'node:assert/strict';
       script('project script', async ({ timeline${support ? ', project' : ''} }) => {
         ${support ? "assert.equal(project, 'project fixture');" : ''}
         assert.equal(timeline.recorder.toJSON().mode, 'script');
-        assert.equal(JSON.parse(process.env.FLIWRIGHT_CONFIG!).scenarios.seeded.name, 'seeded');
+        assert.equal(JSON.parse(readFileSync(process.env.FLIWRIGHT_CONFIG_PATH!, 'utf8')).scenarios.seeded.name, 'seeded');
         const node = timeline.recorder.startNode('step', 'durable script work');
         timeline.recorder.passNode(node.id);
       });`);

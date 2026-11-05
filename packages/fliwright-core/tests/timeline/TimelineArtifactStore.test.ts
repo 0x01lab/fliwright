@@ -1,3 +1,4 @@
+import { resolveFliwrightRunsRoot } from '../../src/runArtifacts.js';
 import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, posix } from 'node:path';
@@ -75,9 +76,9 @@ describe('TimelineArtifactStore runsRoot', () => {
     await rm(sandbox, { recursive: true, force: true });
   });
 
-  it('uses the project-local runs root when no runsRoot and no env', () => {
+  it('uses the machine-local project runs root when no runsRoot and no env', () => {
     const store = new TimelineArtifactStore({ cwd: sandbox, runId: 'r1' });
-    expect(store.runDir).toBe(join(sandbox, '.fliwright/runs', 'r1'));
+    expect(store.runDir).toBe(join(resolveFliwrightRunsRoot({ projectRoot: sandbox }), 'r1'));
   });
 
   it('uses options.runsRoot when provided', () => {

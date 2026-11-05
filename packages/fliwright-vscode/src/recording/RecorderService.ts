@@ -1,8 +1,8 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { applyDartVerification, parseDartVerificationEvidence, cleanFlowWithAi, buildFlowFromRecording, fingerprintScenario, generateRecordingAutomation, ScenarioResolver, type AiRuntime, type DartVerificationEvidence, type FlowCleanPlan, type GenerateRecordingAutomationOptions, type FliwrightDriver, type FliwrightFlowDocument, type RecordingFrame } from '@fliwright/core';
+import { toProjectFlowDocument, applyDartVerification, parseDartVerificationEvidence, cleanFlowWithAi, buildFlowFromRecording, fingerprintScenario, generateRecordingAutomation, ScenarioResolver, type AiRuntime, type DartVerificationEvidence, type FlowCleanPlan, type GenerateRecordingAutomationOptions, type FliwrightDriver, type FliwrightFlowDocument, type RecordingFrame } from '@fliwright/core';
 import { resolveProjectConfig } from '@fliwright/cli';
-import { loadWorkspaceConfig, resolveWorkspacePath } from '../config.js';
+import { getWorkspaceRoot, loadWorkspaceConfig, resolveWorkspacePath } from '../config.js';
 import { verifyRecordingReplay } from '@fliwright/cli/run';
 import type { RecordingSession } from '../types.js';
 import { RecordingPersistenceService, type RecordingListItem } from './RecordingPersistenceService.js';
@@ -84,7 +84,8 @@ export class RecorderService {
       frames: [],
       testName: flow.source?.testName ?? flow.title ?? flow.id,
       recordingId: flow.source?.recordingId,
-      targetFile: flow.source?.targetFile,
+      targetFile: flow.source?.targetFile && getWorkspaceRoot()
+        ? resolveWorkspacePath(getWorkspaceRoot()!, flow.source.targetFile).fsPath : flow.source?.targetFile,
       flow,
       flowFile: flowFile?.fsPath,
     });
@@ -449,7 +450,7 @@ export class RecorderService {
   ): Promise<void> {
     if (session.status !== 'preview') return;
     if (session.flow && isStandaloneFlowSession(session)) {
-      await writeFlowFile(vscode.Uri.file(session.flowFile), session.flow);
+      await writeFlowFile(vscode.Uri.file(session.flowFile), toProjectFlowDocument(session.flow, workspaceRoot.fsPath));
       if (!shouldApply()) return;
       this.setSession({
         ...this.session,

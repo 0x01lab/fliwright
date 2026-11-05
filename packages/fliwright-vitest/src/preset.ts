@@ -1,8 +1,9 @@
 import { fileURLToPath } from 'node:url';
-import { mergeFliwrightConfig, readFliwrightEnvironment, resolveFliwrightProjectRoot, resolveFliwrightRunsRoot, resolveFliwrightCacheRoot } from '@fliwright/core';
-import type { FliwrightPathsConfig, FliwrightRecordingConfig, ScenarioExecutionMode, TestScenario } from '@fliwright/core';
+import { mergeFliwrightConfig, readFliwrightEnvironment, resolveFliwrightProjectRoot, resolveFliwrightRunsRoot, resolveFliwrightCacheRoot, writeFliwrightConfigSnapshot } from '@fliwright/core';
+import type { FliwrightPathsConfig, FliwrightRecordingConfig, ScenarioExecutionMode, TestScenario, NativeConfig } from '@fliwright/core';
 
 export interface FliwrightVitestPresetOptions {
+  native?: NativeConfig;
   runner?: string;
   test?: Record<string, unknown>;
   recording?: Partial<FliwrightRecordingConfig>;
@@ -19,14 +20,14 @@ export interface FliwrightVitestPresetOptions {
 export function fliwrightPreset(options: FliwrightVitestPresetOptions = {}): {
   test: Record<string, unknown>;
 } {
-  const config = mergeFliwrightConfig({ project: options, environment: readFliwrightEnvironment(process.env) });
   const projectRoot = options.projectRoot ?? process.env.FLIWRIGHT_PROJECT_ROOT ?? resolveFliwrightProjectRoot();
-  config.runsRoot = resolveFliwrightRunsRoot({ projectRoot, runsRoot: config.runsRoot, env: {} });
+  const config = mergeFliwrightConfig({ project: options, environment: readFliwrightEnvironment(process.env), projectRoot });
+  config.runsRoot = resolveFliwrightRunsRoot({ projectRoot, runsRoot: config.runsRoot, env: process.env });
   config.cacheRoot = resolveFliwrightCacheRoot({ projectRoot, cacheRoot: config.cacheRoot });
   const reporters = options.test?.reporters ?? ['default'];
   const env = {
     FLIWRIGHT_PROJECT_ROOT: projectRoot,
-    FLIWRIGHT_CONFIG: JSON.stringify(config),
+    FLIWRIGHT_CONFIG_PATH: writeFliwrightConfigSnapshot(config, { projectRoot, cacheRoot: config.cacheRoot }),
     FLIWRIGHT_RECORDING_MODE: config.recording.mode,
     ...(config.runsRoot ? { FLIWRIGHT_RUNS_ROOT: config.runsRoot } : {}),
   };

@@ -1,6 +1,6 @@
 ---
 name: write-fliwright-tests
-description: Create, update, review, or debug Fliwright TypeScript automation scripts and E2E tests for Flutter apps. Use for `@fliwright/vitest` `test` or `script` fixtures, timeline-aware `flow`/`mock`/`agent`/`logger` usage, locator selectors, gestures, form filling, assertions, HTTP mocks, Riverpod state setup, app capabilities, CLI-recorded code cleanup, CLI runs, run artifacts, or manual human-verification/captcha/WebView overlay handling. Covers Fliwright framework patterns only; project-specific routes, Keys, providers, mock endpoints, and captcha config belong in the target project context.
+description: Create, update, review, or debug Fliwright TypeScript automation scripts and E2E tests for Flutter apps. Derive cases, named scenarios and contract-backed HTTP mock rules, then verify requests and visible outcomes. Use for @fliwright/vitest fixtures, Flutter/native locators, system permission dialogs, assertions, timeline artifacts, app state setup and CLI-recorded code cleanup. Project-specific routes, Keys and endpoints belong in the target project.
 ---
 
 # Write Fliwright Automation & Tests
@@ -13,6 +13,15 @@ Use Fliwright as deterministic Flutter app automation through the Dart VM Servic
 - Use `script` from `@fliwright/vitest` for one-off automation, data entry, account setup, operational tasks, and CLI-recorded script cleanup. Put it in `.fliwright/scripts/*.script.ts` or `.fliwright/scripts/*.mjs`; do not add assertions only to make it look like a test.
 - Use bare `FliwrightDriver` only for custom plugin work, legacy bridge compatibility, or low-level coordinate/extension tests. Manage `connect()` and `dispose()` explicitly.
 
+## From Test Goals To Scenarios
+
+For test creation or changes to covered behavior, read [references/scenario-design.md](references/scenario-design.md) before implementation. This workflow accepts natural-language goals, bug reproductions and existing cases without requiring a GitLab Item or test plan.
+
+- Derive observable cases and the state needed to reach each target branch. Match existing scenarios by their actual setup; compose or create missing named `TestScenario` declarations and register them in project config.
+- Derive mock selections and response data from the goal plus the target app's API contracts and parsing logic. Reuse suitable rules; create missing endpoint JSON with [write-fliwright-mock-rules](../write-fliwright-mock-rules/SKILL.md). A valid schema or a rule named `success` does not establish business correctness.
+- Verify scenario composition, resolved mock files, and actual app behavior. For requests central to the goal, assert relevant request facts and the resulting UI branch; activation alone is insufficient.
+- A request to implement tests includes the required scenario/mock authoring and applicable validation. Complete these steps autonomously within the requested scope. A request only for case descriptions stays at case design. Infer setup from evidence; surface genuinely missing business expectations or capabilities rather than inventing them. Keep generated CI tests deterministic; this reasoning happens during authoring.
+
 ## File Placement
 
 New timeline-native `test`/`script` files live under the project's `.fliwright/` directory, NOT the repo-root `tests/`. Confirm placement before creating a file — repo-root `tests/` is reserved for legacy bare-`FliwrightDriver` files, and mixing the two causes mis-categorized suites.
@@ -23,13 +32,18 @@ New timeline-native `test`/`script` files live under the project's `.fliwright/`
 | One-off automation / data entry | `script` from `@fliwright/vitest`, or `createFliwrightScript` | `.fliwright/scripts/` | `*.script.ts` / `*.mjs` |
 | Legacy bare driver / coordinate / extension test | bare `FliwrightDriver` (`connect()`/`dispose()` manual) | repo-root `tests/` | `*.test.ts` / `*.mjs` |
 
-HTTP mock rule JSON goes in `.fliwright/mocks/api/*.json` (see [references/mocks.md](references/mocks.md)).
+Shared HTTP Mock JSON goes in `.fliwright/mocks/api/*.json`; GitLab Item-specific
+responses go in `.fliwright/test-plans/<iid>/mocks/api/*.json`. Use the same
+endpoint schema in both locations. For explicit selection and composition, read
+[references/mock-rule-sets.md](references/mock-rule-sets.md).
 
 Before writing a new file, `ls .fliwright/tests/` (or `scripts/`) to match the placement convention of nearby files; do not infer the directory from a git-status snapshot or unrelated legacy files.
 
+Run evidence uses the project's resolved `runsRoot`, defaulting to `~/.fliwright/<project-path>/runs/`; see the [storage conventions](../fliwright-cli-workflows/references/commands/common.md#ci-evidence). For local or Item acceptance runs, omit invocation-level overrides unless requested. Item plans and coverage can reference returned run IDs and artifact paths without creating `.fliwright/test-plans/<iid>/runs/`. `--output` places a JSON summary separately; it does not relocate timeline, logs or screenshots.
+
 ## Work Pattern
 
-1. Inspect nearby tests, app source, and UI identifiers before writing selectors. Search for Keys, visible labels, routes, providers, mock endpoints, and existing Fliwright helpers with `rg`.
+1. Inspect the test goal, nearby tests, app source, and UI identifiers. Search for Keys, visible labels, routes, providers, mock endpoints, and existing Fliwright helpers with `rg`; derive cases and their scenario/mock requirements using the workflow above before writing selectors.
 2. Confirm the app exposes the needed bridge capabilities before deep exploration. Current flows should support `ext.fliwright.snap`, `ext.fliwright.action`, screenshots, and mock extensions. If `ext.fliwright.snap` is unknown, treat the app as legacy or upgrade/rebuild it before using snapshot/ref features.
 3. Start new files with `import { test, expect } from '@fliwright/vitest'` or `import { script, expect } from '@fliwright/vitest'`. If the project has `.fliwright/support/*-test.ts`, import `test`/`expect` from that support module instead so app-specific helpers are injected consistently. Use the fixture objects `{ page, driver, flow, mock, agent, aiRuntime, timeline, logger }` when relevant.
 4. Declare reusable setup as a named composed `TestScenario`; authenticated business tests use app-owned `auth.seedLoggedIn`, never real login or generic provider overrides. Use `mock.rules(...)` or `flow.step()` for test-specific changes and user actions. In `script` mode, use `flow.frame()`, `logger`, or `agent.verify()` to record facts; use `expect(locator, title?)` only when failure should stop the run.
@@ -42,9 +56,12 @@ Before writing a new file, `ls .fliwright/tests/` (or `scripts/`) to match the p
 Read only the reference needed for the current task:
 
 - First Fliwright test or environment setup: [references/getting-started.md](references/getting-started.md)
+- Test-goal analysis, case derivation, scenario selection/creation and mock correctness: [references/scenario-design.md](references/scenario-design.md)
 - Reusable baselines, authenticated business tests, `TestScenario` and `test.scenario(...)`: [references/scenarios.md](references/scenarios.md)
+- Shared/Item Mock sources, explicit replacement, migration from inline helpers and rule provenance: [references/mock-rule-sets.md](references/mock-rule-sets.md)
 - `test`/`script`, fixtures, `flow`, timeline nodes, manual steps: [references/timeline-native.md](references/timeline-native.md), [references/test-harness.md](references/test-harness.md)
 - Logging and run artifacts: [references/logging.md](references/logging.md)
+- Native UIKit/Android UI, system permission dialogs, native input and mixed Flutter/native assertions: [references/native.md](references/native.md). Use `native` for platform UI and `page` for Flutter; verify device capabilities before selecting scenarios.
 - Selectors, gestures, assertions, navigation, screenshots: [references/selectors.md](references/selectors.md), [references/actions.md](references/actions.md), [references/assertions.md](references/assertions.md), [references/navigation.md](references/navigation.md), [references/screenshots-snapshots.md](references/screenshots-snapshots.md)
 - Forms, AI, mocks, Riverpod state, app capabilities: [references/forms.md](references/forms.md), [references/ai.md](references/ai.md), [references/mocks.md](references/mocks.md), [references/state.md](references/state.md), [references/app-instance.md](references/app-instance.md)
 - CLI workflow and failure diagnosis: [references/cli.md](references/cli.md), [references/agent-workflow.md](references/agent-workflow.md), [references/troubleshooting.md](references/troubleshooting.md)
@@ -68,10 +85,18 @@ If unsure which reference applies, open [references/index.md](references/index.m
 - Use `logger.info/debug/warn/error/success` for script progress and diagnostics; do not make `console.log` the main run log.
 - Keep AI optional and deterministic in CI. Prefer `provider: 'mock'` or `'none'`, catch `AiDisabledError` when AI is optional, and land self-healing suggestions back into stable selectors after review.
 - For HTTP mock rule JSON, prefer `baseRule` plus overrides for repeated endpoint fields, and use `removeBodyFields` when an inherited response field must be absent. See [references/mocks.md](references/mocks.md).
+- For Item acceptance, reuse shared responses and keep only Item-specific data beside its plan. Compose source-qualified selections in named scenarios; do not load shared and Item directories sequentially. Use `replace: true` for an inherited method/path selection. `applyRuleSet` resets all App Mock routes, including editor-applied routes, and requires Flutter-side support; see [references/mock-rule-sets.md](references/mock-rule-sets.md).
 
 ## Project Fixture Extensions
 
 Put reusable app actions and business queries in `.fliwright/support/` with `extendFliwrightTest`; see the [project fixture example](references/test-harness.md#项目级-fixtureextendfliwrighttest). Keep routes, provider names and endpoints in the target project. Keep reusable mock/auth/storage/navigation baselines in [named scenarios](references/scenarios.md), so setup runs before every attempt and retry.
+
+## GitLab 计划中的脚本交付
+
+通过 `gitlab-test-plan` 编写脚本时，覆盖目标来自完整 checklist；没有 checklist 时来自需求推导用例。
+每条用例核对前置条件、操作及全部断言，优先补齐已有部分脚本，不能用 smoke 成功代替全量覆盖。
+收集 catalog 后把完整脚本、部分覆盖及实际阻塞交回计划流程记录，执行结果仍取自真实 run。
+可继续完成的缺口应继续完成；确实无法继续的列出缺失条件和原因，交付为部分完成。
 
 ## Human Verification And Captcha
 
@@ -85,6 +110,7 @@ Treat captcha, slider verification, QR login, SMS approval, and WebView/Platform
 
 ## Validation
 
+- For new or changed cases, complete the [scenario and mock verification](references/scenario-design.md#验证与交付): check setup, critical request facts and branch-specific outcomes. Report static validation and real execution separately, including unresolved goals.
 - For generated or edited test code, run the narrowest relevant TypeScript check or package test available. Use `pnpm lint`, `pnpm --filter @fliwright/vitest test`, `pnpm --filter @fliwright/core test`, or a targeted `pnpm vitest run path/to/file.ts` as appropriate.
 - Direct Vitest execution requires `fliwrightPreset()` in the target project's Vitest config; CLI execution installs the runner itself. Use the [CLI command index](../fliwright-cli-workflows/references/commands/index.md) for current flags and lifecycle rules.
 - For active Flutter app validation, prefer `fliwright run --test path/to/file.ts --json`. Pass `--vm-url` only when config/env discovery is unavailable.

@@ -1,6 +1,6 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { FLIWRIGHT_RUNS_ROOT_ENV, RunArtifactStore, parseTimelineData, resolveFliwrightRunsRoot, resolveFliwrightCacheRoot, mergeFliwrightConfig, readFliwrightEnvironment } from '@fliwright/core';
+import { FLIWRIGHT_RUNS_ROOT_ENV, RunArtifactStore, parseTimelineData, resolveFliwrightRunsRoot, resolveFliwrightRuntimeRoot, resolveFliwrightCacheRoot, mergeFliwrightConfig, readFliwrightEnvironment, writeFliwrightConfigSnapshot } from '@fliwright/core';
 import type { RunSessionResult } from '@fliwright/core';
 import { fileURLToPath } from 'node:url';
 import { startVitest, type Vitest } from 'vitest/node';
@@ -140,7 +140,7 @@ export class PersistentTestExecutor {
     restoreEnv('FLIWRIGHT_FAILURE_TIMEOUT_MS', this.previousFailureTimeoutMs);
     restoreEnv(FLIWRIGHT_RUNS_ROOT_ENV, this.previousRunsRoot);
     restoreEnv('FLIWRIGHT_RUN_ID', this.previousRunId);
-    restoreEnv('FLIWRIGHT_CONFIG', this.previousSharedConfig);
+    restoreEnv('FLIWRIGHT_CONFIG_PATH', this.previousSharedConfig);
     restoreEnv('FLIWRIGHT_PROJECT_ROOT', this.previousProjectRoot);
     this.envApplied = false;
   }
@@ -157,13 +157,13 @@ export class PersistentTestExecutor {
       }
 
       const projectRoot = looksLikeConfigFile(opts.configRoot) ? resolve(opts.configRoot, '..') : resolve(opts.configRoot);
-      const config = mergeFliwrightConfig({ project: opts.sharedConfig, environment: readFliwrightEnvironment(process.env), explicit: { runsRoot: opts.runsRoot } });
-      this.runsRoot = resolveFliwrightRunsRoot({ projectRoot, runsRoot: config.runsRoot, env: {} });
+      const config = mergeFliwrightConfig({ projectRoot, project: opts.sharedConfig, environment: readFliwrightEnvironment(process.env), explicit: { runsRoot: opts.runsRoot } });
+      this.runsRoot = resolveFliwrightRunsRoot({ projectRoot, runsRoot: config.runsRoot });
       await mkdir(this.runsRoot, { recursive: true });
       if (opts.sharedConfig) {
         config.cacheRoot = resolveFliwrightCacheRoot({ projectRoot, cacheRoot: config.cacheRoot });
         config.runsRoot = this.runsRoot;
-        process.env.FLIWRIGHT_CONFIG = JSON.stringify(config);
+        process.env.FLIWRIGHT_CONFIG_PATH = writeFliwrightConfigSnapshot(config, { projectRoot, cacheRoot: config.cacheRoot });
       }
       process.env.FLIWRIGHT_PROJECT_ROOT = projectRoot;
       if (config.runsRoot) process.env[FLIWRIGHT_RUNS_ROOT_ENV] = this.runsRoot;
@@ -187,7 +187,7 @@ export class PersistentTestExecutor {
     this.previousFailureTimeoutMs = process.env.FLIWRIGHT_FAILURE_TIMEOUT_MS;
     this.previousRunsRoot = process.env[FLIWRIGHT_RUNS_ROOT_ENV];
     this.previousRunId = process.env.FLIWRIGHT_RUN_ID;
-    this.previousSharedConfig = process.env.FLIWRIGHT_CONFIG;
+    this.previousSharedConfig = process.env.FLIWRIGHT_CONFIG_PATH;
     this.previousProjectRoot = process.env.FLIWRIGHT_PROJECT_ROOT;
   }
 
@@ -238,17 +238,17 @@ function restoreEnv(name: string, value: string | undefined): void {
 
 export function defaultArtifactsRoot(configRoot: string): string {
   const root = looksLikeConfigFile(configRoot) ? resolve(configRoot, '..') : resolve(configRoot);
-  return join(root, '.fliwright', 'runs');
+  return resolveFliwrightRunsRoot({ projectRoot: root });
 }
 
 /**
  * Default RuntimeSnapshot status-file path a read-only monitor (e.g. the VS Code TDD Loop panel)
- * polls: `<projectRoot>/.fliwright/tdd-status.json`. The project root is derived from the same
+ * polls: `~/.fliwright/<project-path>/runtime/tdd-status.json`. The project root is derived from the same
  * configRoot convention as {@link defaultArtifactsRoot}.
  */
 export function defaultStatusFilePath(configRoot: string): string {
   const root = looksLikeConfigFile(configRoot) ? resolve(configRoot, '..') : resolve(configRoot);
-  return join(root, '.fliwright', 'tdd-status.json');
+  return join(resolveFliwrightRuntimeRoot({ projectRoot: root }), 'runtime', 'tdd-status.json');
 }
 
 function looksLikeConfigFile(configRoot: string): boolean {

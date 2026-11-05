@@ -1,9 +1,10 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { mkdir, open, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { VMServiceConnector } from './VMServiceConnector.js';
 import {
+  workspaceConfigPath,
   readWorkspaceConfig,
   clearWorkspaceVmServiceUrl,
   writeWorkspaceConfig,
@@ -40,6 +41,8 @@ export interface VmServiceEndpointHealth {
   status: 'ok' | 'invalid';
   checkedAt: string;
   reason?: string;
+  clientProtocolVersion?: number;
+  bridgeProtocolVersion?: number;
   dartSdkVersion?: string;
   bridgeCapabilities?: Record<string, unknown>;
 }
@@ -131,7 +134,12 @@ export async function verifyVmServiceEndpoint(endpoint: VmServiceEndpoint, optio
       initialized?: boolean;
       dartSdkVersion?: string;
       bridgeCapabilities?: Record<string, unknown>;
+      protocolVersion?: number;
     };
+    if (handshake?.compatible === false) {
+      return { status: 'invalid', checkedAt, reason: 'bridge-protocol-incompatible', clientProtocolVersion: 2,
+        bridgeProtocolVersion: typeof handshake.protocolVersion === 'number' ? handshake.protocolVersion : undefined };
+    }
     if (handshake?.status !== 'ok' || handshake.compatible !== true || handshake.initialized !== true) {
       return { status: 'invalid', checkedAt, reason: 'bridge-not-ready' };
     }
@@ -156,12 +164,15 @@ export async function verifyVmServiceEndpoint(endpoint: VmServiceEndpoint, optio
 /** Wait for a newly launched app's own bridge; never select another cached app. */
 export async function waitForVmServiceEndpoint(endpoint: VmServiceEndpoint, options: {
   signal?: AbortSignal; timeoutMs?: number; pollIntervalMs?: number; verify?: VmServiceEndpointVerifier;
+  onCheck?: (health: VmServiceEndpointHealth) => void;
 } = {}): Promise<VmServiceEndpointHealth> {
   const signal = AbortSignal.any([options.signal ?? new AbortController().signal, AbortSignal.timeout(options.timeoutMs ?? 15000)]);
   while (true) {
     signal.throwIfAborted();
     const health = await (options.verify ? options.verify(endpoint) : verifyVmServiceEndpoint(endpoint, { signal }));
+    options.onCheck?.(health);
     signal.throwIfAborted();
+    if (health.reason === 'bridge-protocol-incompatible') throw Object.assign(new Error(`Bridge protocol incompatible (client=${health.clientProtocolVersion}, bridge=${health.bridgeProtocolVersion})`), { code: 'BRIDGE_PROTOCOL_INCOMPATIBLE', health });
     if (health.status === 'ok') return health;
     await delay(options.pollIntervalMs ?? 100, undefined, { signal }).catch(() => signal.throwIfAborted());
   }
@@ -357,7 +368,7 @@ export class WorkspaceEndpointOwner {
   }
 
   private async withConfigLock<T>(action: () => Promise<T>): Promise<T> {
-    const directory = join(this.cwd, '.fliwright');
+    const directory = dirname(workspaceConfigPath(this.cwd));
     const lockPath = join(directory, 'vm-service-owner.lock');
     await mkdir(directory, { recursive: true });
     let lock;

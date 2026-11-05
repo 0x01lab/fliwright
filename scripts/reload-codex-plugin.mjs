@@ -139,14 +139,14 @@ function readMarketplaceName(marketplacePath) {
       ? repoMarketplacePath
       : defaultMarketplacePath;
 
-  if (!fs.existsSync(targetPath)) return 'personal';
+  if (!fs.existsSync(targetPath)) return 'fliwright';
   try {
     const marketplace = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
     return typeof marketplace.name === 'string' && marketplace.name.trim()
       ? marketplace.name.trim()
-      : 'personal';
+      : 'fliwright';
   } catch {
-    return 'personal';
+    return 'fliwright';
   }
 }
 

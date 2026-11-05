@@ -1,3 +1,4 @@
+import { resolveFliwrightRuntimeRoot } from '@fliwright/core';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TddRuntime } from '@fliwright/tdd';
@@ -62,7 +63,7 @@ export class ConnectionHost {
   }
   setWorkflow(context: TddWorkflowContext) {
     this.workflow = context;
-    const directory = join(this.options.cwd, '.fliwright', 'sessions', this.options.id ?? 'local');
+    const directory = join(resolveFliwrightRuntimeRoot({ projectRoot: this.options.cwd }), 'sessions', this.options.id ?? 'local');
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     writeFileSync(join(directory, 'workflow.json'), JSON.stringify(context), { mode: 0o600 });
   }

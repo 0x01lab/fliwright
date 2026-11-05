@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { CliError } from '../CommandRegistry.js';
+import { prepareAgentSetup, type AgentSetupResult } from '../InitAgent.js';
 
 const NODE_DEV_DEPENDENCIES: Record<string, string> = {
   '@fliwright/cli': '^0.1.0',
@@ -19,15 +21,16 @@ const DEFAULT_SCRIPTS: Record<string, string> = {
 const CONFIG_TEMPLATE = `import { defineConfig } from '@fliwright/cli';
 
 export default defineConfig({
-  runsRoot: '.fliwright/runs',
-  cacheRoot: '.fliwright/cache',
+  // Runtime data defaults to ~/.fliwright/<absolute-project-path-with-dashes>/.
+  // runsRoot: 'artifacts/runs',
+  // cacheRoot: 'artifacts/cache',
   // vmServiceUrl: 'ws://127.0.0.1:8181/ws',
   timeout: 30000,
   screenshot: 'file',
   recording: { mode: 'standard' },
   paths: {
     tests: '.fliwright/tests', scripts: '.fliwright/scripts',
-    recordings: '.fliwright/recordings', flows: '.fliwright/flows',
+    flows: '.fliwright/flows',
   },
   reporter: 'pretty',
 });
@@ -81,6 +84,7 @@ const GITIGNORE_LINES = [
   '.fliwright/cache/',
   '.fliwright/ai/',
   '.fliwright/failures/',
+  '.fliwright/memory/',
 ];
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
@@ -90,6 +94,9 @@ export interface InitOptions {
   node?: boolean;
   flutter?: boolean;
   packageManager?: PackageManager;
+  agent?: 'codex';
+  yes?: boolean;
+  entrypoint?: string;
 }
 
 export interface InitResult {
@@ -97,11 +104,18 @@ export interface InitResult {
   updated: string[];
   skipped: string[];
   commands: Array<{ command: string; args: string[]; cwd: string }>;
+  status: 'configured' | 'needs-attention';
+  runtimeVerified: false;
+  checks: Array<{ name: string; status: 'passed' | 'pending'; message: string }>;
+  nextSteps: string[];
+  agent?: AgentSetupResult;
 }
 
 export interface InitDeps {
   log?: (message: string) => void;
   runCommand?: (command: string, args: string[], cwd: string) => Promise<void>;
+  skillsRoot?: string;
+  signal?: AbortSignal;
 }
 
 interface PackageJson {
@@ -119,13 +133,31 @@ export async function initCommand(
   deps: InitDeps = {},
 ): Promise<InitResult> {
   const log = deps.log ?? console.log;
-  const result: InitResult = { created: [], updated: [], skipped: [], commands: [] };
+  const result: InitResult = { created: [], updated: [], skipped: [], commands: [], status: 'needs-attention', runtimeVerified: false, checks: [], nextSteps: [] };
   const install = options.install ?? true;
   const setupNode = options.node ?? true;
   const setupFlutter = options.flutter ?? true;
+  deps.signal?.throwIfAborted();
+  const hasFlutterProject = await fileExists(join(projectDir, 'pubspec.yaml'));
+  const entrypoint = options.entrypoint ?? 'lib/main.dart';
+  if (options.agent && (!hasFlutterProject || !setupFlutter || !setupNode)) {
+    throw new CliError('INVALID_INPUT', '--agent codex requires a Flutter project (pubspec.yaml) and Node/Flutter setup enabled.', 2);
+  }
+  if (options.agent || options.entrypoint) {
+    const entryRelative = relative(resolve(projectDir, 'lib'), resolve(projectDir, entrypoint));
+    if (isAbsolute(entrypoint) || entryRelative.startsWith('..') || !/^[A-Za-z0-9_./-]+\.dart$/.test(entrypoint) || !await fileExists(join(projectDir, entrypoint))) {
+      throw new CliError('INVALID_INPUT', 'App entrypoint must be an existing Dart file inside lib/. Specify --entrypoint lib/main_flavor.dart.', 2);
+    }
+  }
+  const installAgent = options.agent ? await prepareAgentSetup(projectDir, deps.skillsRoot) : undefined;
+  let vitestConfigPath = join(projectDir, 'vitest.config.ts');
+  for (const extension of ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs']) {
+    const candidate = join(projectDir, `vitest.config.${extension}`);
+    if (await fileExists(candidate)) { vitestConfigPath = candidate; break; }
+  }
 
   await writeIfAbsent(join(projectDir, 'fliwright.config.ts'), CONFIG_TEMPLATE, result, log);
-  await writeIfAbsent(join(projectDir, 'vitest.config.ts'), VITEST_CONFIG_TEMPLATE, result, log);
+  await writeIfAbsent(vitestConfigPath, VITEST_CONFIG_TEMPLATE, result, log);
   await mkdir(join(projectDir, '.fliwright', 'tests'), { recursive: true });
   await writeIfAbsent(join(projectDir, '.fliwright', 'tests', 'example.test.ts'), EXAMPLE_TEST_TEMPLATE, result, log);
   await mkdir(join(projectDir, '.fliwright', 'scripts'), { recursive: true });
@@ -135,30 +167,66 @@ export async function initCommand(
 
   if (setupNode) {
     await ensurePackageJson(projectDir, result, log);
+    const pkg = JSON.parse(await readFile(join(projectDir, 'package.json'), 'utf8')) as PackageJson;
+    const matched = pkg.type === 'module' && pkg.devDependencies?.vitest === NODE_DEV_DEPENDENCIES.vitest;
+    result.checks.push({ name: 'node-config', status: matched ? 'passed' : 'pending', message: matched
+      ? 'Node ESM and the required Vitest version are declared.'
+      : `Review existing package.json: generated TypeScript configuration requires type=module and Vitest ${NODE_DEV_DEPENDENCIES.vitest}. Existing values were preserved.` });
   }
 
-  const hasFlutterProject = await fileExists(join(projectDir, 'pubspec.yaml'));
   if (setupFlutter && hasFlutterProject) {
-    await ensureFlutterEntry(projectDir, result, log);
+    await ensureFlutterEntry(projectDir, result, log, entrypoint);
   } else if (setupFlutter) {
     result.skipped.push('Flutter setup');
     log('No pubspec.yaml found - skipping Flutter bridge setup.');
   }
+  if (installAgent) {
+    result.agent = await installAgent(result);
+    result.checks.push({ name: 'agent', status: result.agent.conflicts.length ? 'pending' : 'passed', message: result.agent.conflicts.length
+      ? `Preserved customized Skills. Review: ${result.agent.conflicts.join(', ')}` : 'Project-local Codex Skills and AGENTS.md instructions installed.' });
+  }
 
   if (install) {
-    if (setupNode) {
-      const packageManager = options.packageManager ?? await detectPackageManager(projectDir);
-      await runAndTrack(packageManager, ['install'], projectDir, result, deps);
-    }
-    if (setupFlutter && hasFlutterProject) {
-      await runAndTrack('flutter', ['pub', 'add', 'fliwright_bridge'], projectDir, result, deps);
+    try {
+      if (setupNode) {
+        const packageManager = options.packageManager ?? await detectPackageManager(projectDir);
+        await runAndTrack(packageManager, ['install'], projectDir, result, deps);
+      }
+      if (setupFlutter && hasFlutterProject) {
+        await runAndTrack('flutter', ['pub', 'add', 'fliwright_bridge'], projectDir, result, deps);
+      }
+      result.checks.push({ name: 'dependencies', status: 'passed', message: 'Requested dependency installation commands completed.' });
+    } catch (error) {
+      deps.signal?.throwIfAborted();
+      result.checks.push({ name: 'dependencies', status: 'pending', message: error instanceof Error ? error.message : String(error) });
+      result.nextSteps.push('Resolve the dependency installation failure and rerun the same init command. Existing project files are preserved.');
+      throw new CliError('INIT_INSTALL_FAILED', 'Dependency installation failed. Inspect data.checks and rerun init after fixing package registry or tool availability.', 3, result);
     }
   } else {
     result.skipped.push('Dependency install');
+    result.checks.push({ name: 'dependencies', status: 'pending', message: 'Installation skipped. Install Node dependencies and configure fliwright_bridge before live use.' });
     log('Dependency installation skipped.');
   }
 
-  printNextSteps(log, hasFlutterProject);
+  const vitestConfig = await readFile(vitestConfigPath, 'utf8');
+  const presetFound = vitestConfig.includes('fliwrightPreset(') && vitestConfig.includes('@fliwright/vitest/preset');
+  result.checks.push({ name: 'vitest', status: presetFound ? 'passed' : 'pending', message: presetFound ? 'Fliwright preset reference found; use doctor for resolved configuration verification.' : `Merge fliwrightPreset(projectConfig) from @fliwright/vitest/preset into the existing ${basename(vitestConfigPath)}.` });
+  if (setupFlutter && hasFlutterProject) {
+    const entry = await readFile(join(projectDir, 'test_driver/fliwright_app.dart'), 'utf8');
+    const importPath = entrypoint.replace(/^lib\//, '');
+    const matched = entry.includes('FliwrightBridge.init(') && entry.includes(`/${importPath}'`);
+    result.checks.push({ name: 'bridge', status: matched ? 'passed' : 'pending', message: matched ? 'Bridge entrypoint references the selected App entrypoint.' : 'Review existing test_driver/fliwright_app.dart: ensure bridge initialization and selected App import match.' });
+  }
+  result.status = result.checks.some((check) => check.status === 'pending') ? 'needs-attention' : 'configured';
+  result.nextSteps.push(...result.checks.filter((check) => check.status === 'pending').map((check) => check.message));
+  if (hasFlutterProject) result.nextSteps.push('Start App: flutter run -t test_driver/fliwright_app.dart');
+  result.nextSteps.push('Verify live connection: npx --no-install fliwright doctor --strict --json');
+  if (options.agent) result.nextSteps.push('Open a new Codex chat in this project and ask Fliwright to inspect the App and capture a screenshot.');
+  result.nextSteps.push('Replace Counter example selectors and assertions with your App widgets before running tests.');
+  log('');
+  log(`Setup ${result.status}. Live App verification has not run.`);
+  for (const check of result.checks) log(`  ${check.status === 'passed' ? '✓' : '!'} ${check.name}: ${check.message}`);
+  for (const step of result.nextSteps) log(`  ${step}`);
   return result;
 }
 
@@ -190,7 +258,9 @@ async function ensurePackageJson(
   pkg.type ??= 'module';
   pkg.scripts = { ...DEFAULT_SCRIPTS, ...(pkg.scripts ?? {}) };
   pkg.devDependencies = { ...(pkg.devDependencies ?? {}) };
-  for (const [name, version] of Object.entries(NODE_DEV_DEPENDENCIES)) {
+  const cliManifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
+  const dependencies = { ...NODE_DEV_DEPENDENCIES, '@fliwright/cli': `^${cliManifest.version}`, '@fliwright/vitest': `^${cliManifest.version}` };
+  for (const [name, version] of Object.entries(dependencies)) {
     pkg.devDependencies[name] ??= version;
   }
 
@@ -233,21 +303,22 @@ async function ensureFlutterEntry(
   projectDir: string,
   result: InitResult,
   log: (message: string) => void,
+  entrypoint: string,
 ): Promise<void> {
   const pubspec = await readFile(join(projectDir, 'pubspec.yaml'), 'utf8');
   const packageName = parsePubspecName(pubspec) ?? safePackageName(basename(projectDir));
   await mkdir(join(projectDir, 'test_driver'), { recursive: true });
   await writeIfAbsent(
     join(projectDir, 'test_driver', 'fliwright_app.dart'),
-    flutterEntryTemplate(packageName),
+    flutterEntryTemplate(packageName, entrypoint.replace(/^lib\//, '')),
     result,
     log,
   );
 }
 
-function flutterEntryTemplate(packageName: string): string {
+function flutterEntryTemplate(packageName: string, entrypoint: string): string {
   return `import 'package:fliwright_bridge/fliwright_bridge.dart';
-import 'package:${packageName}/main.dart' as app;
+import 'package:${packageName}/${entrypoint}' as app;
 
 Future<void> main() async {
   FliwrightRecordingBinding.ensureInitialized();
@@ -284,13 +355,18 @@ async function runAndTrack(
   result: InitResult,
   deps: InitDeps,
 ): Promise<void> {
+  deps.signal?.throwIfAborted();
   result.commands.push({ command, args, cwd });
-  await (deps.runCommand ?? runCommand)(command, args, cwd);
+  if (deps.runCommand) await deps.runCommand(command, args, cwd);
+  else await runCommand(command, args, cwd, deps.signal);
+  deps.signal?.throwIfAborted();
 }
 
-function runCommand(command: string, args: string[], cwd: string): Promise<void> {
+function runCommand(command: string, args: string[], cwd: string, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
+    const child = spawn(command, args, { cwd, stdio: ['inherit', 'pipe', 'pipe'], shell: process.platform === 'win32', signal });
+    child.stdout?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
+    child.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
     child.on('error', reject);
     child.on('close', (code) => {
       if (code === 0) {
@@ -326,19 +402,4 @@ function parsePubspecName(pubspec: string): string | undefined {
 
 function safePackageName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'fliwright-app';
-}
-
-function printNextSteps(log: (message: string) => void, hasFlutterProject: boolean): void {
-  log('');
-  log('Next steps:');
-  if (hasFlutterProject) {
-    log('  1. Start your Flutter app with the Fliwright bridge entrypoint:');
-    log('     flutter run -t test_driver/fliwright_app.dart');
-    log('  2. Run tests:');
-    log('     npm run test:fliwright');
-  } else {
-    log('  1. Start your Flutter app with FliwrightBridge.init() enabled.');
-    log('  2. Run tests: npm run test:fliwright');
-  }
-  log('  3. Check the environment any time: npm run doctor:fliwright');
 }

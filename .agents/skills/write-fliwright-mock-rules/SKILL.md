@@ -1,6 +1,6 @@
 ---
 name: write-fliwright-mock-rules
-description: Use when creating or editing Fliwright HTTP mock rule files (`.fliwright/mocks/api/*.json`) or the `.fliwright/mocks/mock-index.json` registry — adding an endpoint, defining named response scenarios (success / error / empty / timeout), using `baseRule` inheritance, making a response field absent with `removeBodyFields`, or wiring a mock file into the index for `loadRules()` / `switchRule()`.
+description: Create or edit Fliwright HTTP Mock endpoint JSON in project-shared `.fliwright/mocks/api/` or Item-local `.fliwright/test-plans/*/mocks/api/`. Use for named responses, baseRule inheritance, omitted fields via removeBodyFields, explicit source selections, and the single-directory mock-index.json registry.
 ---
 
 # 编写 Fliwright Mock 规则文件（Write Fliwright Mock Rule Files）
@@ -8,19 +8,31 @@ description: Use when creating or editing Fliwright HTTP mock rule files (`.fliw
 ## 概述
 
 Fliwright 的 HTTP mock 用**一套固定 schema** 描述端点。一个 JSON 文件 = 一个端点，
-内含一条或多条**具名响应规则**（`rules[]`），由 `MockRuleStore` 在 `loadRules()` 时
-加载、用 `switchRule(endpoint, ruleName)` 切换。
+内含一条或多条**具名响应规则**（`rules[]`）。选择加载方式：
+
+- Item 验收：命名场景声明 `sources` + `rules`，只激活引用的响应，校验失败即停止。
+- 单目录工具：`loadRules()` 读取目录并激活默认响应，`switchRule()` 切换已加载规则。
 
 **核心原则：照 schema 写，不要自创结构。** 这套格式是 fliwright 专有的，靠猜会得到
 看似合理但完全错误的文件（`scenarios`/`routes`/`mocks[]` 之类），加载时会被静默
-跳过（`console.warn`）或在缺 `status` 时抛错。
+跳过（`loadRules` 的 `console.warn`）或被严格来源解析拒绝（`resolveMockRuleSet` /
+`applyRuleSet`）。不要把 warn 后继续加载当作规则验证通过。
 
 > 一个端点一个文件。规则名用 snake_case（`success`、`validation_error`、`server_error`）。
-> 默认激活规则在 `mock-index.json` 的 `defaultRule` 里指定，回退值是 `"success"`。
+> 单目录模式的默认规则由 `mock-index.json.defaultRule` 指定，回退值为 `"success"`。
+> sources 模式必须显式选择规则，不使用 index 默认规则。
 
 ## 文件骨架（必需字段）
 
 文件放在 `.fliwright/mocks/api/<name>.json`（示例文件习惯加 `.example`）：
+
+GitLab Item 专属响应可放在 `.fliwright/test-plans/<iid>/mocks/api/<name>.json`，
+使用完全相同的 schema。共享与 Item 规则通过命名 `TestScenario` 的 `sources` +
+`rules` 显式引用；每个 source 声明 `{ name, directory, files }`，每个选择声明
+`{ source, method, endpoint, rule, replace? }`。这种方式不读取 index 默认值，
+Item 文件无需加入共享 `mock-index.json`。只新增 Item 所需差异，优先复用共享规则。
+父子场景相同 method/endpoint 的替换必须写 `replace: true`，跨来源不隐式合并 body。
+详见 [共享与 Item 规则组合](../write-fliwright-tests/references/mock-rule-sets.md)。
 
 | 字段 | 必需 | 类型 / 说明 |
 | --- | --- | --- |
@@ -36,8 +48,8 @@ Fliwright 的 HTTP mock 用**一套固定 schema** 描述端点。一个 JSON �
 
 | 字段 | 必需 | 说明 |
 | --- | --- | --- |
-| `name` | 是 | 规则名，snake_case；被 `defaultRule` / `switchRule` 引用 |
-| `status` | 视情况 | **合并后每条规则都必须有 `status`**，否则 `loadRules()` 抛 `rules[i].status is required when baseRule.status is not set` |
+| `name` | 是 | 规则名，snake_case；被显式 selection、`defaultRule` 或 `switchRule` 引用 |
+| `status` | 视情况 | **合并后每条规则都必须有 `status`**；normalizer 抛错，目录加载 warn 后跳过，sources 模式拒绝整个准备 |
 | `delay` | 否 | 延迟响应的毫秒数 |
 | `headers` | 否 | 响应头（如 `Content-Type`） |
 | `body` | 否 | 响应体（object / array / 标量均可） |
@@ -90,7 +102,10 @@ Fliwright 的 HTTP mock 用**一套固定 schema** 描述端点。一个 JSON �
 }
 ```
 
-## `mock-index.json`（注册表）
+## `mock-index.json`（单目录注册表）
+
+本节适用于 `loadRules()` 和目录工具。sources 模式直接声明文件列表，Item 文件
+不加入共享 index；不要将两种加载方式混合来模拟覆盖。
 
 `.fliwright/mocks/mock-index.json` 列出默认激活规则与文件清单：
 
@@ -102,7 +117,7 @@ Fliwright 的 HTTP mock 用**一套固定 schema** 描述端点。一个 JSON �
 }
 ```
 
-- `files` 是**相对 mocks 目录**的路径，必须带 `api/` 前缀，且与磁盘文件名完全一致。
+- `files` 是**相对 mocks 目录**的路径，按项目约定使用 `api/` 前缀，且与磁盘文件名完全一致。
 - `defaultRule` 应指向真实存在的规则名；不匹配时会**静默回退**到该文件的第一条规则。
 - 新增端点文件后，记得把它追加进 `files`，否则不会被加载。
 - `mock-index.json` 缺失时，`MockRuleStore` 会自动扫描 `api/*.json`、`defaultRule` 回退
@@ -110,9 +125,29 @@ Fliwright 的 HTTP mock 用**一套固定 schema** 描述端点。一个 JSON �
 
 ## 校验
 
-加载坏文件**只会 `console.warn` 后跳过**，不会让测试失败——所以写完一定要校验。最可靠的
-办法是跑一次真正的 normalizer（`@fliwright/core` 导出了 `normalizeMockEndpointConfig`），
-它会抛出 status 缺失 / 结构错误并打印展开后的规则：
+sources/Item 模式先在完整组合配置上调用 `resolveMockRuleSet`。它检查所有声明文件、
+规则名及覆盖冲突，不连接 App；目录从执行工作目录解析：
+
+```typescript
+import { resolveMockRuleSet } from '@fliwright/core';
+
+await resolveMockRuleSet({
+  sources: [{
+    name: 'item-437', directory: '.fliwright/test-plans/437/mocks',
+    files: ['api/user.json'],
+  }],
+  rules: [{ source: 'item-437', method: 'POST', endpoint: '/api/user/info', rule: 'review' }],
+});
+```
+
+文件、method、endpoint、rule 均需替换为实际值；校验父子替换时传入完整来源和选择，
+不要单独验证一条带 `replace: true` 的子规则。`scenario resolve` 不读取规则 JSON。
+离线解析结果包含响应体，勿将完整结果直接当作不含业务数据的审核元信息发布。
+
+单目录 `loadRules()` 加载坏文件会 `console.warn` 后跳过，不会让测试直接失败，
+所以不能只看加载是否返回。单个文件可通过导出的 `normalizeMockEndpointConfig`
+检查继承后是否缺 status，并查看展开结果；完整 source/selection 校验仍用上面的
+`resolveMockRuleSet`：
 
 ```bash
 # 在 fliwright 仓库根目录运行（指向已构建的 dist）
@@ -181,7 +216,7 @@ console.log(JSON.stringify(normalizeMockEndpointConfig(cfg).rules, null, 2));
 | 用 `null` / `""` 表示字段不存在 | 字段仍作为键出现。用 `removeBodyFields`。 |
 | 错误体 `{ "error": "..." }` 直接当 body | object body 会浅合并，泄露继承的用户字段。用 `removeBodyFields` 删掉继承字段，或让 base body 不是 object。 |
 | 期望数组 / 嵌套 object body 按元素合并 | object body 只浅合并一层；数组 / 标量 body 整体替换。要让数组变空就在该规则里重写整个数组。 |
-| 某条规则没 `status` 且 `baseRule` 也没 `status` | `loadRules()` 抛 `status is required`。共享就放 `baseRule.status`，否则每条规则都写 `status`。 |
+| 某条规则没 `status` 且 `baseRule` 也没 `status` | normalizer 抛错；`loadRules()` warn 后跳过文件，sources 模式直接失败。共享就放 `baseRule.status`，否则每条规则都写 `status`。 |
 | `mock-index` 的 `files` 写绝对路径或漏 `api/` 前缀 | 加载不到。用 `api/<file>.json` 相对路径，且与磁盘文件名一致。 |
 | 文件放在 `.fliwright/mocks/` 根目录而非 `api/` 下 | 自动扫描只看 `api/*.json`。放进 `api/`。 |
 | 新增端点文件后忘了更新 `mock-index.json` | 文件不会被加载。新增后追加进 `files`。 |

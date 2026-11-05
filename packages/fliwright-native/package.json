@@ -1,0 +1,51 @@
+{
+  "name": "@fliwright/native",
+  "version": "0.1.0",
+  "description": "Native UI and device test adapters for Flutter automation without Appium.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0x01lab/fliwright.git",
+    "directory": "packages/fliwright-native"
+  },
+  "bugs": {
+    "url": "https://github.com/0x01lab/fliwright/issues"
+  },
+  "homepage": "https://github.com/0x01lab/fliwright#readme",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "runners",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fliwright/core": "workspace:*",
+    "@fliwright/devices": "workspace:*",
+    "saxes": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^5.5.0",
+    "vitest": "5.0.5"
+  }
+}

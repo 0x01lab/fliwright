@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "replace-with-stable-id",
+  "revision": 1,
+  "kind": "task",
+  "title": "Short task or reusable path name",
+  "aliases": [],
+  "scope": {
+    "appId": "unknown",
+    "platform": "unknown",
+    "locale": "unknown"
+  },
+  "preconditions": [],
+  "pages": [],
+  "steps": [],
+  "goal": {
+    "description": "",
+    "evidence": []
+  },
+  "lifecycle": "candidate",
+  "verification": {
+    "level": "unverified",
+    "assessedBy": "agent",
+    "checkedOn": "YYYY-MM-DD"
+  },
+  "evidence": [],
+  "pitfalls": [],
+  "updatedOn": "YYYY-MM-DD"
+}

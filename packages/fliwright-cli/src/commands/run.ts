@@ -10,6 +10,10 @@ import {
   recoverRunProgress,
   restoreRunAttempts,
   mergeFliwrightConfig,
+  writeFliwrightConfigSnapshot,
+  MANAGED_APP_CONTROL_ENV,
+  readManagedAppControl,
+  readFliwrightEnvironment,
 } from '@fliwright/core';
 import type { EvidenceStatus, RunError, RunManifest, RunStatus, RunSessionResult, RecoveredRunProgress, ResolvedFliwrightConfig } from '@fliwright/core';
 import type { ScenarioExecutionMode, TestScenario } from '@fliwright/core';
@@ -17,7 +21,10 @@ import { resolveVmUrl } from '../vm-discovery.js';
 import { resolveProjectConfig } from '../config.js';
 import { artifactReferences } from '../ArtifactReferences.js';
 import { formatPretty, formatJson, formatJunit, type CliFailureEntry, type CliRunResult } from '../reporter.js';
+import { releaseMetadataSchema, type ReleaseMetadata } from '../ReleaseReview.js';
+import { captureDeviceMetadata } from '../DeviceMetadata.js';
 import { spawn } from 'node:child_process';
+import { DeviceLeaseManager, NATIVE_DEVICE_LEASE_ENV, type DeviceLeaseDelegation } from '@fliwright/native';
 import { tmpdir } from 'node:os';
 import { createJiti } from 'jiti';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -25,6 +32,10 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 
 export interface RunOptions {
+  /** Selected device for a managed launch; used to record a device snapshot. */
+  deviceId?: string;
+  /** Explicit tested-build metadata; never inferred from the current checkout. */
+  release?: ReleaseMetadata;
   testPattern?: string;
   caseSelection?: import('../catalog.js').CatalogSelection;
   testName?: string;
@@ -35,7 +46,8 @@ export interface RunOptions {
   recordingMode?: 'standard' | 'full' | 'off';
   output?: string;
   junitOutput?: string;
-  scenario?: string;
+  /** Null explicitly disables the configured default scenario for a direct run. */
+  scenario?: string | null;
   /** Set by the CLI only when it owns a managed app launch. */
   scenarioMode?: ScenarioExecutionMode;
   cwd?: string;
@@ -44,6 +56,10 @@ export interface RunOptions {
   signal?: AbortSignal;
   /** Inherit only when an external supervisor owns and terminates the whole process group. */
   processGroup?: 'isolated' | 'inherit';
+  /** Opaque ownership grant from the supervisor; never serialized into project settings or reports. */
+  nativeDelegation?: DeviceLeaseDelegation;
+  /** Private supervisor channel; passed only to the test subprocess environment. */
+  managedAppControl?: import('@fliwright/core').ManagedAppControl;
   /** Strict unchanged-candidate verification: assertions must not heal targets. */
   recordingReplay?: boolean;
 }
@@ -74,10 +90,12 @@ export class RunFinalizationError extends Error {
 }
 
 export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promise<CliRunResult> {
+  const release = options.release ? releaseMetadataSchema.parse(options.release) : undefined;
   const cwd = resolveFliwrightProjectRoot(options.cwd);
   const config = await resolveProjectConfig(cwd, {
-    ...(options.recordingMode ? { recording: { mode: options.recordingMode } } : {}), runsRoot: options.runsRoot, defaultScenario: options.scenario, scenarioMode: options.scenarioMode,
+    ...(options.recordingMode ? { recording: { mode: options.recordingMode } } : {}), runsRoot: options.runsRoot, defaultScenario: options.scenario ?? undefined, scenarioMode: options.scenarioMode,
   });
+  if (options.scenario === null) delete config.defaultScenario;
   const shared = mergeFliwrightConfig({ project: config });
 
   const reporter = options.reporter ?? config.reporter;
@@ -87,15 +105,23 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
   const recordingMode = shared.recording.mode;
   const runId = createRunId();
 
+  // The retained owner supplies an endpoint only after each attempt's device
+  // preparation. Resolving a cached/bootstrap app here would launch too early.
+  const deferredEndpoint = shared.scenarioMode === 'managed-start' && shared.native?.enabled === true
+    && !!options.managedAppControl && !!options.nativeDelegation;
+  if (deferredEndpoint) {
+    readManagedAppControl({ [MANAGED_APP_CONTROL_ENV]: JSON.stringify(options.managedAppControl) });
+    DeviceLeaseManager.fromEnvironment({ [NATIVE_DEVICE_LEASE_ENV]: JSON.stringify(options.nativeDelegation) });
+  }
   const resolver = deps.resolveVmUrl ?? resolveVmUrl;
-  const vmUrl = await resolver({
+  const vmUrl = deferredEndpoint ? undefined : await resolver({
     cliFlag: options.vmUrl,
     configUrl: config.vmServiceUrl,
     cwd,
     verify: true,
   });
 
-  if (!vmUrl) {
+  if (!deferredEndpoint && !vmUrl) {
     throw new Error(
       'Could not find a running Flutter VM Service.\n\n' +
       '   Start your Flutter app first: flutter run\n' +
@@ -104,7 +130,8 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
     );
   }
 
-  deps.onVmResolved?.(vmUrl);
+  if (vmUrl) deps.onVmResolved?.(vmUrl);
+  const device = options.deviceId ? await captureDeviceMetadata(options.deviceId, options.signal) : undefined;
 
   const runsRoot = await ensureFliwrightRunsRoot({
     projectRoot: cwd,
@@ -117,7 +144,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
     testPattern,
     testName: options.testName,
     caseSelection: options.caseSelection,
-    vmUrl,
+    vmUrl: vmUrl ?? undefined,
     cwd,
     timeout,
     screenshot,
@@ -131,8 +158,11 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
     scenarioMode: shared.scenarioMode,
     sharedConfig: shared,
     processGroup: options.processGroup,
+    nativeDelegation: options.nativeDelegation,
+    managedAppControl: options.managedAppControl,
+    disableDefaultScenario: options.scenario === null,
   });
-  const withArtifacts = await finalizeRunArtifacts(vitestResult, {
+  const withArtifacts = await finalizeRunArtifacts({ ...vitestResult, ...(release ? { release } : {}), ...(device ? { device } : {}) }, {
     cwd,
     outputDir,
     reportPath,
@@ -157,13 +187,16 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
 }
 
 interface RunVitestOptions {
+  managedAppControl?: import('@fliwright/core').ManagedAppControl;
+  nativeDelegation?: DeviceLeaseDelegation;
+  disableDefaultScenario?: boolean;
   processGroup?: 'isolated' | 'inherit';
   recordingReplay?: boolean;
   sharedConfig?: ResolvedFliwrightConfig;
   testPattern: string,
   caseSelection?: import('../catalog.js').CatalogSelection;
   testName?: string;
-  vmUrl: string;
+  vmUrl?: string;
   cwd: string;
   timeout: number;
   screenshot: 'file' | 'base64' | 'off';
@@ -247,18 +280,28 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
     } finally { await context?.close(); }
   `;
   const args = ['--input-type=module', '--eval', bootstrap];
+  const environment = { ...process.env };
+  delete environment.FLIWRIGHT_CONFIG;
+  delete environment.FLIWRIGHT_SCENARIOS;
+  const sharedConfig = mergeFliwrightConfig({ projectRoot: options.cwd, project: options.sharedConfig ?? readFliwrightEnvironment(process.env),
+    explicit: { ...(options.scenarios ? { scenarios: options.scenarios } : {}),
+      ...(options.scenarioMode ? { scenarioMode: options.scenarioMode } : {}) } });
+  if (options.disableDefaultScenario) delete sharedConfig.defaultScenario;
 
   const { stdout, stderr, interrupted, exitCode, exitSignal } = await execNode(
     args,
     {
-      ...process.env,
+      ...environment,
+      [NATIVE_DEVICE_LEASE_ENV]: options.nativeDelegation ? JSON.stringify(options.nativeDelegation) : '',
+      [MANAGED_APP_CONTROL_ENV]: options.managedAppControl ? JSON.stringify(options.managedAppControl) : '',
       FLIWRIGHT_PROJECT_ROOT: options.cwd,
-      ...(options.sharedConfig ? { FLIWRIGHT_CONFIG: JSON.stringify(options.sharedConfig) } : {}),
-      FLIWRIGHT_VM_URL: options.vmUrl,
+      FLIWRIGHT_CONFIG_PATH: writeFliwrightConfigSnapshot(sharedConfig, { projectRoot: options.cwd, cacheRoot: sharedConfig.cacheRoot }),
+      FLIWRIGHT_VM_URL: options.vmUrl ?? '',
+      FLIWRIGHT_VM_SERVICE_URL: options.vmUrl ?? '',
       FLIWRIGHT_SCREENSHOT_MODE: options.screenshot,
       FLIWRIGHT_RECORDING_MODE: options.recordingMode ?? 'standard',
       FLIWRIGHT_FAILURE_TIMEOUT_MS: String(options.timeout),
-      FLIWRIGHT_SCENARIOS: JSON.stringify(options.scenarios ?? {}),
+      ...(options.disableDefaultScenario ? { FLIWRIGHT_DEFAULT_SCENARIO: '' } : {}),
       FLIWRIGHT_SCENARIO_MODE: options.scenarioMode ?? 'attach',
       FLIWRIGHT_RECORDING_REPLAY: options.recordingReplay ? '1' : '',
       ...(options.runId ? { FLIWRIGHT_RUN_ID: options.runId } : {}),
@@ -366,6 +409,7 @@ interface VitestJsonReport {
   startTime?: number;
   runnerErrors?: CliRunResult['runnerErrors'];
   testResults?: Array<{
+    name?: string;
     assertionResults?: Array<{
       fullName?: string;
       title?: string;
@@ -400,6 +444,10 @@ export function parseVitestOutput(raw: string): CliRunResult {
       const passed = assertion.status === 'passed';
       return {
         name: assertion.fullName ?? assertion.title ?? '<unknown>',
+        status: assertion.status === 'passed' ? 'passed' as const
+          : assertion.status === 'pending' || assertion.status === 'todo' || assertion.status === 'skipped' ? 'skipped' as const
+          : 'failed' as const,
+        ...(fileResult.name ? { file: fileResult.name } : {}),
         passed,
         duration: assertion.duration ?? 0,
         ...(passed ? {} : { error: (assertion.failureMessages ?? []).join('\n') }),

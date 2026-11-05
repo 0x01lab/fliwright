@@ -7,6 +7,7 @@ import { createWorker } from './worker.js';
 import { reportWorkerDevices } from './device-reporting.js';
 import { runCatalogScanner } from './catalog-scanner.js';
 import { runCommandProcess } from './processes.js';
+import type { WorkerDiagnostics } from './diagnostics.js';
 
 type HostConfig = z.infer<typeof hostConfigSchema>;
 
@@ -24,10 +25,10 @@ export function executorSettings(config: HostConfig, device: ManagedDevice, root
     root: join(root, 'slots', slotId), resetCommands });
 }
 
-async function runExecutor(config: z.infer<typeof workerConfigSchema>, device: ManagedDevice, signal: AbortSignal) {
+async function runExecutor(config: z.infer<typeof workerConfigSchema>, device: ManagedDevice, signal: AbortSignal, diagnostics?: WorkerDiagnostics) {
   const control = new WorkerControlClient(config.serverUrl, credential(config));
   try {
-    const worker = createWorker(config, control);
+    const worker = createWorker(config, control, diagnostics);
     await control.ready(signal);
     // Enrollment may target a stopped simulator. Boot it without erasing user data.
     if (device.observation.platform === 'ios' && device.observation.kind === 'simulator' && device.observation.state === 'shutdown') {
@@ -50,7 +51,7 @@ async function runExecutor(config: z.infer<typeof workerConfigSchema>, device: M
 }
 
 /** One paired host follows device policy changes and owns isolated per-slot executors. */
-export async function runHostWorker(config: HostConfig, configPath: string, signal: AbortSignal) {
+export async function runHostWorker(config: HostConfig, configPath: string, signal: AbortSignal, diagnostics?: WorkerDiagnostics) {
   const root = resolve(config.root ?? join(dirname(configPath), 'runtime'));
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const stop = new AbortController();
@@ -59,16 +60,34 @@ export async function runHostWorker(config: HostConfig, configPath: string, sign
   const executors = new Map<string, { signature: string; stop: AbortController; done: Promise<void> }>();
   const blocked = new Set<string>();
   let inventory: Promise<void> | undefined, scans: Promise<void> | undefined;
+  let backgroundError: unknown;
+  const supervise = (name: string, task: Promise<void>) => {
+    diagnostics?.component(name, 'running');
+    return task.then(() => {
+      if (!runningSignal.aborted) throw new Error(`Worker background component ${name} exited unexpectedly`);
+      diagnostics?.component(name, 'stopped');
+    }).catch(error => {
+      if (runningSignal.aborted) return;
+      backgroundError = error;
+      diagnostics?.component(name, 'failed');
+      diagnostics?.record('error', 'component.failed', error);
+      stop.abort();
+    });
+  };
+  const connected = control.onConnected(() => diagnostics?.record('info', 'control.connected', 'Host control connection established'));
   try {
     await control.ready(runningSignal);
-    inventory = reportWorkerDevices(control, { signal: runningSignal, tools: config.deviceTools });
-    scans = runCatalogScanner(control, { root: join(root, 'catalogs'), signal: runningSignal, credentialHomes: config.repositoryCredentialHomes });
+    inventory = supervise('inventory', reportWorkerDevices(control, { signal: runningSignal, tools: config.deviceTools,
+      onError: error => { diagnostics?.component('inventory', 'failed'); diagnostics?.record('warn', 'inventory.report_failed', error); },
+      onHealthy: () => diagnostics?.component('inventory', 'running') }));
+    scans = supervise('catalog', runCatalogScanner(control, { root: join(root, 'catalogs'), signal: runningSignal, credentialHomes: config.repositoryCredentialHomes }));
     while (!runningSignal.aborted) {
       const revision = control.revision;
       let assignments: { workerId: string; devices: ManagedDevice[] };
       try { assignments = await control.request('/api/worker/assignments', { signal: runningSignal }); }
       catch (error) {
         if (runningSignal.aborted || control.connected) throw error;
+        diagnostics?.record('warn', 'control.disconnected', error);
         await control.ready(runningSignal);
         continue;
       }
@@ -89,12 +108,22 @@ export async function runHostWorker(config: HostConfig, configPath: string, sign
           writeFileSync(join(settings.root, 'worker.json'), JSON.stringify(settings, null, 2) + '\n', { mode: 0o600 });
           const executorStop = new AbortController();
           const executorSignal = AbortSignal.any([runningSignal, executorStop.signal]);
-          const done = runExecutor(settings, device, executorSignal).catch(() => {
-            if (!executorSignal.aborted) console.warn(`Executor ${slot} stopped; check its local logs and recover quarantined slots explicitly.`);
+          diagnostics?.component(`executor.${slot}`, 'running');
+          const done = runExecutor(settings, device, executorSignal, diagnostics).then(() => {
+            if (!executorSignal.aborted) throw new Error('Executor exited unexpectedly');
+            diagnostics?.component(`executor.${slot}`, 'stopped');
+          }).catch(error => {
+            if (!executorSignal.aborted) {
+              diagnostics?.component(`executor.${slot}`, 'failed');
+              diagnostics?.record('error', 'executor.failed', error, { slotId: slot });
+              console.warn(`Executor ${slot} stopped; check its local logs and recover quarantined slots explicitly.`);
+            }
           });
           executors.set(slot, { signature: device.nativeId, stop: executorStop, done });
           console.log(`Device ${device.observation.name} bound to slot ${slot}.`);
-        } catch {
+          diagnostics?.record('info', 'executor.started', 'Device executor started', { slotId: slot });
+        } catch (error) {
+          if (!blocked.has(slot)) diagnostics?.record('error', 'executor.configuration_failed', error, { slotId: slot });
           if (!blocked.has(slot)) console.warn(`Device ${device.observation.name}: configure local resetCommands for this platform before execution.`);
           blocked.add(slot);
         }
@@ -107,5 +136,7 @@ export async function runHostWorker(config: HostConfig, configPath: string, sign
     stop.abort();
     await Promise.allSettled([inventory, scans, ...[...executors.values()].map(executor => executor.done)]);
     control.close();
+    connected();
   }
+  if (backgroundError) throw backgroundError;
 }

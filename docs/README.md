@@ -7,8 +7,11 @@ active question; this directory is not intended as a reading list.
 | --- | --- |
 | Repository operating rules, memory, boundaries, or delivery process | [../harness/README.md](../harness/README.md) |
 | Product scope | [PRD.md](./PRD.md) |
+| Integrate Fliwright with Codex or an AI coding agent | [Codex integration guide](./codex-integration.md) (中文；开发者接入与 Agent 执行约定) |
 | CLI command usage, examples and Skill workflows | [CLI task and command index](../.agents/skills/fliwright-cli-workflows/references/commands/index.md) (tracked and bundled with the Skill) |
 | Current implemented API or behavior | A known page in [`features/`](./features/), or [`features/index.md`](./features/index.md) only to find an unknown owner |
+| Reuse shared Mock responses with GitLab Item-specific test data | [Shared and Item mock rule sets](./mock-rule-sets.md) |
+| Automate native UI, system permission prompts and mixed Flutter/native tests | [Native testing guide](./native-testing.md) (中文；配置、定位、场景、执行与故障排查) |
 | Design rationale or historical plan | [../harness/specs/README.md](../harness/specs/README.md) |
 | Publishing a release | [release/publishing.md](./release/publishing.md) |
 | Compatibility and supported platforms | [release/compatibility.md](./release/compatibility.md) |

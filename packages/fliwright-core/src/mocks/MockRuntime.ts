@@ -5,6 +5,7 @@ import { TimelineRecorder } from '../timeline/TimelineRecorder.js';
 import type { AgentVisibleFailure } from '../timeline/types.js';
 import type { ActivateMockRulesOptions, MockTimelineMetadata, NormalizedRequestMatcher, WaitForMockCallOptions } from './types.js';
 import { mockRuleRouteId } from './MockRuleController.js';
+import type { MockRuleSet, MockRuleSetReport } from './MockRuleSet.js';
 
 export class MockRuntime {
   constructor(
@@ -18,6 +19,16 @@ export class MockRuntime {
 
   async loadRules(mockDir?: string): Promise<void> {
     return this.record('loadRules', { mockDir }, () => this.manager.loadRules(mockDir));
+  }
+
+  /** Apply one isolated, explicitly selected shared/Item rule set and record its provenance. */
+  async applyRuleSet(config: MockRuleSet): Promise<MockRuleSetReport> {
+    const metadata: MockTimelineMetadata & Record<string, unknown> = { operation: 'applyRuleSet' };
+    return this.run('mock', 'Mock apply rule set', metadata, async () => {
+      const report = await this.manager.applyRuleSet(config);
+      Object.assign(metadata, { ruleSet: report });
+      return report;
+    });
   }
 
   async activateRules(options: ActivateMockRulesOptions): Promise<void> {
@@ -172,7 +183,7 @@ export class MockRuntime {
     await this.recorder?.flushProgress();
     try {
       const value = await body();
-      if (node) this.recorder?.passNode(node.id);
+      if (node) this.recorder?.passNode(node.id, metadata);
       return value;
     } catch (error) {
       const failure = createMockFailure(error, title, node?.id);

@@ -8,12 +8,15 @@ import {
   fstatSync,
   readSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve as resolvePath } from 'node:path';
+import type { ManagedNativeGrant } from '@fliwright/cli/run';
 import { setTimeout as delay } from 'node:timers/promises';
 import { writeJournal } from './WorkerAgent.js';
 import type { ExecutionLease } from '@fliwright/cloud-protocol';
 import type { WorkerTimelineRecorder } from './WorkerTimelineRecorder.js';
 import { recordWorkerTimelineMessage } from './worker-timeline-ipc.js';
+import { NativePreparationIpc } from './NativePreparationIpc.js';
+import type { ManagedAppAttemptRequest } from '@fliwright/core';
 
 /** Bounded, incremental diagnostics; never read an entire build log into memory. */
 export function createLogTail(directory: string, secrets: string[] = []) {
@@ -196,6 +199,8 @@ export async function spawnExecution(
     }>;
     allowedEnv?: string[];
     timeline?: WorkerTimelineRecorder;
+    prepareNative?: (project: string) => Promise<ManagedNativeGrant | undefined>;
+    prepareNativeAttempt?: (project: string, request: ManagedAppAttemptRequest, signal: AbortSignal) => Promise<void>;
   },
 ) {
   signal.throwIfAborted();
@@ -206,9 +211,11 @@ export async function spawnExecution(
     directory,
     flutterBin: options.flutterBin,
     resetCommands: options.resetCommands,
+    nativeSupervisor: true,
   });
   let child: ChildProcess | undefined;
   let ready = false;
+  let nativeRequested = false;
   return new Promise<import('./WorkerAgent.js').ExecutionResult>(
     (resolve, reject) => {
       child = spawn(process.execPath, [options.mainFile, 'execute', jobPath], {
@@ -216,6 +223,11 @@ export async function spawnExecution(
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
         env: sanitizedEnvironment(options.allowedEnv),
       });
+      const nativePreparation = new NativePreparationIpc({ project: resolvePath(directory, 'checkout', lease.request.target.projectPath),
+        signal, prepare: options.prepareNativeAttempt,
+        send: message => { if (child?.connected) child.send(message, () => {}); },
+      });
+      child.once('disconnect', () => nativePreparation.dispose());
       const abort = () => {
         void stopOwnedProcesses(directory).catch(() => {});
       };
@@ -227,8 +239,26 @@ export async function spawnExecution(
         appendFileSync(join(directory, 'executor.log'), chunk, { mode: 0o600 }),
       );
       child.on('message', (message) => {
+        if (nativePreparation.handle(message)) return;
         recordWorkerTimelineMessage(child!, message, options.timeline);
         if (message && typeof message === 'object') {
+          if ('nativeOwnership' in message) {
+            const request = message.nativeOwnership as { id?: unknown; project?: unknown };
+            if (request && typeof request.id === 'string' && request.id.length <= 100) {
+              const valid = !nativeRequested && typeof request.project === 'string'
+                && resolvePath(request.project) === resolvePath(directory, 'checkout', lease.request.target.projectPath);
+              nativeRequested = true;
+              void (async () => {
+                try {
+                  if (!valid || !options.prepareNative) throw new Error('Invalid native ownership request.');
+                  const grant = await options.prepareNative(request.project as string);
+                  if (child?.connected) child.send({ nativeOwnershipReply: { id: request.id, ok: true, grant } }, () => {});
+                } catch {
+                  if (child?.connected) child.send({ nativeOwnershipReply: { id: request.id, ok: false } }, () => {});
+                }
+              })();
+            }
+          }
           if ('ready' in message && message.ready === true && !ready) { ready = true; void options.timeline?.channel.finishSpan(prepareSpan, 'succeeded'); }
           if ('stage' in message && typeof message.stage === 'string')
             onStage(message.stage);
@@ -245,11 +275,13 @@ export async function spawnExecution(
         }
       });
       child.on('error', (e) => {
+        nativePreparation.dispose();
         void options.timeline?.channel.finishSpan(prepareSpan, 'failed', { error: { code: 'preparation_failed', message: 'Execution preparation failed' } });
         signal.removeEventListener('abort', abort);
         reject(e);
       });
       child.on('close', () => {
+        nativePreparation.dispose();
         if (!ready) void options.timeline?.channel.finishSpan(prepareSpan, signal.aborted ? 'interrupted' : 'failed', {
           reason: signal.aborted ? 'shutdown' : 'process_exit', error: { code: 'preparation_failed', message: 'Execution preparation failed' },
         });

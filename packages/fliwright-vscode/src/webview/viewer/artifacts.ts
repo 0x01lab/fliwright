@@ -23,6 +23,7 @@ export function screenshotOfStep(screenshotFile: string | undefined, base: strin
 export interface Selection {
   key: string;
   mode: ListMode;
+  surface?: 'flutter' | 'native';
   node?: TimelineNode;
   step?: TraceStep;
   stepIndex?: number;
@@ -71,6 +72,7 @@ export function deriveSelection(
   return {
     key,
     mode,
+    surface: node.metadata?.surface === 'native' || node.artifacts?.some(artifact => artifact.metadata?.surface === 'native') ? 'native' : 'flutter',
     node,
     failure,
     logs,

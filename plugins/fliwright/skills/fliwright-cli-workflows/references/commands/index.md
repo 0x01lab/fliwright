@@ -4,7 +4,7 @@ purpose: Progressive CLI command routing for Skills
 
 # Fliwright CLI command index
 
-66 commands, one page per leaf command. Read [common conventions](./common.md) once, then open only the relevant command pages. Parameters and schemas are generated from the command registry; semantic guidance is maintained with the CLI package.
+73 commands, one page per leaf command. Read [common conventions](./common.md) once, then open only the relevant command pages. Parameters and schemas are generated from the command registry; semantic guidance is maintained with the CLI package.
 
 ## Choose a workflow
 
@@ -27,7 +27,7 @@ purpose: Progressive CLI command routing for Skills
 | Command | Purpose |
 | --- | --- |
 | [schema](./command-schema.md) | Discover available commands or inspect one command’s machine contract. |
-| [init](./command-init.md) | Create project configuration, example tests/scripts and optional Flutter bridge setup. |
+| [init](./command-init.md) | Initialize project dependencies, Flutter bridge scaffolding and optional project-local Codex Skills. |
 | [doctor](./command-doctor.md) | Check local tooling, configuration and the Flutter automation connection. |
 | [devices list](./command-devices.list.md) | Discover local iOS and Android physical devices and simulators without a running app. |
 
@@ -60,6 +60,19 @@ purpose: Progressive CLI command routing for Skills
 | [app debug-snapshot](./command-app.debug-snapshot.md) | Collect a structural snapshot plus independent debug evidence channels. |
 | [app interact](./command-app.interact.md) | Perform one tap, text entry, navigation, wait, drag or extended action. |
 
+## Inspect native UI and prepare the XCTest Runner
+
+Start with [native workflows](../native.md) for platform configuration, managed/attach runs, capability limits and recovery. Individual command schemas follow below.
+
+| Command | Purpose |
+| --- | --- |
+| [native recovery inspect](./command-native.recovery.inspect.md) | Read the selected device’s local lease, quarantine and recovery evidence without modifying it. |
+| [native recovery verify](./command-native.recovery.verify.md) | Compare an abandoned XCTest Runner journal with the selected iOS Simulator boot generation and launchd identity. |
+| [native recovery restore](./command-native.recovery.restore.md) | Restore the exact isolated resource recorded for an abandoned iOS Simulator or Android Emulator lease. |
+| [native doctor](./command-native.doctor.md) | Inspect the explicitly selected native device, installed target and platform prerequisites without starting a Runner. |
+| [native snapshot](./command-native.snapshot.md) | Capture an explicitly selected device’s native UI hierarchy using ADB or the owned XCTest Runner. |
+| [native prepare](./command-native.prepare.md) | Explicitly build or reuse the unsigned iOS Simulator XCTest Runner in the local build cache. |
+
 ## Prepare a named app baseline
 
 | Command | Purpose |
@@ -87,6 +100,7 @@ purpose: Progressive CLI command routing for Skills
 | --- | --- |
 | [artifacts show](./command-artifacts.show.md) | Read a saved run report, manifest and the available run list. |
 | [artifacts export](./command-artifacts.export.md) | Export a saved run and its referenced evidence to a directory. |
+| [artifacts report](./command-artifacts.report.md) | Generate an offline App release test review report grouped by GitLab Item. |
 | [artifacts failures](./command-artifacts.failures.md) | Extract saved assertion failures and runner errors from a run. |
 | [artifacts timeline](./command-artifacts.timeline.md) | Read a saved attempt timeline or inspect one node and its neighbors. |
 | [artifacts diagnose](./command-artifacts.diagnose.md) | Request optional AI diagnosis of a saved or explicitly supplied agent-visible failure. |

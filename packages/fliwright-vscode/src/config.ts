@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { resolveProjectConfig } from '@fliwright/cli';
-import { mergeFliwrightConfig, type ResolvedFliwrightConfig } from '@fliwright/core';
+import { mergeFliwrightConfig, resolveFliwrightPath, resolveFliwrightRuntimeRoot, type ResolvedFliwrightConfig } from '@fliwright/core';
 import type { ExtensionConfig } from './types.js';
 
 export function getWorkspaceRoot(): vscode.Uri | undefined {
@@ -19,7 +19,7 @@ export function loadConfig(): ExtensionConfig {
     testGlob: config.get<string>('testGlob', '.fliwright/tests/**/*.test.ts'),
     runner: config.get<'vitest' | 'cli'>('runner', 'vitest'),
     screenshotMode: config.get<'file' | 'base64' | 'off'>('screenshotMode', 'file'),
-    failureContextDir: config.get<string>('failureContextDir', '.fliwright/failures'),
+    failureContextDir: config.get<string | null>('failureContextDir', null) ?? path.join(resolveFliwrightRuntimeRoot({ projectRoot: getWorkspaceRoot()?.fsPath }), 'failures'),
     formRulesDir: config.get<string>('formRulesDir', '.fliwright/forms'),
     formRulesFile: config.get<string | null>('formRulesFile', null),
     formLocale: config.get<string>('formLocale', 'zh_CN'),
@@ -50,8 +50,5 @@ export async function loadWorkspaceConfig(root: vscode.Uri): Promise<ExtensionCo
 }
 
 export function resolveWorkspacePath(root: vscode.Uri, value: string): vscode.Uri {
-  if (path.isAbsolute(value)) {
-    return vscode.Uri.file(value);
-  }
-  return vscode.Uri.joinPath(root, ...value.split(/[\\/]+/).filter(Boolean));
+  return vscode.Uri.file(resolveFliwrightPath(value, root.fsPath));
 }

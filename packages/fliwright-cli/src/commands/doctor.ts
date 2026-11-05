@@ -117,8 +117,8 @@ async function checkRecordingConfiguration(projectDir: string): Promise<CheckRes
   try {
     const config = await resolveProjectConfig(projectDir);
     const names = Object.keys(config.scenarios ?? {});
-    const environment = ['FLIWRIGHT_CONFIG', 'FLIWRIGHT_RECORDING_MODE', 'FLIWRIGHT_RUNS_ROOT',
-      'FLIWRIGHT_SCENARIOS', 'FLIWRIGHT_SCENARIO_MODE'].filter((key) => process.env[key]);
+    const environment = ['FLIWRIGHT_CONFIG_PATH', 'FLIWRIGHT_RECORDING_MODE', 'FLIWRIGHT_RUNS_ROOT',
+      'FLIWRIGHT_SCENARIO_MODE'].filter((key) => process.env[key]);
     return [{
       name: 'Recording configuration', passed: true,
       message: `mode=${config.recording.mode}, runsRoot=${config.runsRoot}, cacheRoot=${config.cacheRoot}, scenarios=${names.join(',') || '(none)'}, source=${environment.length ? `environment (${environment.join(',')}) > ` : ''}fliwright.config.ts/defaults`,
@@ -148,7 +148,7 @@ async function checkVitestPreset(projectDir: string, signal?: AbortSignal): Prom
       runner?: string; include: string[]; env?: Record<string, string>; configFile?: string;
     };
     const expectedRunner = fileURLToPath(import.meta.resolve('@fliwright/vitest/runner'));
-    const passed = config.runner === expectedRunner && Boolean(config.env?.FLIWRIGHT_CONFIG);
+    const passed = config.runner === expectedRunner && Boolean(config.env?.FLIWRIGHT_CONFIG_PATH);
     return {
       name: 'Vitest recording preset', passed,
       message: passed

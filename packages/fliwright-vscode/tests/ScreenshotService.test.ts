@@ -5,11 +5,11 @@ import { __webviewPanels } from 'vscode';
 import { ScreenshotPreviewPanel, ScreenshotService } from '../src/screenshot/ScreenshotService.js';
 
 describe('ScreenshotService', () => {
-  it('captures and previews a long PNG at readable width with vertical scrolling', async () => {
+  it('captures and previews a long PNG at 3x resolution with vertical scrolling', async () => {
     const screenshot = vi.fn(async () => Buffer.from('long-png'));
     const service = new ScreenshotService();
     const preview = await service.capture({ page: { screenshot } } as unknown as FliwrightDriver, { fullPage: true });
-    expect(screenshot).toHaveBeenCalledWith({ pixelRatio: 1, fullPage: true });
+    expect(screenshot).toHaveBeenCalledWith({ pixelRatio: 3, fullPage: true });
     expect(preview).toMatchObject({ fullPage: true, dataUri: `data:image/png;base64,${Buffer.from('long-png').toString('base64')}` });
     const panel = new ScreenshotPreviewPanel();
     panel.show(preview);
@@ -29,7 +29,7 @@ describe('ScreenshotService', () => {
     expect(screenshot).toHaveBeenCalledTimes(1);
   });
 
-  it('captures the connected app as an in-memory png preview', async () => {
+  it('captures the connected app at 3x resolution as a lossless in-memory png preview', async () => {
     const bytes = Buffer.from('png-bytes');
     const driver = {
       page: {
@@ -42,7 +42,7 @@ describe('ScreenshotService', () => {
 
     const preview = await service.capture(driver);
 
-    expect(driver.page.screenshot).toHaveBeenCalledWith({ pixelRatio: 1 });
+    expect(driver.page.screenshot).toHaveBeenCalledWith({ pixelRatio: 3 });
     expect(preview).toEqual({
       dataUri: 'data:image/png;base64,cG5nLWJ5dGVz',
       mimeType: 'image/png',

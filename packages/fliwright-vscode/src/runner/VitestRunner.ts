@@ -3,7 +3,7 @@ import { createRequire as createNodeRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { readFile, rm } from 'node:fs/promises';
 import * as path from 'node:path';
-import { FLIWRIGHT_RUNS_ROOT_ENV, ensureFliwrightRunsRoot, mergeFliwrightConfig } from '@fliwright/core';
+import { FLIWRIGHT_RUNS_ROOT_ENV, ensureFliwrightRunsRoot, mergeFliwrightConfig, writeFliwrightConfigSnapshot } from '@fliwright/core';
 import { resolveProjectConfig } from '@fliwright/cli';
 import { finalizeRunArtifacts } from '@fliwright/cli/run';
 import type { RunResult, TestCaseResult } from '../types.js';
@@ -23,7 +23,11 @@ export class VitestRunner implements TestRunner {
     // recovery hook. Keep it alongside JSON output for bounded worker writes.
     const workspaceRequire = createNodeRequire(path.join(params.workspaceRoot.fsPath, 'package.json'));
     args.push('--reporter', workspaceRequire.resolve('@fliwright/vitest/reporter'));
-    const env = { ...buildRunEnv(params), FLIWRIGHT_PROJECT_ROOT: params.workspaceRoot.fsPath, FLIWRIGHT_CONFIG: JSON.stringify(mergeFliwrightConfig({ project: config })) };
+    const env: NodeJS.ProcessEnv = { ...buildRunEnv(params), FLIWRIGHT_PROJECT_ROOT: params.workspaceRoot.fsPath,
+      FLIWRIGHT_CONFIG_PATH: writeFliwrightConfigSnapshot(mergeFliwrightConfig({ project: config }),
+        { projectRoot: params.workspaceRoot.fsPath, cacheRoot: config.cacheRoot }) };
+    delete env.FLIWRIGHT_CONFIG;
+    delete env.FLIWRIGHT_SCENARIOS;
 
     await rm(vitestReportPath, { force: true });
     const execution = await runCommand(process.execPath, args, params.workspaceRoot.fsPath, env, params.signal, params.onOutput);

@@ -71,7 +71,7 @@ export function Icon({
   const Component = icons[name] ?? FileText;
   return (
     <Component
-      className={cn('ico size-4 shrink-0', className)}
+      className={cn("size-4 shrink-0", className)}
       aria-hidden="true"
     />
   );
@@ -86,9 +86,9 @@ export function ResultIcon({
 }) {
   return (
     <span
-      className={cn('result-icon', `result-icon-${status}`, className)}
+      className={cn("inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-pass text-white [&_svg]:size-3 [&_svg]:stroke-[2.5]", status === 'failed' && 'bg-destructive', className)}
       role="img"
-      aria-label={status === 'passed' ? '成功' : '失败'}
+      aria-label={status === 'passed' ? '成功' : '失败'} data-ui={`result-icon result-icon-${status}`}
     >
       <Icon name={status === 'passed' ? 'check' : 'x'} />
     </span>

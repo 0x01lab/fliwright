@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "b59e0becfc5164be025417a6038a9c56c02d0299296077a33e1c28f261b4d44d"
+source_fingerprint: "95e0a78b699c33af3c82c82f34aa61945d359406095639cedba21ffa59d5da23"
 generated: true
 ---
 
@@ -101,6 +101,12 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `AuthCapability`
 - `AuthStatus`
 - `AutomationKind`
+- `BiometricChallengeResult`
+- `BiometricTestApp`
+- `BiometricTestController`
+- `BiometricTestOptions`
+- `BiometricTestStatus`
+- `BiometricWaitOptions`
 - `BridgeContext`
 - `BridgeQuery`
 - `BridgeQueryMatch`
@@ -117,6 +123,11 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `buildFlowVisualComparisons`
 - `builtInFormActionScripts`
 - `builtInSelectRecipes`
+- `CameraTestApp`
+- `CameraTestController`
+- `CameraTestControllerOptions`
+- `CameraTestResult`
+- `CameraTestStatus`
 - `captureFigmaReviewScreenshots`
 - `captureRecording`
 - `ChangeSetFile`
@@ -201,6 +212,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `fingerprintScenario`
 - `FLIWRIGHT_FLOWS_DIR`
 - `FLIWRIGHT_RUNS_ROOT_ENV`
+- `FLIWRIGHT_RUNTIME_ROOT_ENV`
 - `FLIWRIGHT_WORKSPACE_CONFIG_PATH`
 - `FliwrightAgentError`
 - `fliwrightConfigSchema`
@@ -307,6 +319,15 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `Locator`
 - `LogFormatter`
 - `LogSink`
+- `MANAGED_APP_CONTROL_ENV`
+- `ManagedAppAttemptEndpoint`
+- `ManagedAppAttemptRequest`
+- `ManagedAppControl`
+- `ManagedAppLaunchEndpoint`
+- `ManagedAppLifecycle`
+- `ManagedAppLifecycleOptions`
+- `ManagedAppPhaseReporter`
+- `ManagedAppPreparationPhase`
 - `MatchCriteria`
 - `matchCriteriaSchema`
 - `matchesCall`
@@ -331,8 +352,13 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `MockRuleController`
 - `MockRuleEntry`
 - `MockRuleOverride`
+- `MockRuleProvenance`
 - `mockRuleRouteId`
 - `MockRuleRouteResponse`
+- `MockRuleSelection`
+- `MockRuleSet`
+- `MockRuleSetReport`
+- `MockRuleSource`
 - `MockRuleStore`
 - `MockRuntime`
 - `MockTimelineMetadata`
@@ -369,7 +395,9 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `PositionFilter`
 - `positionFilterSchema`
 - `PreparedRecordingCheckpoints`
+- `prepareManagedAppAttempt`
 - `prepareRecordingCheckpoints`
+- `prepareScenarioDevice`
 - `PrettyLogFormatter`
 - `PrettyLogFormatterOptions`
 - `projectRunsRoot`
@@ -385,6 +413,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `RawInputEvent`
 - `ReadEventsResult`
 - `readFliwrightEnvironment`
+- `readManagedAppControl`
 - `readWorkspaceConfig`
 - `readWorkspaceConfigSync`
 - `RecordedOperation`
@@ -435,12 +464,16 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ResetToHomeOptions`
 - `resolveAiConfig`
 - `ResolvedFliwrightConfig`
+- `ResolvedMockRuleSet`
 - `ResolvedScenario`
 - `ResolvedSelector`
 - `resolveFliwrightCacheRoot`
+- `resolveFliwrightPath`
 - `resolveFliwrightProjectRoot`
 - `resolveFliwrightRunsRoot`
 - `ResolveFliwrightRunsRootOptions`
+- `resolveFliwrightRuntimeRoot`
+- `resolveMockRuleSet`
 - `resolveRecordingArtifact`
 - `restoreRunAttempts`
 - `RunArtifactStore`
@@ -464,7 +497,12 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ScenarioAppLayer`
 - `ScenarioApplicationReport`
 - `ScenarioAuthLayer`
+- `ScenarioCameraSource`
 - `ScenarioCoordinator`
+- `ScenarioDeviceCapabilityError`
+- `ScenarioDeviceLayer`
+- `ScenarioDevicePreparation`
+- `ScenarioDeviceReport`
 - `ScenarioDriver`
 - `ScenarioExecutionMode`
 - `ScenarioLayer`
@@ -541,6 +579,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ToolMockResult`
 - `ToolMockServer`
 - `ToolMockServerOptions`
+- `toProjectFlowDocument`
 - `TraceCollector`
 - `TraceData`
 - `TraceMeta`
@@ -550,6 +589,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `unregisterRunSession`
 - `validateFlow`
 - `validateJsonSchema`
+- `validateScenarioDevicePreparation`
 - `validateSelectorQuery`
 - `verifyVmServiceEndpoint`
 - `VmServiceAcquisitionRequest`
@@ -582,6 +622,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `WorkspaceEndpointOwnerOptions`
 - `workspaceEndpointSource`
 - `wrapAgentError`
+- `writeFliwrightConfigSnapshot`
 - `writeWorkspaceConfig`
 - `writeWorkspaceVmServiceUrl`
 
@@ -590,6 +631,8 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/AppInstance.ts`
 - `packages/fliwright-core/src/Assertion.ts`
 - `packages/fliwright-core/src/AssertionSuggester.ts`
+- `packages/fliwright-core/src/BiometricTestController.ts`
+- `packages/fliwright-core/src/CameraTestController.ts`
 - `packages/fliwright-core/src/CodeGenerator.ts`
 - `packages/fliwright-core/src/DartCodeGenerator.ts`
 - `packages/fliwright-core/src/DesignQaClient.ts`
@@ -604,6 +647,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/FormHelper.ts`
 - `packages/fliwright-core/src/JsonRuleLoader.ts`
 - `packages/fliwright-core/src/Locator.ts`
+- `packages/fliwright-core/src/ManagedAppLifecycle.ts`
 - `packages/fliwright-core/src/MockManager.ts`
 - `packages/fliwright-core/src/MockRuleStore.ts`
 - `packages/fliwright-core/src/Page.ts`
@@ -628,6 +672,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/RunSessionRegistry.ts`
 - `packages/fliwright-core/src/RunTraceProjection.ts`
 - `packages/fliwright-core/src/Scenario.ts`
+- `packages/fliwright-core/src/ScenarioDevicePreparation.ts`
 - `packages/fliwright-core/src/SelectRecipes.ts`
 - `packages/fliwright-core/src/Selector.ts`
 - `packages/fliwright-core/src/SelectorResolver.ts`
@@ -685,9 +730,21 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/interfaces/index.ts`
 - `packages/fliwright-core/src/logging.ts`
 - `packages/fliwright-core/src/mocks/MockRuleController.ts`
+- `packages/fliwright-core/src/mocks/MockRuleSet.ts`
 - `packages/fliwright-core/src/mocks/MockRuntime.ts`
 - `packages/fliwright-core/src/mocks/MockService.ts`
 - `packages/fliwright-core/src/mocks/types.ts`
+- `packages/fliwright-core/src/native/AndroidAppReadback.ts`
+- `packages/fliwright-core/src/native/AndroidPermissionDeclaration.ts`
+- `packages/fliwright-core/src/native/DeviceController.ts`
+- `packages/fliwright-core/src/native/NativeAssertion.ts`
+- `packages/fliwright-core/src/native/NativeConfig.ts`
+- `packages/fliwright-core/src/native/NativeEvidence.ts`
+- `packages/fliwright-core/src/native/NativeLocator.ts`
+- `packages/fliwright-core/src/native/NativePage.ts`
+- `packages/fliwright-core/src/native/NativeRuntime.ts`
+- `packages/fliwright-core/src/native/index.ts`
+- `packages/fliwright-core/src/native/types.ts`
 - `packages/fliwright-core/src/runArtifacts.ts`
 - `packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts`
 - `packages/fliwright-core/src/timeline/FlowRuntime.ts`

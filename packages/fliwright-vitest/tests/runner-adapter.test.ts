@@ -1,19 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fliwrightPreset } from '../src/index.js';
+import { readFliwrightEnvironment } from '@fliwright/core';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 describe('fliwright Vitest preset', () => {
   it('resolves storage against the project before transporting config to workers', () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'fliwright-preset-paths-'));
     try {
-      vi.stubEnv('FLIWRIGHT_CONFIG', '');
+      vi.stubEnv('FLIWRIGHT_CONFIG_PATH', '');
       vi.stubEnv('FLIWRIGHT_RUNS_ROOT', '');
-      const preset = fliwrightPreset({ projectRoot: '/repos/app', runsRoot: 'evidence', cacheRoot: 'scratch' });
+      const preset = fliwrightPreset({ projectRoot, runsRoot: 'evidence', cacheRoot: 'scratch' });
       const env = preset.test.env as Record<string, string>;
-      expect(env.FLIWRIGHT_PROJECT_ROOT).toBe('/repos/app');
-      expect(env.FLIWRIGHT_RUNS_ROOT).toBe('/repos/app/evidence');
-      expect(JSON.parse(env.FLIWRIGHT_CONFIG)).toMatchObject({ runsRoot: '/repos/app/evidence', cacheRoot: '/repos/app/scratch' });
-    } finally { vi.unstubAllEnvs(); }
+      expect(env.FLIWRIGHT_PROJECT_ROOT).toBe(projectRoot);
+      expect(env.FLIWRIGHT_RUNS_ROOT).toBe(join(projectRoot, 'evidence'));
+      expect(readFliwrightEnvironment(env)).toMatchObject({ runsRoot: join(projectRoot, 'evidence'), cacheRoot: join(projectRoot, 'scratch') });
+    } finally { vi.unstubAllEnvs(); rmSync(projectRoot, { recursive: true, force: true }); }
   });
 
   it('keeps project reporters and adds terminal recovery for direct runs', () => {
@@ -28,13 +33,13 @@ describe('fliwright Vitest preset', () => {
   it('propagates named scenarios to the default generated-test fixture in direct runs', () => {
     const scenarios = { saved: { name: 'saved', layers: [] } };
     try {
-      vi.stubEnv('FLIWRIGHT_SCENARIOS', '');
+      vi.stubEnv('FLIWRIGHT_CONFIG_PATH', '');
       vi.stubEnv('FLIWRIGHT_SCENARIO_MODE', '');
       const preset = fliwrightPreset({ scenarios, scenarioMode: 'managed-start' });
       const env = preset.test.env as Record<string, string>;
-      expect(JSON.parse(env.FLIWRIGHT_CONFIG).scenarios).toEqual(scenarios);
-      expect(JSON.parse(env.FLIWRIGHT_CONFIG).scenarioMode).toBe('managed-start');
-      expect(process.env.FLIWRIGHT_SCENARIOS).toBe('');
+      expect(readFliwrightEnvironment(env).scenarios).toEqual(scenarios);
+      expect(readFliwrightEnvironment(env).scenarioMode).toBe('managed-start');
+      expect(process.env.FLIWRIGHT_CONFIG_PATH).toBe('');
     } finally { vi.unstubAllEnvs(); }
   });
   it('loads from the public preset entry outside a Vitest worker', () => {
@@ -76,7 +81,7 @@ describe('fliwright Vitest preset', () => {
         failureCaptureBudgetMs: 1200, testFinalScreenshots: false }, runsRoot: '/project/runs',
         paths: { tests: 'checks' }, test: { env: { PROJECT_FLAG: 'yes' } } });
       const env = preset.test.env as Record<string, string>;
-      expect(JSON.parse(env.FLIWRIGHT_CONFIG)).toMatchObject({ recording: { mode: 'off', requireAssertions: false,
+      expect(readFliwrightEnvironment(env)).toMatchObject({ recording: { mode: 'off', requireAssertions: false,
         failureCaptureBudgetMs: 1200, testFinalScreenshots: false }, runsRoot: '/environment/runs', paths: { tests: 'checks' } });
       expect(env.PROJECT_FLAG).toBe('yes');
       expect(process.env.FLIWRIGHT_RECORDING_MODE).toBe('off');

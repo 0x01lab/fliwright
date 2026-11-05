@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cloud-protocol"
 path: "packages/fliwright-cloud-protocol"
-source_fingerprint: "3488727819a46b23f29f24184a28c2f02619795fdff0e8f559f7fad718788480"
+source_fingerprint: "bbd80786b7a4cf978f91fd43c77422af4a5a49d2d543fc20be02cb0bf21f41c1"
 generated: true
 ---
 
@@ -49,5 +49,6 @@ Own Cloud/Worker wire contracts, upload path policy, WebSocket control client an
 - `packages/fliwright-cloud-protocol/src/contracts.ts`
 - `packages/fliwright-cloud-protocol/src/index.ts`
 - `packages/fliwright-cloud-protocol/src/worker-control.ts`
+- `packages/fliwright-cloud-protocol/src/worker-diagnostics.ts`
 - `packages/fliwright-cloud-protocol/src/worker-pairing.ts`
 - `packages/fliwright-cloud-protocol/src/worker-timeline.ts`

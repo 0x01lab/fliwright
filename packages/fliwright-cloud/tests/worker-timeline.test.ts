@@ -39,6 +39,27 @@ it('records startup failure without a test report, durably and idempotently', ()
   try { expect(reopened.workerTimelines.view(request.id, lease.attemptId).spans).toEqual(view.spans); } finally { reopened.close(); }
 });
 
+it('projects a native attempt group and its owner phases in order', () => {
+  const { store, lease, request, append } = setup();
+  append([
+    { ...event(1, 0, { type: 'span.started', spanId: 'attempt-1', phase: 'native.attempt', attemptOrdinal: 1 }), schemaVersion: 2 },
+    { ...event(2, 2, { type: 'span.started', spanId: 'launch-1', parentSpanId: 'attempt-1', phase: 'native.launch' }), schemaVersion: 2 },
+    { ...event(3, 42, { type: 'span.finished', spanId: 'launch-1', status: 'succeeded' }), schemaVersion: 2 },
+    { ...event(4, 45, { type: 'span.finished', spanId: 'attempt-1', status: 'succeeded' }), schemaVersion: 2 },
+  ]);
+  expect(store.workerTimelines.view(request.id, lease.attemptId).spans).toMatchObject([
+    { phase: 'native.attempt', attemptOrdinal: 1, status: 'succeeded' },
+    { phase: 'native.launch', parentSpanId: 'attempt-1', status: 'succeeded', durationMs: 40 },
+  ]);
+});
+
+it('preserves allowlisted protocol version diagnostics without accepting arbitrary error text', () => {
+  const { store, lease, request, append, start, end } = setup();
+  const message = 'Bridge protocol incompatible (client=2, bridge=1)';
+  append([start, { ...end, payload: { type: 'span.finished', spanId: 'launch', status: 'failed', error: { code: 'verification_failed', message } } }]);
+  expect(store.workerTimelines.view(request.id, lease.attemptId).spans[0].error?.message).toBe(message);
+});
+
 it('rejects gaps, conflicts, invalid nesting, different clocks and stale ownership atomically', () => {
   const { store, lease, request, append, start, end, advance } = setup();
   expect(() => append([end])).toThrow(/sequence/i);

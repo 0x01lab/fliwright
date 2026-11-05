@@ -4,7 +4,7 @@ import { verifyRecordingReplay } from '../RecordingReplay.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
-import { copyRecordingArtifacts, applyDartVerification, parseDartVerificationEvidence, fingerprintScenario, generateRecordingAutomation, buildFlowFromRecording, captureRecording, openRecordingCapture, ScenarioResolver, EndpointLeaseManager } from '@fliwright/core';
+import { resolveFliwrightProjectRoot, toProjectFlowDocument, copyRecordingArtifacts, applyDartVerification, parseDartVerificationEvidence, fingerprintScenario, generateRecordingAutomation, buildFlowFromRecording, captureRecording, openRecordingCapture, ScenarioResolver, EndpointLeaseManager } from '@fliwright/core';
 import type { CodegenOptions, DartVerificationEvidence, FliwrightFlowDocument, FliwrightPathsConfig, RecordedOperation, RecordingFrame } from '@fliwright/core';
 import type { RecordingCaptureResource, RecordingReadinessResult, RecordingResult, RecordingCheckpointCandidate } from '@fliwright/core';
 import type { RecordingManifest, GenerateRecordingAutomationOptions, ResolvedSelector } from '@fliwright/core';
@@ -197,7 +197,7 @@ export async function recordCommand(
   if (options.flowOutput) {
     const flowPath = resolve(cwd, options.flowOutput);
     await mkdir(dirname(flowPath), { recursive: true });
-    await writeFile(flowPath, `${JSON.stringify(flow, null, 2)}\n`, 'utf8');
+    await writeFile(flowPath, `${JSON.stringify(toProjectFlowDocument(flow, resolveFliwrightProjectRoot(cwd)), null, 2)}\n`, 'utf8');
     log(`\n✅ Flow written to ${options.flowOutput}`);
   }
 

@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
-import { buildChangeSetSnapshot } from '@fliwright/core';
+import { buildChangeSetSnapshot, resolveFliwrightRuntimeRoot } from '@fliwright/core';
 import { describe, expect, it, vi } from 'vitest';
 import { DevAssistCoordinator } from '../../src/index.js';
 
@@ -118,7 +118,7 @@ describe('DevAssistCoordinator', () => {
     expect(runtime.cycle).toHaveBeenLastCalledWith('opens Markets', expect.objectContaining({
       changes: ['lib/home.dart'],
     }));
-    const trace = JSON.parse(await readFile(join(cwd, '.fliwright', 'devassist', 'session-2.json'), 'utf8'));
+    const trace = JSON.parse(await readFile(join(resolveFliwrightRuntimeRoot({ projectRoot: cwd }), 'devassist', 'session-2.json'), 'utf8'));
     expect(trace.cycles).toMatchObject([
       { timelinePath: '/tmp/runs/run-1/timeline.json', sync: { decision: 'reload' } },
       { timelinePath: '/tmp/runs/run-2/timeline.json', sync: { decision: 'reload' } },

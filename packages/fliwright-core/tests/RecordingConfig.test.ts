@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { writeFliwrightConfigSnapshot } from '../src/index.js';
+import { afterAll, describe, expect, it } from 'vitest';
 import {
   DEFAULT_FLIWRIGHT_CONFIG,
   fliwrightConfigSchema,
@@ -7,17 +11,50 @@ import {
   type FliwrightProjectConfig,
 } from '../src/index.js';
 
+const directory = mkdtempSync(join(tmpdir(), 'config-contract-'));
+afterAll(() => rmSync(directory, { recursive: true, force: true }));
+let nextConfig = 0;
+function rawConfigPath(value: string): string {
+  const file = join(directory, `${nextConfig++}.json`);
+  writeFileSync(file, value);
+  return file;
+}
+
 describe('recording configuration contract', () => {
+  it('transports explicit shared/Item mock sources and replacement selections without dropping fields', () => {
+    const scenarios = {
+      item: { name: 'item-437', layers: [{ kind: 'mocks', sources: [
+        { name: 'shared', directory: '.fliwright/mocks', files: ['api/user.json'] },
+        { name: 'item', directory: '.fliwright/test-plans/437/mocks', files: ['api/user.json'] },
+      ], rules: [
+        { source: 'shared', method: 'POST', endpoint: '/user', rule: 'success' },
+        { source: 'item', method: 'POST', endpoint: '/user', rule: 'review', replace: true },
+      ] }] },
+    };
+    const decoded = readFliwrightEnvironment({ FLIWRIGHT_CONFIG_PATH: writeFliwrightConfigSnapshot({ scenarios }) });
+    expect(mergeFliwrightConfig({ environment: decoded }).scenarios).toEqual(scenarios);
+    expect(() => fliwrightConfigSchema.parse({ scenarios: {
+      invalid: { name: 'invalid', layers: [{ kind: 'mocks', sources: [{ name: 'empty', directory: 'mocks', files: [] }] }] },
+    } })).toThrow();
+  });
+
   it('uses standard recording and shared project directories by default', () => {
     expect(DEFAULT_FLIWRIGHT_CONFIG).toMatchObject({
       recording: { mode: 'standard', failureCaptureBudgetMs: 3000, testFinalizationBudgetMs: 5000 },
       paths: {
         tests: '.fliwright/tests',
         scripts: '.fliwright/scripts',
-        recordings: '.fliwright/recordings',
         flows: '.fliwright/flows',
       },
     });
+  });
+
+  it('resolves recording artifacts for the target project while keeping authored paths portable', () => {
+    expect(mergeFliwrightConfig({ projectRoot: '/workspace/app', environmentSource: { FLIWRIGHT_RUNTIME_ROOT: '/local/app' } })).toMatchObject({
+      paths: { tests: '.fliwright/tests', scripts: '.fliwright/scripts', flows: '.fliwright/flows', recordings: '/local/app/recordings' },
+    });
+    expect(mergeFliwrightConfig({ projectRoot: '/workspace/app', project: { paths: { recordings: 'qa/captures' } } }).paths.recordings)
+      .toBe('qa/captures');
   });
 
   it('merges explicit values over environment and project config', () => {
@@ -39,7 +76,7 @@ describe('recording configuration contract', () => {
   });
 
   it('transports and validates the cache root independently of run settings', () => {
-    const environment = readFliwrightEnvironment({ FLIWRIGHT_CONFIG: JSON.stringify({ cacheRoot: '/worker/cache' }) });
+    const environment = readFliwrightEnvironment({ FLIWRIGHT_CONFIG_PATH: writeFliwrightConfigSnapshot({ cacheRoot: '/worker/cache' }) });
     expect(mergeFliwrightConfig({ project: { runsRoot: 'history', cacheRoot: 'scratch' }, environment }))
       .toMatchObject({ runsRoot: 'history', cacheRoot: '/worker/cache' });
     expect(() => fliwrightConfigSchema.parse({ cacheRoot: '' })).toThrow();
@@ -53,7 +90,7 @@ describe('recording configuration contract', () => {
   it('merges the finalization budget independently of the failure evidence budget', () => {
     const project = { recording: { testFinalizationBudgetMs: 8000, failureCaptureBudgetMs: 2000 } };
     const environment = readFliwrightEnvironment({
-      FLIWRIGHT_CONFIG: JSON.stringify({ recording: { testFinalizationBudgetMs: 6000 } }),
+      FLIWRIGHT_CONFIG_PATH: writeFliwrightConfigSnapshot({ recording: { testFinalizationBudgetMs: 6000 } }),
     });
     expect(mergeFliwrightConfig({ project }).recording).toMatchObject({
       testFinalizationBudgetMs: 8000, failureCaptureBudgetMs: 2000,
@@ -76,7 +113,7 @@ describe('recording configuration contract', () => {
   it('reads the complete serializable environment and applies scalar overrides without defaults', () => {
     expect(readFliwrightEnvironment({})).toEqual({});
     const environment = readFliwrightEnvironment({
-      FLIWRIGHT_CONFIG: JSON.stringify({ recording: { mode: 'full', requireAssertions: false,
+      FLIWRIGHT_CONFIG_PATH: writeFliwrightConfigSnapshot({ recording: { mode: 'full', requireAssertions: false,
         failureCaptureBudgetMs: 1200, testFinalScreenshots: false }, paths: { tests: 'checks' }, scenarioMode: 'managed-start' }),
       FLIWRIGHT_RECORDING_MODE: 'off', FLIWRIGHT_RUNS_ROOT: '/environment/runs',
     });
@@ -89,9 +126,9 @@ describe('recording configuration contract', () => {
 
   it.each([
     { FLIWRIGHT_RECORDING_MODE: 'trace' },
-    { FLIWRIGHT_CONFIG: '{broken' },
-    { FLIWRIGHT_CONFIG: '{"recording":{"failureCaptureBudgetMs":0}}' },
-    { FLIWRIGHT_SCENARIOS: '{"bad":{"name":"bad","layers":[{"kind":"unsupported"}]}}' },
+    { FLIWRIGHT_CONFIG_PATH: rawConfigPath('{broken') },
+    { FLIWRIGHT_CONFIG_PATH: rawConfigPath('{"recording":{"failureCaptureBudgetMs":0}}') },
+    { FLIWRIGHT_CONFIG_PATH: rawConfigPath('{"scenarios":{"bad":{"name":"bad","layers":[{"kind":"unsupported"}]}}}') },
     { FLIWRIGHT_SCENARIO_MODE: 'magic' },
   ])('rejects invalid shared environment values: %j', (environment) => {
     expect(() => readFliwrightEnvironment(environment)).toThrow();

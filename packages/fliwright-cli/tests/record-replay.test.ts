@@ -125,7 +125,7 @@ it('replays the exact generated test with the configured scenario and preserves 
   await writeFile(configPath, (await readFile(configPath, 'utf8')).replace("unrelated/*.test.ts", '.fliwright/tests/*.test.ts'));
   const reportPath = join(cwd, 'direct-replay.json');
   const child = spawn(process.execPath, [fileURLToPath(new URL('./vitest.mjs', import.meta.resolve('vitest/package.json'))), 'run', '--reporter=json', '--outputFile', reportPath], {
-    cwd, env: { ...process.env, FLIWRIGHT_SCENARIOS: '', FLIWRIGHT_VM_URL: 'ws://controlled-vm/ws', FLIWRIGHT_RUN_ID: 'direct-replay' },
+    cwd, env: { ...process.env, FLIWRIGHT_VM_URL: 'ws://controlled-vm/ws', FLIWRIGHT_RUN_ID: 'direct-replay' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';

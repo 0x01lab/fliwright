@@ -16,6 +16,11 @@ const FALLBACK_DEFAULT_RULE = 'success';
 export class MockRuleStore {
   private entries = new Map<string, MockRuleEntry>();
 
+  /** Forget loaded endpoints and active selections when the runtime is reset. */
+  clear(): void {
+    this.entries.clear();
+  }
+
   /**
    * Convert a MockRule to a MockRouteResponse.
    */

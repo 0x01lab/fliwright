@@ -1,8 +1,9 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
+import { resolveFliwrightProjectRoot, resolveFliwrightRuntimeRoot } from './runArtifacts.js';
 import { dirname, join } from 'node:path';
 
-export const FLIWRIGHT_WORKSPACE_CONFIG_PATH = join('.fliwright', 'config.json');
+export const FLIWRIGHT_WORKSPACE_CONFIG_PATH = join('runtime', 'config.json');
 
 export interface FliwrightWorkspaceConfig {
   version: 1;
@@ -20,7 +21,7 @@ export interface FliwrightWorkspaceConfig {
 }
 
 export function workspaceConfigPath(cwd = process.cwd()): string {
-  return join(cwd, FLIWRIGHT_WORKSPACE_CONFIG_PATH);
+  return join(resolveFliwrightRuntimeRoot({ projectRoot: resolveFliwrightProjectRoot(cwd) }), FLIWRIGHT_WORKSPACE_CONFIG_PATH);
 }
 
 export function readWorkspaceConfigSync(cwd = process.cwd()): FliwrightWorkspaceConfig {

@@ -7,7 +7,9 @@ const sourceRoot = path.join(root, '.agents/skills');
 const pluginRoot = path.join(root, 'plugins/fliwright');
 const targetRoot = path.join(pluginRoot, 'skills');
 const skillNames = [
+  'gitlab-test-plan',
   'fliwright-cli-workflows',
+  'fliwright-agent-memory',
   'fliwright-tdd',
   'write-fliwright-mock-rules',
   'write-fliwright-tests',

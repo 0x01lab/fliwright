@@ -112,14 +112,14 @@ it('opens the unified list, restores URL filters and navigates to device detail 
   expect(new URLSearchParams(window.location.search).get('platform')).toBe(
     'ios',
   );
-  const shell = container.querySelector('header.app-header');
+  const shell = container.querySelector("header[data-ui~=app-header]");
   await act(async () =>
     container
       .querySelector<HTMLAnchorElement>('a[href="/devices/phone"]')!
       .click(),
   );
   expect(container.querySelector('h1')?.textContent).toBe('iPhone');
-  expect(container.querySelector('header.app-header')).toBe(shell);
+  expect(container.querySelector("header[data-ui~=app-header]")).toBe(shell);
   expect(container.textContent).toContain('自动同步');
 });
 it('ignores unsupported and stale URL filters instead of hiding devices behind all options', async () => {

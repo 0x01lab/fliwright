@@ -11,8 +11,19 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: pub-release
+  cancel-in-progress: false
+
 jobs:
+  quality:
+    uses: ./.github/workflows/release-gate.yml
+    permissions:
+      contents: read
+
   publish:
+    needs: quality
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +31,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.8'
           cache: true
 
       - uses: dart-lang/setup-dart@v1

@@ -1,7 +1,10 @@
 import chalk from 'chalk';
+import type { ReleaseMetadata } from './ReleaseReview.js';
 
 export interface CliTestResult {
   name: string;
+  status?: 'passed' | 'failed' | 'skipped' | 'running' | 'interrupted';
+  file?: string;
   passed: boolean;
   duration: number;
   error?: string;
@@ -71,6 +74,10 @@ export interface TimelineSummary {
 }
 
 export interface CliRunResult {
+  /** Device details captured for this run; absent fields were not observed. */
+  device?: import('./DeviceMetadata.js').DeviceMetadata;
+  /** Caller-supplied identity of the tested build, preserved with the real run evidence. */
+  release?: ReleaseMetadata;
   status?: 'running' | 'passed' | 'failed' | 'skipped' | 'interrupted';
   passed: boolean;
   totalTests: number;

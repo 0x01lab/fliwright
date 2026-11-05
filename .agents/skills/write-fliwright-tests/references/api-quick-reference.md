@@ -44,6 +44,7 @@ mock.rules(title, body)
 mock.activateRules({ mockDir, routes, clearRoutes?, clearCalls?, assertApplied? })
 //   routes: Array<{ path: string; method?: string; rule: string }>
 mock.loadRules(mockDir?)
+mock.applyRuleSet(config: MockRuleSet): Promise<MockRuleSetReport>
 mock.switchRule(endpoint, ruleName, method?)
 mock.route(path, response & { method?, id? })
 mock.routeFlutter(path, response & { method?, id? })
@@ -198,12 +199,30 @@ driver.mock.setPassthrough(enabled): Promise<void>
 driver.mock.getCalls(path?): Promise<MockCall[]>
 driver.mock.listRoutes(): Promise<{ id, method?, path }[]>
 driver.mock.loadRules(mockDir?= '.fliwright/mocks'): Promise<void>
+driver.mock.applyRuleSet(config: MockRuleSet): Promise<MockRuleSetReport> // strict full replacement in Flutter
 driver.mock.listRules(): { endpoint, method, rules[], activeRule }[]
 driver.mock.switchRule(endpoint, ruleName, method?): Promise<void>
 driver.mock.startServer(opts?) / stopServer()
 driver.mock.controllerUrl: string | null
 // MockRouteResponse { status, body, headers?, delay?, method? }
 ```
+
+共享/Item 场景的完整写法见 [mock-rule-sets.md](./mock-rule-sets.md)。核心类型与
+离线解析函数从 `@fliwright/core` 导出：
+
+```typescript
+// MockRuleSource { name: string; directory: string; files: string[] }
+// MockRuleSelection { source: string; method: string; endpoint: string; rule: string; replace?: boolean }
+// MockRuleSet { sources: MockRuleSource[]; rules: MockRuleSelection[]; denyUnmatchedRequests?: boolean }
+// MockRuleProvenance { source; directory; file; method; endpoint; rule; contentHash }
+// MockRuleSetReport { fingerprint: string; denyUnmatchedRequests: boolean; routes: MockRuleProvenance[] }
+resolveMockRuleSet(config: MockRuleSet): Promise<ResolvedMockRuleSet>
+// ResolvedMockRuleSet extends the report shape; each route additionally includes response.
+```
+
+`resolveMockRuleSet` 校验文件和选择，不连接 App。`applyRuleSet` 清理旧路由、调用记录
+和目录库；只激活选择，不提供后续 `switchRule` 目录切换。Vitest 场景 timeline 的
+`mockRuleSet` 和直接调用 MockRuntime 的 `ruleSet` 保存来源及内容摘要，不含响应体。
 
 ## `driver` — `FliwrightDriver`（原始 / 高级用法）
 

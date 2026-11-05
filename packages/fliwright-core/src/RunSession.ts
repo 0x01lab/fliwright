@@ -18,12 +18,16 @@ export interface EvidenceRequest {
   kind: 'screenshot' | 'snapshot' | 'diagnostics';
   reason: 'start' | 'finish' | 'failure' | 'explicit';
   operationId?: string;
+  /** Originating UI surface; a native failure must never use a Flutter tree. */
+  surface?: 'flutter' | 'native';
+  operationMetadata?: Record<string, unknown>;
 }
 
 export interface EvidenceResult {
   status: 'captured' | 'unavailable' | 'timeout' | 'disabled';
   artifactPaths?: string[];
   error?: unknown;
+  artifactMetadata?: Record<string, unknown>;
 }
 
 export interface RunSessionOperation {
@@ -103,6 +107,7 @@ export class RunSession {
   private readonly operations: RunSessionOperation[] = [];
   private readonly evidence: Array<EvidenceRequest & { result: EvidenceResult }> = [];
   private readonly sensitiveValues = new Set<string>();
+  private readonly evidenceProviders = new Map<'flutter' | 'native', (request: EvidenceRequest) => Promise<EvidenceResult>>();
   private endpointLease?: { manager: Pick<EndpointLeaseManager, 'run'>; endpoint: string };
   private counter = 0;
   private finished = false;
@@ -141,6 +146,14 @@ export class RunSession {
     }
     this.recordingMode = options.mode;
     this.captureActionEvidence = options.captureEvidence;
+  }
+
+  /** Attach a surface when its fixture becomes available, without changing recording policy. */
+  registerEvidenceProvider(surface: 'flutter' | 'native', provider: (request: EvidenceRequest) => Promise<EvidenceResult>): () => void {
+    if (this.finished) throw new Error('RunSession is already finished.');
+    if (this.evidenceProviders.has(surface)) throw new Error(`RunSession already has an evidence provider for ${surface}.`);
+    this.evidenceProviders.set(surface, provider);
+    return () => { if (this.evidenceProviders.get(surface) === provider) this.evidenceProviders.delete(surface); };
   }
 
   /** Serialize the complete logical action, including its evidence capture, per app endpoint. */
@@ -192,7 +205,7 @@ export class RunSession {
         await this.flushProgress();
         return value;
       } catch (error) {
-        if (operation.kind === 'action' && this.recordingMode !== 'off') {
+        if ((operation.kind === 'action' || operation.metadata?.surface === 'native') && this.recordingMode !== 'off') {
           await this.captureOperationEvidence({ kind: 'screenshot', reason: 'failure', operationId }, node.id);
           await this.captureOperationEvidence({ kind: 'snapshot', reason: 'failure', operationId }, node.id);
         }
@@ -245,14 +258,22 @@ export class RunSession {
     if (!this.recordingEnabled && request.reason !== 'explicit') return { status: 'disabled' };
     const capture = async (): Promise<EvidenceResult> => {
       const operationId = request.operationId ?? operationContext.getStore();
-      const normalized = { ...request, ...(operationId ? { operationId } : {}) };
+      const operation = (operationId ? this.operations.find(item => item.operationId === operationId) : undefined)
+        ?? (request.reason === 'failure' ? [...this.operations].reverse().find(item => item.outcome === 'failed') : undefined);
+      const surface = request.surface ?? (operation?.metadata?.surface === 'native' ? 'native' : 'flutter');
+      const normalized: EvidenceRequest = { ...request, surface,
+        ...(operation?.metadata ? { operationMetadata: operation.metadata } : {}),
+        ...(request.operationMetadata ? { operationMetadata: request.operationMetadata } : {}),
+        ...(operationId ? { operationId } : {}) };
+      const provider = this.evidenceProviders.get(surface);
       let result: EvidenceResult;
       try {
-        result = await (
+        result = await (provider ? provider(normalized) : surface === 'native'
+          ? Promise.resolve({ status: 'unavailable' as const, error: 'No native evidence source was configured for this attempt.' }) : (
           this.captureActionEvidence?.(normalized)
           ?? this.options.captureEvidence?.(normalized)
           ?? Promise.resolve({ status: 'disabled' as const })
-        );
+        ));
       } catch (error) {
         result = { status: 'unavailable', error };
       }
@@ -274,6 +295,7 @@ export class RunSession {
       this.recorder.addArtifacts(nodeId, result.artifactPaths.map((path) => ({
         kind,
         path,
+        metadata: { surface: request.surface ?? (this.operations.find(item => item.operationId === request.operationId)?.metadata?.surface === 'native' ? 'native' : 'flutter'), ...result.artifactMetadata },
         ...(kind === 'screenshot' ? { mimeType: 'image/png' } : { mimeType: 'application/json' }),
       })));
     }
@@ -323,10 +345,10 @@ export class RunSession {
       evidenceStatus,
       ...(this.persistenceIssues.size ? { evidenceIssues: [...this.persistenceIssues] } : {}),
       operations: (this.recordingEnabled ? this.operations : []).map((operation) => ({ ...operation,
-        ...(operation.error === undefined ? {} : { error: serializeError(operation.error) }),
+        ...(operation.error === undefined ? {} : { error: serializeError(this.redactReport(operation.error)) }),
       })),
       evidence: this.evidence.map((item) => ({ ...item, result: { ...item.result,
-        ...(item.result.error === undefined ? {} : { error: serializeError(item.result.error) }),
+        ...(item.result.error === undefined ? {} : { error: serializeError(this.redactReport(item.result.error)) }),
       } })),
     };
   }
@@ -340,6 +362,9 @@ function requestWithOperation(request: EvidenceRequest, operationId: string | un
   return operationId ? { ...request, operationId } : request;
 }
 
-function serializeError(error: unknown): unknown {
-  return error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error;
+function serializeError(error: unknown, depth = 0): unknown {
+  if (!(error instanceof Error)) return error;
+  return { name: error.name, message: error.message, stack: error.stack,
+    ...('code' in error && typeof error.code === 'string' ? { code: error.code } : {}),
+    ...(error.cause !== undefined && depth < 3 ? { cause: serializeError(error.cause, depth + 1) } : {}) };
 }

@@ -1,10 +1,10 @@
+import { readFile, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Uri, window, workspace } from 'vscode';
-import { AiRuntime, MockAiAdapter, type FliwrightFlowDocument } from '@fliwright/core';
+import { AiRuntime, MockAiAdapter, resolveFliwrightRuntimeRoot, type FliwrightFlowDocument } from '@fliwright/core';
 import { RecorderService } from '../src/recording/RecorderService.js';
 import { createWorkspace, readText, writeText } from './helpers/workspace.js';
-import { rm } from 'node:fs/promises';
 
 function recording(code: string, operations: unknown[] = [], frames: unknown[] = []) {
   return { status: 'captured', code, operations, frames, issues: [], receivedSequences: [], missingSequences: [] };
@@ -243,10 +243,9 @@ describe('RecorderService', () => {
       await service.start({ recorder } as any, { testName: 'persisted flow' });
       const stopped = await service.stop({ recorder } as any, undefined, {}, Uri.file(root));
 
-      expect(stopped.recordingDir).toMatch(/\.fliwright\/recordings\/recording-\d+$/);
+      expect(stopped.recordingDir).toBe(path.join(resolveFliwrightRuntimeRoot({ projectRoot: root }), 'recordings', stopped.recordingId!));
       expect(stopped.flowFile).toMatch(/\.fliwright\/flows\/flow-recording-\d+\.flow\.json$/);
-      const relativeDir = stopped.recordingDir!.replace(`${root}/`, '');
-      const manifest = JSON.parse(await readText(root, `${relativeDir}/recording.json`));
+      const manifest = JSON.parse(await readFile(path.join(stopped.recordingDir!, 'recording.json'), 'utf8'));
       expect(manifest).toEqual(expect.objectContaining({
         schemaVersion: 2,
         testName: 'persisted flow',
@@ -277,7 +276,7 @@ describe('RecorderService', () => {
       }));
       expect(JSON.stringify(manifest)).not.toContain('base64');
       await rm(source, { recursive: true });
-      await expect(readText(root, `${relativeDir}/screenshots/frame.png`)).resolves.toBe('png-bytes');
+      await expect(readFile(path.join(stopped.recordingDir!, 'screenshots/frame.png'), 'utf8')).resolves.toBe('png-bytes');
 
       const recordings = await service.listPersistedRecordings(Uri.file(root));
       expect(recordings).toHaveLength(1);
@@ -332,8 +331,7 @@ describe('RecorderService', () => {
 
       await service.setFrameIncluded({ recorder } as any, 'frame-1', true, Uri.file(root));
 
-      const relativeDir = stopped.recordingDir!.replace(`${root}/`, '');
-      const manifest = JSON.parse(await readText(root, `${relativeDir}/recording.json`));
+      const manifest = JSON.parse(await readFile(path.join(stopped.recordingDir!, 'recording.json'), 'utf8'));
       expect(manifest.generatedCode).toContain("page.locator({ key: 'target-0' }).click({ waitForAnimations: true })");
       expect(manifest.frames[0]).toEqual(expect.objectContaining({
         operationStatus: 'included',
@@ -375,8 +373,7 @@ describe('RecorderService', () => {
         notes: 'Explain this branch',
       }));
       expect(updated.flowFile).toMatch(/\.fliwright\/flows\/flow-edit\.flow\.json$/);
-      const relativeDir = stopped.recordingDir!.replace(`${root}/`, '');
-      const manifest = JSON.parse(await readText(root, `${relativeDir}/recording.json`));
+      const manifest = JSON.parse(await readFile(path.join(stopped.recordingDir!, 'recording.json'), 'utf8'));
       expect(manifest.flow.nodes[0]).toEqual(expect.objectContaining({
         id: 'note-1',
         type: 'note',

@@ -18,6 +18,7 @@ Use to inspect composition, configuration and isolation requirements before star
 - No live app required by the registry. Check command-specific runtime requirements below.
 - No persistent session required. See usage for finite/session variants.
 - name must exist in project configuration. Resolving does not verify the app can execute every layer.
+- For sources/rules Mock layers, resolution checks declaration composition without reading endpoint JSON. Validate files and selections offline with core resolveMockRuleSet; scenario application validates them before changing App Mock routes.
 
 ## Input
 

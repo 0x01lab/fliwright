@@ -45,7 +45,7 @@ export function WidgetTreeTab({ selection }: { selection: Selection }): JSX.Elem
       </div>
       <ScrollArea className="flex-1">
         {data === undefined || data === null ? (
-          <div className="text-muted-foreground">No widget snapshot captured for this step.</div>
+          <div className="text-muted-foreground">{selection.surface === 'native' ? 'No native snapshot captured for this step.' : 'No widget snapshot captured for this step.'}</div>
         ) : (
           <JsonTree data={data} query={query} />
         )}

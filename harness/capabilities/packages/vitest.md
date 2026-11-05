@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/vitest"
 path: "packages/fliwright-vitest"
-source_fingerprint: "4e7d100fbe9946993412a9ade61649fe984d664139769f03845ffd262e06f1b8"
+source_fingerprint: "7c2bef406cfb8e9aa20a6968652d5411793d13b5045a3c241553a98587d62911"
 generated: true
 ---
 
@@ -16,6 +16,7 @@ Adapt the core runtime to Vitest fixtures, hooks, configuration, reporting, and 
 ### May Depend On
 
 - `@fliwright/core`
+- `@fliwright/native`
 
 ### Must Not Own
 
@@ -59,6 +60,7 @@ Adapt the core runtime to Vitest fixtures, hooks, configuration, reporting, and 
 - `FliwrightRunnerOptions`
 - `FliwrightTest`
 - `FliwrightVitestPresetOptions`
+- `NativeDeviceProvider`
 - `resolveRunsRoot`
 - `ScenarioEnabledFliwrightTest`
 - `ScenarioTest`
@@ -71,6 +73,9 @@ Adapt the core runtime to Vitest fixtures, hooks, configuration, reporting, and 
 - `packages/fliwright-vitest/src/FinalizationBudget.ts`
 - `packages/fliwright-vitest/src/RecoveryReporter.ts`
 - `packages/fliwright-vitest/src/TaskEndpointLease.ts`
+- `packages/fliwright-vitest/src/TaskManagedApp.ts`
+- `packages/fliwright-vitest/src/TaskNativeSession.ts`
+- `packages/fliwright-vitest/src/TaskScenarioPreparation.ts`
 - `packages/fliwright-vitest/src/TestRegistration.ts`
 - `packages/fliwright-vitest/src/index.ts`
 - `packages/fliwright-vitest/src/preset.ts`

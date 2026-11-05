@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cli"
 path: "packages/fliwright-cli"
-source_fingerprint: "25841543edf088a02355fda2639cc0c016729d2b952a23dca341432cadf69dba"
+source_fingerprint: "d1ea8a26c08ae211cf5feab8ad8d5ab0f0d96e09ab19719110003a8f82917c8b"
 generated: true
 ---
 
@@ -19,6 +19,7 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 - `@fliwright/tdd`
 - `@fliwright/vitest`
 - `@fliwright/devices`
+- `@fliwright/native`
 
 ### Must Not Own
 
@@ -47,12 +48,20 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 
 - `createProgram`
 - `createRegistry`
+- `FlutterAndroidApk`
+- `FlutterAndroidBuildOptions`
+- `ManagedNativeGrant`
+- `ManagedNativeLaunch`
+- `ManagedNativeRun`
+- `prepareNativeRun`
+- `withFlutterAndroidApk`
 
 ## CLI Commands
 
 - `app-inspect`
 - `app`
 - `artifact-query`
+- `artifact-report`
 - `artifacts`
 - `doctor`
 - `flow-runtime`
@@ -76,8 +85,20 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 
 - `packages/fliwright-cli/src/ArtifactReferences.ts`
 - `packages/fliwright-cli/src/CommandRegistry.ts`
+- `packages/fliwright-cli/src/DeviceMetadata.ts`
+- `packages/fliwright-cli/src/FlutterAndroidBuild.ts`
+- `packages/fliwright-cli/src/FlutterBuildProcess.ts`
+- `packages/fliwright-cli/src/HtmlReport.ts`
+- `packages/fliwright-cli/src/HtmlReportAssets.ts`
+- `packages/fliwright-cli/src/InitAgent.ts`
 - `packages/fliwright-cli/src/InspectionOutput.ts`
+- `packages/fliwright-cli/src/InstalledAndroidRun.ts`
+- `packages/fliwright-cli/src/ManagedAppRun.ts`
+- `packages/fliwright-cli/src/ManagedNativeRun.ts`
+- `packages/fliwright-cli/src/ManagedNativeTelemetry.ts`
 - `packages/fliwright-cli/src/RecordingReplay.ts`
+- `packages/fliwright-cli/src/ReleaseReview.ts`
+- `packages/fliwright-cli/src/ReportProjectIcon.ts`
 - `packages/fliwright-cli/src/WorkflowContext.ts`
 - `packages/fliwright-cli/src/capabilities/form.ts`
 - `packages/fliwright-cli/src/capabilities/interaction.ts`
@@ -86,6 +107,7 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 - `packages/fliwright-cli/src/commands/app-inspect.ts`
 - `packages/fliwright-cli/src/commands/app.ts`
 - `packages/fliwright-cli/src/commands/artifact-query.ts`
+- `packages/fliwright-cli/src/commands/artifact-report.ts`
 - `packages/fliwright-cli/src/commands/artifacts.ts`
 - `packages/fliwright-cli/src/commands/doctor.ts`
 - `packages/fliwright-cli/src/commands/flow-runtime.ts`
@@ -105,6 +127,7 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 - `packages/fliwright-cli/src/registry/flow-schemas.ts`
 - `packages/fliwright-cli/src/registry/flow.ts`
 - `packages/fliwright-cli/src/registry/generation-schema.ts`
+- `packages/fliwright-cli/src/registry/native.ts`
 - `packages/fliwright-cli/src/registry/session.ts`
 - `packages/fliwright-cli/src/registry/tdd.ts`
 - `packages/fliwright-cli/src/reporter.ts`

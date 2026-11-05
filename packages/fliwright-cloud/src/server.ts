@@ -27,6 +27,8 @@ import {
   catalogSchema,
   workerTimelineClockSchema,
   workerTimelineFinishSchema,
+  workerLogLevelSchema,
+  redactDiagnostic,
 } from '@fliwright/cloud-protocol';
 
 export type Role = 'member' | 'operator' | 'admin';
@@ -207,7 +209,7 @@ export function createCloudServer(options: CloudServerOptions) {
       "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
     );
   });
-  app.setErrorHandler((error, _req, reply) => {
+  app.setErrorHandler((error, req, reply) => {
     const err = error instanceof Error ? error : new Error('Unknown error');
     const status =
       error instanceof ZodError
@@ -217,6 +219,8 @@ export function createCloudServer(options: CloudServerOptions) {
           : 'statusCode' in err && typeof err.statusCode === 'number'
             ? err.statusCode
             : 500;
+    if (status >= 500) console.error(JSON.stringify({ at: new Date().toISOString(), level: 'error', event: 'server.request_failed', requestId: req.id, method: req.method, route: req.routeOptions.url,
+      message: redactDiagnostic(err.message, secrets), stack: redactDiagnostic(err.stack ?? '', secrets) }));
     reply.status(status).send({
       error: status >= 500 ? 'Service operation failed' : redact(err.message),
     });
@@ -533,6 +537,11 @@ export function createCloudServer(options: CloudServerOptions) {
     team(req);
     return store.listWorkers();
   });
+  app.get('/api/workers/:id/diagnostics', (req) => {
+    team(req, 'operator');
+    const query = z.object({ before: z.coerce.number().int().positive().safe().optional(), level: workerLogLevelSchema.optional(), sessionId: z.string().uuid().optional(), search: z.string().max(200).optional() }).strict().parse(req.query);
+    return store.workerDiagnostics.view(param(req, 'id'), query);
+  });
   app.post('/api/workers/:id/pause', (req) => {
     const who = team(req, 'operator'),
       id = param(req, 'id'),
@@ -567,7 +576,6 @@ export function createCloudServer(options: CloudServerOptions) {
     if (!current) blockers.push('当前配置尚无成功扫描');
     else {
       if (!current.suites.some(suite => suite.cases.length)) blockers.push('未发现测试用例');
-      if (!current.scenarios.length) blockers.push('仓库尚未声明运行场景，可浏览用例；运行前请在 fliwright.config.ts 中声明场景');
     }
     const approved = store.db.prepare('SELECT config_revision FROM project_approvals WHERE project_id=?').get(id);
     if (Number(approved?.config_revision) !== project.configRevision) blockers.push('等待管理员确认项目就绪');
@@ -576,7 +584,7 @@ export function createCloudServer(options: CloudServerOptions) {
   app.post('/api/projects/:id/ready', (req) => {
     const who = team(req, 'admin'), id = param(req, 'id'), project = store.project(id);
     const catalog = store.catalogs(id).find(item => item.status === 'ready' && item.configRevision === project.configRevision);
-    if (!catalog || !Object.keys(project.suites).length || !catalog.suites.some(suite => suite.cases.length) || !catalog.scenarios.length) throw new CloudError(409, 'A successful catalog with suites, scenarios and cases is required');
+    if (!catalog || !Object.keys(project.suites).length || !catalog.suites.some(suite => suite.cases.length)) throw new CloudError(409, 'A successful catalog with suites and cases is required');
     store.db.prepare('INSERT INTO project_approvals VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET config_revision=excluded.config_revision').run(id, project.configRevision);
     store.event(null, 'project-ready', { projectId: id, revision: project.configRevision, actor: who.name });
     return { ready: true };
@@ -586,6 +594,10 @@ export function createCloudServer(options: CloudServerOptions) {
     controlHandlers.set(operation, handler);
   };
   workerControl('/api/worker/assignments', (req) => store.workerAssignments(worker(req).name));
+  workerControl('/api/worker/diagnostics', (req) => {
+    const token = String(req.headers.authorization ?? '').replace(/^Bearer /, '');
+    return store.workerDiagnostics.record(worker(req).name, req.body, [...secrets, token]);
+  });
   workerControl('/api/worker/scans/claim', (req) => store.claimCatalogScan(worker(req).name));
   workerControl('/api/worker/scans/heartbeat', (req) => {
     const who = worker(req), key = scanLeaseKeySchema.parse(req.body);
@@ -785,6 +797,7 @@ export function createCloudServer(options: CloudServerOptions) {
       reports.reconcile();
       reports.sweep();
       store.workerTimelines.sweep();
+      store.workerDiagnostics.sweep();
     } catch {
       /* health/operations endpoints retain state for diagnosis */
     }

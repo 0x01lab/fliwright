@@ -1,3 +1,4 @@
+import { resolveFliwrightRuntimeRoot } from '@fliwright/core';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -87,7 +88,7 @@ export class DevAssistCoordinator {
 
   constructor(private readonly deps: DevAssistCoordinatorDeps = {}) {
     this.cwd = resolve(deps.cwd ?? process.cwd());
-    this.traceStore = deps.traceStore ?? new DevAssistTraceStore({ root: join(this.cwd, '.fliwright', 'devassist') });
+    this.traceStore = deps.traceStore ?? new DevAssistTraceStore({ root: join(resolveFliwrightRuntimeRoot({ projectRoot: this.cwd }), 'devassist') });
     this.now = deps.now ?? (() => new Date());
   }
 

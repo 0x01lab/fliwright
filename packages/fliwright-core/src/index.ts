@@ -71,6 +71,8 @@ export type {
   BridgeQueryResult,
   FrameCaptureResult,
 } from './types.js';
+export { ManagedAppLifecycle, prepareManagedAppAttempt, readManagedAppControl, MANAGED_APP_CONTROL_ENV } from './ManagedAppLifecycle.js';
+export type { ManagedAppControl, ManagedAppAttemptRequest, ManagedAppLaunchEndpoint, ManagedAppAttemptEndpoint, ManagedAppLifecycleOptions, ManagedAppPreparationPhase, ManagedAppPhaseReporter } from './ManagedAppLifecycle.js';
 export type {
   FliwrightFigmaBinding,
   FliwrightFlowDecisionRule,
@@ -92,6 +94,7 @@ export { buildFlowFromRecording } from './flow/RecordingFlowBuilder.js';
 export { buildFlowFromTimeline } from './flow/TimelineFlowBuilder.js';
 export {
   FLIWRIGHT_FLOWS_DIR,
+  toProjectFlowDocument,
   flowFileName,
   flowFilePath,
   sanitizeFlowFileId,
@@ -153,6 +156,8 @@ export { PluginRegistry } from './PluginRegistry.js';
 export { Protocol } from './Protocol.js';
 export { VMServiceConnector, setConnectorDebugLog } from './VMServiceConnector.js';
 export { AppInstance } from './AppInstance.js';
+export { BiometricTestController } from './BiometricTestController.js';
+export type { BiometricChallengeResult, BiometricTestApp, BiometricTestStatus, BiometricTestOptions, BiometricWaitOptions } from './BiometricTestController.js';
 export type {
   AppCapabilityDescriptor,
   AppCapabilityProxy,
@@ -164,11 +169,15 @@ export type {
   SeedLoggedInInput,
 } from './AppInstance.js';
 export { fingerprintScenario, ScenarioCoordinator, ScenarioPreparationError, ScenarioResolutionError, ScenarioResolver } from './Scenario.js';
+export { prepareScenarioDevice, validateScenarioDevicePreparation, ScenarioDeviceCapabilityError } from './ScenarioDevicePreparation.js';
+export type { ScenarioDevicePreparation, ScenarioDeviceReport } from './ScenarioDevicePreparation.js';
 export type {
   ResolvedScenario,
   ScenarioApplicationReport,
   ScenarioAppLayer,
   ScenarioAuthLayer,
+  ScenarioCameraSource,
+  ScenarioDeviceLayer,
   ScenarioDriver,
   ScenarioExecutionMode,
   ScenarioLayer,
@@ -180,6 +189,8 @@ export type {
   ScenarioStorageLayer,
   TestScenario,
 } from './Scenario.js';
+export { CameraTestController } from './CameraTestController.js';
+export type { CameraTestApp, CameraTestResult, CameraTestStatus, CameraTestControllerOptions } from './CameraTestController.js';
 export { DesignQaClient } from './DesignQaClient.js';
 export type {
   DesignQaCaptureCommandResult,
@@ -247,6 +258,7 @@ export {
   fliwrightConfigSchema,
   mergeFliwrightConfig,
   readFliwrightEnvironment,
+  writeFliwrightConfigSnapshot,
 } from './RecordingConfig.js';
 export type {
   FliwrightPathsConfig,
@@ -321,6 +333,9 @@ export {
   legacyProjectRunsRoot,
   projectRunsRoot,
   projectRunsRootCandidates,
+  resolveFliwrightRuntimeRoot,
+  resolveFliwrightPath,
+  FLIWRIGHT_RUNTIME_ROOT_ENV,
   resolveFliwrightRunsRoot,
   resolveFliwrightCacheRoot,
   resolveFliwrightProjectRoot,
@@ -539,6 +554,8 @@ export type {
   RuntimeAssertionOptions,
 } from './assertions/types.js';
 export { MockRuntime, matchesCall } from './mocks/MockRuntime.js';
+export { resolveMockRuleSet } from './mocks/MockRuleSet.js';
+export type { MockRuleSource, MockRuleSelection, MockRuleSet, MockRuleProvenance, MockRuleSetReport, ResolvedMockRuleSet } from './mocks/MockRuleSet.js';
 export { FliwrightMockService, mock } from './mocks/MockService.js';
 export {
   MockRuleController,
@@ -564,3 +581,4 @@ export type {
 } from './mocks/types.js';
 
 export { projectRunTrace } from './RunTraceProjection.js';
+export * from './native/index.js';

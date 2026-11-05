@@ -22,7 +22,8 @@
     "package:check": "node scripts/verify-package-tarballs.mjs",
     "simulate:flow-clean": "node scripts/simulate-flow-clean.mjs",
     "docs:cli": "node scripts/generate-cli-command-docs.mjs",
-    "docs:cli:check": "node scripts/generate-cli-command-docs.mjs --check"
+    "docs:cli:check": "node scripts/generate-cli-command-docs.mjs --check",
+    "test-plan": "node packages/test-plan/dist/cli.js"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

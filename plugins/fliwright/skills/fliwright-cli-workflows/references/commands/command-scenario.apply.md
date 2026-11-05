@@ -18,8 +18,10 @@ Use for manual exploration with a deterministic environment.
 - A running Flutter app with fliwright_bridge; attach with vmUrl/project configuration or use a connection session.
 - No persistent session required. See usage for finite/session variants.
 - Requires a declared scenario and the bridge capabilities used by its layers. Authenticated business baselines use app-owned auth.seedLoggedIn.
+- Source-qualified Mock layers combine shared and Item-local JSON selections and require replace: true for an inherited method/path replacement. They are validated together and applied once, replacing all App Mock routes including editor rules, clearing calls and the old catalog. Only selected endpoints activate; unmatched requests are denied unless explicitly allowed. Flutter application must succeed without fallback.
 - Connection mode is attach unless configured otherwise. A strict startup baseline can reject attach; use a managed test workflow with waiting bootstrap.
-- For tests prefer run --scenario so setup repeats before each attempt and retry.
+- Device layers require an owned test attempt and are rejected before connecting the Bridge. Use run --scenario for device requirements.
+- For tests prefer run --scenario so setup repeats before each attempt and retry. For mixed scenarios select test.scenario(name) per test without a conflicting global scenario.
 
 ## Input
 
@@ -50,6 +52,7 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 | mode | Scenario execution mode. |
 | appliedLayers | Layer kinds applied. |
 | ready | true after all declared layers have completed. |
+| mocks | When using sources/rules: selected source/file/rule provenance, content hashes, fingerprint and unmatched-request policy; excludes response bodies. |
 
 ## Effects and failure handling
 

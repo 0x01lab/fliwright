@@ -29,7 +29,7 @@ Use when a Figma API token is available and targets have file/node bindings.
 | `path` | `--path` | string | no | — | Direct path to a .flow.json file |
 | `pixelDiffTolerance` | `--pixel-diff-tolerance` | number | no | — | Allowed visual diff ratio, default 0.03 |
 | `layoutPxTolerance` | `--layout-px-tolerance` | number | no | — | Allowed layout delta in px, default 4 |
-| `outputDir` | `--output-dir` | string | no | — | Directory for Figma screenshots. Defaults to .fliwright/reviews/<flowId>/figma. |
+| `outputDir` | `--output-dir` | string | no | — | Directory for Figma screenshots. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>/figma. |
 | `capturesFile` | `--captures-file` | string | no | — | Path to write figma-captures.json. |
 | `accessToken` | `--access-token` | string | no | — | Figma access token. Defaults to FIGMA_ACCESS_TOKEN or FIGMA_TOKEN. |
 | `scale` | `--scale` | number | no | — | Figma image render scale. |
@@ -86,7 +86,7 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
     },
     "outputDir": {
       "type": "string",
-      "description": "Directory for Figma screenshots. Defaults to .fliwright/reviews/<flowId>/figma."
+      "description": "Directory for Figma screenshots. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>/figma."
     },
     "capturesFile": {
       "type": "string",

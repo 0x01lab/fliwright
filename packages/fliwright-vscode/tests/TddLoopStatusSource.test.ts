@@ -1,3 +1,5 @@
+import { resolveFliwrightRuntimeRoot } from '@fliwright/core';
+import { dirname } from 'node:path';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,8 +12,8 @@ describe('FileTddLoopStatusSource', () => {
 
   beforeAll(() => {
     workspaceRoot = mkdtempSync(join(tmpdir(), 'fliwright-tdd-src-'));
-    mkdirSync(join(workspaceRoot, '.fliwright'), { recursive: true });
-    statusFile = join(workspaceRoot, DEFAULT_TDD_STATUS_RELATIVE_PATH);
+    statusFile = join(resolveFliwrightRuntimeRoot({ projectRoot: workspaceRoot }), DEFAULT_TDD_STATUS_RELATIVE_PATH);
+    mkdirSync(dirname(statusFile), { recursive: true });
   });
 
   afterAll(() => {

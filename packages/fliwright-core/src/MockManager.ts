@@ -1,6 +1,7 @@
 import type { MockRouteResponse, MockCall, SendRequest } from './types.js';
 import type { MockAdapter } from './interfaces/MockAdapter.js';
 import { ToolMockServer, type ToolMockServerOptions } from './ToolMockServer.js';
+import { resolveMockRuleSet, type MockRuleSet, type MockRuleSetReport } from './mocks/MockRuleSet.js';
 
 export class MockManager implements MockAdapter {
   /** @internal */ _server = new ToolMockServer();
@@ -171,6 +172,42 @@ export class MockManager implements MockAdapter {
   }
 
   // --- Rule switching API ---
+
+  /** Validate shared/Item selections, then replace the attempt's routes strictly in Flutter. */
+  async applyRuleSet(config: MockRuleSet): Promise<MockRuleSetReport> {
+    const resolved = await resolveMockRuleSet(config);
+    await this.readFlutterStore('ext.fliwright.mock.clearRoutes');
+    this._server.clear();
+    try {
+      const enabled = !resolved.denyUnmatchedRequests;
+      await this.readFlutterStore('ext.fliwright.mock.setPassthrough', { enabled: String(enabled) });
+      this.passthrough = enabled;
+      this._server.setPassthrough(enabled);
+      await this.readFlutterStore('ext.fliwright.mock.clearCalls');
+      this._server.clearCalls();
+      for (const route of resolved.routes) {
+        const id = `fliwright-test:${[route.source, route.method, route.endpoint, route.rule].map(encodeURIComponent).join(':')}`;
+        const response = { ...route.response, method: route.method, id };
+        await this.syncFlutterRoute(route.endpoint, response);
+        this._server.route(route.endpoint, response);
+      }
+      const applied = await this.listFlutterRoutes();
+      const expected = this._server.listRoutes();
+      if (applied.length !== expected.length || expected.some(route => !applied.some(candidate => (
+        candidate.id === route.id && candidate.method?.toUpperCase() === route.method && candidate.path === route.path
+      )))) throw new Error('Flutter mock rule set verification failed: active routes differ from selected rules.');
+    } catch (error) {
+      try {
+        await this.readFlutterStore('ext.fliwright.mock.clearRoutes');
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'Flutter mock rule set application and cleanup failed.');
+      } finally {
+        this._server.clear();
+      }
+      throw error;
+    }
+    return { ...resolved, routes: resolved.routes.map(({ response: _response, ...route }) => route) };
+  }
 
   /**
    * Load mock rules from a directory and apply all active rules to Flutter.

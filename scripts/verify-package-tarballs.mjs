@@ -1,19 +1,14 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { verifyConsumerImports } from './verify-consumer-imports.mjs';
+import { getReleasePackages } from './release-packages.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = resolve(import.meta.dirname, '..');
-const packages = [
-  'packages/fliwright-devices',
-  'packages/fliwright-core',
-  'packages/fliwright-vitest',
-  'packages/fliwright-cli',
-  'packages/fliwright-tdd',
-  'packages/fliwright-plugin-riverpod',
-];
+const packages = getReleasePackages(root).map(({ directory }) => directory);
 const requiredEntries = ['package/package.json', 'package/README.md', 'package/LICENSE'];
 const forbiddenPrefixes = ['package/src/', 'package/tests/', 'package/.fliwright/'];
 
@@ -47,6 +42,18 @@ try {
     }
     if (!entries.some((entry) => entry.startsWith('package/dist/'))) {
       throw new Error(`${packageJson.name}: tarball has no dist output`);
+    }
+    if (packageJson.name === '@fliwright/cli') {
+      async function requireSkillTree(directory, prefix) {
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+          const packedPath = `${prefix}/${entry.name}`;
+          if (entry.isDirectory()) await requireSkillTree(join(directory, entry.name), packedPath);
+          else if (!entries.includes(packedPath)) throw new Error(`${packageJson.name}: tarball is missing ${packedPath}`);
+        }
+      }
+      for (const skill of ['fliwright-cli-workflows', 'fliwright-agent-memory', 'write-fliwright-tests', 'write-fliwright-mock-rules']) {
+        await requireSkillTree(join(root, '.agents', 'skills', skill), `package/dist/skills/${skill}`);
+      }
     }
 
     const { stdout: packedManifest } = await execFileAsync(
@@ -91,41 +98,22 @@ try {
     } else {
       await execFileAsync('pnpm', ['install', '--ignore-scripts'], { cwd: consumerDir });
     }
-    await execFileAsync(process.execPath, [
-      '--input-type=module',
-      '--eval',
-      [
-        "import { FliwrightDriver } from '@fliwright/core';",
-        "import { DeviceDiscovery } from '@fliwright/devices';",
-        "import { defineConfig as defineCliConfig } from '@fliwright/cli';",
-        "import { runCommand } from '@fliwright/cli/run';",
-        "import { TddRuntime } from '@fliwright/tdd';",
-        "import { riverpodPlugin } from '@fliwright/plugin-riverpod';",
-        'if (![DeviceDiscovery, FliwrightDriver, defineCliConfig, runCommand, TddRuntime, riverpodPlugin].every(Boolean)) throw new Error("missing public export");',
-      ].join('\n'),
+    await verifyConsumerImports(consumerDir);
+    await mkdir(join(consumerDir, 'lib'), { recursive: true });
+    await writeFile(join(consumerDir, 'pubspec.yaml'), 'name: clean_consumer\n');
+    await writeFile(join(consumerDir, 'lib', 'main.dart'), 'void main() {}\n');
+    const { stdout: setupOutput } = await execFileAsync(process.execPath, [
+      join(consumerDir, 'node_modules', '@fliwright', 'cli', 'dist', 'index.js'),
+      'init', '--agent', 'codex', '--yes', '--install', 'false', '--json',
     ], { cwd: consumerDir });
-    await writeFile(join(consumerDir, 'vitest.config.mjs'), [
-      "import { fliwrightPreset } from '@fliwright/vitest/preset';",
-      "export default fliwrightPreset({ recording: { mode: 'off' }, test: { include: ['package-entry.test.mjs'] } });",
-    ].join('\n'));
-    await writeFile(join(consumerDir, 'package-entry.test.mjs'), [
-      "import { test } from '@fliwright/vitest';",
-      "import { expect } from 'vitest';",
-      "test('loads the published Vitest fixture', () => { expect(typeof test).toBe('function'); });",
-    ].join('\n'));
-    await writeFile(join(consumerDir, 'vitest.config.mjs'), [
-      "import { fliwrightPreset } from '@fliwright/vitest/preset';",
-      "export default fliwrightPreset({ test: { include: ['package-entry.test.mjs'] } });",
-    ].join('\n'));
-    if (packageManager === 'npm') {
-      await execFileAsync(process.execPath, [
-        join(consumerDir, 'node_modules', 'vitest', 'vitest.mjs'),
-        'run',
-        'package-entry.test.mjs',
-      ], { cwd: consumerDir });
-    } else {
-      await execFileAsync('pnpm', ['exec', 'vitest', 'run', 'package-entry.test.mjs'], { cwd: consumerDir });
+    const setup = JSON.parse(setupOutput);
+    if (!setup.ok || setup.data.runtimeVerified !== false || setup.data.agent.skills.length !== 4 || setup.data.agent.conflicts.length) {
+      throw new Error(`${packageManager}: installed CLI could not initialize Codex Skills`);
     }
+    await readFile(join(consumerDir, '.agents', 'skills', 'fliwright-cli-workflows', 'references', 'commands', 'command-init.md'));
+    await readFile(join(consumerDir, '.agents', 'skills', 'fliwright-agent-memory', 'references', 'memory-format.md'));
+    await readFile(join(consumerDir, '.agents', 'skills', 'fliwright-agent-memory', 'assets', 'memory-entry.template.json'));
+    console.log(`verified clean ${packageManager} consumer Codex initialization`);
     console.log(`verified clean ${packageManager} consumer install and public imports`);
   }
 } finally {

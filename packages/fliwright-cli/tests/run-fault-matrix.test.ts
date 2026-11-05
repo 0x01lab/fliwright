@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { watch } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -89,17 +90,23 @@ describe('CLI combined fault recovery', () => {
     const runsRoot = join(root, 'runs');
     const endpoint = `ws://cancel-${root.split('/').at(-1)}/ws`;
     const owner = await new EndpointLeaseManager().acquire(endpoint);
-    // This only unblocks a broken implementation so the assertion can explain the failure.
-    const fallback = setTimeout(() => { void owner.release(); }, 2000);
+    // Start the fallback only after the child reaches preparation; process startup
+    // under suite load must not release the lease before cancellation is tested.
+    let fallback: ReturnType<typeof setTimeout> | undefined;
+    const preparationWatcher = watch(root, (_event, filename) => {
+      if (filename === 'preparation-started' && !fallback) fallback = setTimeout(() => { void owner.release(); }, 2000);
+    });
     try {
       await mkdir(join(root, '.fliwright/tests'), { recursive: true });
       await writeFile(join(root, 'runner.mjs'), `
         import { FliwrightRunner } from ${JSON.stringify(import.meta.resolve('@fliwright/vitest/runner'))};
+        import { writeFile } from 'node:fs/promises';
         export default class CanceledPreparationRunner extends FliwrightRunner {
           async onBeforeRunTask(task) {
             const key = Symbol.for('@fliwright/vitest/prepare-task');
             const prepare = task.meta[key];
             task.meta[key] = async (registered, signal) => {
+              await writeFile(${JSON.stringify(join(root, 'preparation-started'))}, 'ready');
               setTimeout(() => this.cancel('keyboard-input'), 25);
               return prepare(registered, signal);
             };
@@ -140,7 +147,7 @@ describe('CLI combined fault recovery', () => {
       expect(portable.timeline.status).toBe('interrupted');
       expect(portable.trace.meta.status).toBe('interrupted');
       expect(JSON.parse(await readFile(join(output, 'report.json'), 'utf8'))).toMatchObject({ status: 'interrupted', passed: false });
-    } finally { clearTimeout(fallback); await owner.release(); await rm(root, { recursive: true, force: true }); }
+    } finally { preparationWatcher.close(); clearTimeout(fallback); await owner.release(); await rm(root, { recursive: true, force: true }); }
   }, 10_000);
 
   it('preserves transport, capture, cleanup and collection faults through portable partial export', async () => {

@@ -43,8 +43,8 @@ export function DetailTabs(props: DetailTabsProps): JSX.Element {
             const disabled = tab.id === 'widgetTree' && !hasSnapshot;
             const badge = tab.id === 'error' ? errorCount : tab.id === 'logs' ? logCount : 0;
             return (
-              <TabsTrigger key={tab.id} value={tab.id} disabled={disabled} title={disabled ? 'No widget snapshot for this step' : undefined}>
-                {tab.label}
+              <TabsTrigger key={tab.id} value={tab.id} disabled={disabled} title={disabled ? 'No UI snapshot for this step' : undefined}>
+                {tab.id === 'widgetTree' && selection?.surface === 'native' ? 'Native Tree' : tab.label}
                 {badge ? <Badge variant={tab.id === 'error' ? 'destructive' : 'muted'} className="ml-1 px-1.5 py-0 normal-case">{badge}</Badge> : null}
               </TabsTrigger>
             );

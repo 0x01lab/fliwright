@@ -42,25 +42,25 @@ export const FlowReviewPlanParamsSchema = z.object({
 
 export const FlowReviewCaptureRuntimeParamsSchema = FlowReviewPlanParamsSchema.extend({
   pixelRatio: z.number().optional().default(1).describe('Runtime screenshot pixel ratio, default 1'),
-  outputDir: z.string().optional().describe('Directory to write runtime screenshots. Defaults to .fliwright/reviews/<flowId>-<timestamp>.'),
+  outputDir: z.string().optional().describe('Directory to write runtime screenshots. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>.'),
   targetIds: z.array(z.string()).optional().describe('Optional subset of flow node ids to capture'),
   limit: z.number().optional().describe('Optional max number of targets to capture'),
 });
 
 export const FlowReviewBundleParamsSchema = FlowReviewPlanParamsSchema.extend({
-  outputDir: z.string().optional().describe('Review artifact root directory. Defaults to .fliwright/reviews/<flowId>.'),
+  outputDir: z.string().optional().describe('Review artifact root directory. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>.'),
   outputPath: z.string().optional().describe('Optional path to write the review bundle JSON.'),
 });
 
 export const FlowReviewCaptureFigmaParamsSchema = FlowReviewPlanParamsSchema.extend({
-  outputDir: z.string().optional().describe('Directory for Figma screenshots. Defaults to .fliwright/reviews/<flowId>/figma.'),
+  outputDir: z.string().optional().describe('Directory for Figma screenshots. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>/figma.'),
   capturesFile: z.string().optional().describe('Path to write figma-captures.json.'),
   accessToken: z.string().optional().describe('Figma access token. Defaults to FIGMA_ACCESS_TOKEN or FIGMA_TOKEN.'),
   scale: z.number().optional().describe('Figma image render scale.'),
 });
 
 export const FlowReviewRunParamsSchema = FlowReviewPlanParamsSchema.extend({
-  outputDir: z.string().optional().describe('Review artifact root directory. Defaults to .fliwright/reviews/<flowId>-<timestamp>.'),
+  outputDir: z.string().optional().describe('Review artifact root directory. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>.'),
   accessToken: z.string().optional().describe('Figma access token. Defaults to FIGMA_ACCESS_TOKEN or FIGMA_TOKEN.'),
   scale: z.number().optional().describe('Figma image render scale.'),
   pixelRatio: z.number().optional().default(1).describe('Runtime screenshot pixel ratio, default 1.'),
@@ -95,7 +95,7 @@ export const FlowReviewReportParamsSchema = FlowReviewPlanParamsSchema.extend({
   comparisons: z.array(FlowReviewComparisonSchema).optional().describe('Optional visual/text/token comparison metrics from a diff engine'),
   autoCompare: z.boolean().optional().default(true).describe('Automatically compare runtime/Figma PNG screenshots when both paths are available. Default true.'),
   pixelThreshold: z.number().optional().describe('Per-pixel RGBA delta threshold used by autoCompare. Default 0.'),
-  outputPath: z.string().optional().describe('Path to write the review report JSON. Defaults to .fliwright/reviews/<flowId>-report.json'),
+  outputPath: z.string().optional().describe('Path to write the review report JSON. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-report.json'),
 });
 
 export const FlowGenerateTestParamsSchema = FlowAgentSpecParamsSchema.extend({

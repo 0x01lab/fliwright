@@ -17,7 +17,7 @@ Use to coordinate runtime capture and external Figma export through separate too
 
 - No live app required by the registry. Check command-specific runtime requirements below.
 - No persistent session required. See usage for finite/session variants.
-- Default root is .fliwright/reviews/<flowId>. This command prepares tasks; it does not execute screenshots or a review.
+- Default root is ~/.fliwright/<project-path>/reviews/<flowId>. This command prepares tasks; it does not execute screenshots or a review.
 - The bundle’s figmaMcp field describes external Figma tasks, not a Fliwright MCP server.
 
 ## Input
@@ -28,7 +28,7 @@ Use to coordinate runtime capture and external Figma export through separate too
 | `path` | `--path` | string | no | — | Direct path to a .flow.json file |
 | `pixelDiffTolerance` | `--pixel-diff-tolerance` | number | no | — | Allowed visual diff ratio, default 0.03 |
 | `layoutPxTolerance` | `--layout-px-tolerance` | number | no | — | Allowed layout delta in px, default 4 |
-| `outputDir` | `--output-dir` | string | no | — | Review artifact root directory. Defaults to .fliwright/reviews/<flowId>. |
+| `outputDir` | `--output-dir` | string | no | — | Review artifact root directory. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>. |
 | `outputPath` | `--output-path` | string | no | — | Optional path to write the review bundle JSON. |
 
 Requiredness/defaults above come from the input schema. Conditional requirements and effective implementation defaults are explained above; “—” means no Zod default. Every command also accepts [common options](./common.md#common-options). JSON keys use camelCase; flags use kebab-case. Positional fields are supplied positionally or in --input, not as flags.
@@ -83,7 +83,7 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
     },
     "outputDir": {
       "type": "string",
-      "description": "Review artifact root directory. Defaults to .fliwright/reviews/<flowId>."
+      "description": "Review artifact root directory. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>."
     },
     "outputPath": {
       "type": "string",

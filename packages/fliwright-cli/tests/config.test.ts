@@ -1,8 +1,9 @@
+import { pathToFileURL } from 'node:url';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, writeFile, rm, mkdir } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { loadConfig, defineConfig, resolveProjectConfig, type FliwrightCliConfig } from '../src/config.js';
+import { homedir, tmpdir } from 'node:os';
+import { loadConfig, defineConfig, resolveProjectConfig, resolveProjectImport, type FliwrightCliConfig } from '../src/config.js';
 
 describe('defineConfig', () => {
   it('fills defaults for omitted optional fields', () => {
@@ -70,10 +71,21 @@ describe('loadConfig', () => {
       .toMatchObject({ runsRoot: join(tmpDir, 'ci-runs'), cacheRoot: join(tmpDir, 'scratch') });
   });
 
-  it('defaults both storage roots inside the project', async () => {
+  it('defaults runtime partitions outside the project', async () => {
     expect(await resolveProjectConfig(tmpDir, {}, {})).toMatchObject({
-      runsRoot: join(tmpDir, '.fliwright/runs'), cacheRoot: join(tmpDir, '.fliwright/cache'),
+      runsRoot: join(homedir(), '.fliwright', tmpDir.replace(/[/\\]/g, '-'), 'runs'),
+      cacheRoot: join(homedir(), '.fliwright', tmpDir.replace(/[/\\]/g, '-'), 'cache'),
+      paths: { recordings: join(homedir(), '.fliwright', tmpDir.replace(/[/\\]/g, '-'), 'recordings') },
     });
+  });
+
+  it('resolves import-only project dependencies for configs outside the project', async () => {
+    await mkdir(join(tmpDir, 'node_modules/import-only'), { recursive: true });
+    await writeFile(join(tmpDir, 'node_modules/import-only/package.json'), JSON.stringify({
+      name: 'import-only', type: 'module', exports: { './preset': { import: './preset.js' } },
+    }));
+    await writeFile(join(tmpDir, 'node_modules/import-only/preset.js'), 'export const preset = {};');
+    expect(resolveProjectImport('import-only/preset', tmpDir)).toBe(pathToFileURL(await realpath(join(tmpDir, 'node_modules/import-only/preset.js'))).href);
   });
 
   it('loads values from fliwright.config.ts', async () => {

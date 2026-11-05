@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { resolveProjectConfig } from '@fliwright/cli';
+import { resolveFliwrightRuntimeRoot } from '@fliwright/core';
+import { resolveProjectConfig, resolveProjectImport } from '@fliwright/cli';
 
 export interface VitestScriptConfig {
   path: string;
@@ -16,16 +17,17 @@ export function usesVitestScript(filePath: string, source: string): boolean {
 
 export async function createVitestScriptConfig(relativeScript: string, workspaceRoot: string): Promise<VitestScriptConfig> {
   const project = await resolveProjectConfig(workspaceRoot);
-  const presetOptions = { recording: project.recording, paths: project.paths,
+  const presetOptions = { projectRoot: workspaceRoot, cacheRoot: project.cacheRoot, recording: project.recording, paths: project.paths,
     runsRoot: project.runsRoot, scenarios: project.scenarios, scenarioMode: project.scenarioMode };
-  const stateDir = path.join(workspaceRoot, '.fliwright');
+  const stateDir = path.join(resolveFliwrightRuntimeRoot({ projectRoot: workspaceRoot }), 'tmp');
   await fs.mkdir(stateDir, { recursive: true });
-  // Keep module resolution in the target project, including ESM-only exports.
+  // Resolve the project dependency explicitly because the temporary config lives outside its node_modules tree.
+  const presetUrl = resolveProjectImport('@fliwright/vitest/preset', workspaceRoot);
   const dir = await fs.mkdtemp(path.join(stateDir, 'script-config-'));
   const configPath = path.join(dir, 'vitest.config.mjs');
   const include = relativeScript.split(path.sep).join('/');
   await fs.writeFile(configPath, [
-    "import { fliwrightPreset } from '@fliwright/vitest/preset';",
+    `import { fliwrightPreset } from ${JSON.stringify(presetUrl)};`,
     'export default {',
     `  root: ${JSON.stringify(workspaceRoot)},`,
     `  ...fliwrightPreset({ ...${JSON.stringify(presetOptions)}, test: {`,

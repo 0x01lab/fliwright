@@ -66,7 +66,7 @@ export interface StartOpts {
    * Optional path the runtime writes its {@link RuntimeSnapshot} to after each state change
    * (start/focus/cycle/reconnect/stop), as a best-effort, non-blocking JSON dump. Lets read-only
    * monitors (e.g. the VS Code TDD Loop panel) observe the loop without a second driver connection.
-   * Defaults to `<projectRoot>/.fliwright/tdd-status.json` when set by the CLI layer.
+   * Defaults to `~/.fliwright/<project-path>/runtime/tdd-status.json` when set by the CLI layer.
    */
   statusFilePath?: string;
 }

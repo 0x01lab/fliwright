@@ -13,3 +13,4 @@ export { pairWorker } from './pairing.js';
 export { installLocalPackages } from './local-packages.js';
 export { WorkerTimelineRecorder, readWorkerTimelineLog } from './WorkerTimelineRecorder.js';
 export { WorkerTimelineChannel, type SpanOptions } from './WorkerTimelineChannel.js';
+export { WorkerDiagnostics, readWorkerLogs, reportWorkerDiagnostics } from './diagnostics.js';

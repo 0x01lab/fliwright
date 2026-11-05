@@ -52,8 +52,10 @@ describe('initCommand', () => {
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(gitignore).toContain('.fliwright/runs/');
     expect(gitignore).toContain('.fliwright/cache/');
-    expect(config).toContain("cacheRoot: '.fliwright/cache'");
+    expect(config).not.toContain("cacheRoot: '.fliwright/cache'");
+    expect(config).not.toContain("recordings: '.fliwright/recordings'");
     expect(gitignore).toContain('.fliwright/failures/');
+    expect(gitignore).toContain('.fliwright/memory/');
   });
 
   it('does not overwrite existing fliwright.config.ts or package scripts', async () => {

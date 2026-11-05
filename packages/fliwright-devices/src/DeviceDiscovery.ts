@@ -79,7 +79,11 @@ export class DeviceDiscovery {
             if (!runtime.includes('.iOS-')) continue;
             for (const value of array(rows)) {
               const d = object(value);
+              const deviceType = text(d.deviceTypeIdentifier);
+              const model = deviceType?.startsWith('com.apple.CoreSimulator.SimDeviceType.')
+                ? deviceType.slice('com.apple.CoreSimulator.SimDeviceType.'.length).replaceAll('-', ' ') || undefined : undefined;
               devices.push({ id: required(d.udid), name: required(d.name), platform: 'ios', kind: 'simulator',
+                model,
                 state: d.isAvailable === false ? 'unavailable' : d.state === 'Booted' ? 'online' : d.state === 'Shutdown' ? 'shutdown' : 'unknown',
                 osVersion: runtime.split('.iOS-')[1]?.replaceAll('-', '.'), detail: text(d.availabilityError) });
             }

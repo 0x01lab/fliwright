@@ -1,13 +1,15 @@
 # HTTP Mock
 
+为测试目标选择或新增响应时，先按 [场景与 Mock 设计](./scenario-design.md) 核对真实 API 契约、目标分支数据、关键请求和 UI 结果。这里的 API 与文件格式不替代业务正确性检查。
+
 新版脚本优先使用 `mock` fixture（timeline-aware `MockRuntime`）；底层能力或旧文件再用
 `driver.mock`（`MockManager`）。二者都通过运行中 app 内的 Dart `HttpOverrides` 拦截 app 的
 HTTP 流量，因此 **Dio/HttpClient 的真实请求会被你的 mock 规则捕获并应答**。你既能在
 UI 上断言，也能对 app 实际发出的请求做断言。
 
-> Mock 需要桥接的 mock 扩展（`ext.fliwright.mock.*`）。当当前桥接暴露了
-> Flutter mock store 时，`MockManager` 会把规则同步过去；否则回退到工具侧的
-> 镜像（`ToolMockServer`）。无论哪种情况，下文 API 完全一致。
+> App 内 HTTP Mock 需要桥接扩展（`ext.fliwright.mock.*`）。`route()` 等尽力同步
+> 方法在同步不可用时可保留工具侧镜像；镜像存在不能证明 App 已使用响应。
+> `routeFlutter()` 和共享/Item `applyRuleSet()` 要求 Flutter 内生效，失败会抛错。
 
 ## 心智模型（The mental model）
 
@@ -50,6 +52,7 @@ test('register flow', async ({ page, flow, mock }) => {
 ```typescript
 mock.rules(title, body)
 mock.loadRules(mockDir?)
+mock.applyRuleSet({ sources, rules, denyUnmatchedRequests? })
 mock.switchRule(endpoint, ruleName, method?)
 mock.route(path, response & { method?, id? })
 mock.routeFlutter(path, response & { method?, id? })
@@ -149,6 +152,15 @@ viExpect(result.status).toBe(404);
 ```
 
 ## 规则文件：`loadRules()` / `listRules()` / `switchRule()`
+
+GitLab Item 验收优先使用命名场景中的 `sources` + 具名 `rules`。完整示例、
+`mock.applyRuleSet` 的严格执行语义、覆盖与追溯见
+[mock-rule-sets.md](./mock-rule-sets.md)。source 模式不读取共享 index 默认值，
+Item 文件无需加入共享 index；只激活选中的端点。
+
+`loadRules()` 仍是单目录全部默认规则加载工具，不具有上述选择与组合语义。
+`applyRuleSet()` 不建立可用 `switchRule()` 切换的目录规则库；用例中途切换时
+应用另一份显式 rule set，或用 `routeFlutter()` 注册对应响应并触发真实业务请求。
 
 对于多端点、多响应场景的情况，把它们定义成 JSON，运行时再切换。
 
@@ -307,6 +319,9 @@ test('register flow: mock API → fill form → submit → verify request', asyn
 
 - **先清后设。** 上一个用例残留的路由会顺着共享 driver 串到当前用例。
   开始 app 可见的 mock 测试时，先 `await mock.clearRoutes(); await mock.clearCalls();`。
+- **source 场景自带清理。** `applyRuleSet()` 在一次解析后替换全部路由并清理记录，
+  包括编辑器临时规则；不要在场景准备后再次 clear/loadRules。原有
+  `mock.clearRoutes()` 保留编辑器规则，二者隔离范围不同。
 - **body 可能是字符串。** Dio 会把请求体 JSON 编码；断言字段前先 `JSON.parse`。
 - **`route()` 是尽力而为；`routeFlutter()` 是严格语义。** 当某个 UI 动作
   必须观察到该规则时用 `routeFlutter()`，否则用例可能只对镜像通过、而 app 什么也看不到。

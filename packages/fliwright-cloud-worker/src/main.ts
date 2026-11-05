@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
 import { pairWorker } from './pairing.js';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
-import { WorkerControlClient, CloudError } from '@fliwright/cloud-protocol';
+import { WorkerControlClient, CloudError, redactDiagnostic } from '@fliwright/cloud-protocol';
 import {
   workerConfigSchema,
   discoveryConfigSchema,
@@ -19,11 +19,26 @@ import { runCommandProcess } from './processes.js';
 import { executorTimeline } from './worker-timeline-ipc.js';
 import { runHostWorker } from './host.js';
 import { installLocalPackages } from './local-packages.js';
+import { WorkerDiagnostics, readWorkerLogs, reportWorkerDiagnostics } from './diagnostics.js';
 const [command, path] = process.argv.slice(2);
 const stop = new AbortController();
+let diagnostics: WorkerDiagnostics | undefined;
+let diagnosticControl: WorkerControlClient | undefined;
+let stopReporting: (() => Promise<void>) | undefined;
+// Persist synchronously and exit: never resume after an uncaught exception.
+process.on('uncaughtExceptionMonitor', error => {
+  if (diagnostics) diagnostics.record('fatal', 'service.uncaught_exception', error);
+  else console.error(redactDiagnostic(error.stack ?? error.message));
+});
+process.on('uncaughtException', () => process.exit(1));
+process.on('unhandledRejection', error => {
+  if (diagnostics) diagnostics.record('fatal', 'service.unhandled_rejection', error);
+  else console.error(redactDiagnostic(error instanceof Error ? error.stack ?? error.message : String(error)));
+  process.exit(1);
+});
 function installStop() {
-  process.once('SIGTERM', () => stop.abort());
-  process.once('SIGINT', () => stop.abort());
+  process.once('SIGTERM', () => { diagnostics?.record('info', 'service.stop_requested', 'SIGTERM'); stop.abort(); });
+  process.once('SIGINT', () => { diagnostics?.record('info', 'service.stop_requested', 'SIGINT'); stop.abort(); });
 }
 async function waitForGo() {
   if (!process.send) throw new Error('Executor requires supervisor IPC');
@@ -53,6 +68,7 @@ Commands:
   discover       Report host devices without an execution slot
   recover        Verify cleanup and recover an isolated slot
   retry-uploads  Retry retained report uploads without executing tests
+  logs           Print the latest 100 local service log entries (works offline)
   install-local-packages <bundle.json>  Install packed build dependencies in the current checkout
 
 Each Worker connects to the Cloud Server configured by serverUrl.
@@ -81,6 +97,31 @@ Credentials use credentialFile after pairing, or a configured tokenEnv.`);
     throw new Error(
       'Usage: fliwright-worker <run|discover|recover|retry-uploads> <config.json>',
     );
+  if (['run', 'discover', 'recover', 'retry-uploads', 'logs'].includes(command)) {
+    // Create diagnostics before parsing configuration so ENOENT and validation errors are retained.
+    let root = join(dirname(resolve(path)), 'runtime');
+    let input: unknown;
+    try {
+      input = loadJson(path);
+      if (input && typeof input === 'object' && 'root' in input && typeof input.root === 'string') root = resolve(input.root);
+    } catch { /* The main command will report the original configuration error. */ }
+    if (command === 'logs') {
+      console.log(JSON.stringify({ root, logs: readWorkerLogs(root).slice(-100) }, null, 2));
+      return;
+    }
+    const secrets: string[] = [];
+    // Never serialize invalid configuration payloads or Zod issue values into diagnostics.
+    try { const config = discoveryConfigSchema.parse(input && typeof input === 'object' ? Object.fromEntries(Object.entries(input).filter(([key]) => ['serverUrl', 'tokenEnv', 'credentialFile', 'deviceTools'].includes(key))) : input); secrets.push(credential(config)); } catch { /* Credential failure is diagnosed by the actual command. */ }
+    diagnostics = new WorkerDiagnostics(root, { secrets });
+    console.log(`Worker service diagnostics: ${diagnostics.path}`);
+    if (['run', 'discover'].includes(command)) {
+      const config = input as { serverUrl?: string };
+      if (config?.serverUrl && secrets[0]) {
+        diagnosticControl = new WorkerControlClient(config.serverUrl, secrets[0]);
+        stopReporting = reportWorkerDiagnostics(diagnostics, diagnosticControl);
+      }
+    }
+  }
   if (command === 'execute' || command === 'reset') {
     installStop();
     let forced: NodeJS.Timeout | undefined;
@@ -140,7 +181,10 @@ Credentials use credentialFile after pairing, or a configured tokenEnv.`);
     const control = new WorkerControlClient(config.serverUrl, credential(config));
     try {
       await control.ready(stop.signal);
-      await reportWorkerDevices(control, { signal: stop.signal, tools: config.deviceTools });
+      diagnostics?.component('inventory', 'running');
+      await reportWorkerDevices(control, { signal: stop.signal, tools: config.deviceTools,
+        onError: error => { diagnostics?.component('inventory', 'failed'); diagnostics?.record('warn', 'inventory.report_failed', error); },
+        onHealthy: () => diagnostics?.component('inventory', 'running') });
     } catch (error) {
       if (!stop.signal.aborted) throw error;
     } finally { control.close(); }
@@ -150,7 +194,7 @@ Credentials use credentialFile after pairing, or a configured tokenEnv.`);
     const input = loadJson(path);
     if (command === 'run' && input && typeof input === 'object' && !('slotId' in input)) {
       installStop();
-      await runHostWorker(hostConfigSchema.parse(input), path, stop.signal);
+      await runHostWorker(hostConfigSchema.parse(input), path, stop.signal, diagnostics);
       return;
     }
     const config = workerConfigSchema.parse(input);
@@ -162,7 +206,7 @@ Credentials use credentialFile after pairing, or a configured tokenEnv.`);
     installStop();
     const control = new WorkerControlClient(config.serverUrl, credential(config));
     try {
-      const worker = createWorker(config, control);
+      const worker = createWorker(config, control, diagnostics);
       if (command === 'recover') {
         await worker.recover();
         console.log('Device reset verified; slot recovered');
@@ -171,8 +215,20 @@ Credentials use credentialFile after pairing, or a configured tokenEnv.`);
       try { await control.ready(stop.signal); }
       catch (error) { if (!stop.signal.aborted) throw error; }
       if (stop.signal.aborted) return;
-      const inventory = reportWorkerDevices(control, { signal: stop.signal, tools: config.deviceTools });
-      const scans = runCatalogScanner(control, { root: join(config.root, 'catalogs'), signal: stop.signal, credentialHomes: config.repositoryCredentialHomes });
+      let backgroundError: unknown;
+      const supervise = (name: string, task: Promise<void>) => {
+        diagnostics?.component(name, 'running');
+        return task.then(() => {
+          if (!stop.signal.aborted) throw new Error(`Worker background component ${name} exited unexpectedly`);
+        }).catch(error => {
+          if (!stop.signal.aborted) {
+            backgroundError = error; diagnostics?.component(name, 'failed');
+            diagnostics?.record('error', 'component.failed', error); stop.abort();
+          }
+        });
+      };
+      const inventory = supervise('inventory', reportWorkerDevices(control, { signal: stop.signal, tools: config.deviceTools }));
+      const scans = supervise('catalog', runCatalogScanner(control, { root: join(config.root, 'catalogs'), signal: stop.signal, credentialHomes: config.repositoryCredentialHomes }));
       try {
         while (!stop.signal.aborted) {
           const revision = control.revision;
@@ -191,14 +247,25 @@ Credentials use credentialFile after pairing, or a configured tokenEnv.`);
         stop.abort();
         await Promise.all([inventory, scans]);
       }
+      if (backgroundError) throw backgroundError;
     } finally { control.close(); }
     return;
   }
   throw new Error('Unknown Worker command');
 }
-main().catch(() => {
+main().then(() => {
+  diagnostics?.record('info', 'service.stopped', 'Worker command completed');
+}).catch(error => {
+  // ZodError contains caller-supplied input; keep only field names and issue codes.
+  const safe = error?.name === 'ZodError' ? new Error(`Invalid Worker configuration: ${error.issues.map((issue: { path: string[]; code: string }) => `${issue.path.join('.')}: ${issue.code}`).join(', ')}`)
+    : error instanceof SyntaxError ? new Error('Invalid JSON in Worker configuration or credentials') : error;
+  diagnostics?.record('fatal', 'service.failed', safe);
+  if (!diagnostics) console.error(redactDiagnostic(safe instanceof Error ? safe.message : String(safe)));
   console.error(
     'Worker operation failed. Check configuration, credentials and local diagnostics; existing slot locks require recovery. If pairing may have been consumed, revoke it in Cloud and generate a new code using a new directory.',
   );
   process.exitCode = 1;
+}).finally(async () => {
+  await stopReporting?.();
+  diagnosticControl?.close();
 });

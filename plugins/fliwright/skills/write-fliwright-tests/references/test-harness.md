@@ -134,7 +134,7 @@ const test = createFliwrightTest(defineConfig({
 | `requireAssertions` | `boolean` | `false` | 为 `true` 时，测试结束前必须至少有一个 locator `expect(...).to*` timeline assertion node |
 | `agentPolicy` | `AgentPolicy` | *(未设)* | 主动/被动 agent 策略 |
 | `timelineDir` | `string` | `process.cwd()` | 兼容的项目目录输入；新配置优先使用 `projectRoot` |
-| `projectRoot` | `string` | 当前项目 | 项目根目录；默认工件根为 `<project>/.fliwright/runs` |
+| `projectRoot` | `string` | 当前项目 | 项目根目录；默认工件根为 `~/.fliwright/<project-path>/runs`，路径编码见 [CLI conventions](../../fliwright-cli-workflows/references/commands/common.md#ci-evidence) |
 | `runsRoot` | `string` | *(未设)* | 显式工件根目录；相对路径基于项目解析。CLI/env/preset 的优先级见 [CLI conventions](../../fliwright-cli-workflows/references/commands/common.md#ci-evidence) |
 | `scenarios` | `Record<string, TestScenario>` | *(未设)* | 命名组合环境，见 [scenarios.md](./scenarios.md) |
 | `defaultScenario` | `string` | *(未设)* | 为所有 attempt 选择场景；必须与 `test.scenario(name)` 的显式选择一致 |

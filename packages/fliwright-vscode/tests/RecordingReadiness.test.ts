@@ -1,8 +1,10 @@
+import { writeFliwrightConfigSnapshot } from '@fliwright/core';
+import { join } from 'node:path';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { Uri } from 'vscode';
 import { readFile, writeFile } from 'node:fs/promises';
 import { RecorderService, recordingEditorViewType } from '../src/recording/RecorderService.js';
-import { createWorkspace, readText } from './helpers/workspace.js';
+import { createWorkspace } from './helpers/workspace.js';
 import { verifyRecordingReplay } from '@fliwright/cli/run';
 
 vi.mock('@fliwright/cli/run', async (original) => ({ ...await original<typeof import('@fliwright/cli/run')>(),
@@ -28,7 +30,7 @@ describe('IDE recording readiness', () => {
     await writeFile(root.fsPath + '/fliwright.config.ts', `export default { paths: {
       scripts: 'qa/tasks', recordings: 'qa/captures', flows: 'qa/flows'
     } };`);
-    vi.stubEnv('FLIWRIGHT_SCENARIOS', JSON.stringify({ saved: { name: 'saved', layers: [] } }));
+    vi.stubEnv('FLIWRIGHT_CONFIG_PATH', writeFliwrightConfigSnapshot({ scenarios: { saved: { name: 'saved', layers: [] } } }));
     const service = new RecorderService();
     const app = driver();
     await service.start(app);
@@ -134,7 +136,7 @@ describe('IDE recording readiness', () => {
     const result = await service.stop(app, undefined, {}, root);
     expect(result.readiness?.readiness).toBe('draft');
     await expect(service.saveGeneratedCode(root)).rejects.toThrow(/unresolved target/i);
-    expect(await readText(root.fsPath, '.fliwright/recordings/' + result.recordingId + '/recording.json')).toContain('unresolved target');
+    expect(await readFile(join(result.recordingDir!, 'recording.json'), 'utf8')).toContain('unresolved target');
   });
 
   it('confirms a checkpoint, replays, and invalidates verification after the scenario changes', async () => {
@@ -218,7 +220,7 @@ describe('IDE recording readiness', () => {
       expected: 'Updated',
       confirmed: true,
     });
-    const persisted = JSON.parse(await readText(root.fsPath, `${edited.recordingDir!.replace(`${root.fsPath}/`, '')}/recording.json`));
+    const persisted = JSON.parse(await readFile(join(edited.recordingDir!, 'recording.json'), 'utf8'));
     expect(persisted.readiness).toMatchObject({ readiness: 'generated' });
     expect(persisted.readiness.verifiedRunId).toBeUndefined();
     expect(reviewed.readiness?.verifiedRunId).toBeUndefined();

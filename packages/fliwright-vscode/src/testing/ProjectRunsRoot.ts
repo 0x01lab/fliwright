@@ -23,7 +23,7 @@ export function projectRunsRoot(
   workspaceRoot: vscode.Uri,
   options: ProjectRunsRootOptions = {},
 ): ProjectRunsRootResult {
-  const runsDir = resolveFliwrightRunsRoot({ projectRoot: workspaceRoot.fsPath, runsRoot: options.runsRoot });
+  const runsDir = resolveFliwrightRunsRoot({ projectRoot: workspaceRoot.fsPath, runsRoot: options.runsRoot, homeDir: options.homeDir });
   return { ...coreProjectRunsRoot(workspaceRoot.fsPath, options), rootDir: dirname(runsDir), runsDir };
 }
 

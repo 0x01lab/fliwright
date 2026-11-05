@@ -1,3 +1,4 @@
+import { Alert } from './components/ui/alert.js';
 import React, { useEffect, useState, type FormEvent } from 'react';
 import {
   Link,
@@ -168,14 +169,14 @@ export function Devices() {
     <>
       <div>
         <h1 className="text-lg font-semibold tracking-tight">设备管理</h1>
-        <p className="lede">
+        <p className="text-xs text-muted-foreground" data-ui="lede">
           统一查看各主机上的 iOS、Android 真机和模拟器，管理应用范围与调度状态。
         </p>
       </div>
       {error && (
-        <div className="error" role="alert">
+        <Alert asChild variant="destructive"><div role="alert" data-ui="error">
           {error}
-        </div>
+        </div></Alert>
       )}
       <div className="grid gap-3 sm:grid-cols-3">
         {[
@@ -279,7 +280,7 @@ export function Devices() {
               <TableRow key={d.id}>
                 <TableCell className="min-w-40">
                   <Link
-                    className="link font-medium"
+                    className="font-medium text-primary hover:underline font-medium"
                     to="/devices/$id"
                     params={{ id: d.id }}
                   >
@@ -317,16 +318,16 @@ export function Devices() {
             ))}
           </TableBody>
         </Table>
-        {!data && !error && <p className="empty">正在加载设备…</p>}
+        {!data && !error && <p className="grid justify-items-center gap-2 px-4 py-7 text-center text-muted-foreground [&_svg]:size-6 [&_h3]:text-sm [&_p]:max-w-[44ch] [&_p]:text-xs" data-ui="empty">正在加载设备…</p>}
         {data && !items.length && (
-          <p className="empty">
+          <p className="grid justify-items-center gap-2 px-4 py-7 text-center text-muted-foreground [&_svg]:size-6 [&_h3]:text-sm [&_p]:max-w-[44ch] [&_p]:text-xs" data-ui="empty">
             {data.length
               ? '没有符合筛选条件的设备。'
               : '尚未收到设备检测结果。请在已登记主机上启动设备检测或 Worker。'}
           </p>
         )}
       </Card>
-      <p className="hint">
+      <p className="text-xs leading-[1.45] text-muted-foreground">
         设备变化自动上报并刷新，每 30 秒校准一次；90
         秒未更新后停止新任务分配。暂停设备仅影响后续任务。
       </p>
@@ -346,13 +347,13 @@ export function DeviceDetail() {
     useData<Array<{ id: string; name: string }>>('/api/targets');
   return (
     <>
-      <Link to="/devices" className="link">
+      <Link to="/devices" className="font-medium text-primary hover:underline">
         ← 设备列表
       </Link>
       {error && (
-        <div className="error" role="alert">
+        <Alert asChild variant="destructive"><div role="alert" data-ui="error">
           {error}
-        </div>
+        </div></Alert>
       )}
       {!data && !error && <p>正在加载设备…</p>}
       {data && (
@@ -361,13 +362,13 @@ export function DeviceDetail() {
             <h1 className="text-lg font-semibold tracking-tight">
               {name(data)}
             </h1>
-            <p className="lede">
+            <p className="text-xs text-muted-foreground" data-ui="lede">
               {data.observation.name} · {data.workerId} · {data.nativeId}
             </p>
             <Readiness device={data} />
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
-            <Card className="p-3 stack">
+            <Card className="p-3 grid content-start gap-3" data-ui="stack">
               <h2>设备与执行状态</h2>
               <dl className="grid grid-cols-2 gap-3 text-xs">
                 <dt>平台 / 类型</dt>
@@ -405,14 +406,14 @@ export function DeviceDetail() {
                 </dd>
               </dl>
               {data.observation.detail && (
-                <p className="hint">{data.observation.detail}</p>
+                <p className="text-xs leading-[1.45] text-muted-foreground">{data.observation.detail}</p>
               )}
               {data.slot?.attemptId && (
                 <p>
                   当前任务尝试：<code>{data.slot.attemptId}</code>
                 </p>
               )}
-              <Link to="/workers" className="link">
+              <Link to="/workers" className="font-medium text-primary hover:underline">
                 查看 Worker 主机 →
               </Link>
             </Card>
@@ -424,7 +425,7 @@ export function DeviceDetail() {
               onSaved={update}
             />
           </div>
-          <Card className="p-3 stack">
+          <Card className="p-3 grid content-start gap-3" data-ui="stack">
             <h2>执行环境</h2>
             <p>
               在主机启动一次 fliwright-worker run 后，保存允许的应用即可自动同步执行环境。
@@ -444,7 +445,7 @@ export function DeviceDetail() {
                 <code>{data.nativeId}</code>
               </dd>
             </dl>
-            <p className="hint">
+            <p className="text-xs leading-[1.45] text-muted-foreground">
               iOS 模拟器自动启动，测试前后重启并保留设备数据。其他设备使用主机配置的重置策略。
               若一直等待执行进程，请确认主机运行的是 run，而非仅发现设备的 discover。
               隔离槽位仍需在主机清理并恢复。
@@ -521,11 +522,11 @@ function DeviceSettingsForm({
     }
   };
   return (
-    <Card className="p-3 stack">
+    <Card className="p-3 grid content-start gap-3" data-ui="stack">
       <h2>管理配置</h2>
-      {!editable && <p className="hint">仅操作员和管理员可修改。</p>}
+      {!editable && <p className="text-xs leading-[1.45] text-muted-foreground">仅操作员和管理员可修改。</p>}
       <form data-device-settings onSubmit={save}>
-        <fieldset disabled={!editable || saving} className="stack">
+        <fieldset disabled={!editable || saving} className="grid content-start gap-3" data-ui="stack">
           <Label htmlFor="device-alias">设备别名</Label>
           <Input
             id="device-alias"
@@ -573,7 +574,7 @@ function DeviceSettingsForm({
             onChange={(e) => set('slotId', e.target.value || null)}
           />
           </details>
-          <div className="stack">
+          <div className="grid content-start gap-3" data-ui="stack">
             <Label>允许的应用</Label>
             {targets.map((target) => (
               <Label key={target.id}>
@@ -614,9 +615,9 @@ function DeviceSettingsForm({
         </fieldset>
       </form>
       {error && (
-        <div role="alert" className="error">
+        <Alert asChild variant="destructive"><div role="alert" data-ui="error">
           {error}
-        </div>
+        </div></Alert>
       )}
       {notice && <p role="status">{notice}</p>}
       <small>

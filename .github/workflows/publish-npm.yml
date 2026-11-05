@@ -9,8 +9,19 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
 jobs:
+  quality:
+    uses: ./.github/workflows/release-gate.yml
+    permissions:
+      contents: read
+
   publish:
+    needs: quality
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,23 +30,19 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Verify tag matches public package versions
-        shell: bash
-        run: |
-          expected="npm-v$(node -p "require('./packages/fliwright-cli/package.json').version")"
-          test "${GITHUB_REF_NAME}" = "${expected}"
-          for manifest in packages/fliwright-{devices,core,vitest,cli,tdd,plugin-riverpod}/package.json; do
-            test "$(node -p "require('./${manifest}').version")" = "${GITHUB_REF_NAME#npm-v}"
-          done
+      - name: Verify tag matches the complete public dependency graph
+        run: node scripts/release-packages.mjs verify
 
-      - run: pnpm lint
-      - run: pnpm test
+      - run: pnpm --filter './packages/*' --filter '!@fliwright/cloud*' -r run build
+      - run: pnpm --filter './packages/*' --filter '!@fliwright/cloud*' -r run lint
+      # Keep package suites from competing for CPU and filesystem budgets.
+      - run: pnpm --workspace-concurrency=1 --filter './packages/*' --filter '!@fliwright/cloud*' -r run test --maxWorkers=2
       - run: pnpm package:check
 
       - name: Publish in dependency order with provenance
@@ -53,12 +60,11 @@ jobs:
               pnpm --filter "${package_name}" publish --no-git-checks
             fi
           }
-          publish_if_missing @fliwright/devices
-          publish_if_missing @fliwright/core
-          publish_if_missing @fliwright/vitest
-          publish_if_missing @fliwright/plugin-riverpod
-          publish_if_missing @fliwright/tdd
-          publish_if_missing @fliwright/cli
+          # Materialize the list first so discovery errors cannot become an empty successful loop.
+          node scripts/release-packages.mjs list > "$RUNNER_TEMP/npm-release-packages.txt"
+          while IFS= read -r package_name; do
+            publish_if_missing "$package_name"
+          done < "$RUNNER_TEMP/npm-release-packages.txt"
 
       - name: Verify published registry consumer
         env:

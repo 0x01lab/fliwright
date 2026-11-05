@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Local and Item acceptance workflows share the configured run history with
+  Run Viewer; Item directories keep plans and summaries. Roots overridden only
+  in a CLI invocation are not discovered automatically. Remove unused legacy
+  project-local run and trace path helpers; no legacy-root fallback is active.
+- Separate authored `.fliwright` assets from machine-local runtime data. Runs,
+  caches, raw recordings, review evidence, VM metadata, sessions and temporary
+  runner configs default to `~/.fliwright/<project-path>/`, replacing every slash
+  in the complete path with `-` and preserving the leading dash.
+- Preserve explicit storage settings, support `~/` paths and
+  `FLIWRIGHT_RUNTIME_ROOT` / `FLIWRIGHT_CACHE_ROOT`, and store shared Flow targets
+  as project-relative paths. Existing data is preserved without automatic migration.
+
 ## 0.2.0
 
 ### Changed

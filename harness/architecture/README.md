@@ -24,9 +24,11 @@ other Harness document duplicates those rules.
 | `packages/fliwright-cloud-worker` | CLI-started host discovery/reporting, supervised execution, cleanup and upload | Server persistence, browser UI or central scheduling |
 | `packages/fliwright-cloud-protocol` | Shared wire schemas, HTTP client and artifact upload path policy | Host tools, execution or server persistence |
 | `packages/fliwright-devices` | Host iOS/Android physical device and simulator discovery, normalized state and tooling diagnostics | App launch, cloud scheduling, slot leases, reset policies, CLI or editor UX |
+| `packages/fliwright-native` | Owned Android ADB/iOS XCTest sessions, native device leases, VM process binding and platform diagnostics | Flutter bridge instrumentation, cloud scheduling, CLI/editor UX or general device inventory |
 | `packages/fliwright-core` | Reusable automation runtime, VM-service client protocol, shared models | CLI, MCP, editor UX, or in-app Dart instrumentation |
 | `packages/fliwright-bridge` | Flutter-side `ext.fliwright.*` instrumentation and app interaction | TypeScript orchestration or user-facing transports |
 | `packages/fliwright-vitest` | Vitest fixtures, hooks, reporters, test lifecycle integration | Core automation semantics or transport workflows |
+| `packages/test-plan` | Independent GitLab snapshots, validation of skill-authored test plans and automation bindings | AI orchestration, Flutter runtime, test execution or release approval |
 | `packages/fliwright-cli` | Developer, agent and CI CLI commands and reusable command capabilities | Core primitives, editor UX, or Dart instrumentation |
 | `packages/fliwright-vscode` | VS Code commands, views, webviews, and project workflows | Core primitives, MCP contracts, or Dart instrumentation |
 | `packages/fliwright-plugin-riverpod` | TypeScript Riverpod plugin and state adapter | Flutter observation or generic runtime behavior |
@@ -62,8 +64,10 @@ runtime surfaces; use it to discover an implemented capability, then use
 - End-to-end smoke tests are in `e2e`; Flutter demos and demo tests are in
   `examples/*`. Demos consume only their declared bridge packages and must not
   become a dependency of runtime packages.
-- Per-project runtime state belongs to the target project's `.fliwright/`
-  directory. Its URL and configuration resolution are defined in
+- Authored team assets belong to the target project's `.fliwright/` directory.
+  Machine-local runtime data defaults to `~/.fliwright/<project-path>/`, with
+  every slash in the complete project path replaced by `-`. Its URL and
+  configuration resolution are defined in
   [../memory/runtime-configuration.md](../memory/runtime-configuration.md).
 - Product and design intent belongs in `docs/`; development governance belongs
   in `harness/`. Do not duplicate either in package READMEs without a local

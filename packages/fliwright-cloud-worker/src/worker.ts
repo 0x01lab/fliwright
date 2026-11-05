@@ -22,6 +22,9 @@ import { createHash } from 'node:crypto';
 import { WorkerAgent, writeJournal } from './WorkerAgent.js';
 import type { WorkerTimelineChannel } from './WorkerTimelineChannel.js';
 import { recordWorkerTimelineMessage } from './worker-timeline-ipc.js';
+import type { WorkerDiagnostics } from './diagnostics.js';
+import { WorkerNativeOwnership } from './WorkerNativeOwnership.js';
+import { ManagedNativeTimeline } from './ManagedNativeTimeline.js';
 import {
   runCommandProcess,
   spawnExecution,
@@ -34,12 +37,13 @@ const digest = (value: Buffer) =>
   createHash('sha256').update(value).digest('hex');
 
 type WorkerSettings = z.infer<typeof workerConfigSchema>;
-export function createWorker(config: WorkerSettings, control: WorkerControlClient) {
+export function createWorker(config: WorkerSettings, control: WorkerControlClient, diagnostics?: WorkerDiagnostics) {
   if (process.platform === 'win32')
     throw new Error('Mac/Unix workers require owned process groups');
   const client = new CloudClient(config.serverUrl, credential(config));
   let logAttempt: string | undefined;
   let readLogs: (() => string | undefined) | undefined;
+  const nativeOwnership = new WorkerNativeOwnership();
   return new WorkerAgent(config, {
     claim: (signal) =>
       control.request<ExecutionLease | null>('/api/worker/claim', {
@@ -48,29 +52,54 @@ export function createWorker(config: WorkerSettings, control: WorkerControlClien
         signal,
       }),
     watchLease: (lease, listener) => control.watchLease(lease, listener),
-    heartbeat: (lease, stage, timelineClock) => {
+    heartbeat: async (lease, stage, timelineClock) => {
       if (logAttempt !== lease.attemptId) {
         logAttempt = lease.attemptId;
         readLogs = createLogTail(join(config.root, 'spool', lease.attemptId), [
           credential(config),
         ]);
       }
-      return control.request('/api/worker/heartbeat', {
+      try { return await control.request('/api/worker/heartbeat', {
         method: 'POST',
         body: { ...leaseKey(lease), stage, log: readLogs?.(), timelineClock },
-      });
+      }); } catch (error) {
+        diagnostics?.record('error', 'lease.heartbeat_failed', error, { slotId: lease.slotId, requestId: lease.request.id, attemptId: lease.attemptId });
+        throw error;
+      }
     },
     recordTimeline: (batch, signal) => control.request('/api/worker/timeline', { method: 'POST', body: batch, signal }),
-    execute: (lease, directory, signal, onStage, timeline) =>
-      spawnExecution(lease, directory, signal, onStage, {
+    execute: async (lease, directory, signal, onStage, timeline) => {
+      const context = { slotId: lease.slotId, requestId: lease.request.id, attemptId: lease.attemptId };
+      const nativeTimeline = new ManagedNativeTimeline(timeline?.channel);
+      diagnostics?.record('info', 'execution.started', 'Execution child starting', context);
+      try {
+      const result = await spawnExecution(lease, directory, signal, onStage, {
         mainFile: fileURLToPath(new URL('./main.js', import.meta.url)),
         flutterBin: config.flutterBin,
         resetCommands: config.resetCommands,
         allowedEnv: config.allowedEnv.filter((k) => k !== config.tokenEnv),
         timeline,
-      }),
+        prepareNative: async project => {
+          const grant = await nativeOwnership.acquire(project, { deviceId: lease.deviceId, signal, scenario: lease.request.input.scenario ?? null,
+          onPhase: event => nativeTimeline.observe(event),
+          launch: { target: lease.request.target.entry, flutterArgs: lease.request.target.flutterArgs, requiredCapabilities: lease.request.target.requiredCapabilities, flutterBin: config.flutterBin } });
+          await nativeTimeline.flush();
+          return grant;
+        },
+        prepareNativeAttempt: async (project, request, attemptSignal) => {
+          await nativeOwnership.prepareAttempt(project, request, attemptSignal);
+          await nativeTimeline.flush();
+        },
+      });
+      await nativeTimeline.flush();
+      diagnostics?.record(result.infrastructure ? 'error' : 'info', 'execution.finished', result.error ?? `Execution verdict: ${result.verdict}`, context);
+      return result;
+      } catch (error) { diagnostics?.record('error', 'execution.child_failed', error, context); throw error; }
+      finally { await nativeTimeline.flush(); }
+    },
     stopOwned: stopOwnedProcesses,
     reset: async (timeline, parentSpanId) => {
+      await nativeOwnership.reset(async () => {
       // Reset runs as its own recorded group too; a crashed reset cannot race recovery.
       const resetDir = join(config.root, 'reset');
       const { mkdirSync } = await import('node:fs');
@@ -124,6 +153,8 @@ export function createWorker(config: WorkerSettings, control: WorkerControlClien
         await stopOwnedProcesses(resetDir);
         timeline?.interrupt('reset', 'process_exit');
       }
+      });
+      await new Promise(resolve => setTimeout(resolve, 0));
     },
     publish: (lease, directory, timeline, parentSpanId) => publishBundle(client, lease, directory, timeline, parentSpanId),
     recordResult: (lease, result) =>

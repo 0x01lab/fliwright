@@ -39,8 +39,9 @@ Use for an app task stored as a TypeScript script, such as data setup or a repea
 | `recordingMode` | `--recording-mode` | "standard" \| "full" \| "off" | no | — | Runner timeline/recording evidence level. |
 | `output` | `--output` | string | no | — | Write the JSON run report here. Use junitOutput for XML. (minLength=1) |
 | `junitOutput` | `--junit-output` | string | no | — | Path for a separate JUnit XML report, including failed runs. (minLength=1) |
-| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default <project>/.fliwright/runs. Relative paths use the project root. (minLength=1) |
+| `runsRoot` | `--runs-root` | string | no | — | Canonical run directory. Overrides config/FLIWRIGHT_RUNS_ROOT; default ~/.fliwright/<project-path>/runs. Relative paths use the project root. (minLength=1) |
 | `scenario` | `--scenario` | string | no | — | Named composed TestScenario in fliwright.config; resolve it before execution. (minLength=1) |
+| `release` | `--release` | object | no | — | JSON object with confirmed app/version/build/commit/platform/environment for the tested build. Unknown fields may be omitted. Preserved in real run results and exports; never inferred from source or independently attested. |
 | `file` | `positional file` | string | yes | — | Automation file to execute or focus; interpreted relative to cwd. (minLength=1) |
 
 Requiredness/defaults above come from the input schema. Conditional requirements and effective implementation defaults are explained above; “—” means no Zod default. Every command also accepts [common options](./common.md#common-options). JSON keys use camelCase; flags use kebab-case. Positional fields are supplied positionally or in --input, not as flags.
@@ -181,6 +182,36 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
     "scenario": {
       "type": "string",
       "minLength": 1
+    },
+    "release": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
     },
     "file": {
       "type": "string",

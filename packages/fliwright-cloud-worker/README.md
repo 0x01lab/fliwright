@@ -86,6 +86,43 @@ Worker 主机需要 npm 和 npm registry 访问。每次安装先校验 tarball 
 
 ## 生命周期与常驻运行
 
+### 服务监控与系统日志
+
+`run` / `discover` 的服务监控独立于测试任务，启动时打印本地日志位置。
+Cloud「Worker 主机」展示服务状态；operator/admin 可展开「服务诊断与日志」，
+查看服务会话、PID、Node 版本、运行时间、RSS、事件循环延迟、后台组件状态和脱敏错误堆栈，
+按级别、会话及关键字筛选、翻页，并下载当前查询的诊断 JSON（最多 100 条，非完整归档）。
+同一身份有多个活跃会话时提示检查重复实例；服务状态不替代槽位租约或设备健康。
+
+每 10 秒独立上报；35 秒未收到监控时显示「无法联系服务」，不将网络中断、休眠、
+进程被杀或 OOM 混同为某个确定死因。未升级 Worker 显示尚无监控数据。
+后台 inventory/catalog 循环意外退出会记录错误并停止主服务；单个槽位执行器失败则记录
+`executor.failed` 并将服务标记为组件异常。执行任务日志可通过 requestId/attemptId/slotId 关联。
+
+本地日志位于配置 `root/logs/worker.jsonl`；未设置 root 时位于配置文件旁
+`runtime/logs/worker.jsonl`。每文件约 1 MiB，保留当前文件与三个轮转文件；日志文件权限
+0600、目录 0700。Cloud 保存每台主机最近 7 天且最多 2000 条、最多 50 个会话
+（页面显示最近 10 个）。离线上报失败不终止业务，重连后按批重传仍保留的日志，
+Cloud 按会话和序号去重；本地日志轮转后已淘汰的未上传记录无法恢复。
+
+服务或 Cloud 已停止时，仍可离线读取最近 100 条：
+
+```sh
+fliwright-worker logs /PRIVATE/PATH/cloud-worker/worker.json
+# 仓库内
+pnpm cloud:worker logs /PRIVATE/PATH/cloud-worker/worker.json
+```
+
+未捕获异常或未处理 Promise 拒绝先同步写 fatal 日志再以状态 1 退出；不会继续使用
+异常后的进程。SIGKILL、主机断电和内存耗尽可能无法执行日志代码：Cloud 保留最后
+心跳，下次启动记录上次未正常退出，再结合 launchd/systemd 和操作系统日志定位。
+服务日志不自动清除 `slot.lock`，也不自动重放执行中的任务。
+
+任务启动失败另保留在槽位 spool 下的 `commands.log`、`executor.log`（若产生）、
+`worker-timeline.jsonl` 和 `result.json`。Flutter stdout/stderr 与 VM 验证结果会记录到
+命令日志；明确的 Bridge 协议不兼容会立即失败，并在时间轴显示客户端/Bridge 版本。
+结构化服务日志在落盘前、服务端在保存前均执行凭据脱敏；不采集完整环境变量或配置文件。
+
 终端启动后 Worker 常驻，SIGINT/SIGTERM 请求停止；正在执行的任务按原有取消、证据导出和清理流程结束。崩溃、失联或清理失败会保留 `slot.lock`，需要显式 `recover`，不要手动删锁。
 
 macOS 使用 `deploy/com.fliwright.cloud.worker.plist` 模板交给 launchd。替换 Node、Worker 目录、Flutter、PATH、配置、日志和凭据；在可使用 Simulator 的登录用户会话运行。Linux 可由 systemd 运行同一个 CLI；iOS Worker 必须部署在 Mac 上。进程管理器负责开机启动与异常重启，Worker 本身不安装后台服务。

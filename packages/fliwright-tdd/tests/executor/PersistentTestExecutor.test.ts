@@ -1,3 +1,4 @@
+import { resolveFliwrightRunsRoot } from '@fliwright/core';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdir, mkdtemp, readdir, writeFile, rm, realpath, stat } from 'node:fs/promises';
@@ -8,10 +9,39 @@ import { defaultArtifactsRoot, PersistentTestExecutor } from '../../src/executor
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('PersistentTestExecutor.rerun', () => {
-  it('places default artifacts under the project root for file and directory config roots', () => {
-    expect(defaultArtifactsRoot('/repo/app/vitest.config.ts')).toBe('/repo/app/.fliwright/runs');
-    expect(defaultArtifactsRoot('/repo/app/custom.vitest.mjs')).toBe('/repo/app/.fliwright/runs');
-    expect(defaultArtifactsRoot('/repo/app')).toBe('/repo/app/.fliwright/runs');
+  it('loads large shared configuration by path in fork workers and restores the parent path after disposal', async () => {
+    const project = await mkdtemp(resolve(tmpdir(), 'fliwright-tdd-large-config-'));
+    const executor = new PersistentTestExecutor();
+    const previousPath = process.env.FLIWRIGHT_CONFIG_PATH;
+    try {
+      const testFile = resolve(project, 'proof.test.mjs');
+      const configFile = resolve(project, 'vitest.config.mjs');
+      await writeFile(configFile, `export default { root: ${JSON.stringify(project)}, test: { include: ['proof.test.mjs'] } };`);
+      await writeFile(testFile, `import { test, expect } from ${JSON.stringify(import.meta.resolve('vitest'))};
+        import { readFileSync } from 'node:fs';
+        import { spawnSync } from 'node:child_process';
+        test('large config', () => {
+          expect(process.env.FLIWRIGHT_CONFIG).toBeUndefined();
+          const config = JSON.parse(readFileSync(process.env.FLIWRIGHT_CONFIG_PATH, 'utf8'));
+          expect(config.scenarios.large.layers[0].seed.payload.length).toBe(2 * 1024 * 1024);
+          const child = spawnSync(process.execPath, ['-e', 'process.exit(0)']);
+          expect(child.error).toBeUndefined();
+          expect(child.status).toBe(0);
+        });`);
+      await executor.boot({ configRoot: configFile, runsRoot: resolve(project, 'runs'), driverProvider: async () => ({}),
+        sharedConfig: { cacheRoot: resolve(project, 'cache'), recording: { mode: 'off' },
+          scenarios: { large: { name: 'large', layers: [{ kind: 'storage', seed: { payload: 'x'.repeat(2 * 1024 * 1024) } }] } } } });
+      expect(process.env.FLIWRIGHT_CONFIG_PATH).toBeTruthy();
+      expect(await executor.rerun(testFile, 'large config')).toMatchObject({ status: 'green' });
+      await executor.dispose();
+      expect(process.env.FLIWRIGHT_CONFIG_PATH).toBe(previousPath);
+    } finally { await executor.dispose(); await rm(project, { recursive: true, force: true }); }
+  }, 20000);
+
+  it('places default artifacts outside the project for file and directory config roots', () => {
+    expect(defaultArtifactsRoot('/repo/app/vitest.config.ts')).toBe(resolveFliwrightRunsRoot({ projectRoot: '/repo/app' }));
+    expect(defaultArtifactsRoot('/repo/app/custom.vitest.mjs')).toBe(resolveFliwrightRunsRoot({ projectRoot: '/repo/app' }));
+    expect(defaultArtifactsRoot('/repo/app')).toBe(resolveFliwrightRunsRoot({ projectRoot: '/repo/app' }));
   });
 
   it('does not restore runtime env before boot has applied it', async () => {

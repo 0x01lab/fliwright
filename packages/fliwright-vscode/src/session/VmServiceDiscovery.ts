@@ -44,13 +44,14 @@ export async function discoverVmServiceUrl(ports = SCAN_PORTS): Promise<string |
 }
 
 export async function discoverVmServiceCandidates(options: DiscoverVmServiceOptions = {}): Promise<VmServiceCandidate[]> {
-  const candidates: VmServiceCandidate[] = [];
-  const seen = new Set<string>();
+  const candidates = new Map<string, VmServiceCandidate>();
 
   const add = (candidate: VmServiceCandidate) => {
-    if (seen.has(candidate.url)) return;
-    seen.add(candidate.url);
-    candidates.push(candidate);
+    const previous = candidates.get(candidate.url);
+    if (!previous || candidate.confidence > previous.confidence) {
+      candidates.delete(candidate.url);
+      candidates.set(candidate.url, candidate);
+    }
   };
 
   const cached = normalizeVmServiceUrl(options.cachedUrl);
@@ -68,12 +69,12 @@ export async function discoverVmServiceCandidates(options: DiscoverVmServiceOpti
     add({
       url: workspaceConfigUrl,
       source: 'workspace-config',
-      label: '.fliwright/config.json',
+      label: 'Local Fliwright runtime config',
       confidence: 90,
     });
   }
 
-  for (const url of extractVmServiceUrls(options.logText ?? '')) {
+  for (const url of extractVmServiceUrls(options.logText ?? '').reverse()) {
     add({
       url,
       source: 'log',
@@ -83,19 +84,19 @@ export async function discoverVmServiceCandidates(options: DiscoverVmServiceOpti
   }
 
   const ports = options.ports ?? SCAN_PORTS;
-  for (const port of ports) {
-    const url = await discoverOnPort(port);
+  const discovered = await Promise.all(ports.map(discoverOnPort));
+  for (const [index, url] of discovered.entries()) {
     if (url) {
       add({
         url,
         source: 'port-scan',
-        label: `Local port ${port}`,
+        label: `Local port ${ports[index]}`,
         confidence: 50,
       });
     }
   }
 
-  return candidates.sort((a, b) => b.confidence - a.confidence);
+  return [...candidates.values()].sort((a, b) => b.confidence - a.confidence);
 }
 
 export function extractVmServiceUrls(text: string): string[] {
@@ -111,12 +112,61 @@ export function extractVmServiceUrls(text: string): string[] {
       }
       for (const value of expanded) {
         const normalized = normalizeVmServiceUrl(value);
-        if (normalized) urls.add(normalized);
+        if (normalized) {
+          urls.delete(normalized);
+          urls.add(normalized);
+        }
       }
     }
   }
 
   return [...urls];
+}
+
+/** Keeps fragmented DAP output while notifying only when its latest endpoint changes. */
+export class VmServiceDebugOutput {
+  private buffer = '';
+  private latestUrl: string | undefined;
+  private debuggerUrl: string | undefined;
+
+  get text(): string {
+    // Retain the current endpoint even if verbose application output evicts its log line.
+    return this.latestUrl ? `${this.buffer}\nDart VM Service: ${this.latestUrl}\n` : this.buffer;
+  }
+
+  accept(message: unknown): string | undefined {
+    if (typeof message !== 'object' || message === null) return undefined;
+    const event = message as { type?: string; event?: string; body?: Record<string, unknown> };
+    if (event.type !== 'event') return undefined;
+    if (event.event === 'output' && typeof event.body?.output === 'string') {
+      return this.append(event.body.output);
+    }
+    if (event.event === 'dart.debuggerUris') {
+      // Dart-Code exposes the host-accessible address separately for forwarded devices.
+      for (const value of [event.body?.clientVmServiceUri, event.body?.vmServiceUri, event.body?.observatoryUri]) {
+        const url = typeof value === 'string' ? normalizeVmServiceUrl(value) : null;
+        if (url) {
+          this.debuggerUrl = url;
+          return this.append('');
+        }
+      }
+    }
+    return undefined;
+  }
+
+  append(text: string): string | undefined {
+    this.buffer = `${this.buffer}${text}`.slice(-20000);
+    const latestUrl = this.debuggerUrl ?? extractVmServiceUrls(this.buffer).at(-1);
+    if (!latestUrl || latestUrl === this.latestUrl) return undefined;
+    this.latestUrl = latestUrl;
+    return latestUrl;
+  }
+
+  clear(): void {
+    this.buffer = '';
+    this.latestUrl = undefined;
+    this.debuggerUrl = undefined;
+  }
 }
 
 export function normalizeVmServiceUrl(value: string | null | undefined): string | null {

@@ -4,6 +4,7 @@ export type MockBackend = 'flutter' | 'dio' | 'tool-server';
 
 export interface MockTimelineMetadata {
   operation:
+    | 'applyRuleSet'
     | 'activateRules'
     | 'loadRules'
     | 'switchRule'

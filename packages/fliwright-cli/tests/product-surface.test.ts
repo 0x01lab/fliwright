@@ -8,7 +8,7 @@ describe('CLI-first product surface', () => {
     expect(subcommands(program, 'app')).toEqual(['debug-snapshot', 'diagnostics', 'find', 'interact', 'observe', 'reload', 'screenshot', 'snapshot', 'source-map', 'status']);
     expect(subcommands(program, 'scenario')).toEqual(['apply', 'list', 'reset', 'resolve']);
     expect(subcommands(program, 'mock')).toEqual(['apply', 'calls', 'clear-calls', 'list', 'reset', 'start', 'status']);
-    expect(subcommands(program, 'artifacts')).toEqual(['diagnose', 'export', 'failures', 'show', 'timeline']);
+    expect(subcommands(program, 'artifacts')).toEqual(['diagnose', 'export', 'failures', 'report', 'show', 'timeline']);
     expect(subcommands(program, 'session')).toEqual(['cancel', 'close', 'list', 'open', 'reconnect', 'status']);
   });
 

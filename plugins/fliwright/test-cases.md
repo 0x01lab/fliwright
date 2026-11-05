@@ -32,6 +32,44 @@ Expected:
 - A new direct Vitest setup includes `fliwrightPreset(projectConfig)`. The agent
   checks generated/edited TypeScript, then validates against the app when available.
 
+## GitLab Acceptance To Release Review
+
+Prompt (replace the URL with an accessible real Item):
+
+```text
+Use $gitlab-test-plan to complete the test plan, Fliwright scripts, bindings, execution validation and release review HTML report for this GitLab Item: <Item URL>.
+```
+
+Expected:
+
+- The agent discovers the helper CLI and reads the Item, prioritizing its
+  acceptance checklist; no nested AI process is launched.
+- It composes `write-fliwright-tests`, checks existing coverage and continues
+  from planning through binding and available validation without separate prompts.
+- Source snapshots, plan, coverage and scripts belong to the target project.
+  A plan-only variant does not generate scripts or run the app.
+- With confirmed release metadata and actual run evidence, it produces the
+  review HTML. Failed or incomplete results remain blocking in that report.
+- Missing tools, access, runtime or release metadata are reported accurately;
+  no invented metadata, GitLab mutations or App release occurs.
+
+Report-only variant:
+
+```text
+Use $gitlab-test-plan to generate a release review HTML report from the existing review manifest <review.json path> and its saved run artifacts.
+```
+
+- The agent checks the manifest-selected run and renders its saved evidence.
+  It does not refetch GitLab, edit scripts or rerun tests.
+- Passing and failing results are included. Missing inputs or incomplete
+  evidence remain explicit blockers; the report does not grant release approval.
+- Remove the review manifest but keep the bound plan and an identifiable saved
+  run: the agent uses `artifacts report --plan`, which writes a reusable review
+  manifest alongside the HTML. Missing version/build/commit must not prevent
+  Item, acceptance criteria and all planned cases from appearing in the report.
+- Confirmed metadata passed with `run --release` survives failed runs and
+  artifact export. Conflicting review metadata blocks qualification.
+
 ## Mock Rules
 
 Prompt:
