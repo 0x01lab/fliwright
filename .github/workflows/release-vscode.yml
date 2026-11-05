@@ -6,15 +6,25 @@ on:
       - 'vscode-v*'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: vscode-marketplace-release
   cancel-in-progress: false
 
 jobs:
+  quality:
+    uses: ./.github/workflows/release-gate.yml
+    permissions:
+      contents: read
+
   publish:
+    needs: quality
+    timeout-minutes: 30
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,7 +34,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -39,15 +49,8 @@ jobs:
             exit 1
           fi
 
-      - name: Verify Marketplace credential
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        shell: bash
-        run: |
-          if [[ -z "${VSCE_PAT}" ]]; then
-            echo "Missing required VSCE_PAT GitHub Actions secret." >&2
-            exit 1
-          fi
+      - name: Build workspace dependencies
+        run: pnpm --filter fliwright-vscode... build
 
       - name: Lint and unit test extension
         run: pnpm --filter fliwright-vscode run lint && pnpm --filter fliwright-vscode run test
@@ -61,13 +64,15 @@ jobs:
       - name: Package VSIX
         run: pnpm --filter fliwright-vscode run package
 
+      - name: Test packaged VSIX
+        run: xvfb-run -a pnpm --filter fliwright-vscode run test:vsix
+
       - name: Publish to VS Code Marketplace
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: pnpm --filter fliwright-vscode run publish:vsce:package
+        run: node scripts/publish-vscode.mjs
 
       - name: Upload VSIX to GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: packages/fliwright-vscode/fliwright-vscode-*.vsix
           generate_release_notes: true
+          fail_on_unmatched_files: true

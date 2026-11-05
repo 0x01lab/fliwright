@@ -50,10 +50,11 @@
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:integration": "node scripts/run-integration.mjs",
-    "verify:release": "pnpm run lint && pnpm run test && pnpm run test:integration && pnpm run package",
+    "test:vsix": "node scripts/run-integration.mjs --vsix",
+    "verify:release": "pnpm run lint && pnpm run test && pnpm run test:integration && pnpm run package && pnpm run test:vsix",
     "package": "pnpm run build && node scripts/stage-vsix.mjs && cd .vsix-stage && ../node_modules/.bin/vsce package --no-dependencies --out ../fliwright-vscode-$(node -p \"require('./package.json').version\").vsix",
     "publish:vsce": "pnpm run verify:release && pnpm run publish:vsce:package",
-    "publish:vsce:package": "cd .vsix-stage && ../node_modules/.bin/vsce publish --packagePath ../fliwright-vscode-$(node -p \"require('./package.json').version\").vsix"
+    "publish:vsce:package": "cd .vsix-stage && ../node_modules/.bin/vsce publish --oidc --packagePath ../fliwright-vscode-$(node -p \"require('./package.json').version\").vsix"
   },
   "activationEvents": [
     "onDebug",
@@ -1052,7 +1053,7 @@
     "@types/react-dom": "^18.3.7",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.4.1",
-    "@vscode/vsce": "^3.6.3",
+    "@vscode/vsce": "^4.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "esbuild": "^0.28.1",
