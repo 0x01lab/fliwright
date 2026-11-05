@@ -123,6 +123,38 @@ pnpm cloud:worker logs /PRIVATE/PATH/cloud-worker/worker.json
 命令日志；明确的 Bridge 协议不兼容会立即失败，并在时间轴显示客户端/Bridge 版本。
 结构化服务日志在落盘前、服务端在保存前均执行凭据脱敏；不采集完整环境变量或配置文件。
 
+### 执行工作区与磁盘保留
+
+每个槽位使用 `root/slots/<slotId>/spool/<attemptId>/` 隔离任务。确认进程已终止、
+设备重置成功且 Cloud 已确认任务完成后，立即删除 `checkout/`（含源码、依赖、构建产物）。
+报告完整导出后删除重复的 `runs/`；上传成功后删除本地 `bundle/` 和上传凭据。
+上传失败保留报告包供 `retry-uploads` 使用；导出失败保留原始 `runs/`。
+补传成功也会释放报告包，后续不会重复上传该包。日志、结果和 Worker 时间线保留供本机诊断。
+
+槽位启动领取任务前、任务完成后、显式恢复成功后及补传时，都会清理历史记录。
+默认每个槽位最多保留最近 20 次、7 天、1 GiB、10000 个文件/目录/符号链接，
+任一限制达到即淘汰较旧记录；单次记录超过容量限制也会被淘汰。**待补传报告同样受限**，
+超过保留期限或预算后无法再从该 Worker 补传。长期空闲期间不额外启动清理定时器。
+这些限制针对非活动的本机历史数据，当前执行和仍带 `slot.lock` 的未恢复任务不会被自动删除；
+不限制一次运行中的峰值工作区，也不替代 Cloud Server 已上传报告的保留策略。
+
+可在主机 `worker.json` 中覆盖 `spoolRetention`，配置会传递到每个槽位；独立槽位配置也支持同一字段：
+
+```json
+{
+  "spoolRetention": {
+    "maxAttempts": 20,
+    "maxAgeHours": 168,
+    "maxBytes": 1073741824,
+    "maxFiles": 10000
+  }
+}
+```
+
+升级后会在确认旧任务的进程已停止后清理历史工作区；只读目录可删除，符号链接的外部目标不会被遍历或修改。
+清理失败会保留槽位锁，需要排查磁盘权限或进程状态后显式恢复。`retry-uploads` 与执行、恢复共用槽位锁，
+应在槽位未执行且已恢复时运行。运行目录属于本机数据，不应提交 Git。
+
 终端启动后 Worker 常驻，SIGINT/SIGTERM 请求停止；正在执行的任务按原有取消、证据导出和清理流程结束。崩溃、失联或清理失败会保留 `slot.lock`，需要显式 `recover`，不要手动删锁。
 
 macOS 使用 `deploy/com.fliwright.cloud.worker.plist` 模板交给 launchd。替换 Node、Worker 目录、Flutter、PATH、配置、日志和凭据；在可使用 Simulator 的登录用户会话运行。Linux 可由 systemd 运行同一个 CLI；iOS Worker 必须部署在 Mac 上。进程管理器负责开机启动与异常重启，Worker 本身不安装后台服务。

@@ -61,7 +61,8 @@ Before publishing an update:
 
 1. Update the source Skills under `.agents/skills/`, then run `pnpm plugin:sync`.
 2. Bump `plugins/fliwright/.codex-plugin/plugin.json` to a new plugin version.
-3. Run `node scripts/check-codex-plugin.mjs --skip-cli` and check the bundled
+3. Run `node --test scripts/tests/release-codex-plugin.test.mjs` and
+   `node scripts/check-codex-plugin.mjs --strict-plugin --skip-cli`, then check the bundled
    [smoke prompts](../../plugins/fliwright/test-cases.md) for affected workflows.
 4. Include `.agents/plugins/marketplace.json`, the plugin manifest, and all
    referenced plugin Skills/resources in the reviewed change published to
@@ -74,8 +75,9 @@ Before publishing an update:
    build metadata such as `+codex.20261105` does not:
 
    ```bash
-   git tag codex-v0.1.0+codex.20260712075300
-   git push origin codex-v0.1.0+codex.20260712075300
+   version=$(node -p "require('./plugins/fliwright/.codex-plugin/plugin.json').version")
+   git tag "codex-v${version}"
+   git push origin "codex-v${version}"
    ```
 
 6. From a clean Codex environment, register and install the public source:
@@ -243,6 +245,14 @@ OIDC (`id-token: write`) for pub.dev, runs `flutter analyze .`, `flutter test`,
 a dry run, and then `flutter pub publish --force`.
 
 ## npm
+
+Push `npm-v<version>` only after the release changes are merged to main. The npm
+workflow verifies main ancestry and reruns all CI jobs through the reusable
+release gate. It builds packages before lint/tests, checks tarballs, publishes
+in dependency order, then installs the exact versions in a clean npm consumer.
+The `CI quality gate` aggregates every required job and rejects failures or
+skipped jobs. Package tests run sequentially with two workers for stable timing.
+
 
 The public TypeScript packages are published by `.github/workflows/publish-npm.yml`
 from a matching `npm-v<version>` tag. Public scoped packages are discovered from manifests and ordered by workspace runtime/peer dependencies; native is included automatically. The workflow verifies that all public

@@ -12,6 +12,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('登录页'));
     await tester.pumpAndSettle();
+    expect(appRouter.routeInformationProvider.value.uri.path, '/login');
+    expect(find.text('导航到表单页面'), findsNothing);
     expect(find.text('手机号'), findsOneWidget);
     expect(find.text('返回首页'), findsOneWidget);
     await tester.tap(find.text('返回首页'));

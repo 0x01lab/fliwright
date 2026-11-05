@@ -1,7 +1,7 @@
 name: form_demo
 description: Demo Flutter app for E2E testing Fliwright form filling.
-version: 0.1.0
 publish_to: none
+version: 0.1.0
 
 environment:
   sdk: ^3.5.0

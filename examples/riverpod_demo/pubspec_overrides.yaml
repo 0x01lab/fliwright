@@ -1,0 +1,4 @@
+# Resolve the transitive bridge to the same checkout used by this demo.
+dependency_overrides:
+  fliwright_bridge:
+    path: ../../packages/fliwright-bridge

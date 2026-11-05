@@ -283,10 +283,10 @@ export async function retrySpool(config: WorkerSettings) {
   try { closeSync(openSync(lock, 'wx', 0o600)); }
   catch { throw new Error('Worker slot lock exists; stop execution and complete recovery before retrying uploads'); }
   try {
-  writeJournal(lock, { pid: process.pid, stage: 'retry-uploads' });
-  await pruneSpool(config.root, config.spoolRetention, stopOwnedProcesses);
-  for (const entry of readdirSync(spool, { withFileTypes: true }))
-    if (entry.isDirectory()) {
+    writeJournal(lock, { pid: process.pid, stage: 'retry-uploads' });
+    await pruneSpool(config.root, config.spoolRetention, stopOwnedProcesses);
+    for (const entry of readdirSync(spool, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
       const dir = join(spool, entry.name),
         jobPath = join(dir, 'job.json');
       if (!existsSync(jobPath) || !existsSync(join(dir, 'publication.json')))
@@ -311,6 +311,6 @@ export async function retrySpool(config: WorkerSettings) {
       writeJournal(retentionPath, { completedAt, published: true, bundleReady: true });
       await compactSpoolAttempt(dir, true, true);
     }
-  await pruneSpool(config.root, config.spoolRetention, stopOwnedProcesses);
+    await pruneSpool(config.root, config.spoolRetention, stopOwnedProcesses);
   } finally { rmSync(lock, { force: true }); }
 }

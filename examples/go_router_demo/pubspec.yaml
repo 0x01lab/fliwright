@@ -1,7 +1,7 @@
 name: go_router_demo
 description: Demo Flutter app using go_router to showcase Fliwright navigation and form filling.
-version: 0.1.0
 publish_to: none
+version: 0.1.0
 
 environment:
   sdk: ^3.5.0
