@@ -2,6 +2,13 @@ import { readFileSync, lstatSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { workerPairingCredentialSchema, commandSchema } from '@fliwright/cloud-protocol';
+import { defaultSpoolRetention } from './spool.js';
+const spoolRetentionSchema = z.object({
+  maxAttempts: z.number().int().positive().default(defaultSpoolRetention.maxAttempts),
+  maxAgeHours: z.number().positive().default(defaultSpoolRetention.maxAgeHours),
+  maxBytes: z.number().int().positive().default(defaultSpoolRetention.maxBytes),
+  maxFiles: z.number().int().positive().default(defaultSpoolRetention.maxFiles),
+}).strict().default({});
 const workerConfigObject = z
   .object({
     serverUrl: z.string().url(),
@@ -30,6 +37,7 @@ const workerConfigObject = z
     repositoryCredentialHomes: z.record(z.string().min(1)).default({}),
     allowedEnv: z.array(z.string()).default([]),
     heartbeatMs: z.number().int().min(500).max(10000).default(5000),
+    spoolRetention: spoolRetentionSchema,
   })
   .strict();
 export interface WorkerAuthSettings {
@@ -51,6 +59,7 @@ export const discoveryConfigSchema = workerConfigObject.pick({
 export const hostConfigSchema = workerConfigObject.pick({
   serverUrl: true, tokenEnv: true, credentialFile: true, deviceTools: true,
   flutterBin: true, repositoryCredentialHomes: true, allowedEnv: true, heartbeatMs: true,
+  spoolRetention: true,
 }).extend({
   root: z.string().min(1).optional(),
   resetCommands: workerConfigObject.shape.resetCommands.optional(),

@@ -24,7 +24,7 @@ describe('Flutter finder parity', () => {
       match: { textContains: 'Sign' },
     });
     expect(await queryOf(page.getByText(/sign in/i), sendRequest)).toEqual({
-      match: { textRegex: 'sign in' },
+      match: { textRegex: 'sign in', textCaseSensitive: false },
     });
     expect(await queryOf(page.getByKey('submit'), sendRequest)).toEqual({
       match: { key: 'submit' },
@@ -81,7 +81,7 @@ describe('Flutter finder parity', () => {
       match: { textContains: 'Sign' },
     });
     expect(await queryOf(page.getByTextContaining(/sign in/i), sendRequest)).toEqual({
-      match: { textRegex: 'sign in' },
+      match: { textRegex: 'sign in', textCaseSensitive: false },
     });
     expect(await queryOf(page.getByIcon(saveIcon), sendRequest)).toEqual({
       match: {

@@ -31,6 +31,15 @@
         "textRegex": {
           "$ref": "#/properties/type"
         },
+        "textCaseSensitive": {
+          "type": "boolean"
+        },
+        "textMultiline": {
+          "type": "boolean"
+        },
+        "textDotAll": {
+          "type": "boolean"
+        },
         "semanticIdentifier": {
           "$ref": "#/properties/type"
         },
@@ -39,6 +48,17 @@
         },
         "semanticsHint": {
           "$ref": "#/properties/type"
+        },
+        "semanticsMatch": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "contains",
+            "regex"
+          ]
+        },
+        "semanticsCaseSensitive": {
+          "type": "boolean"
         },
         "role": {
           "$ref": "#/properties/type"

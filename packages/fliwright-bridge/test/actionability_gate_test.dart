@@ -30,6 +30,7 @@ void main() {
       tester,
       enabled: true,
       rect: Rect.zero,
+      size: Size.zero,
     );
 
     await expectLater(
@@ -91,6 +92,7 @@ Future<RefEntry> _entryFor(
   required bool enabled,
   Rect rect = const Rect.fromLTWH(0, 0, 100, 40),
   double top = 0,
+  Size size = const Size(100, 40),
 }) async {
   await tester.pumpWidget(
     Directionality(
@@ -100,8 +102,8 @@ Future<RefEntry> _entryFor(
           Positioned(
             left: 0,
             top: top,
-            width: 100,
-            height: 40,
+            width: size.width,
+            height: size.height,
             child: Text(enabled ? 'Enabled' : 'Disabled'),
           ),
         ],

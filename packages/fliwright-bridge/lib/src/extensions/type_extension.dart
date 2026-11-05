@@ -49,7 +49,7 @@ class TypeExtension {
     Element? precomputedElement;
     int matchedCount = 0;
 
-    if (precomputedEntry != null) {
+    if (precomputedEntry != null && precomputedId == null) {
       targetId = '${precomputedEntry.element.hashCode}';
       targetType = precomputedEntry.metadata['type']?.toString();
       rect = {
@@ -394,8 +394,7 @@ class TypeExtension {
           selection: TextSelection.collapsed(offset: buffer.length),
           composing: TextRange.empty,
         );
-        notifiedEditableChanged =
-            _notifyEditableTextChanged(
+        notifiedEditableChanged = _notifyEditableTextChanged(
               focusedEditable!,
               previousText,
               nextText,
@@ -516,12 +515,10 @@ class TypeExtension {
     final selection = value.selection.isValid
         ? value.selection
         : TextSelection.collapsed(offset: text.length);
-    final start = selection.start < selection.end
-        ? selection.start
-        : selection.end;
-    final end = selection.start < selection.end
-        ? selection.end
-        : selection.start;
+    final start =
+        selection.start < selection.end ? selection.start : selection.end;
+    final end =
+        selection.start < selection.end ? selection.end : selection.start;
 
     TextEditingValue nextValue(String nextText, int offset) {
       return TextEditingValue(
@@ -584,12 +581,10 @@ class TypeExtension {
     final selection = value.selection.isValid
         ? value.selection
         : TextSelection.collapsed(offset: text.length);
-    final start = selection.start < selection.end
-        ? selection.start
-        : selection.end;
-    final end = selection.start < selection.end
-        ? selection.end
-        : selection.start;
+    final start =
+        selection.start < selection.end ? selection.start : selection.end;
+    final end =
+        selection.start < selection.end ? selection.end : selection.start;
     final next = text.replaceRange(start, end, insertion);
     controller.value = TextEditingValue(
       text: next,

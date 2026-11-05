@@ -4,6 +4,8 @@ import {
   lstatSync,
   existsSync,
   rmSync,
+  openSync,
+  closeSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +27,7 @@ import { recordWorkerTimelineMessage } from './worker-timeline-ipc.js';
 import type { WorkerDiagnostics } from './diagnostics.js';
 import { WorkerNativeOwnership } from './WorkerNativeOwnership.js';
 import { ManagedNativeTimeline } from './ManagedNativeTimeline.js';
+import { compactSpoolAttempt, pruneSpool } from './spool.js';
 import {
   runCommandProcess,
   spawnExecution,
@@ -276,6 +279,12 @@ export async function retrySpool(config: WorkerSettings) {
   const client = new CloudClient(config.serverUrl, credential(config)),
     spool = join(config.root, 'spool');
   if (!existsSync(spool)) return;
+  const lock = join(config.root, 'slot.lock');
+  try { closeSync(openSync(lock, 'wx', 0o600)); }
+  catch { throw new Error('Worker slot lock exists; stop execution and complete recovery before retrying uploads'); }
+  try {
+  writeJournal(lock, { pid: process.pid, stage: 'retry-uploads' });
+  await pruneSpool(config.root, config.spoolRetention, stopOwnedProcesses);
   for (const entry of readdirSync(spool, { withFileTypes: true }))
     if (entry.isDirectory()) {
       const dir = join(spool, entry.name),
@@ -295,5 +304,13 @@ export async function retrySpool(config: WorkerSettings) {
         writeJournal(join(dir, 'upload-recovered.json'), {
           publishedAt: Date.now(),
         });
+      const retentionPath = join(dir, 'retention.json');
+      const completedAt = existsSync(retentionPath)
+        ? (JSON.parse(readFileSync(retentionPath, 'utf8')) as { completedAt: number }).completedAt
+        : lstatSync(existsSync(resultPath) ? resultPath : jobPath).mtimeMs;
+      writeJournal(retentionPath, { completedAt, published: true, bundleReady: true });
+      await compactSpoolAttempt(dir, true, true);
     }
+  await pruneSpool(config.root, config.spoolRetention, stopOwnedProcesses);
+  } finally { rmSync(lock, { force: true }); }
 }

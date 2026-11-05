@@ -27,7 +27,8 @@ Future<Rect> ensureActionable(
   RefEntry entry, {
   required String ref,
   bool checkStable = true,
-  bool checkReceivesEvents = false,
+  bool checkReceivesEvents = true,
+  Alignment alignment = Alignment.center,
 }) async {
   final renderObject = _findRenderObject(entry.element, ref);
   if (!renderObject.attached) {
@@ -41,23 +42,21 @@ Future<Rect> ensureActionable(
     throw ActionabilityException(ref: ref, reason: 'not enabled');
   }
 
-  var rect = entry.rect;
+  var rect = _liveRectOf(entry.element) ?? entry.rect;
   if (rect.width <= 0 || rect.height <= 0) {
     throw ActionabilityException(ref: ref, reason: 'zero rect');
   }
-  rect = _liveRectOf(entry.element) ?? rect;
-
   final view = _firstFlutterView();
   if (view == null) return rect;
 
   final keyboard = SoftKeyboard.current();
   final viewport = keyboard.viewport;
   final interactiveViewport = keyboard.interactiveViewport;
-  if (!interactiveViewport.contains(rect.center)) {
+  if (!interactiveViewport.contains(alignment.withinRect(rect))) {
     await _tryScrollIntoView(entry.element);
     rect = _liveRectOf(entry.element) ?? rect;
-    if (!interactiveViewport.contains(rect.center)) {
-      if (keyboard.restricts(rect.center)) {
+    if (!interactiveViewport.contains(alignment.withinRect(rect))) {
+      if (keyboard.restricts(alignment.withinRect(rect))) {
         throw ActionabilityException(
           ref: ref,
           reason:
@@ -92,18 +91,19 @@ Future<Rect> ensureActionable(
     if (target == null) return rect;
 
     final result = BoxHitTestResult();
-    RendererBinding.instance.hitTestInView(result, rect.center, view.viewId);
+    RendererBinding.instance
+        .hitTestInView(result, alignment.withinRect(rect), view.viewId);
     final path = result.path.toList(growable: false);
     final receivesEvents = path.any(
       (hit) =>
           identical(hit.target, target) ||
           _isRenderObjectDescendant(hit.target, target),
     );
-    if (!receivesEvents && path.isNotEmpty && !_isPlatformOnlyPath(path)) {
+    if (!receivesEvents) {
       throw ActionabilityException(
         ref: ref,
         reason:
-            'obscured by other widget (top=${path.first.target.runtimeType})',
+            'obscured by other widget (top=${path.isEmpty ? 'none' : path.first.target.runtimeType})',
       );
     }
   }
@@ -182,12 +182,4 @@ bool _isRenderObjectDescendant(HitTestTarget target, RenderObject ancestor) {
     parent = parent.parent;
   }
   return false;
-}
-
-bool _isPlatformOnlyPath(List<HitTestEntry<HitTestTarget>> path) {
-  if (path.length != 1) return false;
-  final name = path.first.target.runtimeType.toString();
-  return name == 'RenderView' ||
-      name == '_ReusableRenderView' ||
-      name.endsWith('RenderView');
 }

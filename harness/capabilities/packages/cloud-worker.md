@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cloud-worker"
 path: "packages/fliwright-cloud-worker"
-source_fingerprint: "adc6741d2aa98fc3d1b3400dbc8b8a7c50a62b2b26113f11d9bfbefb72fb236c"
+source_fingerprint: "2de69595fd2d535edda1a10bb1db019ba6ef3a62113933006b8a9fb5a12161a6"
 generated: true
 ---
 
@@ -46,6 +46,7 @@ Own host device discovery and reporting, supervised test execution, cleanup and 
 
 - `collectCheckoutCatalog`
 - `createWorker`
+- `defaultSpoolRetention`
 - `discoveryConfigSchema`
 - `executeCatalogScan`
 - `ExecutionResult`
@@ -65,6 +66,7 @@ Own host device discovery and reporting, supervised test execution, cleanup and 
 - `scanProcess`
 - `secureCatalogCheckout`
 - `SpanOptions`
+- `SpoolRetention`
 - `WorkerAgent`
 - `WorkerAgentOptions`
 - `workerConfigSchema`
@@ -93,5 +95,6 @@ Own host device discovery and reporting, supervised test execution, cleanup and 
 - `packages/fliwright-cloud-worker/src/native-ownership-ipc.ts`
 - `packages/fliwright-cloud-worker/src/pairing.ts`
 - `packages/fliwright-cloud-worker/src/processes.ts`
+- `packages/fliwright-cloud-worker/src/spool.ts`
 - `packages/fliwright-cloud-worker/src/worker-timeline-ipc.ts`
 - `packages/fliwright-cloud-worker/src/worker.ts`
