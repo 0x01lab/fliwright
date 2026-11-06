@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -53,7 +54,7 @@ it('reports native cleanup, binding, disabled configuration and timeout failures
     let output = ''; child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
     const code = await new Promise((resolveCode, reject) => { child.once('error', reject); child.once('close', resolveCode); });
     expect(code, output).toBe(1);
-    expect(output).toContain('8 failed | 3 passed');
+    expect(stripVTControlCharacters(output)).toContain('8 failed | 3 passed');
     const events = (await readFile(eventsPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
     expect(events.filter(item => item.phase === 'body').map(item => item.id)).toEqual(['cleanup', 'after-cleanup', 'timeout', 'after-timeout', 'owner', 'after-owner']);
     expect(events.filter(item => item.phase === 'owner-open')).toHaveLength(10);

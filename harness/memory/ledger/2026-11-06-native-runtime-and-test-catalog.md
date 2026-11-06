@@ -35,3 +35,9 @@ installation. Divergent peer versions create separate Vitest runtime instances;
 custom runners and test modules can then disagree on the active suite even when
 the Vitest package versions match. The scenario-registration subprocess test
 reproduces this failure and protects test registration after peer alignment.
+
+When asserting subprocess test summaries, strip ANSI control sequences before
+matching counts; CI enables color and can otherwise make a correct run fail its
+outer regression test. Durable Android recovery integration tests budget fixture
+setup, fsync and crash-owner transitions separately from production operation
+deadlines. Their outer test timeout must cover that complete sequence.

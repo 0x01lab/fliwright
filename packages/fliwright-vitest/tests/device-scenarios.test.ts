@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 import { spawn } from 'node:child_process';
 import { appendFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -56,7 +57,7 @@ it('prepares explicit/default device scenarios before the Bridge and checks ever
     child.stderr.on('data', chunk => { output += chunk; });
     const code = await new Promise((done, reject) => { child.once('error', reject); child.once('close', done); });
     expect(code, output).toBe(1);
-    expect(output).toContain('3 failed | 2 passed');
+    expect(stripVTControlCharacters(output)).toContain('3 failed | 2 passed');
     expect(output).not.toContain('unexpected-body');
     const events = (await readFile(eventsPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
     for (const tag of ['explicit', 'default']) {
@@ -114,7 +115,7 @@ it('rejects permission scenarios in a real worker before contacting the managed 
     child.stderr.on('data', chunk => { output += chunk; });
     const code = await new Promise((done, reject) => { child.once('error', reject); child.once('close', done); });
     expect(code, output).toBe(1);
-    expect(output).toContain('2 failed');
+    expect(stripVTControlCharacters(output)).toContain('2 failed');
     expect(output).toMatch(/permissions requires a verified preboot\/prelaunch/);
     expect(await readFile(eventsPath, 'utf8')).toBe('');
     expect(preparations).toBe(0);

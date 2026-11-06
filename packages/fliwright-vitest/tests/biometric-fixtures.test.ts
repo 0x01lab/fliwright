@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -62,8 +63,8 @@ it('observes app-local callbacks and cleans unresolved challenges after failure 
     child.stderr.on('data', chunk => { output += chunk; });
     const code = await new Promise((done, reject) => { child.once('error', reject); child.once('close', done); });
     expect(code, output).toBe(1);
-    expect(output).toContain('3 failed | 3 passed');
-    expect(output).toContain('unresolved challenge');
-    expect(output).toContain('original-biometric-body-failure');
+    expect(stripVTControlCharacters(output)).toContain('3 failed | 3 passed');
+    expect(stripVTControlCharacters(output)).toContain('unresolved challenge');
+    expect(stripVTControlCharacters(output)).toContain('original-biometric-body-failure');
   } finally { await rm(root, { recursive: true, force: true }); }
 }, 20000);

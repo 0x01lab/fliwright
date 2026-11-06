@@ -15,8 +15,8 @@ import { androidDeviceIdentity } from '../helpers/androidDeviceIdentity.js';
 import { nativeModuleCompiler } from '../helpers/compileNativeModule.js';
 import type { ToolExecutor } from '../../src/ToolExecutor.js';
 
-// These integration tests perform real durable writes and fsync on each recovery boundary.
-vi.setConfig({ testTimeout: 15000 });
+// Include fixture setup and real fsync at every boundary around the bounded recovery operation.
+vi.setConfig({ testTimeout: 30000 });
 
 const roots: string[] = [];
 const children: ChildProcess[] = [];
@@ -136,7 +136,7 @@ it.each([false, true])('restores captured flags, owned forwarding and installati
   expect(f.calls.some(args => args.includes('--remove-all'))).toBe(false);
   expect(await inspectDeviceLease(f.input)).toMatchObject({ state: 'available' });
   const next = await f.manager.acquire('android', f.input.deviceId); await next.release();
-}, 15000);
+}, 30000);
 
 it.each(['boot', 'avd', 'apk', 'uid', 'flags', 'sensitive-flags', 'app-op', 'users', 'forward'] as const)('refuses changed %s before any mutation', async kind => {
   const f = await fixture();
@@ -293,7 +293,7 @@ it('takes over an actual SIGKILLed Android recovery owner and completes from the
   expect(await readFile(join(result.archiveDirectory, 'original.dirty'))).toEqual(f.dirty);
   expect(await inspectDeviceLease(f.input)).toMatchObject({ state: 'available' });
   expect(report.recovery).toBe('exited');
-}, 30000);
+}, 60000);
 
 it('reconciles a permission write after its recovery owner is SIGKILLed before readback without replaying it', async () => {
   const f = await fixture(), compiler = nativeModuleCompiler(join(f.input.rootDir, 'compiled'));
@@ -325,7 +325,7 @@ it('reconciles a permission write after its recovery owner is SIGKILLed before r
   expect(f.calls.some(args => args[3]?.startsWith('pm revoke '))).toBe(false);
   expect(f.state).toMatchObject({ stopped: true, running: false, granted: false });
   expect(await readFile(join(result.archiveDirectory, 'original.dirty'))).toEqual(f.dirty);
-}, 30000);
+}, 60000);
 
 it('reconciles a removed forward after its recovery owner is SIGKILLed before readback without replaying it', async () => {
   const f = await fixture(), compiler = nativeModuleCompiler(join(f.input.rootDir, 'compiled'));
@@ -357,7 +357,7 @@ it('reconciles a removed forward after its recovery owner is SIGKILLed before re
   expect(f.calls.some(args => args[2] === 'forward' && args[3] === '--remove')).toBe(false);
   expect(f.state.forward).toBe('');
   expect(await readFile(join(result.archiveDirectory, 'original.dirty'))).toEqual(f.dirty);
-}, 30000);
+}, 60000);
 
 it('reconciles an uninstall after its recovery owner is SIGKILLed before readback without replaying it', async () => {
   const f = await fixture(true), compiler = nativeModuleCompiler(join(f.input.rootDir, 'compiled'));
@@ -390,7 +390,7 @@ it('reconciles an uninstall after its recovery owner is SIGKILLed before readbac
   expect(f.calls.some(args => args[2] === 'uninstall')).toBe(false);
   expect(f.state.installed).toBe(false);
   expect(await readFile(join(result.archiveDirectory, 'original.dirty'))).toEqual(f.dirty);
-}, 30000);
+}, 60000);
 
 const archiveCrashBoundaries = ['readback-completed', 'archiving', 'lock-renamed', 'lock-destination-synced', 'lock-synced',
   'dirty-renamed', 'dirty-destination-synced', 'dirty-synced', 'archived'] as const;
@@ -428,7 +428,7 @@ it.each(archiveCrashBoundaries)('resumes Android recovery after SIGKILL at %s an
   expect(await readFile(join(result.archiveDirectory, 'original.dirty'))).toEqual(f.dirty);
   expect(await inspectDeviceLease(f.input)).toMatchObject({ state: 'available' });
   const next = await f.manager.acquire('android', f.input.deviceId); await next.release();
-}, 30000);
+}, 60000);
 
 const verifiedCrashBoundaries = ['app.stop.verified', 'permission.camera.grant.verified', 'permission.camera.clear-flags.verified',
   'permission.camera.set-flags.verified', 'permissions.readback.verified', 'forward.remove.verified', 'app.uninstall.verified'] as const;
@@ -465,7 +465,7 @@ it.each(verifiedCrashBoundaries)('continues after a verified Android action at %
             : boundaryName === 'app.uninstall.verified' && f.calls.some(args => args[2] === 'uninstall');
   expect(repeated).toBe(false);
   expect(await inspectDeviceLease(f.input)).toMatchObject({ state: 'available' });
-}, 30000);
+}, 60000);
 
 it.each(['app.stop.verified', 'permission.camera.grant.verified'])('keeps Android recovery isolated when %s changes before explicit resume', async boundary => {
   const f = await fixture(), compiler = nativeModuleCompiler(join(f.input.rootDir, 'compiled'));
@@ -491,7 +491,7 @@ it.each(['app.stop.verified', 'permission.camera.grant.verified'])('keeps Androi
   expect(mutations(f.calls)).toEqual([]);
   await expect(f.manager.acquire('android', f.input.deviceId)).rejects.toMatchObject({ code: 'device_busy' });
   expect(await readFile(f.lease.permissionRecoveryPath!)).toEqual(f.original['permission-recovery.json']);
-}, 30000);
+}, 60000);
 
 const pendingCrashBoundaries = [
   { boundary: 'app.stop.pending', installedBySession: false },
@@ -528,4 +528,4 @@ it.each(pendingCrashBoundaries)('retains an unknown pending Android write after 
   await expect(f.manager.acquire('android', f.input.deviceId)).rejects.toMatchObject({ code: 'device_busy' });
   expect(await readFile(f.lease.permissionRecoveryPath!)).toEqual(f.original['permission-recovery.json']);
   expect(await readdir(f.input.rootDir)).toContain(`${f.lease.key}.recovery`);
-}, 30000);
+}, 60000);

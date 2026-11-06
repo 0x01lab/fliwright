@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -55,9 +56,9 @@ it('isolates app camera queues per attempt, verifies leftovers and cleans after 
     child.stderr.on('data', chunk => { output += chunk; });
     const code = await new Promise((done, reject) => { child.once('error', reject); child.once('close', done); });
     expect(code, output).toBe(1);
-    expect(output).toContain('3 failed | 2 passed');
-    expect(output).toContain('original-camera-body-failure');
-    expect(output).toContain('unconsumed');
+    expect(stripVTControlCharacters(output)).toContain('3 failed | 2 passed');
+    expect(stripVTControlCharacters(output)).toContain('original-camera-body-failure');
+    expect(stripVTControlCharacters(output)).toContain('unconsumed');
     const events = (await readFile(eventsPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
     expect(events).toHaveLength(12); // Six attempts; fixture cleanup errors prevent a retry.
     expect(events.filter((_, index) => index % 2 === 0).every(event => event.discarded === 0)).toBe(true);
