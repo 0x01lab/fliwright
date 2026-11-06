@@ -1180,7 +1180,7 @@ describe('runCommand', () => {
             if (method === 'ext.fliwright.snap') return { widgets: [{ type: 'Text' }] };
             if (method === 'ext.fliwright.captureFrame') return { diagnostics: [{ kind: 'Flutter.Error', timestamp: 1812345678901, streamId: 'Logging', data: { message: 'build failed' } }] };
             return { success: true };
-          }, healing: { getReports: () => [] }, dispose: async () => {},
+          }, getDiagnostics: () => [], healing: { getReports: () => [] }, dispose: async () => {},
         };
         const test = createFliwrightTest({ vmServiceUrl: 'ws://unused', requireAssertions: false, log: { format: 'silent' } }, { driverProvider: async () => driver });
         test(${JSON.stringify(name)}, async ({ page }) => { throw new Error('original business error'); });

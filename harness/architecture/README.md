@@ -33,7 +33,7 @@ other Harness document duplicates those rules.
 | `packages/fliwright-vscode` | VS Code commands, views, webviews, and project workflows | Core primitives, MCP contracts, or Dart instrumentation |
 | `packages/fliwright-plugin-riverpod` | TypeScript Riverpod plugin and state adapter | Flutter observation or generic runtime behavior |
 | `packages/fliwright-bridge-riverpod` | Flutter/Riverpod observation and provider bridge methods | Generic bridge behavior or TypeScript adapters |
-| `packages/fliwright-tdd` | Persistent TDD loop, reset, rerun, generation, repair planning | General CLI, MCP transport, or Dart protocol behavior |
+| `packages/fliwright-tdd` | Persistent focused execution, reset, app synchronization and evidence | Agent decisions, test authoring, AI repair, general CLI, MCP transport, or Dart protocol behavior |
 | `e2e` | Smoke and integration verification against a running app | Public runtime APIs or product capabilities |
 | `examples/form_demo` | Form and network-mock consumer verification | Public APIs or reusable runtime behavior |
 | `examples/go_router_demo` | Navigation consumer verification | Public APIs or reusable runtime behavior |

@@ -197,7 +197,7 @@ async function groupMembers(group: number): Promise<number[]> {
     execFile('/bin/ps', ['-axo', 'pid=,pgid=,stat='], { encoding: 'utf8', timeout: 1000, maxBuffer: 4 * 1024 * 1024 },
       (error, stdout) => error ? reject(toolError('cleanup_failed')) : resolve(stdout));
   });
-  const records = output.trim().split('\n').map(line => /^\s*([1-9]\d*)\s+([1-9]\d*)\s+(\S+)\s*$/.exec(line));
+  const records = output.trim().split('\n').map(line => /^\s*([1-9]\d*)\s+(0|[1-9]\d*)\s+(\S+)\s*$/.exec(line));
   if (records.some(record => !record)) throw toolError('cleanup_failed');
   return records.filter(record => Number(record![2]) === group && !record![3].includes('Z')).map(record => Number(record![1]));
 }

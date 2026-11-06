@@ -47,7 +47,7 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 
 | Data field / variant | Meaning |
 | --- | --- |
-| session | With --session: host status containing connected/endpoint/tdd/workflow/closed. |
+| session | With --session: host status containing connected/endpoint/tdd/closed. |
 | finite | Without --session: persisted RuntimeSnapshot or null. |
 
 ## Effects and failure handling

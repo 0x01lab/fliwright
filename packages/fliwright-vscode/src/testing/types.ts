@@ -25,6 +25,8 @@ export interface TestCaseNode {
   kind: 'testCase';
   id: string;                 // "<relPath>::<ancestor titles joined by '/'>/<title>"
   label: string;
+  /** Anchored Vitest full-name pattern; titles may themselves contain '/' or regexp syntax. */
+  testNamePattern: string;
   status: TestNodeStatus;
   durationMs?: number;
   fileUri: vscode.Uri;

@@ -66,7 +66,7 @@ export async function executeCli(argv: string[], registry = createRegistry()): P
     if (json && input.reporter && input.reporter !== 'json') throw new CliError('INVALID_INPUT', '--json conflicts with an explicit non-JSON reporter.', 2);
     selectedReporter = input.reporter;
     const session = common.session as string | undefined ?? process.env.FLIWRIGHT_SESSION;
-    const routedToSession = Boolean(session && (definition.needsSession || (definition.needsApp && !['run', 'script', 'record'].includes(definition.path)) || ['generate-test', 'tdd.cycle', 'tdd.sync', 'tdd.status'].includes(definition.path)));
+    const routedToSession = Boolean(session && (definition.needsSession || (definition.needsApp && !['run', 'script', 'record'].includes(definition.path)) || ['tdd.cycle', 'tdd.sync', 'tdd.status'].includes(definition.path)));
     if (routedToSession && (input.vmUrl || input.deviceId)) throw new CliError('INVALID_INPUT', '--session cannot change its endpoint or device.', 2);
     if (routedToSession && session) {
       sessionOperation = true;

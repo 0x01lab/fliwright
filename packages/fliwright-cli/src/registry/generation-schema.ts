@@ -1,21 +1,5 @@
 import { z } from 'zod';
 export const GenerateTestParamsSchema = z.object({
-  mode: z.enum(['default', 'red-first']).optional().default('default')
-    .describe("Generation mode. Use 'red-first' with spec for TDD-oriented tests."),
-  spec: z.object({
-    app: z.any().optional(),
-    initialState: z.any().optional(),
-    elements: z.array(z.any()),
-    flows: z.array(z.any()),
-    assertions: z.array(z.any()).optional(),
-  }).passthrough().optional().describe('InteractionSpec from design/intention parsing for red-first TDD generation'),
-  flowId: z.string().optional().describe('Flow id to generate when mode is red-first and spec contains multiple flows'),
-  allFlows: z.boolean().optional().default(false)
-    .describe('Generate one red-first test for every selected flow in the InteractionSpec'),
-  flowIds: z.array(z.string()).optional()
-    .describe('Subset of flow ids to generate when allFlows is true'),
-  testNamePrefix: z.string().optional()
-    .describe('Prefix to apply to generated suite test names when allFlows is true'),
   source: z.string().optional().describe('Flutter/Dart source code of the page or widget to test'),
   snapshot: z.string().optional().describe('Agent-readable snapshot text from fliwright app snapshot'),
   refs: z.array(z.object({

@@ -1,3 +1,6 @@
+import { resolve } from 'node:path';
+import { generateTestCommand } from '../commands/generate-test.js';
+import { GenerateTestParamsSchema } from './generation-schema.js';
 import { waitForVmServiceEndpoint } from '@fliwright/core';
 import { z } from 'zod';
 import { FlutterDaemonController, SubprocessDaemonTransport } from '@fliwright/tdd';
@@ -36,6 +39,10 @@ export function registerFinite(registry: CommandRegistry, deps: FiniteDeps = {})
   const add = (path: string, input: z.ZodRawShape, execute: (input: any, context: CommandContext) => unknown, effects: string[] = [], extra: Partial<Parameters<CommandRegistry['add']>[0]> = {}) =>
     registry.add({ path, input: z.object(input), execute, effects, description: path.replaceAll('.', ' '), ...extra });
   const withContext = (fn: (options: any, deps?: AppSessionDeps) => unknown) => (input: any, context: CommandContext) => fn({ ...input, cwd: context.cwd, signal: context.signal }, deps.app);
+  registry.add({ path: 'generate-test', description: 'Generate a test draft from source or snapshot',
+    input: GenerateTestParamsSchema, effects: ['filesystem-write'],
+    execute: (input, context) => generateTestCommand({ ...input,
+      outputFile: input.outputFile ? resolve(context.cwd, input.outputFile) : undefined }) });
   add('schema', { path: str }, (input) => registry.schema(input.path), [], { positional: ['path'] });
   add('init', { install: bool, node: bool, flutter: bool, pm: z.enum(['npm', 'pnpm', 'yarn', 'bun']).optional(), agent: z.enum(['codex']).optional(), yes: bool, entrypoint: str }, (input, context) => initCommand(context.cwd, { ...input, packageManager: input.pm }, { log: console.error, signal: context.signal }), ['project-files', 'dependency-install']);
   add('doctor', { ...connection, strict: bool }, async (input, context) => {

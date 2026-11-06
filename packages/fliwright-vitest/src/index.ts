@@ -163,11 +163,8 @@ export interface FliwrightFixtures {
 
 export type FliwrightTest = TestAPI<FliwrightFixtures>;
 
-export type ScenarioTest<TFixtures extends FliwrightFixtures = FliwrightFixtures> = (
-  name: string,
-  handler: (fixtures: TFixtures) => unknown | Promise<unknown>,
-  timeout?: number,
-) => void;
+/** Vitest registration API with a named environment selected, including for/each and modifiers. */
+export type ScenarioTest<TFixtures extends FliwrightFixtures = FliwrightFixtures> = TestAPI<TFixtures>;
 
 export interface ScenarioEnabledFliwrightTest<TFixtures extends FliwrightFixtures = FliwrightFixtures> extends TestAPI<TFixtures> {
   scenario(name: string): ScenarioTest<TFixtures>;
@@ -512,7 +509,7 @@ function withScenarioSupport<TFixtures extends FliwrightFixtures>(
   scenarioTest.scenario = (scenarioName: string): ScenarioTest<TFixtures> => {
     const config = resolveConfig();
     if (config.defaultScenario && config.defaultScenario !== scenarioName) throw new Error(`Explicit scenario '${scenarioName}' conflicts with selected scenario '${config.defaultScenario}'.`);
-    if (config.defaultScenario === scenarioName) return (name, handler, timeout) => { scenarioTest(name, handler, timeout); };
+    if (config.defaultScenario === scenarioName) return scenarioTest;
     const scenarios = config.scenarios;
     if (!scenarios) {
       throw new Error(`Test scenario '${scenarioName}' was requested, but defineConfig({ scenarios }) is missing.`);
@@ -538,11 +535,9 @@ function withScenarioSupport<TFixtures extends FliwrightFixtures>(
         await use(undefined);
       }, { auto: true }],
     }) as unknown as TestAPI<TFixtures>;
-    return (name, handler, timeout) => {
-      const meta: Partial<import('vitest').TaskMeta> = {};
-      Object.assign(meta, { [taskScenarioKey]: scenario });
-      prepared(name, { timeout, meta }, handler);
-    };
+    const meta: Partial<import('vitest').TaskMeta> = {};
+    Object.assign(meta, { [taskScenarioKey]: scenario });
+    return withTaskPreparation(prepared, prepare, meta);
   };
   return scenarioTest;
 }

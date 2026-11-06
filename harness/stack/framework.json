@@ -19,6 +19,7 @@
   "nodeDependencyManifests": {
     "package.json": {
       "devDependencies": {
+        "@types/node": "^26.0.1",
         "typescript": "^5.5.0",
         "vitest": "5.0.5",
         "vite": "^8.1.0"
@@ -34,7 +35,7 @@
         "ws": "^8.17.0"
       },
       "devDependencies": {
-        "@types/node": "^25.9.1",
+        "@types/node": "^26.0.1",
         "@types/ws": "^8.5.10",
         "typescript": "^5.5.0",
         "vitest": "5.0.5",
@@ -52,7 +53,7 @@
         "@fliwright/native": "workspace:*"
       },
       "devDependencies": {
-        "@types/node": "^25.9.1",
+        "@types/node": "^26.0.1",
         "typescript": "^5.5.0"
       }
     },
@@ -106,7 +107,7 @@
         }
       },
       "devDependencies": {
-        "@types/node": "^25.9.1",
+        "@types/node": "^26.0.1",
         "typescript": "^5.5.0",
         "vitest": "5.0.5",
         "ws": "^8.17.0",
@@ -207,7 +208,7 @@
         "node": ">=20"
       },
       "devDependencies": {
-        "@types/node": "^25.9.1",
+        "@types/node": "^26.0.1",
         "typescript": "^5.5.0",
         "vitest": "5.0.5"
       }
@@ -256,7 +257,7 @@
         "saxes": "^6.0.0"
       },
       "devDependencies": {
-        "@types/node": "^25.9.1",
+        "@types/node": "^26.0.1",
         "typescript": "^5.5.0",
         "vitest": "5.0.5"
       }
@@ -270,7 +271,7 @@
         "zod": "^3.25.76"
       },
       "devDependencies": {
-        "@types/node": "^25.9.1",
+        "@types/node": "^26.0.1",
         "typescript": "^5.5.0",
         "vitest": "5.0.5"
       }

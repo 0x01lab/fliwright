@@ -51,7 +51,7 @@ describe('TddRuntime', () => {
     await runtime.start({
       configRoot: '/tmp/exio/vitest.config.ts',
       vmServiceUrl: 'ws://vm/ws',
-      scenario: { homeRoute: '/home', resetCategories: ['navigation'] },
+      baselineConfig: { homeRoute: '/home', resetCategories: ['navigation'] },
     });
     await runtime.focus('/tmp/exio/.fliwright/tests/exio-navigation.test.ts', 'Exio shell navigates to markets and trading tabs');
 
@@ -154,7 +154,7 @@ describe('TddRuntime', () => {
     };
     const runtime = new TddRuntime({ driverFactory: () => driver, executor });
     await runtime.start({ configRoot: '/tmp/vitest.config.ts', vmServiceUrl: 'ws://vm/ws' });
-    await runtime.setScenario({ homeRoute: '/dashboard', resetCategories: ['navigation'] });
+    await runtime.setBaselineConfig({ homeRoute: '/dashboard', resetCategories: ['navigation'] });
     await runtime.focus('/tmp/sample.test.ts', 'alpha passes');
 
     const result = await runtime.cycle();
@@ -562,7 +562,7 @@ describe('TddRuntime', () => {
 
     const cyclePromise = runtime.cycle();
     await waitUntil(() => executor.rerun.mock.calls.length === 1);
-    const scenarioPromise = runtime.setScenario({ homeRoute: '/dashboard', resetCategories: ['navigation'] });
+    const scenarioPromise = runtime.setBaselineConfig({ homeRoute: '/dashboard', resetCategories: ['navigation'] });
     await Promise.resolve();
 
     expect(driver.page.resetToHome).toHaveBeenCalledWith({ homeRoute: '/' });

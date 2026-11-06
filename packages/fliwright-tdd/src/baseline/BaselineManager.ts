@@ -1,4 +1,4 @@
-import type { ResetAdapterResult, ResetCategory, ResetReport, Scenario } from '../types.js';
+import type { ResetAdapterResult, ResetCategory, ResetReport, BaselineConfig } from '../types.js';
 import { AppCapabilityResetAdapters } from './AppCapabilityResetAdapter.js';
 import { StorageBackedResetAdapters } from './StorageResetAdapter.js';
 
@@ -37,7 +37,7 @@ export interface ResetContext {
       invoke(capability: string, method: string, input?: unknown): Promise<unknown>;
     };
   };
-  scenario: Scenario;
+  scenario: BaselineConfig;
   full: boolean;
 }
 
@@ -124,7 +124,7 @@ export class BaselineManager {
     this.adapters.set(adapter.category, adapter);
   }
 
-  async reset(scenario: Scenario, opts: { full?: boolean } = {}): Promise<ResetReport> {
+  async reset(scenario: BaselineConfig, opts: { full?: boolean } = {}): Promise<ResetReport> {
     const full = opts.full ?? false;
     const results: ResetAdapterResult[] = [];
 

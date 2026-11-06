@@ -17,6 +17,10 @@ Use Fliwright as deterministic Flutter app automation through the Dart VM Servic
 
 For test creation or changes to covered behavior, read [references/scenario-design.md](references/scenario-design.md) before implementation. This workflow accepts natural-language goals, bug reproductions and existing cases without requiring a GitLab Item or test plan.
 
+For new tests or changes to test registration, parameterization, hooks or fixtures, also read [references/vitest-authoring.md](references/vitest-authoring.md). Confirm the target project's installed Vitest version and use the relevant official API documentation; nearby tests are examples, not the API specification.
+
+When creating a test file, choose the closest [basic template](references/test-templates.md) and adapt its structure to the verified goal and project contracts. Read only the selected template; do not copy illustrative scenario names, Keys, routes or expected values as business facts.
+
 - Derive observable cases and the state needed to reach each target branch. Match existing scenarios by their actual setup; compose or create missing named `TestScenario` declarations and register them in project config.
 - Derive mock selections and response data from the goal plus the target app's API contracts and parsing logic. Reuse suitable rules; create missing endpoint JSON with [write-fliwright-mock-rules](../write-fliwright-mock-rules/SKILL.md). A valid schema or a rule named `success` does not establish business correctness.
 - Verify scenario composition, resolved mock files, and actual app behavior. For requests central to the goal, assert relevant request facts and the resulting UI branch; activation alone is insufficient.
@@ -56,7 +60,9 @@ Run evidence uses the project's resolved `runsRoot`, defaulting to `~/.fliwright
 Read only the reference needed for the current task:
 
 - First Fliwright test or environment setup: [references/getting-started.md](references/getting-started.md)
+- Starting a test file: [references/test-templates.md](references/test-templates.md) — explicit per-file home/Mock hooks, single case, `test.for`, `test.each`, distinct scenarios and submission verification.
 - Test-goal analysis, case derivation, scenario selection/creation and mock correctness: [references/scenario-design.md](references/scenario-design.md)
+- Vitest version, official API sources, `test.for` / `test.each`, hooks, cleanup and test collection: [references/vitest-authoring.md](references/vitest-authoring.md)
 - Reusable baselines, authenticated business tests, `TestScenario` and `test.scenario(...)`: [references/scenarios.md](references/scenarios.md)
 - Shared/Item Mock sources, explicit replacement, migration from inline helpers and rule provenance: [references/mock-rule-sets.md](references/mock-rule-sets.md)
 - `test`/`script`, fixtures, `flow`, timeline nodes, manual steps: [references/timeline-native.md](references/timeline-native.md), [references/test-harness.md](references/test-harness.md)
@@ -72,6 +78,10 @@ If unsure which reference applies, open [references/index.md](references/index.m
 
 ## Authoring Rules
 
+- Register independent cases with explicit declarations or Vitest `test.for` / `test.each`, not top-level `for` / `forEach` title generation. Prefer `test.for` when using fixtures. Keep distinct scenarios explicit; action/assertion loops inside a case are allowed. See [Vitest authoring](references/vitest-authoring.md).
+- Use the project's extended `test` for hooks that need its fixtures. Keep per-attempt state in a fixture or cleanup closure, and await teardown. Tests sharing one app run serially unless the project provides isolated app instances.
+- For this workflow, explicitly declare the [per-file lifecycle](references/test-templates.md#脚本内生命周期) in every Flutter test script: `test.beforeEach` explicitly calls the target project's existing home-reset helper (for example, Exio's `exio.openHome()`), and `test.afterEach` clears all active App HTTP Mock routes after each attempt, including failures. Inspect the helper's implementation and state requirements before reuse; do not replace an applicable app-specific helper with raw `page.goto('/home')`. If missing, implement it in project support using verified navigation, overlay handling and readiness. Support owns that implementation; each test script owns the explicit call and hook registrations. Import the project's fixture `test` from support. Use strict `driver.mock.clearFlutterRoutes()` for full cleanup; `mock.clearRoutes()` preserves editor-owned routes. Keep Mock JSON sources intact. Tests enter their target route from home; do not depend on scenario navigation to leave them on a different page.
+- Put imports first and keep actions, waits and assertions on separate lines. Extract repeated business operations without hiding case identity, scenario selection or expected outcomes.
 - Selectors: stable `Key` > semantics identifier/label/role > exact visible text > scoped text/type > raw widget type fallback.
 - During exploration, use `page.snapshot()` and `page.findRef(...)` to discover candidates, then commit resilient query-based locators such as `page.getByKey(...)`, `page.getByText(...)`, or scoped `page.locator(...)`. Do not commit ephemeral `e<N>` refs from one snapshot.
 - Scope ambiguous UI with descendant/ancestor locators, `.and(...)`, `.nth(...)`, route context, or form context. Do not rely on whichever element happens to be first.
@@ -82,6 +92,8 @@ If unsure which reference applies, open [references/index.md](references/index.m
 - Choose select strategies based on the widget: `selectOption()` for standard dropdowns, real user clicks for custom sheets/dialogs, and search-field-plus-option-click flows for virtualized country/region pickers.
 - Assert visible outcomes with `await expect(locator, 'clear title').toBeVisible()`, `toHaveText()`, `toContainText()`, `toBeEnabled()`, or `.not`. The title becomes timeline metadata.
 - Use Vitest `expect` only for non-locator values such as captured HTTP calls from `mock.findCalls(...)` or `mock.getCalls(...)`.
+- Locate the actual text-bearing descendant when a wrapper has no own text; do not flatten the whole widget subtree just to assert one label. Poll raw values only when no locator matcher represents the condition, and explain the missing capability when it is not obvious.
+- For zero/exact request counts, define the operation window and wait for its observable completion before checking the total. First-call polling, a single UI node, or network silence alone does not prove exactly-once behavior. See [request assertions](references/assertions.md#请求断言).
 - Use `logger.info/debug/warn/error/success` for script progress and diagnostics; do not make `console.log` the main run log.
 - Keep AI optional and deterministic in CI. Prefer `provider: 'mock'` or `'none'`, catch `AiDisabledError` when AI is optional, and land self-healing suggestions back into stable selectors after review.
 - For HTTP mock rule JSON, prefer `baseRule` plus overrides for repeated endpoint fields, and use `removeBodyFields` when an inherited response field must be absent. See [references/mocks.md](references/mocks.md).
@@ -112,6 +124,7 @@ Treat captcha, slider verification, QR login, SMS approval, and WebView/Platform
 
 - For new or changed cases, complete the [scenario and mock verification](references/scenario-design.md#验证与交付): check setup, critical request facts and branch-specific outcomes. Report static validation and real execution separately, including unresolved goals.
 - For generated or edited test code, run the narrowest relevant TypeScript check or package test available. Use `pnpm lint`, `pnpm --filter @fliwright/vitest test`, `pnpm --filter @fliwright/core test`, or a targeted `pnpm vitest run path/to/file.ts` as appropriate.
+- For new, renamed or parameterized cases, collect the target file with the installed Vitest runner and check expected names, count and uniqueness. When editor discovery is relevant, also check the Tests tree; runtime collection does not prove static discovery. See [collection checks](references/vitest-authoring.md#用例收集与交付).
 - Direct Vitest execution requires `fliwrightPreset()` in the target project's Vitest config; CLI execution installs the runner itself. Use the [CLI command index](../fliwright-cli-workflows/references/commands/index.md) for current flags and lifecycle rules.
 - For active Flutter app validation, prefer `fliwright run --test path/to/file.ts --json`. Pass `--vm-url` only when config/env discovery is unavailable.
 - If validation needs a running app or VM Service URL that is not available, say that explicitly and still perform static checks where possible.

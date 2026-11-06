@@ -1,18 +1,13 @@
-import { resolveFliwrightRuntimeRoot } from '@fliwright/core';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { TddRuntime } from '@fliwright/tdd';
 import { CommandRegistry, CliError, type CommandContext } from '../CommandRegistry.js';
 import { registerFinite } from '../registry/finite.js';
 import { registerFlow } from '../registry/flow.js';
 import { connectAppSession, type AppSession, type AppSessionDeps } from '../capabilities/session.js';
-import type { TddWorkflowContext } from '../WorkflowContext.js';
 
 /** Owns persistent objects only; run evidence, artifacts and endpoint leases keep their existing owners. */
 export class ConnectionHost {
   private session?: AppSession;
   private runtime?: TddRuntime;
-  private workflow?: TddWorkflowContext;
   private queue: Promise<unknown> = Promise.resolve();
   private closed = false;
   private closing = false;
@@ -37,7 +32,7 @@ export class ConnectionHost {
     await this.queue;
     await this.refreshEndpoint();
   }
-  status() { return { connected: Boolean(this.session), endpoint: this.session?.vmServiceUrl, tdd: this.runtime?.snapshot(), workflow: this.workflow, closed: this.closed }; }
+  status() { return { connected: Boolean(this.session), endpoint: this.session?.vmServiceUrl, tdd: this.runtime?.snapshot(), closed: this.closed }; }
   getRuntime(): TddRuntime {
     if (!this.runtime) throw new CliError('TDD_NOT_STARTED', 'Start the TDD runtime before this command.', 4);
     return this.runtime;
@@ -61,16 +56,9 @@ export class ConnectionHost {
     this.runtime = undefined;
     return runtime.snapshot();
   }
-  setWorkflow(context: TddWorkflowContext) {
-    this.workflow = context;
-    const directory = join(resolveFliwrightRuntimeRoot({ projectRoot: this.options.cwd }), 'sessions', this.options.id ?? 'local');
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
-    writeFileSync(join(directory, 'workflow.json'), JSON.stringify(context), { mode: 0o600 });
-  }
-  getWorkflow() { return this.workflow; }
   async execute(command: string, input: unknown, context?: Partial<CommandContext> & { onStart?: () => Promise<void> }): Promise<unknown> {
     if (this.closing || this.closed) throw new CliError('SESSION_CLOSED', 'Session is closing.', 4);
-    const abort = () => { if (command.startsWith('tdd.') || command.startsWith('devassist.')) void this.runtime?.cancel(); };
+    const abort = () => { if (command.startsWith('tdd.')) void this.runtime?.cancel(); };
     const run = this.queue.then(async () => {
       context?.signal?.throwIfAborted();
       context?.signal?.addEventListener('abort', abort, { once: true });
@@ -82,7 +70,7 @@ export class ConnectionHost {
       const { registerTdd } = await import('../registry/tdd.js');
       registerTdd(registry, this);
       const definition = registry.definitions.get(command);
-      if (!definition || command === 'mock.start' || (!command.startsWith('tdd.') && !command.startsWith('devassist.') && !command.startsWith('app.') && !command.startsWith('scenario.') && !command.startsWith('mock.') && !command.startsWith('flow.review-') && command !== 'generate-test')) throw new CliError('INVALID_INPUT', `Command cannot execute in a connection session: ${command}`, 2);
+      if (!definition || command === 'mock.start' || (!command.startsWith('tdd.') && !command.startsWith('app.') && !command.startsWith('scenario.') && !command.startsWith('mock.') && !command.startsWith('flow.review-'))) throw new CliError('INVALID_INPUT', `Command cannot execute in a connection session: ${command}`, 2);
       const parsed = definition.input.strict().parse(input);
       const result = await definition.execute(parsed, { cwd: this.options.cwd, requestId: context?.requestId ?? 'local', signal: context?.signal ?? new AbortController().signal });
       context?.signal?.throwIfAborted();

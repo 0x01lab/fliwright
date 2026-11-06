@@ -98,6 +98,8 @@ export class RunArtifactStore {
 
     const map = await this.loadIndex(workspaceRoot);
     for (const tc of result.results) {
+      // Name-filtered runs also report unexecuted siblings. Keep their last result.
+      if (tc.status === 'skipped') continue;
       const { ancestors, title } = splitName(tc.name);
       const tcRelPath = relPathForTestCase(workspaceRoot, relPath, tc);
       const id = testNodeId(tcRelPath, ancestors, title);

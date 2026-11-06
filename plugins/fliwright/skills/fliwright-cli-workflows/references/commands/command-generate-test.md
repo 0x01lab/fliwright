@@ -7,31 +7,24 @@ source: packages/fliwright-cli/src/registry
 
 # fliwright generate-test
 
-Generate a test draft from Flutter source, snapshot candidates or an InteractionSpec.
+Generate an editable test draft from Flutter source or snapshot candidates.
 
 ## When to use
 
-Use for a new test before hand refinement; choose red-first for an intent-driven TDD starting point.
+Use for a source/snapshot starting point; the agent owns acceptance assertions and TDD decisions.
 
 ## Preconditions and behavior
 
 - No live app required by the registry. Check command-specific runtime requirements below.
 - No persistent session required. See usage for finite/session variants.
-- default mode uses supplied refs first, then parses snapshot text, then source. source and snapshot are literal content, not filenames. description does not by itself synthesize meaningful steps.
-- red-first requires a valid spec. allFlows selects suite generation; flowIds restricts its flows. Generation never executes tests.
-- outputFile writes source plus a .workflow.json sidecar. With --session, red-first generation also stores workflow context for later focus.
-- Snapshot candidate input is converted to durable selector candidates; never save opaque live ref tokens in generated tests.
+- Uses supplied refs first, then snapshot text, then source. source and snapshot are literal content, not filenames. description does not by itself synthesize meaningful steps.
+- outputFile writes only the test source. Generation does not run tests or establish red/green evidence.
+- Review all generated actions and assertions with write-fliwright-tests. TDD requirements and implementation changes belong to the agent.
 
 ## Input
 
 | JSON field | CLI syntax | Type / values | Required | Schema default | Meaning |
 | --- | --- | --- | --- | --- | --- |
-| `mode` | `--mode` | "default" \| "red-first" | no | "default" | Generation mode. Use 'red-first' with spec for TDD-oriented tests. |
-| `spec` | `--spec` | object | no | — | InteractionSpec from design/intention parsing for red-first TDD generation |
-| `flowId` | `--flow-id` | string | no | — | Flow id to generate when mode is red-first and spec contains multiple flows |
-| `allFlows` | `--all-flows` | boolean | no | false | Generate one red-first test for every selected flow in the InteractionSpec |
-| `flowIds` | `--flow-ids` | array<string> | no | — | Subset of flow ids to generate when allFlows is true |
-| `testNamePrefix` | `--test-name-prefix` | string | no | — | Prefix to apply to generated suite test names when allFlows is true |
 | `source` | `--source` | string | no | — | Flutter/Dart source code of the page or widget to test |
 | `snapshot` | `--snapshot` | string | no | — | Agent-readable snapshot text from fliwright app snapshot |
 | `refs` | `--refs` | array<object> | no | — | Structured refs from fliwright app snapshot |
@@ -66,63 +59,6 @@ JSON
 fliwright generate-test --input 'fliwright-generate-test-input.json' --json
 ```
 
-### Generate from design intent
-
-```sh
-cat > 'fliwright-generate-test-input.json' <<'JSON'
-{
-  "mode": "red-first",
-  "spec": {
-    "app": {
-      "platform": "flutter",
-      "screenName": "Counter"
-    },
-    "elements": [
-      {
-        "id": "increment",
-        "role": "button",
-        "name": "Increment",
-        "text": "Increment",
-        "locatorHints": [
-          {
-            "strategy": "key",
-            "value": "increment"
-          }
-        ]
-      },
-      {
-        "id": "count",
-        "role": "text",
-        "name": "Counter value",
-        "text": "Count: 1"
-      }
-    ],
-    "flows": [
-      {
-        "id": "increment-flow",
-        "name": "Increment the counter",
-        "steps": [
-          {
-            "action": "tap",
-            "target": "increment"
-          }
-        ],
-        "expectedOutcome": [
-          {
-            "kind": "text",
-            "target": "count",
-            "equals": "Count: 1"
-          }
-        ]
-      }
-    ]
-  },
-  "outputFile": ".fliwright/tests/counter-red.test.ts"
-}
-JSON
-fliwright generate-test --input 'fliwright-generate-test-input.json' --json
-```
-
 ## Result
 
 With --json, read the versioned envelope’s ok and data fields. The following describes data, not the outer envelope. “(data)” means a value returned directly, not a wrapper property.
@@ -131,12 +67,10 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 | --- | --- |
 | testCode / testName | Generated source and name. |
 | testFile | Written file path when outputFile is set. |
-| warnings / selectorDiagnostics / coverage | Red-first generation quality and coverage metadata when present. |
-| tests / workflow | Multi-flow suite metadata or single-flow workflow context. |
 
 ## Effects and failure handling
 
-Registry effects: `tdd-workflow`. These are coarse declarations; the behavior section explains actual reads/writes.
+Registry effects: `filesystem-write`. These are coarse declarations; the behavior section explains actual reads/writes.
 
 Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data on nonzero exit because it can contain failure evidence or partial results. Correct input errors before retrying; for session mutations query the operation journal before retrying an uncertain response.
 
@@ -146,57 +80,6 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
 {
   "type": "object",
   "properties": {
-    "mode": {
-      "type": "string",
-      "enum": [
-        "default",
-        "red-first"
-      ],
-      "default": "default",
-      "description": "Generation mode. Use 'red-first' with spec for TDD-oriented tests."
-    },
-    "spec": {
-      "type": "object",
-      "properties": {
-        "app": {},
-        "initialState": {},
-        "elements": {
-          "type": "array"
-        },
-        "flows": {
-          "type": "array"
-        },
-        "assertions": {
-          "type": "array"
-        }
-      },
-      "required": [
-        "elements",
-        "flows"
-      ],
-      "additionalProperties": true,
-      "description": "InteractionSpec from design/intention parsing for red-first TDD generation"
-    },
-    "flowId": {
-      "type": "string",
-      "description": "Flow id to generate when mode is red-first and spec contains multiple flows"
-    },
-    "allFlows": {
-      "type": "boolean",
-      "default": false,
-      "description": "Generate one red-first test for every selected flow in the InteractionSpec"
-    },
-    "flowIds": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Subset of flow ids to generate when allFlows is true"
-    },
-    "testNamePrefix": {
-      "type": "string",
-      "description": "Prefix to apply to generated suite test names when allFlows is true"
-    },
     "source": {
       "type": "string",
       "description": "Flutter/Dart source code of the page or widget to test"
@@ -269,8 +152,7 @@ Refresh the installed contract with `fliwright schema generate-test --json`. Tha
 
 ## Related commands
 
-- [tdd validate-spec](./command-tdd.validate-spec.md) — Validate an InteractionSpec and report its executable intent coverage.
-- [tdd prepare](./command-tdd.prepare.md) — Generate a red-first test, store workflow context and optionally focus it in a session.
 - [run](./command-run.md) — Run selected Vitest automation tests and save canonical run evidence.
 - [flow generate-test](./command-flow.generate-test.md) — Generate a TypeScript test skeleton from a saved flow.
+- [tdd focus](./command-tdd.focus.md) — Select the file and optional test name for persistent TDD cycles.
 - [Command index](./index.md)

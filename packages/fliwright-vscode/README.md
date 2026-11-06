@@ -51,6 +51,23 @@ The script process receives both `FLIWRIGHT_VM_SERVICE_URL` and
 to the `Fliwright` output channel, and the final pass/fail result is added to
 the `Runs` view.
 
+## Discovering Tests
+
+Expand a file in the **Tests** view to collect its cases through Vitest in a
+separate process. Discovery shares the CLI/Cloud catalog implementation and
+supports `test.scenario(...)`, parameterized cases, imported data and generated
+titles. Collection needs a trusted workspace and its installed Vitest; it does
+not need a running Flutter app. Scenario names must be declared in the project.
+
+Collection loads module-level code but does not run test bodies, hooks or app
+fixtures. Results are cached until refresh or a source/configuration change.
+File expansions arriving together are batched (up to 32 files) into one Vitest
+context; only one collection process runs at a time. Listing cases skips Mock
+catalog scanning. Build output, coverage and Fliwright run/cache artifacts do
+not invalidate the cache, and completed runs refresh statuses without collecting
+again. Refresh cancels pending work, and each batch has a 30-second deadline. Failures appear below the file and in the
+**Fliwright** output channel. Use the file's Refresh action to retry.
+
 ## Recording Tests
 
 1. Start the Flutter app with `FliwrightBridge.init()` enabled and connect the extension to the VM Service.

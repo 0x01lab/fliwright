@@ -90,3 +90,18 @@ describe('catalog collection and exact selection', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   }, 30000);
 });
+
+it('collects multiple test files in one cases-only pass without scanning Mock responses', async () => {
+  const { collectTestCases } = await import('../src/catalog.js');
+  const root = await mkdtemp(join(tmpdir(), 'fliwright-cases-only-'));
+  try {
+    await symlink(resolve('../../node_modules'), join(root, 'node_modules'));
+    await mkdir(join(root, '.fliwright/mocks/api'), { recursive: true });
+    await writeFile(join(root, '.fliwright/mocks/api/broken.json'), 'not JSON');
+    for (const name of ['a', 'b']) await writeFile(join(root, `${name}.test.mjs`), `import {test} from 'vitest'; test('${name}', () => {});`);
+    await writeFile(join(root, 'broken.test.mjs'), "throw new Error('invalid fixture');");
+    const result = await collectTestCases({ cwd: root, patterns: ['*.test.mjs'] });
+    expect(result.filter(file => !file.errors.length).flatMap(file => file.cases.map(item => item.titlePath))).toEqual([['a'], ['b']]);
+    expect(result.find(file => file.file === 'broken.test.mjs')?.errors).toEqual([expect.stringContaining('invalid fixture')]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+}, 15000);

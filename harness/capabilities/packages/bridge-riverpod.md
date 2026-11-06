@@ -1,7 +1,7 @@
 ---
 package: "fliwright_bridge_riverpod"
 path: "packages/fliwright-bridge-riverpod"
-source_fingerprint: "ed1704c9ed9339d4f3f7f99b47e415a171a536149a2fa1c7f92b8d7bd0e3ac6e"
+source_fingerprint: "84d55bfc78e5e66e6e1760e47683a6fab68c41462a31fc71cf4972df761289f1"
 generated: true
 ---
 

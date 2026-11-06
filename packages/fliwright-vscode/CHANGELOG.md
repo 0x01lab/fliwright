@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.2.1
+
+- Discover test groups and parameterized cases through isolated Vitest collection,
+  with cancellable per-file caching and refresh when test dependencies change.
+- Preserve individual test results and assertion history across focused runs, and
+  open each test's latest artifacts in Run Viewer.
+- Bundle the test catalog worker in the VSIX and retain exact test-name filters
+  when running a collected case.
 
 - Local and Item acceptance workflows share the configured run history with
   Run Viewer; Item directories keep plans and summaries. Roots overridden only

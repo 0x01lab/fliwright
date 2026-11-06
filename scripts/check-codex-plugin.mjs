@@ -16,10 +16,6 @@ const bundledSkillNames = [
   'write-fliwright-mock-rules',
   'write-fliwright-tests',
 ];
-const commandEnv = {
-  ...process.env,
-  FLIWRIGHT_RUNS_ROOT: process.env.FLIWRIGHT_RUNS_ROOT ?? path.join(os.tmpdir(), 'fliwright-plugin-check-runs'),
-};
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const skillNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 let cachedPythonHasYaml;
@@ -112,7 +108,7 @@ Options:
 function runCommand(label, command, args) {
   const result = spawnSync(command, args, {
     cwd: root,
-    env: commandEnv,
+    env: process.env,
     encoding: 'utf8',
     stdio: 'pipe',
   });

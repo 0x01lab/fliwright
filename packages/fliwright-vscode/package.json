@@ -2,7 +2,7 @@
   "name": "fliwright-vscode",
   "displayName": "Fliwright",
   "description": "Flutter automation, recording, mocks, traces, and Riverpod state tools for Fliwright.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "fliwright",
   "license": "MIT",
   "repository": {

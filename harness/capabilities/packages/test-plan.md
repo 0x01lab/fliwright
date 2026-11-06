@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/test-plan"
 path: "packages/test-plan"
-source_fingerprint: "e6da7f4cbbcdf6067e4cc06247e27b3a6018232663589d9e5d4f699d763897c2"
+source_fingerprint: "68216d4fe8b12421d3a91c6e0838e327bb1261321a7828ee0b1c9f01c672b3c3"
 generated: true
 ---
 

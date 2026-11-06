@@ -1,4 +1,4 @@
-import type { RunnerTask, RunnerTestCase, TestAPI } from 'vitest';
+import type { RunnerTask, RunnerTestCase, TaskMeta, TestAPI } from 'vitest';
 
 const prepareKey = Symbol.for('@fliwright/vitest/prepare-task');
 type PrepareTask = (task: RunnerTestCase, signal: AbortSignal) => Promise<void>;
@@ -7,7 +7,9 @@ type PreparedMeta = { [prepareKey]?: PrepareTask };
 /** Bind preparation through public test metadata without wrapping the body.
  * Symbol keys stay within the worker and are omitted from reporter serialization.
  */
-export function withTaskPreparation<T extends object>(test: TestAPI<T>, prepare: PrepareTask): TestAPI<T> {
+export function withTaskPreparation<T extends object>(
+  test: TestAPI<T>, prepare: PrepareTask, metadata: Partial<TaskMeta> = {},
+): TestAPI<T> {
   const proxies = new WeakMap<object, object>();
   const variants = new Set(['concurrent', 'skip', 'only', 'todo', 'fails']);
   const factories = new Set(['each', 'for', 'skipIf', 'runIf', 'extend']);
@@ -27,7 +29,7 @@ export function withTaskPreparation<T extends object>(test: TestAPI<T>, prepare:
           : typeof handlerOrTimeout === 'number' ? { timeout: handlerOrTimeout } : {};
         const handler = typeof optionsOrHandler === 'function' ? optionsOrHandler : handlerOrTimeout;
         return Reflect.apply(fn, receiver, [name, {
-          ...options, meta: { ...options.meta, [prepareKey]: prepare },
+          ...options, meta: { ...options.meta, ...metadata, [prepareKey]: prepare },
         }, handler]);
       },
       get(fn, property, receiver) {

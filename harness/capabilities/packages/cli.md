@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cli"
 path: "packages/fliwright-cli"
-source_fingerprint: "d1ea8a26c08ae211cf5feab8ad8d5ab0f0d96e09ab19719110003a8f82917c8b"
+source_fingerprint: "9e2d87041e357bc26f3dc0609f4e07bb94f452e7d4e21dc3b646f225c89044fb"
 generated: true
 ---
 
@@ -99,7 +99,6 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 - `packages/fliwright-cli/src/RecordingReplay.ts`
 - `packages/fliwright-cli/src/ReleaseReview.ts`
 - `packages/fliwright-cli/src/ReportProjectIcon.ts`
-- `packages/fliwright-cli/src/WorkflowContext.ts`
 - `packages/fliwright-cli/src/capabilities/form.ts`
 - `packages/fliwright-cli/src/capabilities/interaction.ts`
 - `packages/fliwright-cli/src/capabilities/session.ts`

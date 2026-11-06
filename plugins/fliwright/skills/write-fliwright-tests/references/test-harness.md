@@ -189,21 +189,22 @@ export { expect } from '@fliwright/vitest';
 
 ## Hooks
 
-本包重新导出的 hooks 都带上了 `{ page }` 上下文类型：
+安装版本支持时，在实际使用的 `test` 上注册 hooks，继承基础或项目扩展的 fixture 类型：
 
 ```typescript
-import { test, beforeEach, afterEach } from '@fliwright/vitest';
+import { test } from '@fliwright/vitest';
 
-beforeEach(async ({ page }) => {
-  await page.navigate('/');        // reset to a known route before each test
-});
-
-afterEach(async ({ page }) => {
-  // optional teardown
+test.beforeEach(({ logger }) => {
+  logger.info('Starting test');
+  return () => {
+    logger.info('Finished test');
+  };
 });
 ```
 
-`beforeEach` / `afterEach` 收到的是 `{ page }`；`beforeAll` / `afterAll` 直接从 Vitest 原样重新导出（没有 Fliwright 上下文）。`describe` 也被重新导出。
+项目有扩展 fixture 时，从 `.fliwright/support/*-test.ts` 导入 `test`，使用 `test.beforeEach` / `test.afterEach`。可复用基线仍交给命名场景。
+
+本包顶层导出的 `beforeEach` / `afterEach` 包装器只声明 `{ page }` 上下文类型；`beforeAll` / `afterAll` 从 Vitest 原样重新导出，没有每条测试的 Fliwright 上下文。`describe` 也被重新导出。cleanup 的顺序与状态恢复见 [Vitest 生命周期](./vitest-authoring.md#hooks清理与隔离)。
 
 ## `expect`（Fliwright 断言）
 

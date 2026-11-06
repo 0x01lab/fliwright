@@ -5,7 +5,7 @@ import type { RunSessionResult } from '@fliwright/core';
 import { fileURLToPath } from 'node:url';
 import { startVitest, type Vitest } from 'vitest/node';
 import { focusAndRerun } from './FocusedRerunRecipe.js';
-import { collectResultsFromModules, ResultReporter, type CollectedResult } from './ResultReporter.js';
+import { collectResultsFromModules, type CollectedResult } from './TestRunResults.js';
 import type { TddFailureArtifacts, TddFailureAssertion, TddFailureSource } from '../diagnostics/TddFailureContext.js';
 
 export interface TestRunOutcome {
@@ -20,7 +20,6 @@ export interface TestRunOutcome {
 export interface BootOptions {
   configRoot: string;
   vmServiceUrl?: string;
-  driverProvider: () => Promise<unknown>;
   runsRoot?: string;
   sharedConfig?: Partial<import('@fliwright/core').FliwrightProjectConfig>;
   defaultScenario?: string;
@@ -29,7 +28,6 @@ export interface BootOptions {
 
 export class PersistentTestExecutor {
   private vitest?: Vitest;
-  private reporter?: ResultReporter;
   private previousDefaultScenario?: string;
   private previousScenarioMode?: string;
   private previousVmServiceUrl?: string;
@@ -51,22 +49,26 @@ export class PersistentTestExecutor {
     // left with TDD env vars leaking into unrelated (batch) test runs.
     await this.applyRuntimeEnv(opts);
     try {
-      this.reporter = new ResultReporter();
       this.vitest = await startVitest('test', [], {
-        config: opts.configRoot,
+        root: looksLikeConfigFile(opts.configRoot) ? undefined : resolve(opts.configRoot),
+        config: looksLikeConfigFile(opts.configRoot) ? resolve(opts.configRoot) : undefined,
         watch: true,
         standalone: true,
-        reporters: [this.reporter],
+        reporters: [],
         pool: 'forks',
         maxWorkers: 1,
       }, {
         // macOS FSEvents can deliver a config write from before boot after a
         // focused run starts, causing Vite to close its active module cache.
         ...(process.platform === 'darwin' ? { server: { watch: { usePolling: true } } } : {}),
-        plugins: [{ name: 'fliwright-runner', config(config) {
-        const runtimeConfig = config as typeof config & { test?: { runner?: string } };
-        (runtimeConfig.test ??= {}).runner ??= fileURLToPath(import.meta.resolve('@fliwright/vitest/runner'));
-      } }] });
+        plugins: [{
+          name: 'fliwright-runner',
+          config(config) {
+            const runtimeConfig = config as typeof config & { test?: { runner?: string } };
+            (runtimeConfig.test ??= {}).runner ??= fileURLToPath(import.meta.resolve('@fliwright/vitest/runner'));
+          },
+        }],
+      });
       if (!this.vitest) throw new Error('Failed to start Vitest');
       // A directly used executor can receive storage through the project's
       // Vitest preset. Resolve the same root the worker actually receives.
@@ -77,37 +79,35 @@ export class PersistentTestExecutor {
       await this.dispose().catch(() => undefined);
       throw error;
     }
-
-    // The provider is kept for same-process executor experiments. Vitest workers cannot
-    // receive live driver objects through process boundaries, so the production path also injects
-    // FLIWRIGHT_VM_SERVICE_URL for ordinary @fliwright/vitest fixtures.
-    void opts.driverProvider;
   }
 
   async rerun(file: string, testName?: string): Promise<TestRunOutcome> {
-    if (!this.vitest || !this.reporter) throw new Error('PersistentTestExecutor not booted');
+    if (!this.vitest) throw new Error('PersistentTestExecutor not booted');
 
-    this.reporter.drain();
     // The public API returns the exact run we requested. A reporter's next
     // event may instead belong to a watcher refresh (or contain no modules).
     const run = await focusAndRerun(this.vitest, file, testName);
     const files = run.testModules;
     const results = collectResultsFromModules(files);
-    const picked = this.pickResult(results, testName);
-    const resolvedTestName = picked?.testName ?? testName;
+    const picked = results.find((result) => result.status === 'red') ?? results[0];
+    const resolvedTestName = picked?.fullName ?? testName;
+    const errors = [
+      ...results.filter((result) => result.status === 'red').map((result) => result.message ?? `${result.fullName} failed.`),
+      ...files.flatMap((module) => [module, ...module.children.allSuites()].flatMap((suite) => suite.errors().map((error) => error.message))),
+      ...run.unhandledErrors.map((error) => error instanceof Error ? error.message
+        : error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error)),
+    ];
+    const failed = errors.length > 0 || files.some((module) => module.state() === 'failed') || !picked;
     const timelineArtifacts = await this.readTimelineArtifacts(picked);
     const failureDetails = picked?.status === 'red' && resolvedTestName
       ? await this.readFailureDetails(picked)
       : undefined;
 
     return {
-      status: picked?.status ?? 'red',
+      status: failed ? 'red' : 'green',
       testName: resolvedTestName,
-      failure: picked?.status === 'red' ? { message: picked.message }
-        : !picked ? { message: run.unhandledErrors.map((error) => {
-          if (error && typeof error === 'object' && 'message' in error) return String(error.message);
-          return JSON.stringify(error);
-        }).join('\n') || 'Focused run returned no matching test result.' } : undefined,
+      failure: failed ? { message: errors.join('\n') || (!picked
+        ? 'Focused run returned no matching test result.' : 'Focused test module failed.') } : undefined,
       failureDetails,
       timelinePath: failureDetails?.artifacts?.timelinePath ?? timelineArtifacts.timelinePath,
       timelineNodeId: failureDetails?.artifacts?.timelineNodeId ?? timelineArtifacts.timelineNodeId,
@@ -119,15 +119,8 @@ export class PersistentTestExecutor {
       await this.vitest?.close();
     } finally {
       this.vitest = undefined;
-      this.reporter = undefined;
       if (this.envApplied) this.restoreRuntimeEnv();
     }
-  }
-
-  private pickResult(results: CollectedResult[], testName?: string): CollectedResult | undefined {
-    if (!testName) return results.find((result) => result.status === 'red') ?? results[0];
-    return results.find((result) => result.testName === testName)
-      ?? results.find((result) => result.testName.includes(testName));
   }
 
   private restoreRuntimeEnv(): void {

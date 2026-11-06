@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import type { RunManifest } from '@fliwright/core';
 import type { RunResult, TestCaseResult } from '../types.js';
 import { testNodeId } from './types.js';
 import { relPathForTestCase } from './relPath.js';
@@ -69,6 +70,8 @@ export class TestStatusStore {
 
     const map = await this.loadIndex();
     for (const tc of result.results) {
+      // Name-filtered runs also report unexecuted siblings. Keep their last result.
+      if (tc.status === 'skipped') continue;
       const { ancestors, title } = splitName(tc.name);
       const tcRelPath = relPathForTestCase(workspaceRoot, relPath, tc);
       const id = testNodeId(tcRelPath, ancestors, title);
@@ -83,8 +86,12 @@ export class TestStatusStore {
     const entry = index.get(testId);
     if (!entry) return [];
 
-    const timeline = await readJson(join(this.runsDir, entry.runId, TIMELINE_FILE_NAME))
-      ?? await readJson(join(this.runsDir, entry.resultRunId, TIMELINE_FILE_NAME));
+    const runDir = join(this.runsDir, entry.resultRunId);
+    const manifest = await readJson(join(runDir, 'run.json')) as RunManifest | undefined;
+    const timeline = manifest?.schemaVersion === 1 && Array.isArray(manifest.tests)
+      ? await this.loadAttemptTimeline(runDir, manifest, testId)
+      : await readJson(join(this.runsDir, entry.runId, TIMELINE_FILE_NAME))
+        ?? await readJson(join(runDir, TIMELINE_FILE_NAME));
     const nodes: unknown[] = Array.isArray(timeline?.nodes) ? timeline.nodes : [];
 
     return nodes
@@ -97,6 +104,23 @@ export class TestStatusStore {
         durationMs: durationMs(node.startedAt, node.endedAt),
         error: typeof node.error?.message === 'string' ? node.error.message : undefined,
       }));
+  }
+
+  /** Select the indexed test's latest retry, including retries with no assertions. */
+  private async loadAttemptTimeline(runDir: string, manifest: RunManifest, testId: string): Promise<{ nodes?: unknown[] } | undefined> {
+    const matching: Array<{ directory: string; attemptIndex: number }> = [];
+    for (const test of manifest.tests) {
+      for (const [index, attempt] of test.attempts.entries()) {
+        const resultPath = join(runDir, attempt.resultPath);
+        const result = await readJson(resultPath);
+        if (typeof result?.testFile !== 'string' || !Array.isArray(result.testPath)
+          || `${result.testFile}::${result.testPath.join('/')}` !== testId) continue;
+        matching.push({ directory: dirname(resultPath),
+          attemptIndex: typeof result.attemptIndex === 'number' ? result.attemptIndex : index });
+      }
+    }
+    const latest = matching.sort((a, b) => b.attemptIndex - a.attemptIndex)[0];
+    return latest ? readJson(join(latest.directory, TIMELINE_FILE_NAME)) : undefined;
   }
 
   async pruneDangling(keepRunIds: Set<string>): Promise<void> {

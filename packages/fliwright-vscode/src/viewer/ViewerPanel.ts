@@ -64,7 +64,7 @@ export class ViewerPanel {
     await this.openForRun(picked.runDir, picked.selection);
   }
 
-  /** Open the most recent run. */
+  /** Open the most recent executed attempt; filtered tests have no replay data. */
   async openLatest(options: { failedOnly?: boolean } = {}): Promise<void> {
     const root = this.service.getWorkspaceRoot();
     if (!root) {
@@ -77,10 +77,12 @@ export class ViewerPanel {
       return;
     }
     const allRuns = await this.service.listRuns(runsDir);
-    const runs = options.failedOnly ? allRuns.filter(run => run.status === 'failed' || run.status === 'interrupted') : allRuns;
+    const runs = allRuns.filter(run => options.failedOnly
+      ? run.status === 'failed' || run.status === 'interrupted'
+      : run.status !== 'skipped');
     if (runs.length === 0) {
       vscode.window.showWarningMessage(options.failedOnly ? 'No failed or interrupted runs found for this workspace.'
-        : 'No runs with timeline.json found in the configured runs directory for this workspace.');
+        : 'No executed runs found for this workspace. Skipped tests have no replay data.');
       return;
     }
     await this.openForRun(runs[0].runDir, runs[0]);

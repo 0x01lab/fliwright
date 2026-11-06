@@ -27,4 +27,4 @@ export { artifactReferences, type ArtifactReference } from './ArtifactReferences
 export { artifactsReportCommand } from './commands/artifact-report.js';
 export { releaseMetadataSchema, releaseReviewSchema, type ReleaseMetadata, type ReleaseReview } from './ReleaseReview.js';
 
-export { collectCatalog, collectedCases, catalogCaseId, type CatalogCase, type CatalogSelection } from './catalog.js';
+export { collectCatalog, collectTestCases, type CollectedCatalogFile, collectedCases, catalogCaseId, type CatalogCase, type CatalogSelection } from './catalog.js';

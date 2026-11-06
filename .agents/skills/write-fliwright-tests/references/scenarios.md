@@ -87,3 +87,10 @@ JSON；文件级离线校验使用 `resolveMockRuleSet`。CLI 的场景选择与
 只有要求在首帧前准备环境时才设 `startupIsolation: 'required'`。目标 app 的测试入口需要先注册能力、初始化 bridge、等待 `FliwrightTestBootstrap.awaitScenario()`，再执行 `runApp`；调用方使用 managed launch（`run --device-id`）。已运行 app 的 attach 模式会拒绝必需首帧隔离的场景。普通 attach 测试可省略该字段。
 
 完整命令与前置条件见 [scenario apply](../../fliwright-cli-workflows/references/commands/command-scenario.apply.md) 和 [run](../../fliwright-cli-workflows/references/commands/command-run.md)。
+
+## 参数化用例
+
+`test.scenario(name)` 返回 Vitest 测试注册接口，可继续使用 `.for`、`.each`、
+`.skip`、`.only`、条件修饰符和标准 options（如 `retry` / `timeout` / `meta`）。
+参数化签名、不同场景的组织方式、静态发现限制及收集检查统一见
+[Vitest 测试编写](./vitest-authoring.md#参数化与场景)。

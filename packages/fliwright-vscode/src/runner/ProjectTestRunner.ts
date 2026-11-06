@@ -21,11 +21,11 @@ export class ProjectTestRunner implements TestRunner {
       print: false,
     });
     const results = [...result.results];
-    if (!result.passed && !results.some(test => !test.passed)) {
+    if (!result.passed && !results.some(test => !test.passed && test.status !== 'skipped')) {
       results.push({ name: 'Fliwright run', passed: false, duration: 0,
         error: result.runnerErrors?.map(error => error.message).join('\n') || 'Fliwright run failed before tests completed.' });
     }
     return { ...result, runId: result.artifacts?.runId, results,
-      failedTests: Math.max(result.failedTests, results.filter(test => !test.passed).length) };
+      failedTests: Math.max(result.failedTests, results.filter(test => !test.passed && test.status !== 'skipped').length) };
   }
 }

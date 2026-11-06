@@ -53,6 +53,7 @@ import { WebSocketMockTreeProvider } from './views/WebSocketMockTreeProvider.js'
 import { ScriptsTreeProvider } from './views/ScriptsTreeProvider.js';
 import { StateTreeProvider } from './views/StateTreeProvider.js';
 import { TestsTreeProvider } from './views/TestsTreeProvider.js';
+import { watchTestCollection } from './testing/TestCollectionWatcher.js';
 import { TestStatusStore } from './testing/TestStatusStore.js';
 import { relPathOf } from './testing/relPath.js';
 import { RunArtifactStore } from './testing/RunArtifactStore.js';
@@ -117,7 +118,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   }
   const statusStore = new TestStatusStore(() => runsRoot ?? '');
-  const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore);
+  const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore, undefined,
+    message => output.appendLine(`[Fliwright] ${message}`));
+  context.subscriptions.push(testsTree, watchTestCollection(testsTree));
   const scriptsTree = new ScriptsTreeProvider(scriptDiscoveryService);
   const flowsTree = new FlowsTreeProvider();
   const stateTree = new StateTreeProvider();
@@ -395,27 +398,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       [{ language: 'typescript', scheme: 'file' }, { language: 'typescriptreact', scheme: 'file' }],
       new FliwrightCodeLensProvider(),
     ),
-  );
-
-  // ── Lazy-parse cache invalidation on save ───────────
-  // Debounce (300ms) per-file: drop ONE file's parse cache so an edited .test.ts
-  // is re-parsed on next expand while every other file stays cached. timers run
-  // on the extension host.
-  const saveDebounce = new Map<string, ReturnType<typeof setTimeout>>();
-  context.subscriptions.push(
-    vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (!doc.fileName.endsWith('.test.ts')) return;
-      const key = doc.uri.toString();
-      const existing = saveDebounce.get(key);
-      if (existing) clearTimeout(existing);
-      saveDebounce.set(
-        key,
-        setTimeout(() => {
-          saveDebounce.delete(key);
-          testsTree.invalidateFile(doc.uri);
-        }, 300),
-      );
-    }),
   );
 
   // ── Visual Test Editor ──────────────────────────────
@@ -886,12 +868,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.runCurrentTest', async (node?: unknown) => {
       // Accept the new Tests panel nodes (TestFileNode / TestCaseNode, typed as
       // `unknown` because the legacy tree entries still feed this command).
-      // For a testCase, derive a vitest -t pattern from the node id's ancestor
-      // chain (`<relPath>::<anc1>/<anc2>/.../<title>`) so only that case runs.
-      const n = node as { kind?: string; id?: string; uri?: vscode.Uri; fileUri?: vscode.Uri } | undefined;
+      // Use the discovered full-name pattern rather than decoding the node id:
+      // test titles may contain slashes and regular-expression characters.
+      const n = node as { kind?: string; id?: string; uri?: vscode.Uri; fileUri?: vscode.Uri; testNamePattern?: string } | undefined;
       if (n?.kind === 'testCase' && n.id) {
-        const pattern = n.id.split('::')[1]?.split('/').join(' > ');
-        await runTests(n, { testNamePattern: pattern });
+        await runTests(n, { testNamePattern: n.testNamePattern });
       } else {
         await runTests(n, {});
       }
@@ -970,9 +951,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await viewerPanel.openRun(loaded.runDir);
     }),
     vscode.commands.registerCommand('fliwright.refreshTests', () => {
-      // Drop roots, the status map, and ALL per-file parse caches, then re-fire
-      // the tree. The next getChildren() re-discovers test files and re-reads
-      // index.json for statuses; source parsing stays lazy (on expand).
+      // Cancel outstanding collections and rediscover on the next expansion.
       testsTree.refresh();
     }),
     vscode.commands.registerCommand('fliwright.refreshFlows', () => {
@@ -1712,7 +1691,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         statusBar.setRunResult(result);
         completed = result;
-        testsTree.refresh();
+        await testsTree.refreshStatuses();
         output.appendLine(`Run complete: ${result.passedTests}/${result.totalTests} passed, ${result.failedTests} failed.`);
 
         // Trace artifacts are now stored inside each run directory. Retention

@@ -169,6 +169,8 @@ export function parseVitestJson(stdout: string, stderr = '', exitCode = 0): RunR
         name: Array.isArray(assertion.ancestorTitles)
           ? [...assertion.ancestorTitles, assertion.title].filter(Boolean).join(' > ')
           : String(assertion.title ?? file.name ?? 'Unnamed test'),
+        status: status === 'passed' ? 'passed'
+          : status === 'pending' || status === 'skipped' || status === 'todo' ? 'skipped' : 'failed',
         passed: status === 'passed',
         duration: Number(assertion.duration ?? 0),
         error: failureMessages.length > 0 ? failureMessages.join('\n') : undefined,

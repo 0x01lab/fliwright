@@ -35,12 +35,48 @@ export function collectedCases(modules: Iterable<any>, root: string): Array<Cata
   }
   return cases;
 }
-/** Collection only: imports trusted project modules but never starts an app or runs hooks/tests. */
-export async function collectCatalog(options: { cwd: string; suites: Record<string, string> }) {
+export interface CollectedCatalogFile {
+  file: string;
+  cases: CatalogCase[];
+  errors: string[];
+}
+
+/** Collect only test declarations, sharing one Vitest context across the requested patterns. */
+export async function collectTestCases(options: { cwd: string; patterns: string[] }): Promise<CollectedCatalogFile[]> {
+  if (!options.patterns.length) return [];
+  for (const pattern of options.patterns) {
+    if (isAbsolute(pattern) || pattern.split(/[\\/]/).includes('..')) throw new Error('Suite path escapes project');
+  }
   const root = await realpath(options.cwd);
   const resolver = createJiti(resolve(root, 'package.json'));
   const url = resolver.esmResolve('vitest/node', { try: true }) ?? import.meta.resolve('vitest/node');
   const { createVitest } = await import(url);
+  const context = await createVitest({ root, watch: false, include: options.patterns, reporters: [], maxWorkers: 1,
+    fileParallelism: false, configLoader: 'runner', cache: false, fsModuleCache: false });
+  try {
+    const result = await context.collect([], { staticParse: false });
+    if (result.unhandledErrors.length) throw new Error('Unhandled collection error', { cause: result.unhandledErrors[0] });
+    const files: CollectedCatalogFile[] = [];
+    let count = 0;
+    for (const module of result.testModules) {
+      const file = relative(root, module.moduleId).split('\\').join('/');
+      const canonical = relative(root, await realpath(module.moduleId));
+      if (isAbsolute(file) || file.startsWith('../') || canonical.startsWith('../') || isAbsolute(canonical)) {
+        throw new Error('Test file escapes project');
+      }
+      const errors = module.errors().map((error: { message?: string }) => error.message ?? String(error));
+      const cases = errors.length ? [] : collectedCases([module], root).map(({ test: _test, ...item }) => item);
+      count += cases.length;
+      if (count > 10000) throw new Error('Catalog case limit exceeded');
+      files.push({ file, cases, errors });
+    }
+    return files.sort((a, b) => a.file.localeCompare(b.file));
+  } finally { await context.close(); }
+}
+
+/** Collection only: imports trusted project modules but never starts an app or runs hooks/tests. */
+export async function collectCatalog(options: { cwd: string; suites: Record<string, string> }) {
+  const root = await realpath(options.cwd);
   const config = await loadConfig(root);
   const directories = new Set(['.fliwright/mocks', ...Object.values(config.scenarios ?? {}).flatMap(scenario =>
     scenario.layers.flatMap(layer => layer.kind === 'mocks' && layer.directory ? [layer.directory] : []))]);
@@ -72,20 +108,11 @@ export async function collectCatalog(options: { cwd: string; suites: Record<stri
   });
   const suites = [];
   for (const [id, pattern] of Object.entries(options.suites)) {
-    if (isAbsolute(pattern) || pattern.split(/[\\/]/).includes('..')) throw new Error('Suite path escapes project');
-    const context = await createVitest({ root, watch: false, include: [pattern], reporters: [], maxWorkers: 1,
-      configLoader: 'runner', cache: false, fsModuleCache: false });
-    try {
-      const result = await context.collect([], { staticParse: false });
-      if (result.unhandledErrors.length) throw new Error('Unhandled collection error');
-      const cases = collectedCases(result.testModules, root).map(({ test: _test, ...item }) => item);
-      for (const item of cases) {
-        const path = relative(root, await realpath(resolve(root, item.file)));
-        if (path.startsWith('../') || isAbsolute(path)) throw new Error('Test symlink escapes project');
-      }
-      if (cases.length > 10000) throw new Error('Catalog case limit exceeded');
-      suites.push({ id, pattern, files: [...new Set(cases.map(item => item.file))], cases });
-    } finally { await context.close(); }
+    const files = await collectTestCases({ cwd: root, patterns: [pattern] });
+    const failed = files.find(file => file.errors.length);
+    if (failed) throw new Error('Test module collection failed', { cause: new Error(failed.errors.join('\n')) });
+    const cases = files.flatMap(file => file.cases);
+    suites.push({ id, pattern, files: [...new Set(cases.map(item => item.file))], cases });
   }
   return { suites, scenarios, mocks, scannerVersion: 'vitest-collection-v1', fliwrightVersion: '0.1.0' };
 }

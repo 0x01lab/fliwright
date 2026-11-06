@@ -26,6 +26,7 @@
     "test-plan": "node packages/test-plan/dist/cli.js"
   },
   "devDependencies": {
+    "@types/node": "^26.0.1",
     "typescript": "^5.5.0",
     "vitest": "5.0.5",
     "vite": "^8.1.0"

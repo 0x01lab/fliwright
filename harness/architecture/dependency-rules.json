@@ -53,9 +53,9 @@
       "path": "packages/fliwright-tdd",
       "capabilities": [
         "TDD execution",
-        "test repair workflow"
+        "Flutter app synchronization"
       ],
-      "responsibility": "Own persistent TDD execution, baseline reset, focused reruns, red-first generation, and repair planning.",
+      "responsibility": "Own persistent focused test execution, Flutter synchronization, baseline reset and execution evidence. TDD decisions and test authoring belong to agent skills.",
       "doesNotOwn": [
         "general-purpose CLI commands",
         "MCP transport contracts",

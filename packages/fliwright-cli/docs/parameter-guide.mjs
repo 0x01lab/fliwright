@@ -117,14 +117,11 @@ export const parameterDocs = {
   changes: 'Changed source paths used by sync=auto.',
   autoEscalate: 'Allow structural reload failure to retry once with restart when supported; runtime default true.',
   timeoutMs: 'Per-cycle wall-clock budget in milliseconds, separate from common --deadline.',
-  repair: 'Nested repair options {mode: suggest|safe-apply, iterations?: positive integer}.',
-  iterations: 'Maximum guarded repair iterations; runtime default 3 for safe-apply.',
   request: 'Natural-language development/verification request for DevAssist.',
   devAssistSessionId: 'DevAssist continuation identity, distinct from the CLI connection session.',
   files: 'Changed/relevant file paths for DevAssist context.',
   baseRevision: 'Git revision used to establish the DevAssist change-set baseline.',
   focus: 'Focus the generated test if a runtime and written testFile exist.',
-  spec: 'Structured InteractionSpec. See the nested example; validate with tdd validate-spec.',
   operationId: 'Session operation journal identity. Recover from a routed command envelope.',
 };
 export const commandParameterDocs = {

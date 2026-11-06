@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "56c84b2b542549ecda281315c9d8f5dc4240d990ac6d59a8c3e85a7383fdb210"
+source_fingerprint: "69c16b0d95e8eb0b11eb9dac683440a0c7b3e8232a2448626ef8021b019ebb12"
 generated: true
 ---
 
@@ -171,8 +171,11 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/tddloop/index.ts`
 - `packages/fliwright-vscode/src/testing/ProjectRunsRoot.ts`
 - `packages/fliwright-vscode/src/testing/RunArtifactStore.ts`
+- `packages/fliwright-vscode/src/testing/TestCatalogCollector.ts`
+- `packages/fliwright-vscode/src/testing/TestCatalogTree.ts`
+- `packages/fliwright-vscode/src/testing/TestCollectionWatcher.ts`
 - `packages/fliwright-vscode/src/testing/TestStatusStore.ts`
-- `packages/fliwright-vscode/src/testing/TestTreeBuilder.ts`
+- `packages/fliwright-vscode/src/testing/catalog-worker.ts`
 - `packages/fliwright-vscode/src/testing/relPath.ts`
 - `packages/fliwright-vscode/src/testing/types.ts`
 - `packages/fliwright-vscode/src/types.ts`

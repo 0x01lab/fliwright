@@ -45,7 +45,8 @@ export async function inspectNativeToolProcess(record: NativeToolRecord): Promis
       execFile('/bin/ps', ['-axo', 'pid=,pgid=,stat=,command='], { encoding: 'utf8', timeout: 1000, maxBuffer: 4 * 1024 * 1024 },
         (error, stdout) => error ? reject(error) : resolve(stdout));
     });
-    const lines = output.trim().split('\n').map(line => /^\s*([1-9]\d*)\s+([1-9]\d*)\s+(\S+)\s+(.*)$/.exec(line));
+    // Linux kernel threads can belong to process group zero.
+    const lines = output.trim().split('\n').map(line => /^\s*([1-9]\d*)\s+(0|[1-9]\d*)\s+(\S+)\s+(.*)$/.exec(line));
     if (lines.some(line => !line)) return 'invalid';
     const members = lines.filter(line => Number(line![2]) === record.group && !line![3].includes('Z'));
     if (!members.length) return 'exited';

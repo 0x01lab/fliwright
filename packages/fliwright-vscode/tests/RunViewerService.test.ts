@@ -318,6 +318,35 @@ describe('RunViewerService canonical manifest attempts', () => {
 });
 
 describe('RunViewerService.findLatestRunForTestIndexed', () => {
+  it.each([false, true])('keeps the last executed attempt when a later run skips the test (indexed=%s)', async indexed => {
+    const root = mkdtempSync(join(tmpdir(), 'fliwright-rv-skipped-'));
+    const nodeId = 'tests/settings.test.ts::APP-UI-007 / settings UI locale zh-Hans';
+    try {
+      for (const [runId, status, day] of [['executed', 'passed', '01'], ['filtered', 'skipped', '02']] as const) {
+        const dir = join(root, runId, 'tests/task-1/attempts/attempt-0');
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, 'result.json'), JSON.stringify({
+          testFile: 'tests/settings.test.ts', testPath: ['APP-UI-007 / settings UI locale zh-Hans'],
+        }));
+        writeFileSync(join(dir, 'timeline.json'), JSON.stringify({
+          version: 2, runId, testName: 'APP-UI-007 / settings UI locale zh-Hans',
+          mode: 'test', status, startedAt: `2026-11-${day}T00:00:00Z`, nodes: [],
+        }));
+        writeFileSync(join(root, runId, 'run.json'), JSON.stringify({
+          schemaVersion: 1, runId, status: 'passed', evidenceStatus: 'complete',
+          tests: [{ testId: 'task-1', attempts: [{ attemptId: 'attempt-0', resultPath: 'tests/task-1/attempts/attempt-0/result.json' }] }],
+        }));
+      }
+      const service = new RunViewerService();
+      const index = indexed ? new Map([[nodeId, { runId: 'filtered' }]]) : new Map();
+      const loaded = await service.findLatestRunForTestIndexed(vscode.Uri.file(root), nodeId, index);
+      expect(loaded?.timeline.runId).toBe('executed');
+      // Explicit history selections can still inspect skipped attempts.
+      expect((await service.loadRun(vscode.Uri.file(join(root, 'filtered')), { testId: 'task-1' }))?.timeline.status)
+        .toBe('skipped');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
   // Reuse the findLatestRunForTest fixture layout: run-1 (no match), run-2 (match).
   let runsDir: string;
   let runsDirUri: vscode.Uri;

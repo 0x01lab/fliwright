@@ -11,20 +11,20 @@ Select the file and optional test name for persistent TDD cycles.
 
 ## When to use
 
-Use after tdd start, or after generating a different test file.
+Use after tdd start to select an authored test file.
 
 ## Preconditions and behavior
 
 - No live app required by the registry. Check command-specific runtime requirements below.
 - An explicit connection session is required (--session or FLIWRIGHT_SESSION).
-- Requires a started runtime. file can be omitted only if workflow context has a testFile from generation.
-- This selects the test; it does not run a cycle.
+- Requires a started runtime. file is required; pass the authored test explicitly.
+- This selects the test; it does not run a cycle. testName is a literal leaf or full name (Suite > test), including punctuation.
 
 ## Input
 
 | JSON field | CLI syntax | Type / values | Required | Schema default | Meaning |
 | --- | --- | --- | --- | --- | --- |
-| `file` | `--file` | string | no | — | Automation file to execute or focus; interpreted relative to cwd. (minLength=1) |
+| `file` | `--file` | string | yes | — | Automation file to execute or focus; interpreted relative to cwd. (minLength=1) |
 | `testName` | `--test-name` | string | no | — | Test-name selection or generated test name; see this command’s usage. (minLength=1) |
 
 Requiredness/defaults above come from the input schema. Conditional requirements and effective implementation defaults are explained above; “—” means no Zod default. Every command also accepts [common options](./common.md#common-options). JSON keys use camelCase; flags use kebab-case. Positional fields are supplied positionally or in --input, not as flags.
@@ -68,6 +68,9 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
       "minLength": 1
     }
   },
+  "required": [
+    "file"
+  ],
   "additionalProperties": false,
   "$schema": "http://json-schema.org/draft-07/schema#"
 }
@@ -78,6 +81,5 @@ Refresh the installed contract with `fliwright schema tdd.focus --json`. That co
 ## Related commands
 
 - [tdd start](./command-tdd.start.md) — Start a persistent TDD runtime inside an existing connection session.
-- [tdd prepare](./command-tdd.prepare.md) — Generate a red-first test, store workflow context and optionally focus it in a session.
 - [tdd cycle](./command-tdd.cycle.md) — Sync the app, restore test state and rerun a focused test once.
 - [Command index](./index.md)

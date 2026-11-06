@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/devices"
 path: "packages/fliwright-devices"
-source_fingerprint: "113a9cb7747f6f7cb02d585ea36186a21c88e326990fa5e50f2581248675e571"
+source_fingerprint: "9bf44dd26608a3b5961079f635a39439e187e414aa7808b377e237dc488fad28"
 generated: true
 ---
 

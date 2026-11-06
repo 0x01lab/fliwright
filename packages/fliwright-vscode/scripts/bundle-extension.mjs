@@ -23,11 +23,22 @@ export function bundleExtension(options = {}) {
     alias: { jiti: jitiStatic },
     outfile: 'dist/extension.js',
     sourcemap: true,
-    banner: { js: 'import{createRequire as __fliwrightCreateRequire}from"module";const require=__fliwrightCreateRequire(import.meta.url);' },
+    // Bundled CommonJS dependencies inspect
+    // their module location during initialization, even in the ESM VSIX.
+    banner: { js: 'import{createRequire as __fliwrightCreateRequire}from"module";import{fileURLToPath as __fliwrightFileURLToPath}from"node:url";import{dirname as __fliwrightDirname}from"node:path";const require=__fliwrightCreateRequire(import.meta.url);const __filename=__fliwrightFileURLToPath(import.meta.url);const __dirname=__fliwrightDirname(__filename);' },
+    ...options,
+  });
+}
+
+export function bundleCatalogWorker(options = {}) {
+  return bundleExtension({
+    entryPoints: ['src/testing/catalog-worker.ts'],
+    outfile: 'dist/catalog-worker.mjs',
     ...options,
   });
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   await bundleExtension();
+  await bundleCatalogWorker();
 }

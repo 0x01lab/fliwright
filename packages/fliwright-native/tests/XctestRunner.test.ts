@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it as platformIt, vi } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,10 @@ import { startXctestSession } from '../src/ios/XctestRunner.js';
 import { claimDeviceRecovery, inspectDeviceLease } from '../src/DeviceRecovery.js';
 import { nativeModuleCompiler } from './helpers/compileNativeModule.js';
 import { writeFakeXctestTools } from './helpers/fakeXctestTools.js';
+
+// These integration tests launch the macOS-only XCTest session entry point.
+const it = platformIt.skipIf(process.platform !== 'darwin');
+vi.setConfig({ testTimeout: 20000 });
 
 const roots: string[] = [];
 const children: ChildProcess[] = [], groups: number[] = [];

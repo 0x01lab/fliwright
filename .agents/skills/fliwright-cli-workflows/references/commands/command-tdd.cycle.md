@@ -20,7 +20,7 @@ Use repeatedly with a session for interactive development, or with --file for a 
 - Session mode requires tdd start and focus; finite mode requires file and starts/stops its own runtime.
 - sync chooses none/reload/restart/auto. changes influences auto; autoEscalate allows one structural reload failure to escalate if restart is available.
 - timeoutMs is the per-cycle budget; --deadline is the CLI budget. A timeout can return while the owned body settles; the host serializes later operations.
-- A red cycle exits 1 with result evidence. repair is nested JSON with mode and optional iterations; omit it for an ordinary cycle.
+- A red cycle exits 1 with result evidence. The agent decides whether the failure is expected, edits code and requests another cycle; the runtime performs no AI repair.
 
 ## Input
 
@@ -32,7 +32,6 @@ Use repeatedly with a session for interactive development, or with --file for a 
 | `changes` | `--changes` | array<string> | no | — | Changed source paths used by sync=auto. |
 | `autoEscalate` | `--auto-escalate` | boolean | no | — | Allow structural reload failure to retry once with restart when supported; runtime default true. |
 | `timeoutMs` | `--timeout-ms` | integer | no | — | Per-cycle wall-clock budget in milliseconds, separate from common --deadline. (exclusiveMinimum=0) |
-| `repair` | `--repair` | object | no | — | Nested repair options {mode: suggest\|safe-apply, iterations?: positive integer}. |
 | `file` | `--file` | string | no | — | Automation file to execute or focus; interpreted relative to cwd. (minLength=1) |
 | `vmUrl` | `--vm-url` | string | no | — | Dart VM Service websocket URL. Omit to use project/environment endpoint resolution where supported. (minLength=1) |
 | `deviceId` | `--device-id` | string | no | — | Flutter device id for an owned launch; mutually exclusive with vmUrl. (minLength=1) |
@@ -69,7 +68,7 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 | file / testName / durationMs | Focused selection and elapsed cycle time. |
 | lastSync / baselineVersion / syncEscalated | Synchronization and reset identity. |
 | timelinePath / failureContext | Saved timeline and diagnostic failure context when available. |
-| failure | Failure context when red; inspect actual result fields and repair metadata. |
+| failure | Failure context when red; inspect the current run evidence. |
 
 ## Effects and failure handling
 
@@ -112,26 +111,6 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
       "type": "integer",
       "exclusiveMinimum": 0
     },
-    "repair": {
-      "type": "object",
-      "properties": {
-        "mode": {
-          "type": "string",
-          "enum": [
-            "suggest",
-            "safe-apply"
-          ]
-        },
-        "iterations": {
-          "type": "integer",
-          "exclusiveMinimum": 0
-        }
-      },
-      "required": [
-        "mode"
-      ],
-      "additionalProperties": false
-    },
     "file": {
       "type": "string",
       "minLength": 1
@@ -173,6 +152,5 @@ Refresh the installed contract with `fliwright schema tdd.cycle --json`. That co
 
 - [tdd focus](./command-tdd.focus.md) — Select the file and optional test name for persistent TDD cycles.
 - [tdd sync](./command-tdd.sync.md) — Apply an explicit app synchronization level without running tests.
-- [tdd repair](./command-tdd.repair.md) — Run the focused cycle with bounded repair planning or guarded runtime actions.
 - [artifacts failures](./command-artifacts.failures.md) — Extract saved assertion failures and runner errors from a run.
 - [Command index](./index.md)

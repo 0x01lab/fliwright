@@ -17,7 +17,7 @@ Use when a Skill needs the flow’s intent and structure without the entire docu
 
 - No live app required by the registry. Check command-specific runtime requirements below.
 - No persistent session required. See usage for finite/session variants.
-- This is FlowAgentSpec, not the InteractionSpec required by generate-test --mode red-first. Do not pass it through without deliberate conversion.
+- Use this context to author and review the test with write-fliwright-tests; it is not an executable test.
 
 ## Input
 
@@ -79,5 +79,4 @@ Refresh the installed contract with `fliwright schema flow.agent-spec --json`. T
 
 - [flow get](./command-flow.get.md) — Read one complete flow document.
 - [flow generate-test](./command-flow.generate-test.md) — Generate a TypeScript test skeleton from a saved flow.
-- [tdd validate-spec](./command-tdd.validate-spec.md) — Validate an InteractionSpec and report its executable intent coverage.
 - [Command index](./index.md)
