@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { FLIWRIGHT_RUNS_ROOT_ENV } from '@fliwright/core';
 import * as vscode from 'vscode';
+import { loadConfig, resolveWorkspacePath } from '../config.js';
 import { VitestRunner } from '../runner/VitestRunner.js';
 import type { RunResult, ScriptFileEntry } from '../types.js';
 import { createVitestScriptConfig, usesVitestScript } from './VitestScriptConfig.js';
@@ -25,7 +26,7 @@ export class ScriptRunner {
       const config = await createVitestScriptConfig(relativeScript, params.workspaceRoot.fsPath);
       try {
         return await new VitestRunner().run({ ...params, testFile: params.script.uri,
-          failureContextDir: vscode.Uri.joinPath(params.workspaceRoot, '.fliwright', 'failures'),
+          failureContextDir: resolveWorkspacePath(params.workspaceRoot, loadConfig().failureContextDir),
           configPath: config.path });
       } finally {
         await config.cleanup();

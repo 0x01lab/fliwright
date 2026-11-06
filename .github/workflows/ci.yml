@@ -2,6 +2,7 @@ name: Continuous integration
 
 on:
   pull_request:
+  merge_group:
   workflow_call:
   push:
     branches:
@@ -13,6 +14,7 @@ permissions:
 jobs:
   harness:
     name: Harness governance
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +34,8 @@ jobs:
         run: node scripts/verify-harness.mjs
 
   typescript:
-    name: TypeScript quality
+    name: Public TypeScript quality
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,11 +48,12 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter './packages/*' --filter '!@fliwright/cloud*' -r run build
       - run: node --test scripts/tests/*.test.mjs
-      - run: pnpm build
       - run: pnpm docs:cli:check
-      - run: pnpm lint
-      - run: pnpm --workspace-concurrency=1 --filter './packages/*' -r run test --maxWorkers=2
+      - run: pnpm --filter './packages/*' --filter '!@fliwright/cloud*' -r run lint
+      # Keep package suites from competing for CPU and filesystem budgets.
+      - run: pnpm --workspace-concurrency=1 --filter './packages/*' --filter '!@fliwright/cloud*' -r run test --maxWorkers=2
       - run: pnpm plugin:check -- --strict-plugin --skip-cli
       - run: pnpm package:check
       - uses: actions/upload-artifact@v4
@@ -65,6 +69,7 @@ jobs:
 
   dart:
     name: Dart and Flutter quality
+    timeout-minutes: 25
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,6 +77,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Analyze and test Dart and Flutter projects
@@ -102,6 +108,7 @@ jobs:
 
   e2e:
     name: Generated Flutter E2E smoke
+    timeout-minutes: 20
     runs-on: macos-latest
     needs: [typescript, dart]
     steps:
@@ -114,6 +121,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.8'
           cache: true
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fliwright/cli... build
@@ -128,10 +136,78 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
 
+  node-compatibility:
+    name: Public packages on Node ${{ matrix.node }}
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fliwright/cli... --filter @fliwright/plugin-riverpod... build
+      - run: pnpm --filter @fliwright/cli... --filter @fliwright/plugin-riverpod... lint
+      - run: pnpm --workspace-concurrency=1 --filter @fliwright/cli... --filter @fliwright/plugin-riverpod... test --maxWorkers=2
+
+  mobile:
+    name: Mobile compile (${{ matrix.platform }})
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            os: ubuntu-latest
+          - platform: ios
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - uses: actions/setup-java@v4
+        if: matrix.platform == 'android'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.8'
+          cache: true
+      - name: Compile native fixtures and Flutter plugins
+        run: node scripts/verify-mobile-build.mjs ${{ matrix.platform }}
+      - name: Compile iOS XCTest runner without signing
+        if: matrix.platform == 'ios'
+        run: >-
+          xcodebuild build-for-testing
+          -project packages/fliwright-native/runners/ios/FliwrightRunner.xcodeproj
+          -scheme FliwrightRunner -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/fliwright-xctest"
+          CODE_SIGNING_ALLOWED=NO
+      - uses: pnpm/action-setup@v4
+        if: matrix.platform == 'ios'
+      - name: Test XCTest session lifecycle on macOS
+        if: matrix.platform == 'ios'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @fliwright/native... build
+          pnpm --filter @fliwright/native exec vitest run tests/XctestRunner.test.ts --maxWorkers=2
+
   quality-gate:
     name: CI quality gate
+    timeout-minutes: 5
     if: always()
-    needs: [harness, typescript, dart, e2e]
+    needs: [harness, typescript, dart, e2e, node-compatibility, mobile]
     runs-on: ubuntu-latest
     steps:
       - name: Require every quality job to succeed
@@ -142,7 +218,7 @@ jobs:
           const jobs = JSON.parse(process.env.RESULTS);
           const failed = Object.entries(jobs).filter(([, job]) => job.result !== 'success');
           if (failed.length) {
-            console.error('Required jobs did not pass:', failed.map(([name, job]) => `${name}: ${job.result}`).join(', '));
+            console.error('Required quality jobs did not pass:', failed.map(([name, job]) => `${name}: ${job.result}`).join(', '));
             process.exit(1);
           }
           JS

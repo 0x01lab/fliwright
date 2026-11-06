@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.1
+
+- Discover test groups and parameterized cases through isolated Vitest collection,
+  with cancellable per-file caching and refresh when test dependencies change.
+- Preserve individual test results and assertion history across focused runs, and
+  open each test's latest artifacts in Run Viewer.
+- Bundle the test catalog worker in the VSIX and retain exact test-name filters
+  when running a collected case.
+
+- Local and Item acceptance workflows share the configured run history with
+  Run Viewer; Item directories keep plans and summaries. Roots overridden only
+  in a CLI invocation are not discovered automatically. Remove unused legacy
+  project-local run and trace path helpers; no legacy-root fallback is active.
+- Separate authored `.fliwright` assets from machine-local runtime data. Runs,
+  caches, raw recordings, review evidence, VM metadata, sessions and temporary
+  runner configs default to `~/.fliwright/<project-path>/`, replacing every slash
+  in the complete path with `-` and preserving the leading dash.
+- Preserve explicit storage settings, support `~/` paths and
+  `FLIWRIGHT_RUNTIME_ROOT` / `FLIWRIGHT_CACHE_ROOT`, and store shared Flow targets
+  as project-relative paths. Existing data is preserved without automatic migration.
+
 ## 0.2.0
 
 ### Changed

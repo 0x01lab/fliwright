@@ -10,6 +10,7 @@ import { StepsPane } from './components/StepsPane.js';
 import { Viewport } from './components/Viewport.js';
 import { DetailTabs } from './components/DetailTabs.js';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../components/ui/resizable.js';
+import { BrandMark } from '../components/BrandMark.js';
 
 const DEFAULT_STATE: ViewerState = {
   selectedKey: null,
@@ -69,7 +70,7 @@ function ViewerApp(): JSX.Element {
   if (!run) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-        <div className="text-4xl">🧪</div>
+        <BrandMark thinking className="mb-2 size-20" />
         <h3 className="text-base font-semibold text-foreground">Loading run…</h3>
         <div className="text-[11px]">If this persists, run tests with trace enabled and reopen the viewer.</div>
       </div>

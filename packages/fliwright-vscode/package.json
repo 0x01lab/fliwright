@@ -2,7 +2,7 @@
   "name": "fliwright-vscode",
   "displayName": "Fliwright",
   "description": "Flutter automation, recording, mocks, traces, and Riverpod state tools for Fliwright.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "fliwright",
   "license": "MIT",
   "repository": {
@@ -35,16 +35,16 @@
   ],
   "icon": "media/fliwright-marketplace.png",
   "galleryBanner": {
-    "color": "#111827",
+    "color": "#142D4E",
     "theme": "dark"
   },
   "main": "./dist/extension.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && pnpm run bundle && pnpm run bundle:tw && pnpm run bundle:webview && pnpm run bundle:viewer",
     "bundle": "node scripts/bundle-extension.mjs",
-    "bundle:webview": "esbuild src/webview/recording-canvas/app.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=dist/webview/recordingCanvas.js --loader:.css=css --asset-names=webview/[name] --outbase=src --sourcemap",
-    "bundle:viewer": "esbuild src/webview/viewer/app.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=dist/webview/viewerApp.js --loader:.css=css --asset-names=webview/[name] --outbase=src --sourcemap",
-    "bundle:viewer:watch": "esbuild src/webview/viewer/app.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=dist/webview/viewerApp.js --loader:.css=css --asset-names=webview/[name] --outbase=src --sourcemap --watch",
+    "bundle:webview": "esbuild src/webview/recording-canvas/app.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=dist/webview/recordingCanvas.js --loader:.css=css --loader:.svg=dataurl --asset-names=webview/[name] --outbase=src --sourcemap",
+    "bundle:viewer": "esbuild src/webview/viewer/app.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=dist/webview/viewerApp.js --loader:.css=css --loader:.svg=dataurl --asset-names=webview/[name] --outbase=src --sourcemap",
+    "bundle:viewer:watch": "esbuild src/webview/viewer/app.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=dist/webview/viewerApp.js --loader:.css=css --loader:.svg=dataurl --asset-names=webview/[name] --outbase=src --sourcemap --watch",
     "bundle:tw": "tailwindcss -i src/webview/styles/tailwind.css -o dist/webview/tailwind.css --minify",
     "bundle:tw:watch": "tailwindcss -i src/webview/styles/tailwind.css -o dist/webview/tailwind.css --watch",
     "lint": "tsc --noEmit -p tsconfig.json",
@@ -143,7 +143,7 @@
         {
           "id": "fliwright",
           "title": "Fliwright",
-          "icon": "media/fliwright.svg"
+          "icon": "media/fliwright-activitybar.svg"
         }
       ]
     },
@@ -976,9 +976,9 @@
           "description": "Failure screenshot mode used by Fliwright test runs."
         },
         "fliwright.failureContextDir": {
-          "type": "string",
-          "default": ".fliwright/failures",
-          "description": "Directory where Fliwright failure context JSON files are read from."
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Optional failure context directory. Defaults to failures/ inside the machine-local project partition; supports absolute, project-relative and ~/ paths."
         },
         "fliwright.formRulesDir": {
           "type": "string",

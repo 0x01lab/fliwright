@@ -74,6 +74,15 @@ sudo systemctl start fliwright-cloud
 
 ## 健康检查与升级
 
+Cloud「Worker 主机」的「服务诊断与日志」提供独立于测试结果的主机服务监控。
+operator/admin 可检查会话、组件错误、最近心跳和关联任务；Worker 无法连接时在主机运行
+`fliwright-worker logs /PRIVATE/PATH/worker.json`。页面「无法联系」仅表示监控超时，
+须结合进程监督日志确认网络中断、进程退出、OOM 或主机休眠。
+macOS 模板将 stdout/stderr 写入 `~/Library/Logs/fliwright-cloud-worker*.log`；
+Linux 使用 `journalctl -u <worker-unit> -n 100 --no-pager`，异常重启由 launchd/systemd 负责。
+Server 未处理的 HTTP 5xx 错误也输出带 requestId、路由和脱敏堆栈的 JSON 到 stderr。
+升级 Server 与 Worker 后重启才会启用新监控；仅刷新网页不会升级运行中的 Worker。
+
 ```sh
 node /PATH/fliwright-cloud health /PRIVATE/PATH/server.json
 ```

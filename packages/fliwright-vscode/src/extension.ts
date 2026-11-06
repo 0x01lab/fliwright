@@ -4,6 +4,8 @@ import * as vscode from 'vscode';
 import type { FliwrightFlowDocument, FormAnalyzeResult, FormFillResult, RecordingCheckpointCandidate } from '@fliwright/core';
 import { resolveProjectConfig } from '@fliwright/cli';
 import {
+  resolveFliwrightRuntimeRoot,
+  workspaceConfigPath,
   clearWorkspaceVmServiceUrl,
   buildFlowReviewBundle,
   buildFlowReviewPlan,
@@ -33,7 +35,8 @@ import { ScriptRunner } from './scripts/ScriptRunner.js';
 import { createVitestScriptConfig, usesVitestScript } from './scripts/VitestScriptConfig.js';
 import { ScreenshotPreviewPanel, ScreenshotService } from './screenshot/ScreenshotService.js';
 import { FliwrightSession } from './session/FliwrightSession.js';
-import { discoverVmServiceCandidates, extractVmServiceUrls } from './session/VmServiceDiscovery.js';
+import { discoverVmServiceCandidates, VmServiceDebugOutput } from './session/VmServiceDiscovery.js';
+import { VmServiceConnectionController } from './session/VmServiceConnectionController.js';
 import { MockConfigService } from './sandbox/MockConfigService.js';
 import { clearFlutterMockRoutes, formatMockRuleDebug, SandboxService } from './sandbox/SandboxService.js';
 import { WebSocketMockConfigService } from './websocket/WebSocketMockConfigService.js';
@@ -50,6 +53,7 @@ import { WebSocketMockTreeProvider } from './views/WebSocketMockTreeProvider.js'
 import { ScriptsTreeProvider } from './views/ScriptsTreeProvider.js';
 import { StateTreeProvider } from './views/StateTreeProvider.js';
 import { TestsTreeProvider } from './views/TestsTreeProvider.js';
+import { watchTestCollection } from './testing/TestCollectionWatcher.js';
 import { TestStatusStore } from './testing/TestStatusStore.js';
 import { relPathOf } from './testing/relPath.js';
 import { RunArtifactStore } from './testing/RunArtifactStore.js';
@@ -65,7 +69,6 @@ import { TraceStore } from '@fliwright/core';
 
 let output: vscode.OutputChannel;
 const LAST_VM_SERVICE_URL_KEY = 'fliwright.vmServiceUrl.lastSuccess';
-const DEBUG_LOG_BUFFER_LIMIT = 20000;
 const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 5000;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -99,7 +102,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const websocketMockTree = new WebSocketMockTreeProvider(websocketMockConfigService);
   const formTree = new FormDataTreeProvider(formService);
   const runArtifactStore = new RunArtifactStore();
-  // Resolve runsRoot from fliwright.config.ts (default: <project>/.fliwright/runs).
+  // Resolve runsRoot from fliwright.config.ts (default: ~/.fliwright/<project-path>/runs).
   // Best-effort: if the workspace root is unavailable or mkdir fails, fall back to
   // undefined so run recording is skipped (the tests tree still works against an
   // empty in-memory store). The store is always constructed so TestsTreeProvider
@@ -115,7 +118,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   }
   const statusStore = new TestStatusStore(() => runsRoot ?? '');
-  const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore);
+  const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore, undefined,
+    message => output.appendLine(`[Fliwright] ${message}`));
+  context.subscriptions.push(testsTree, watchTestCollection(testsTree));
   const scriptsTree = new ScriptsTreeProvider(scriptDiscoveryService);
   const flowsTree = new FlowsTreeProvider();
   const stateTree = new StateTreeProvider();
@@ -203,8 +208,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     void vscode.commands.executeCommand('setContext', 'fliwright.connected', isActiveSessionState(state.status));
   }));
 
-  let debugLogBuffer = '';
-  let autoConnectTimer: ReturnType<typeof setTimeout> | undefined;
+  const debugOutput = new VmServiceDebugOutput();
+  const connectionController = new VmServiceConnectionController(
+    async (options) => {
+      try {
+        return await discoverAndConnect(options);
+      } catch (error) {
+        await session.disconnect();
+        mockTree.setAppliedRules([]);
+        throw error;
+      }
+    },
+    (error) => output.appendLine(`Automatic VM Service discovery failed: ${messageOf(error)}`),
+  );
   let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
   let healthCheckInFlight = false;
   let mockSyncInFlight: Promise<void> | undefined;
@@ -212,25 +228,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let websocketMockSupported: boolean | undefined;
   const stateProviderWatches = new Map<string, () => void>();
 
-  const rememberDebugOutput = (text: string) => {
-    debugLogBuffer = `${debugLogBuffer}${text}`.slice(-DEBUG_LOG_BUFFER_LIMIT);
-    const urls = extractVmServiceUrls(debugLogBuffer);
-    const latestUrl = urls.at(-1);
+  const rememberDebugMessage = (message: unknown) => {
+    const latestUrl = debugOutput.accept(message);
     if (!latestUrl) return;
 
-    void persistWorkspaceVmServiceUrl(latestUrl, 'Flutter debug output');
     scheduleAutoConnect('Flutter debug output', 100, {
-      forceReconnect: Boolean(session.currentUrl && session.currentUrl !== latestUrl),
+      forceReconnect: session.currentUrl !== latestUrl,
     });
   };
 
   const scheduleAutoConnect = (reason: string, delayMs = 0, options: { forceReconnect?: boolean } = {}) => {
     if (!loadConfig().autoDiscoverVmService) return;
-    if (autoConnectTimer) clearTimeout(autoConnectTimer);
-    autoConnectTimer = setTimeout(() => {
-      autoConnectTimer = undefined;
-      void discoverAndConnect({ reason, interactive: false, forceReconnect: options.forceReconnect });
-    }, delayMs);
+    connectionController.schedule({ reason, interactive: false, forceReconnect: options.forceReconnect }, delayMs);
   };
 
   const stopHealthCheck = () => {
@@ -249,7 +258,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
 
       healthCheckInFlight = true;
-      void session.verifyConnection().then(async (healthy) => {
+      void connectionController.run(async () => {
+        if (!isActiveSessionState(session.state.status)) return;
+        const healthy = await session.verifyConnection();
         if (healthy) return;
         const staleUrl = session.currentUrl;
         const message = 'VM Service connection lost. Searching for a new Flutter VM Service...';
@@ -260,6 +271,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         websocketMockTree.setSupported(undefined);
         await session.markConnectionLost(message);
         scheduleAutoConnect('VM Service connection lost', 100, { forceReconnect: true });
+      }).catch((error) => {
+        output.appendLine(`VM Service health check failed: ${messageOf(error)}`);
       }).finally(() => {
         healthCheckInFlight = false;
       });
@@ -351,23 +364,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const isFlutterOrDart = /flutter|dart/i.test(sessionIdentity);
         return {
           onDidSendMessage(message: unknown) {
-            if (!isFlutterOrDart || typeof message !== 'object' || message === null) return;
-            const event = message as { type?: string; event?: string; body?: { output?: unknown } };
-            if (event.type !== 'event' || event.event !== 'output' || typeof event.body?.output !== 'string') return;
-            rememberDebugOutput(event.body.output);
+            if (isFlutterOrDart) rememberDebugMessage(message);
           },
         };
       },
     }),
     vscode.debug.onDidStartDebugSession((debugSession) => {
       if (/flutter|dart/i.test(`${debugSession.type} ${debugSession.name}`)) {
-        void clearPersistedWorkspaceVmServiceUrl('Flutter debug session started');
+        debugOutput.clear();
         scheduleAutoConnect('Flutter debug session', 500);
       }
     }),
     {
       dispose() {
-        if (autoConnectTimer) clearTimeout(autoConnectTimer);
+        connectionController.dispose();
         stopHealthCheck();
         clearStateProviderWatches();
       },
@@ -388,27 +398,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       [{ language: 'typescript', scheme: 'file' }, { language: 'typescriptreact', scheme: 'file' }],
       new FliwrightCodeLensProvider(),
     ),
-  );
-
-  // ── Lazy-parse cache invalidation on save ───────────
-  // Debounce (300ms) per-file: drop ONE file's parse cache so an edited .test.ts
-  // is re-parsed on next expand while every other file stays cached. timers run
-  // on the extension host.
-  const saveDebounce = new Map<string, ReturnType<typeof setTimeout>>();
-  context.subscriptions.push(
-    vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (!doc.fileName.endsWith('.test.ts')) return;
-      const key = doc.uri.toString();
-      const existing = saveDebounce.get(key);
-      if (existing) clearTimeout(existing);
-      saveDebounce.set(
-        key,
-        setTimeout(() => {
-          saveDebounce.delete(key);
-          testsTree.invalidateFile(doc.uri);
-        }, 300),
-      );
-    }),
   );
 
   // ── Visual Test Editor ──────────────────────────────
@@ -462,7 +451,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // ── TDD Loop monitor (additive, read-only; design spec §4.3 / §5.4 / §10 P1) ──────────────
   // The monitor is invisible until the user opens it. It reads a snapshot an external party (the
-  // CLI-owned TddRuntime) writes to `<workspaceRoot>/.fliwright/tdd-status.json`; it NEVER creates
+  // CLI-owned TddRuntime) writes to `~/.fliwright/<project-path>/runtime/tdd-status.json`; it NEVER creates
   // a driver, connects to a VM service, or spawns a daemon — so it cannot fight the CLI-driven loop
   // (design principle 4, single-driver by convention). See src/tddloop/TddLoopStatusSource.ts.
   const tddLoopSource = new FileTddLoopStatusSource(getWorkspaceRoot()?.fsPath);
@@ -499,29 +488,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           placeHolder: 'ws://127.0.0.1:8181/ws',
         });
         if (url === undefined) return;
-        const state = await session.connect(url);
-        if (state.status === 'connected') {
-          await onConnected(state.url, true);
-        } else if (state.status === 'error') {
-          throw new Error(state.message);
-        }
+        connectionController.cancelScheduled();
+        await connectionController.run(async () => {
+          const state = await session.connect(url);
+          if (state.status === 'connected') {
+            await onConnected(state.url, true);
+          } else if (state.status === 'error') {
+            throw new Error(state.message);
+          }
+        });
       });
     }),
     vscode.commands.registerCommand('fliwright.disconnect', async () => {
       await runCommand('Disconnect VM Service', async () => {
-        stopHealthCheck();
-        clearStateProviderWatches();
-        mockTree.setAppliedRules([]);
-        websocketMockSupported = undefined;
-        websocketMockTree.setSupported(undefined);
-        await session.disconnect();
-        await clearPersistedWorkspaceVmServiceUrl('VS Code disconnected');
+        connectionController.cancelScheduled();
+        await connectionController.run(async () => {
+          stopHealthCheck();
+          clearStateProviderWatches();
+          mockTree.setAppliedRules([]);
+          websocketMockSupported = undefined;
+          websocketMockTree.setSupported(undefined);
+          await session.disconnect();
+          await clearPersistedWorkspaceVmServiceUrl('VS Code disconnected');
+        });
         vscode.window.showInformationMessage('Disconnected from VM Service');
       });
     }),
     vscode.commands.registerCommand('fliwright.discoverVmService', async () => {
       await runCommand('Discover VM Service', async () => {
-        const connected = await discoverAndConnect({ reason: 'Manual scan', interactive: true, forceReconnect: true });
+        const connected = await connectionController.discover({ reason: 'Manual scan', interactive: true, forceReconnect: true });
         if (!connected) {
           vscode.window.showWarningMessage('No local Flutter VM Service found.');
         }
@@ -873,12 +868,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.runCurrentTest', async (node?: unknown) => {
       // Accept the new Tests panel nodes (TestFileNode / TestCaseNode, typed as
       // `unknown` because the legacy tree entries still feed this command).
-      // For a testCase, derive a vitest -t pattern from the node id's ancestor
-      // chain (`<relPath>::<anc1>/<anc2>/.../<title>`) so only that case runs.
-      const n = node as { kind?: string; id?: string; uri?: vscode.Uri; fileUri?: vscode.Uri } | undefined;
+      // Use the discovered full-name pattern rather than decoding the node id:
+      // test titles may contain slashes and regular-expression characters.
+      const n = node as { kind?: string; id?: string; uri?: vscode.Uri; fileUri?: vscode.Uri; testNamePattern?: string } | undefined;
       if (n?.kind === 'testCase' && n.id) {
-        const pattern = n.id.split('::')[1]?.split('/').join(' > ');
-        await runTests(n, { testNamePattern: pattern });
+        await runTests(n, { testNamePattern: n.testNamePattern });
       } else {
         await runTests(n, {});
       }
@@ -957,9 +951,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await viewerPanel.openRun(loaded.runDir);
     }),
     vscode.commands.registerCommand('fliwright.refreshTests', () => {
-      // Drop roots, the status map, and ALL per-file parse caches, then re-fire
-      // the tree. The next getChildren() re-discovers test files and re-reads
-      // index.json for statuses; source parsing stays lazy (on expand).
+      // Cancel outstanding collections and rediscover on the next expansion.
       testsTree.refresh();
     }),
     vscode.commands.registerCommand('fliwright.refreshFlows', () => {
@@ -1221,7 +1213,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const root = requireWorkspaceRoot();
         const flow = await readFlowDocument(node.uri);
         const reviewPlan = buildFlowReviewPlan(flow);
-        const defaultUri = resolveWorkspacePath(root, `.fliwright/reviews/${sanitizeFlowFileId(flow.id)}-review-plan.json`);
+        const defaultUri = resolveWorkspacePath(root, path.join(resolveFliwrightRuntimeRoot({ projectRoot: root.fsPath }), 'reviews', `${sanitizeFlowFileId(flow.id)}-review-plan.json`));
         const uri = await vscode.window.showSaveDialog({
           title: 'Create UI Review Plan',
           defaultUri,
@@ -1242,12 +1234,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (!node || node.kind !== 'flowFile') throw new Error('Select a flow to review.');
         const root = requireWorkspaceRoot();
         const flow = await readFlowDocument(node.uri);
-        const bundleOutputDir = `.fliwright/reviews/${sanitizeFlowFileId(flow.id)}`;
+        const bundleOutputDir = path.join(resolveFliwrightRuntimeRoot({ projectRoot: root.fsPath }), 'reviews', sanitizeFlowFileId(flow.id));
         const bundle = buildFlowReviewBundle(flow, {
           flowPath: node.uri.fsPath,
           outputDir: bundleOutputDir,
         });
-        const defaultUri = resolveWorkspacePath(root, `.fliwright/reviews/${sanitizeFlowFileId(flow.id)}-review-bundle.json`);
+        const defaultUri = resolveWorkspacePath(root, path.join(resolveFliwrightRuntimeRoot({ projectRoot: root.fsPath }), 'reviews', `${sanitizeFlowFileId(flow.id)}-review-bundle.json`));
         const uri = await vscode.window.showSaveDialog({
           title: 'Create UI Review Bundle',
           defaultUri,
@@ -1476,7 +1468,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const candidates = await discoverVmServiceCandidates({
       cachedUrl: context.workspaceState.get<string>(LAST_VM_SERVICE_URL_KEY),
       workspaceConfigUrl: workspaceRoot ? readWorkspaceConfigSync(workspaceRoot.fsPath).vmServiceUrl : undefined,
-      logText: debugLogBuffer,
+      logText: debugOutput.text,
     });
 
     if (candidates.length === 0) {
@@ -1515,6 +1507,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           explicitEndpointSource(candidate.url, { source: candidate.source }),
         ], {
           cwd: workspaceRoot?.fsPath,
+          persistWorkspaceCache: false,
         }).acquire();
         verifiedUrl = endpoint.url;
       } catch (error) {
@@ -1558,9 +1551,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (!root) return;
     try {
       await writeWorkspaceVmServiceUrl(url, { cwd: root.fsPath, source });
-      output.appendLine(`Wrote VM Service URL to .fliwright/config.json (${source}): ${url}`);
+      output.appendLine(`Wrote VM Service URL to ${workspaceConfigPath(root.fsPath)} (${source}): ${url}`);
     } catch (error) {
-      output.appendLine(`Failed to write .fliwright/config.json: ${messageOf(error)}`);
+      output.appendLine(`Failed to write ${workspaceConfigPath(root.fsPath)}: ${messageOf(error)}`);
     }
   }
 
@@ -1569,9 +1562,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (!root) return;
     try {
       await clearWorkspaceVmServiceUrl({ cwd: root.fsPath, source });
-      output.appendLine(`Cleared VM Service URL in .fliwright/config.json (${source}).`);
+      output.appendLine(`Cleared VM Service URL in ${workspaceConfigPath(root.fsPath)} (${source}).`);
     } catch (error) {
-      output.appendLine(`Failed to clear .fliwright/config.json VM Service URL: ${messageOf(error)}`);
+      output.appendLine(`Failed to clear ${workspaceConfigPath(root.fsPath)} VM Service URL: ${messageOf(error)}`);
     }
   }
 
@@ -1698,7 +1691,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         statusBar.setRunResult(result);
         completed = result;
-        testsTree.refresh();
+        await testsTree.refreshStatuses();
         output.appendLine(`Run complete: ${result.passedTests}/${result.totalTests} passed, ${result.failedTests} failed.`);
 
         // Trace artifacts are now stored inside each run directory. Retention
@@ -1736,7 +1729,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (!script) return;
 
       if (!isActiveSessionState(session.state.status)) {
-        const connected = await discoverAndConnect({ reason: 'Run script', interactive: true });
+        const connected = await connectionController.discover({ reason: 'Run script', interactive: true });
         if (!connected) {
           throw new Error('Connect to a Flutter VM Service before running a script.');
         }
@@ -1841,7 +1834,7 @@ Install @fliwright/cli in the target project and use the bundled fliwright-cli-w
 - Check environment: fliwright doctor --strict --json
 - Inspect UI: fliwright app snapshot --json
 - Capture diagnostics: fliwright app debug-snapshot --json
-- Save screenshot: fliwright app screenshot --output .fliwright/artifacts/screen.png --json
+- Save screenshot: fliwright app screenshot --json
 - Run tests: fliwright run --test .fliwright/tests/example.test.ts --scenario ready --json
 - Read failures: fliwright artifacts failures --json
 

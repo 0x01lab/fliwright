@@ -6,7 +6,45 @@ import {
   CloudError,
   deviceInventorySchema,
   safeArtifactPath,
+  catalogMockDirectorySchema,
+  projectSchema,
+  projectSubmissionSchema,
+  submissionSchema,
 } from '../src/index.js';
+
+it('allows direct runs without a declared scenario while validating named selections', () => {
+  const project = { id: 'app', name: 'App', repository: 'https://git.example.com/app.git', suites: { smoke: '*.test.ts' } };
+  expect(projectSchema.parse(project).scenarios).toEqual([]);
+  expect(projectSchema.parse({ ...project, autoRun: { enabled: true, selections: [{ suite: 'smoke' }] } }).autoRun.selections).toEqual([{ suite: 'smoke' }]);
+  expect(projectSchema.safeParse({ ...project, autoRun: { selections: [{ suite: 'smoke', scenario: 'missing' }] } }).success).toBe(false);
+  const input = { commit: 'a'.repeat(40), suite: 'smoke' };
+  expect(submissionSchema.parse({ ...input, targetId: 'app' })).not.toHaveProperty('scenario');
+  expect(projectSubmissionSchema.parse({ ...input, projectId: 'app', mode: 'suite' })).not.toHaveProperty('scenario');
+  expect(projectSubmissionSchema.safeParse({ ...input, projectId: 'app', mode: 'suite', scenario: '' }).success).toBe(false);
+});
+
+it('transports bounded mock choices without response bodies or checkout escapes', () => {
+  const endpoint = { endpoint: '/assets', method: 'GET', rules: ['success', 'empty'], activeRule: 'success' };
+  const directory = { directory: '.fliwright/mocks', profiles: ['success', 'member'], endpoints: [endpoint] };
+  expect(catalogMockDirectorySchema.parse(directory)).toEqual(directory);
+  expect(catalogMockDirectorySchema.safeParse({ ...directory, directory: '../outside' }).success).toBe(false);
+  expect(catalogMockDirectorySchema.safeParse({ ...directory, endpoints: [{ ...endpoint, body: { secret: 'not-metadata' } }] }).success).toBe(false);
+});
+
+it('accepts mock profiles aggregated across endpoints beyond the per-endpoint rule limit', () => {
+  const rules = Array.from({ length: 101 }, (_, index) => `profile-${index}`);
+  const directory = {
+    directory: '.fliwright/mocks',
+    profiles: rules,
+    endpoints: [
+      { endpoint: '/assets', method: 'GET', rules: rules.slice(0, 100), activeRule: rules[0] },
+      { endpoint: '/orders', method: 'GET', rules: rules.slice(100), activeRule: rules[100] },
+    ],
+  };
+  expect(catalogMockDirectorySchema.parse(directory)).toEqual(directory);
+  expect(catalogMockDirectorySchema.safeParse({ ...directory, profiles: Array(100_001).fill('profile') }).success).toBe(false);
+  expect(catalogMockDirectorySchema.safeParse({ ...directory, endpoints: [{ ...directory.endpoints[0], rules }] }).success).toBe(false);
+});
 
 it('validates native inventory as a wire contract without a host scanner', () => {
   expect(

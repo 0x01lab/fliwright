@@ -19,8 +19,9 @@ if (manifest.name !== 'fliwright-vscode') {
 manifest.scripts = {};
 manifest.files = [
   'dist/**',
-  'media/fliwright.svg',
+  'media/fliwright-activitybar.svg',
   'media/fliwright-marketplace.png',
+  'media/brand/banner.png',
   'README.md',
   'CHANGELOG.md',
   'LICENSE.md',

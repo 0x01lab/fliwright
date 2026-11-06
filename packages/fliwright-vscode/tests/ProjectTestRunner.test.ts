@@ -35,3 +35,24 @@ it('makes a CLI collection error visible when zero test bodies ran', async () =>
   expect(result).toMatchObject({ passed: false, failedTests: 1 });
   expect(result.results[0]).toMatchObject({ passed: false, error: expect.stringContaining('scenario missing') });
 });
+
+it('does not count unselected CLI cases as failures and preserves their skipped status', async () => {
+  mocks.cli.mockResolvedValue({ passed: true, totalTests: 2, passedTests: 1, failedTests: 0, duration: 1,
+    results: [
+      { name: 'selected', status: 'passed', passed: true, duration: 1 },
+      { name: 'unselected', status: 'skipped', passed: false, duration: 0 },
+    ] });
+  const result = await new ProjectTestRunner(() => 'cli').run({ workspaceRoot: Uri.file('/project'),
+    failureContextDir: Uri.file('/project/failures'), testNamePattern: '^selected$' });
+  expect(result).toMatchObject({ passed: true, failedTests: 0 });
+  expect(result.results[1]).toMatchObject({ name: 'unselected', status: 'skipped' });
+});
+
+it('keeps CLI runner errors visible even when the only reported cases were skipped', async () => {
+  mocks.cli.mockResolvedValue({ passed: false, totalTests: 1, passedTests: 0, failedTests: 0, duration: 1,
+    results: [{ name: 'unselected', status: 'skipped', passed: false, duration: 0 }],
+    runnerErrors: [{ phase: 'collection', message: 'scenario missing' }] });
+  const result = await new ProjectTestRunner(() => 'cli').run({ workspaceRoot: Uri.file('/project'),
+    failureContextDir: Uri.file('/project/failures') });
+  expect(result.results).toContainEqual(expect.objectContaining({ name: 'Fliwright run', error: 'scenario missing' }));
+});

@@ -33,3 +33,6 @@ docs/features
 **/.fliwright/snapshots/
 
 **/.fliwright/sessions/
+
+# Local Cloud Worker runtime (checkouts, dependencies, reports and logs).
+/packages/fliwright-cloud-worker/cloud-worker/

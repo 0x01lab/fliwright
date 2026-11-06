@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Fliwright chameleon"><defs>
+    <linearGradient id="logo-crest" x1="96" y1="64" x2="167" y2="16" gradientUnits="userSpaceOnUse"><stop stop-color="#36D98A"/><stop offset="1" stop-color="#B7F34A"/></linearGradient>
+    <linearGradient id="logo-body" x1="37" y1="202" x2="210" y2="60" gradientUnits="userSpaceOnUse"><stop stop-color="#009FF0"/><stop offset=".38" stop-color="#00C9D8"/><stop offset=".7" stop-color="#36D98A"/><stop offset="1" stop-color="#B7F34A"/></linearGradient>
+    <linearGradient id="logo-fold" x1="53" y1="167" x2="134" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#00C9D8"/><stop offset="1" stop-color="#00BFA6"/></linearGradient>
+    <linearGradient id="logo-tail" x1="105" y1="211" x2="143" y2="158" gradientUnits="userSpaceOnUse"><stop stop-color="#00BFA6"/><stop offset="1" stop-color="#B7F34A"/></linearGradient>
+  </defs>
+  <path d="M80 64C83 20 122 6 150 16C177 24 199 42 211 68C170 87 126 83 80 80Z" fill="url(#logo-crest)"/>
+  <path d="M127 58C70 33 16 75 16 139C16 202 55 241 103 241C144 241 166 217 164 188C162 160 142 148 123 154C105 159 98 177 104 190C108 199 119 201 127 196C112 199 106 188 112 179C121 165 142 175 138 194C133 220 94 222 77 200C56 173 66 139 95 133C123 127 139 151 173 155C213 160 244 140 244 113C244 94 225 70 204 60C179 49 149 48 127 58Z" fill="url(#logo-body)"/>
+  <path d="M127 58C87 54 47 81 39 121C29 169 55 211 91 220C63 202 60 170 78 148C96 126 121 128 143 144C122 126 113 104 127 58Z" fill="url(#logo-fold)" opacity=".72"/><path d="M123 154C105 159 98 177 104 190C108 199 119 201 127 196C112 199 106 188 112 179C121 165 142 175 138 194C135 209 123 215 110 216C144 219 165 200 158 178C153 159 137 150 123 154Z" fill="url(#logo-tail)"/>
+  <circle cx="194" cy="99" r="32" fill="#FFFFFF"/><circle cx="205" cy="99" r="20" fill="#142D4E"/><circle cx="212" cy="89" r="6" fill="#FFFFFF"/></svg>

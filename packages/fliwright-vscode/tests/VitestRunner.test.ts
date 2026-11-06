@@ -8,6 +8,35 @@ import { parseVitestJson, buildVitestArgs, buildRunEnv, resolveVitestCli, Vitest
 import type { RunParams } from '../src/runner/TestRunner.js';
 
 describe('VitestRunner', () => {
+  it('runs fork workers with multi-megabyte scenarios through a config path instead of environment payloads', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'fliwright-editor-large-config-'));
+    try {
+      await symlink(path.resolve('../../e2e/node_modules'), path.join(root, 'node_modules'), 'dir');
+      await writeFile(path.join(root, 'package.json'), '{"type":"module"}');
+      await writeFile(path.join(root, 'fliwright.config.ts'), `export default { recording: { mode: 'off' },
+        scenarios: { large: { name: 'large', layers: [{ kind: 'storage', seed: { payload: 'x'.repeat(2 * 1024 * 1024) } }] } } };`);
+      await writeFile(path.join(root, 'vitest.config.mjs'), `import { fliwrightPreset } from '@fliwright/vitest/preset';
+        export default fliwrightPreset({ test: { include: ['proof.test.mjs'], pool: 'forks', maxWorkers: 1 } });`);
+      await writeFile(path.join(root, 'proof.test.mjs'), `import { test, expect } from 'vitest';
+        import { readFliwrightEnvironment } from '@fliwright/core';
+        import { spawnSync } from 'node:child_process';
+        test('large config remains available without bloating descendant environments', () => {
+          expect(process.env.FLIWRIGHT_CONFIG).toBeUndefined();
+          expect(process.env.FLIWRIGHT_SCENARIOS).toBeUndefined();
+          expect(process.env.FLIWRIGHT_CONFIG_PATH).toBeTruthy();
+          const config = readFliwrightEnvironment(process.env);
+          expect(config.scenarios.large.layers[0].seed.payload.length).toBe(2 * 1024 * 1024);
+          const child = spawnSync(process.execPath, ['-e', 'process.exit(0)']);
+          expect(child.error).toBeUndefined();
+          expect(child.status).toBe(0);
+        });`);
+      const result = await new VitestRunner().run({ workspaceRoot: { fsPath: root } as any,
+        failureContextDir: { fsPath: path.join(root, 'failures') } as any,
+        runsRoot: path.join(root, 'runs'), runId: 'large-config' });
+      expect(result, result.stderr).toMatchObject({ passed: true, totalTests: 1, passedTests: 1 });
+    } finally { await rm(root, { force: true, recursive: true }); }
+  }, 20000);
+
   it.skipIf(process.platform === 'win32').each([false, true])('cancels fork workers and their connected descendants (ignores SIGTERM: %s)', async (ignoreTermination) => {
     const root = await mkdtemp(path.join(tmpdir(), 'fliwright-editor-cancel-'));
     const controller = new AbortController();

@@ -29,9 +29,19 @@ export interface MatchCriteria {
   text?: string;
   textContains?: string;
   textRegex?: string;
+  /** Defaults to true for exact, contains and regex text matching. */
+  textCaseSensitive?: boolean;
+  /** Maps the JavaScript RegExp m flag to Dart multiLine. */
+  textMultiline?: boolean;
+  /** Maps the JavaScript RegExp s flag to Dart dotAll. */
+  textDotAll?: boolean;
   semanticIdentifier?: string;
   semanticsLabel?: string;
   semanticsHint?: string;
+  /** Defaults to contains for structured semantics labels and hints. */
+  semanticsMatch?: TextMatchMode;
+  /** Defaults to true for semantics label and hint matching. */
+  semanticsCaseSensitive?: boolean;
   role?: string;
   tooltip?: string;
   enabled?: boolean;
@@ -68,9 +78,15 @@ export interface SelectorQuery {
 }
 
 export type SelectorAst =
+  | { kind: 'all' }
+  | { kind: 'match'; criteria: MatchCriteria }
+  | { kind: 'fallback'; primary?: SelectorAst; fallback: FallbackCriteria }
+  | { kind: 'position'; selector: SelectorAst; position: PositionFilter }
   | {
       kind: 'text';
       value: string;
+      multiline?: boolean;
+      dotAll?: boolean;
       match?: TextMatchMode;
       caseSensitive?: boolean;
     }

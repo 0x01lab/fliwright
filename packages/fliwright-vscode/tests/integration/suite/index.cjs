@@ -14,17 +14,44 @@ async function run() {
     assert.equal(extension.packageJSON.version, process.env.FLIWRIGHT_TEST_VSIX_VERSION);
     for (const resource of [
       'dist/extension.js',
+      'dist/catalog-worker.mjs',
       'dist/webview/recordingCanvas.js',
       'dist/webview/recordingCanvas.css',
       'dist/webview/tailwind.css',
       'dist/webview/viewerApp.js',
-      'media/fliwright.svg',
+      'media/fliwright-activitybar.svg',
       'media/fliwright-marketplace.png',
     ]) {
       assert.ok(fs.existsSync(path.join(extension.extensionPath, resource)), `${resource} should be inside the installed VSIX`);
     }
   }
   await extension.activate();
+
+  // Exercise the packaged collector using the real extension host's executable.
+  const os = require('node:os');
+  const { execFile } = require('node:child_process');
+  const { promisify } = require('node:util');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fw-editor-collection-'));
+  try {
+    fs.mkdirSync(path.join(root, 'node_modules'));
+    fs.symlinkSync(path.dirname(require.resolve('vitest/package.json')), path.join(root, 'node_modules/vitest'), 'dir');
+    fs.writeFileSync(path.join(root, 'editor.test.ts'), `
+      import { test, beforeAll } from 'vitest';
+      beforeAll(() => { throw new Error('collection must not run hooks'); });
+      test.for(['home', 'assets'])('refresh %s', () => { throw new Error('collection must not run tests'); });
+    `);
+    const worker = path.join(extension.extensionPath, 'dist/catalog-worker.mjs');
+    const { stdout } = await promisify(execFile)(process.execPath, [worker, JSON.stringify({ cwd: root, files: ['editor.test.ts'] })], {
+      cwd: root, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, timeout: 30_000,
+    });
+    const marker = 'FLIWRIGHT_EDITOR_CATALOG=';
+    const line = stdout.split(/\r?\n/).find(value => value.startsWith(marker));
+    assert.ok(line, 'Catalog worker should return collected tests');
+    assert.deepEqual(JSON.parse(line.slice(marker.length)).files['editor.test.ts'], { nodes: [
+      { kind: 'test', title: 'refresh home' }, { kind: 'test', title: 'refresh assets' },
+    ] });
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+
 
   const commands = await vscode.commands.getCommands(true);
   for (const command of [

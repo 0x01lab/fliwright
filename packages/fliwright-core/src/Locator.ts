@@ -402,8 +402,10 @@ export class Locator {
     this.assertSuccessResponse(response, 'selectOption');
   }
 
+  /** Locate a mounted target before scrolling; screen visibility is not a prerequisite. */
   async scrollIntoView(options?: { alignment?: number; duration?: number; timeout?: number }): Promise<void> {
     const response = await this.sendAction('scrollIntoView', {
+      visible: 'any',
       alignment: options?.alignment ?? 0.5,
       duration: options?.duration ?? 300,
       timeout: options?.timeout,
@@ -471,7 +473,7 @@ export class Locator {
     this.assertSuccessResponse(response, 'fill');
   }
 
-  /** Click using a pre-resolved widget. */
+  /** Click a pre-resolved identity using its current geometry; stale targets fail. */
   async clickResolved(resolved: WidgetInfo): Promise<void> {
     const response = await this.sendAction('tap', {
       targetId: resolved.id,

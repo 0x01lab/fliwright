@@ -1,7 +1,7 @@
 ---
 package: "fliwright_bridge"
 path: "packages/fliwright-bridge"
-source_fingerprint: "0b53e187b178c704ab85eb6319de2a6257049092f174212cd43edd43a7ace1f0"
+source_fingerprint: "f84075b7f89c0c51f06daa4a5c38de15ca5c814a1c41ea59402ffaf42f04f7c2"
 generated: true
 ---
 
@@ -136,7 +136,9 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `FliwrightAppCapability`
 - `FliwrightAppInstance`
 - `FliwrightAuthCapability`
+- `FliwrightBiometricTestCapability`
 - `FliwrightBridge`
+- `FliwrightCameraTestCapability`
 - `FliwrightDioMockInterceptor`
 - `FliwrightFormControl`
 - `FliwrightFormOption`
@@ -228,3 +230,5 @@ Run inside Flutter applications and expose ext.fliwright.* VM-service methods fo
 - `packages/fliwright-bridge/lib/src/selector_tree_evaluator.dart`
 - `packages/fliwright-bridge/lib/src/semantics_compat.dart`
 - `packages/fliwright-bridge/lib/src/soft_keyboard.dart`
+- `packages/fliwright-bridge/lib/src/testing/biometric_test.dart`
+- `packages/fliwright-bridge/lib/src/testing/camera_test.dart`

@@ -10,11 +10,15 @@ import { registerTdd } from './registry/tdd.js';
 import { registerFlow } from './registry/flow.js';
 import { registerFinite } from './registry/finite.js';
 import { registerDevices } from './registry/devices.js';
+import { registerNative } from './registry/native.js';
+export { prepareNativeRun, type ManagedNativeRun, type ManagedNativeGrant, type ManagedNativeLaunch } from './ManagedNativeRun.js';
+export { withFlutterAndroidApk, type FlutterAndroidBuildOptions, type FlutterAndroidApk } from './FlutterAndroidBuild.js';
 
 export function createRegistry(): CommandRegistry {
   const registry = new CommandRegistry();
   registerFinite(registry);
   registerDevices(registry);
+  registerNative(registry);
   registerFlow(registry);
   registerTdd(registry);
   registerSessions(registry);
@@ -62,7 +66,7 @@ export async function executeCli(argv: string[], registry = createRegistry()): P
     if (json && input.reporter && input.reporter !== 'json') throw new CliError('INVALID_INPUT', '--json conflicts with an explicit non-JSON reporter.', 2);
     selectedReporter = input.reporter;
     const session = common.session as string | undefined ?? process.env.FLIWRIGHT_SESSION;
-    const routedToSession = Boolean(session && (definition.needsSession || (definition.needsApp && !['run', 'script', 'record'].includes(definition.path)) || ['generate-test', 'tdd.cycle', 'tdd.sync', 'tdd.status'].includes(definition.path)));
+    const routedToSession = Boolean(session && (definition.needsSession || (definition.needsApp && !['run', 'script', 'record'].includes(definition.path)) || ['tdd.cycle', 'tdd.sync', 'tdd.status'].includes(definition.path)));
     if (routedToSession && (input.vmUrl || input.deviceId)) throw new CliError('INVALID_INPUT', '--session cannot change its endpoint or device.', 2);
     if (routedToSession && session) {
       sessionOperation = true;

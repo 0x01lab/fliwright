@@ -275,6 +275,7 @@ export interface FlowFileEntry {
 export interface TestCaseResult {
   name: string;
   filePath?: string;
+  status?: 'passed' | 'failed' | 'skipped' | 'running' | 'interrupted';
   passed: boolean;
   duration: number;
   error?: string;

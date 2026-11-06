@@ -6,14 +6,17 @@ import { pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-it('loads and reloads TypeScript project scenarios from the portable extension bundle', async () => {
+it('loads and reloads TypeScript scenarios with explicit mock sources from the portable extension bundle', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fliwright-bundled-config-'));
   try {
     const { bundleExtension } = await import(pathToFileURL(resolve('scripts/bundle-extension.mjs')).href);
     const project = join(root, 'project');
     await mkdir(project);
+    const sources = [{ name: 'item', directory: '.fliwright/test-plans/437/mocks', files: ['api/user.json'] }];
+    const rule = { source: 'item', method: 'POST', endpoint: '/user', rule: 'ready', replace: true };
     await writeFile(join(project, 'scenario.ts'), `export interface ScenarioName { name: string }
-      export const scenario: ScenarioName & { layers: never[] } = { name: 'first', layers: [] };`);
+      export const scenario = { name: 'first', layers: [{ kind: 'mocks',
+        sources: ${JSON.stringify(sources)}, rules: [${JSON.stringify(rule)}] }] } satisfies ScenarioName & { layers: unknown[] };`);
     await writeFile(join(project, 'fliwright.config.ts'), `import { scenario } from './scenario.ts';
       export default { scenarios: { fixture: scenario } };`);
     const bundle = join(root, 'portable', 'config.mjs');
@@ -26,11 +29,14 @@ it('loads and reloads TypeScript project scenarios from the portable extension b
     const source = `import { resolveProjectConfig } from ${JSON.stringify(pathToFileURL(bundle).href)};
       import { writeFile } from 'node:fs/promises';
       const first = await resolveProjectConfig(${JSON.stringify(project)}, {}, {});
-      await writeFile(${JSON.stringify(join(project, 'scenario.ts'))}, "export const scenario = { name: 'second', layers: [] };");
+      await writeFile(${JSON.stringify(join(project, 'scenario.ts'))}, ${JSON.stringify(`export const scenario = { name: 'second', layers: [{ kind: 'mocks', sources: ${JSON.stringify(sources)}, rules: [${JSON.stringify({ ...rule, rule: 'review' })}] }] };`)});
       const second = await resolveProjectConfig(${JSON.stringify(project)}, {}, {});
-      console.log(JSON.stringify([first.scenarios.fixture.name, second.scenarios.fixture.name]));`;
+      console.log(JSON.stringify([first.scenarios.fixture, second.scenarios.fixture]));`;
     const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '--eval', source]);
-    expect(JSON.parse(stdout.trim())).toEqual(['first', 'second']);
+    expect(JSON.parse(stdout.trim())).toEqual([
+      { name: 'first', layers: [{ kind: 'mocks', sources, rules: [rule] }] },
+      { name: 'second', layers: [{ kind: 'mocks', sources, rules: [{ ...rule, rule: 'review' }] }] },
+    ]);
     expect(await readFile(bundle, 'utf8')).not.toContain('fliwright-bundled-config-');
   } finally { await rm(root, { recursive: true, force: true }); }
 }, 20000);

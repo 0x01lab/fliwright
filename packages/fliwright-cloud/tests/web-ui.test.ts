@@ -82,9 +82,9 @@ describe('cloud UI composition', () => {
   it('renders successful and failed results as labeled status icons', () => {
     const passed = renderToStaticMarkup(h(ResultIcon, { status: 'passed' }));
     const failed = renderToStaticMarkup(h(ResultIcon, { status: 'failed' }));
-    expect(passed).toContain('class="result-icon result-icon-passed"');
+    expect(passed).toContain('data-ui="result-icon result-icon-passed"');
     expect(passed).toContain('aria-label="成功"');
-    expect(failed).toContain('class="result-icon result-icon-failed"');
+    expect(failed).toContain('data-ui="result-icon result-icon-failed"');
     expect(failed).toContain('aria-label="失败"');
   });
 });

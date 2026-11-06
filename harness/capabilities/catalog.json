@@ -17,7 +17,8 @@
         "@fliwright/core",
         "@fliwright/tdd",
         "@fliwright/vitest",
-        "@fliwright/devices"
+        "@fliwright/devices",
+        "@fliwright/native"
       ],
       "ownedCapabilities": [
         "command-line workflows",
@@ -26,9 +27,20 @@
       "sourceFiles": [
         "packages/fliwright-cli/src/ArtifactReferences.ts",
         "packages/fliwright-cli/src/CommandRegistry.ts",
+        "packages/fliwright-cli/src/DeviceMetadata.ts",
+        "packages/fliwright-cli/src/FlutterAndroidBuild.ts",
+        "packages/fliwright-cli/src/FlutterBuildProcess.ts",
+        "packages/fliwright-cli/src/HtmlReport.ts",
+        "packages/fliwright-cli/src/HtmlReportAssets.ts",
+        "packages/fliwright-cli/src/InitAgent.ts",
         "packages/fliwright-cli/src/InspectionOutput.ts",
+        "packages/fliwright-cli/src/InstalledAndroidRun.ts",
+        "packages/fliwright-cli/src/ManagedAppRun.ts",
+        "packages/fliwright-cli/src/ManagedNativeRun.ts",
+        "packages/fliwright-cli/src/ManagedNativeTelemetry.ts",
         "packages/fliwright-cli/src/RecordingReplay.ts",
-        "packages/fliwright-cli/src/WorkflowContext.ts",
+        "packages/fliwright-cli/src/ReleaseReview.ts",
+        "packages/fliwright-cli/src/ReportProjectIcon.ts",
         "packages/fliwright-cli/src/capabilities/form.ts",
         "packages/fliwright-cli/src/capabilities/interaction.ts",
         "packages/fliwright-cli/src/capabilities/session.ts",
@@ -36,6 +48,7 @@
         "packages/fliwright-cli/src/commands/app-inspect.ts",
         "packages/fliwright-cli/src/commands/app.ts",
         "packages/fliwright-cli/src/commands/artifact-query.ts",
+        "packages/fliwright-cli/src/commands/artifact-report.ts",
         "packages/fliwright-cli/src/commands/artifacts.ts",
         "packages/fliwright-cli/src/commands/doctor.ts",
         "packages/fliwright-cli/src/commands/flow-runtime.ts",
@@ -55,6 +68,7 @@
         "packages/fliwright-cli/src/registry/flow-schemas.ts",
         "packages/fliwright-cli/src/registry/flow.ts",
         "packages/fliwright-cli/src/registry/generation-schema.ts",
+        "packages/fliwright-cli/src/registry/native.ts",
         "packages/fliwright-cli/src/registry/session.ts",
         "packages/fliwright-cli/src/registry/tdd.ts",
         "packages/fliwright-cli/src/reporter.ts",
@@ -66,7 +80,14 @@
       ],
       "publicExports": [
         "createProgram",
-        "createRegistry"
+        "createRegistry",
+        "FlutterAndroidApk",
+        "FlutterAndroidBuildOptions",
+        "ManagedNativeGrant",
+        "ManagedNativeLaunch",
+        "ManagedNativeRun",
+        "prepareNativeRun",
+        "withFlutterAndroidApk"
       ],
       "packageEntrypoints": [
         ".",
@@ -81,6 +102,7 @@
         "app-inspect",
         "app",
         "artifact-query",
+        "artifact-report",
         "artifacts",
         "doctor",
         "flow-runtime",
@@ -99,7 +121,7 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "25841543edf088a02355fda2639cc0c016729d2b952a23dca341432cadf69dba"
+      "sourceFingerprint": "9e2d87041e357bc26f3dc0609f4e07bb94f452e7d4e21dc3b646f225c89044fb"
     },
     {
       "name": "@fliwright/cloud",
@@ -124,6 +146,7 @@
       "sourceFiles": [
         "packages/fliwright-cloud/src/CloudStore.ts",
         "packages/fliwright-cloud/src/ReportStore.ts",
+        "packages/fliwright-cloud/src/WorkerDiagnosticsStore.ts",
         "packages/fliwright-cloud/src/WorkerTimelineStore.ts",
         "packages/fliwright-cloud/src/config.ts",
         "packages/fliwright-cloud/src/deployment.ts",
@@ -135,16 +158,20 @@
         "packages/fliwright-cloud/src/web/Devices.tsx",
         "packages/fliwright-cloud/src/web/Projects.tsx",
         "packages/fliwright-cloud/src/web/Replay.tsx",
+        "packages/fliwright-cloud/src/web/ScenarioBuilder.tsx",
         "packages/fliwright-cloud/src/web/TestBoard.tsx",
         "packages/fliwright-cloud/src/web/TimeTimeline.tsx",
+        "packages/fliwright-cloud/src/web/WorkerDiagnostics.tsx",
         "packages/fliwright-cloud/src/web/WorkerExecutionTimeline.tsx",
         "packages/fliwright-cloud/src/web/WorkerPairing.tsx",
         "packages/fliwright-cloud/src/web/app.tsx",
+        "packages/fliwright-cloud/src/web/components/ui/alert.tsx",
         "packages/fliwright-cloud/src/web/components/ui/badge.tsx",
         "packages/fliwright-cloud/src/web/components/ui/button.tsx",
         "packages/fliwright-cloud/src/web/components/ui/card.tsx",
         "packages/fliwright-cloud/src/web/components/ui/checkbox.tsx",
         "packages/fliwright-cloud/src/web/components/ui/dialog.tsx",
+        "packages/fliwright-cloud/src/web/components/ui/empty.tsx",
         "packages/fliwright-cloud/src/web/components/ui/input.tsx",
         "packages/fliwright-cloud/src/web/components/ui/label.tsx",
         "packages/fliwright-cloud/src/web/components/ui/native-select.tsx",
@@ -158,6 +185,7 @@
         "packages/fliwright-cloud/src/web/lib/utils.ts",
         "packages/fliwright-cloud/src/web/main.tsx",
         "packages/fliwright-cloud/src/web/replay-model.ts",
+        "packages/fliwright-cloud/src/web/scenario-builder.ts",
         "packages/fliwright-cloud/src/web/ui.tsx",
         "packages/fliwright-cloud/src/worker-control.ts"
       ],
@@ -170,6 +198,7 @@
         "ReportStore",
         "ReportView",
         "Role",
+        "WorkerDiagnosticsStore",
         "WorkerTimelineStore"
       ],
       "packageEntrypoints": [
@@ -178,7 +207,7 @@
       "binaryEntrypoints": [
         "fliwright-cloud"
       ],
-      "sourceFingerprint": "56648cb0986b238a560da435fdafc9be7b154c524c3b8e10c84384a3b652d1c7"
+      "sourceFingerprint": "c9f9e2824648a149f31eb0397c9a5bc0e58ff2190bc5f8093bd35a0368e8dba6"
     },
     {
       "name": "@fliwright/cloud-protocol",
@@ -203,6 +232,7 @@
         "packages/fliwright-cloud-protocol/src/contracts.ts",
         "packages/fliwright-cloud-protocol/src/index.ts",
         "packages/fliwright-cloud-protocol/src/worker-control.ts",
+        "packages/fliwright-cloud-protocol/src/worker-diagnostics.ts",
         "packages/fliwright-cloud-protocol/src/worker-pairing.ts",
         "packages/fliwright-cloud-protocol/src/worker-timeline.ts"
       ],
@@ -217,7 +247,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "3488727819a46b23f29f24184a28c2f02619795fdff0e8f559f7fad718788480"
+      "sourceFingerprint": "41c54df7e778bb42730fac22b4702b1926aef3b86b1b9a1e0eee185ae4b0f234"
     },
     {
       "name": "@fliwright/cloud-worker",
@@ -243,25 +273,32 @@
         "worker CLI"
       ],
       "sourceFiles": [
+        "packages/fliwright-cloud-worker/src/ManagedNativeTimeline.ts",
+        "packages/fliwright-cloud-worker/src/NativePreparationIpc.ts",
         "packages/fliwright-cloud-worker/src/WorkerAgent.ts",
+        "packages/fliwright-cloud-worker/src/WorkerNativeOwnership.ts",
         "packages/fliwright-cloud-worker/src/WorkerTimelineChannel.ts",
         "packages/fliwright-cloud-worker/src/WorkerTimelineRecorder.ts",
         "packages/fliwright-cloud-worker/src/catalog-scanner.ts",
         "packages/fliwright-cloud-worker/src/config.ts",
         "packages/fliwright-cloud-worker/src/device-reporting.ts",
+        "packages/fliwright-cloud-worker/src/diagnostics.ts",
         "packages/fliwright-cloud-worker/src/executor.ts",
         "packages/fliwright-cloud-worker/src/host.ts",
         "packages/fliwright-cloud-worker/src/index.ts",
         "packages/fliwright-cloud-worker/src/local-packages.ts",
         "packages/fliwright-cloud-worker/src/main.ts",
+        "packages/fliwright-cloud-worker/src/native-ownership-ipc.ts",
         "packages/fliwright-cloud-worker/src/pairing.ts",
         "packages/fliwright-cloud-worker/src/processes.ts",
+        "packages/fliwright-cloud-worker/src/spool.ts",
         "packages/fliwright-cloud-worker/src/worker-timeline-ipc.ts",
         "packages/fliwright-cloud-worker/src/worker.ts"
       ],
       "publicExports": [
         "collectCheckoutCatalog",
         "createWorker",
+        "defaultSpoolRetention",
         "discoveryConfigSchema",
         "executeCatalogScan",
         "ExecutionResult",
@@ -269,8 +306,10 @@
         "hostConfigSchema",
         "installLocalPackages",
         "pairWorker",
+        "readWorkerLogs",
         "readWorkerTimelineLog",
         "reportWorkerDevices",
+        "reportWorkerDiagnostics",
         "retrySpool",
         "runCatalogScanner",
         "runHostWorker",
@@ -279,10 +318,12 @@
         "scanProcess",
         "secureCatalogCheckout",
         "SpanOptions",
+        "SpoolRetention",
         "WorkerAgent",
         "WorkerAgentOptions",
         "workerConfigSchema",
         "WorkerDependencies",
+        "WorkerDiagnostics",
         "WorkerTimelineChannel",
         "WorkerTimelineRecorder"
       ],
@@ -292,7 +333,7 @@
       "binaryEntrypoints": [
         "fliwright-worker"
       ],
-      "sourceFingerprint": "a3bd2d7533954c864d32536435a00724e10ea49ef9d3e8d4caa0711b8d89ff94"
+      "sourceFingerprint": "bdfb5c5839b9ab387437b518c6d5ef30fee49edb482cdeab1279ce5c27ebc665"
     },
     {
       "name": "@fliwright/core",
@@ -315,6 +356,8 @@
         "packages/fliwright-core/src/AppInstance.ts",
         "packages/fliwright-core/src/Assertion.ts",
         "packages/fliwright-core/src/AssertionSuggester.ts",
+        "packages/fliwright-core/src/BiometricTestController.ts",
+        "packages/fliwright-core/src/CameraTestController.ts",
         "packages/fliwright-core/src/CodeGenerator.ts",
         "packages/fliwright-core/src/DartCodeGenerator.ts",
         "packages/fliwright-core/src/DesignQaClient.ts",
@@ -329,6 +372,7 @@
         "packages/fliwright-core/src/FormHelper.ts",
         "packages/fliwright-core/src/JsonRuleLoader.ts",
         "packages/fliwright-core/src/Locator.ts",
+        "packages/fliwright-core/src/ManagedAppLifecycle.ts",
         "packages/fliwright-core/src/MockManager.ts",
         "packages/fliwright-core/src/MockRuleStore.ts",
         "packages/fliwright-core/src/Page.ts",
@@ -353,6 +397,7 @@
         "packages/fliwright-core/src/RunSessionRegistry.ts",
         "packages/fliwright-core/src/RunTraceProjection.ts",
         "packages/fliwright-core/src/Scenario.ts",
+        "packages/fliwright-core/src/ScenarioDevicePreparation.ts",
         "packages/fliwright-core/src/SelectRecipes.ts",
         "packages/fliwright-core/src/Selector.ts",
         "packages/fliwright-core/src/SelectorResolver.ts",
@@ -410,9 +455,21 @@
         "packages/fliwright-core/src/interfaces/index.ts",
         "packages/fliwright-core/src/logging.ts",
         "packages/fliwright-core/src/mocks/MockRuleController.ts",
+        "packages/fliwright-core/src/mocks/MockRuleSet.ts",
         "packages/fliwright-core/src/mocks/MockRuntime.ts",
         "packages/fliwright-core/src/mocks/MockService.ts",
         "packages/fliwright-core/src/mocks/types.ts",
+        "packages/fliwright-core/src/native/AndroidAppReadback.ts",
+        "packages/fliwright-core/src/native/AndroidPermissionDeclaration.ts",
+        "packages/fliwright-core/src/native/DeviceController.ts",
+        "packages/fliwright-core/src/native/NativeAssertion.ts",
+        "packages/fliwright-core/src/native/NativeConfig.ts",
+        "packages/fliwright-core/src/native/NativeEvidence.ts",
+        "packages/fliwright-core/src/native/NativeLocator.ts",
+        "packages/fliwright-core/src/native/NativePage.ts",
+        "packages/fliwright-core/src/native/NativeRuntime.ts",
+        "packages/fliwright-core/src/native/index.ts",
+        "packages/fliwright-core/src/native/types.ts",
         "packages/fliwright-core/src/runArtifacts.ts",
         "packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts",
         "packages/fliwright-core/src/timeline/FlowRuntime.ts",
@@ -491,6 +548,12 @@
         "AuthCapability",
         "AuthStatus",
         "AutomationKind",
+        "BiometricChallengeResult",
+        "BiometricTestApp",
+        "BiometricTestController",
+        "BiometricTestOptions",
+        "BiometricTestStatus",
+        "BiometricWaitOptions",
         "BridgeContext",
         "BridgeQuery",
         "BridgeQueryMatch",
@@ -507,6 +570,11 @@
         "buildFlowVisualComparisons",
         "builtInFormActionScripts",
         "builtInSelectRecipes",
+        "CameraTestApp",
+        "CameraTestController",
+        "CameraTestControllerOptions",
+        "CameraTestResult",
+        "CameraTestStatus",
         "captureFigmaReviewScreenshots",
         "captureRecording",
         "ChangeSetFile",
@@ -591,6 +659,7 @@
         "fingerprintScenario",
         "FLIWRIGHT_FLOWS_DIR",
         "FLIWRIGHT_RUNS_ROOT_ENV",
+        "FLIWRIGHT_RUNTIME_ROOT_ENV",
         "FLIWRIGHT_WORKSPACE_CONFIG_PATH",
         "FliwrightAgentError",
         "fliwrightConfigSchema",
@@ -697,6 +766,15 @@
         "Locator",
         "LogFormatter",
         "LogSink",
+        "MANAGED_APP_CONTROL_ENV",
+        "ManagedAppAttemptEndpoint",
+        "ManagedAppAttemptRequest",
+        "ManagedAppControl",
+        "ManagedAppLaunchEndpoint",
+        "ManagedAppLifecycle",
+        "ManagedAppLifecycleOptions",
+        "ManagedAppPhaseReporter",
+        "ManagedAppPreparationPhase",
         "MatchCriteria",
         "matchCriteriaSchema",
         "matchesCall",
@@ -721,8 +799,13 @@
         "MockRuleController",
         "MockRuleEntry",
         "MockRuleOverride",
+        "MockRuleProvenance",
         "mockRuleRouteId",
         "MockRuleRouteResponse",
+        "MockRuleSelection",
+        "MockRuleSet",
+        "MockRuleSetReport",
+        "MockRuleSource",
         "MockRuleStore",
         "MockRuntime",
         "MockTimelineMetadata",
@@ -759,7 +842,9 @@
         "PositionFilter",
         "positionFilterSchema",
         "PreparedRecordingCheckpoints",
+        "prepareManagedAppAttempt",
         "prepareRecordingCheckpoints",
+        "prepareScenarioDevice",
         "PrettyLogFormatter",
         "PrettyLogFormatterOptions",
         "projectRunsRoot",
@@ -775,6 +860,7 @@
         "RawInputEvent",
         "ReadEventsResult",
         "readFliwrightEnvironment",
+        "readManagedAppControl",
         "readWorkspaceConfig",
         "readWorkspaceConfigSync",
         "RecordedOperation",
@@ -825,12 +911,16 @@
         "ResetToHomeOptions",
         "resolveAiConfig",
         "ResolvedFliwrightConfig",
+        "ResolvedMockRuleSet",
         "ResolvedScenario",
         "ResolvedSelector",
         "resolveFliwrightCacheRoot",
+        "resolveFliwrightPath",
         "resolveFliwrightProjectRoot",
         "resolveFliwrightRunsRoot",
         "ResolveFliwrightRunsRootOptions",
+        "resolveFliwrightRuntimeRoot",
+        "resolveMockRuleSet",
         "resolveRecordingArtifact",
         "restoreRunAttempts",
         "RunArtifactStore",
@@ -854,7 +944,12 @@
         "ScenarioAppLayer",
         "ScenarioApplicationReport",
         "ScenarioAuthLayer",
+        "ScenarioCameraSource",
         "ScenarioCoordinator",
+        "ScenarioDeviceCapabilityError",
+        "ScenarioDeviceLayer",
+        "ScenarioDevicePreparation",
+        "ScenarioDeviceReport",
         "ScenarioDriver",
         "ScenarioExecutionMode",
         "ScenarioLayer",
@@ -931,6 +1026,7 @@
         "ToolMockResult",
         "ToolMockServer",
         "ToolMockServerOptions",
+        "toProjectFlowDocument",
         "TraceCollector",
         "TraceData",
         "TraceMeta",
@@ -940,6 +1036,7 @@
         "unregisterRunSession",
         "validateFlow",
         "validateJsonSchema",
+        "validateScenarioDevicePreparation",
         "validateSelectorQuery",
         "verifyVmServiceEndpoint",
         "VmServiceAcquisitionRequest",
@@ -972,6 +1069,7 @@
         "WorkspaceEndpointOwnerOptions",
         "workspaceEndpointSource",
         "wrapAgentError",
+        "writeFliwrightConfigSnapshot",
         "writeWorkspaceConfig",
         "writeWorkspaceVmServiceUrl"
       ],
@@ -979,7 +1077,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "b59e0becfc5164be025417a6038a9c56c02d0299296077a33e1c28f261b4d44d"
+      "sourceFingerprint": "fbc73a29e280b9a3e18052abd4abdeb18f5ee6a650b2c0000ecc274c172efc12"
     },
     {
       "name": "@fliwright/devices",
@@ -1019,7 +1117,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "8a1b2191fa06cebd77116eddf185a9725b65a5aebaf6cad7f2b13987e92d179c"
+      "sourceFingerprint": "9bf44dd26608a3b5961079f635a39439e187e414aa7808b377e237dc488fad28"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -1039,21 +1137,135 @@
         "Flutter VM smoke tests"
       ],
       "sourceFiles": [
+        "e2e/.fliwright/support/camera-scenarios.ts",
+        "e2e/.fliwright/support/native-scenarios.ts",
+        "e2e/.fliwright/tests/camera.test.ts",
+        "e2e/.fliwright/tests/native-android-mixed.test.ts",
+        "e2e/.fliwright/tests/native-input.test.ts",
+        "e2e/.fliwright/tests/native-mixed.test.ts",
+        "e2e/camera.vitest.config.ts",
         "e2e/design-qa-smoke-runner.test.ts",
         "e2e/design-qa-smoke.test.ts",
         "e2e/exio-app-e2e.test.ts",
+        "e2e/fliwright.config.ts",
         "e2e/form-fill-e2e.test.ts",
         "e2e/form-mock-e2e.test.ts",
         "e2e/go-router-navigation-e2e.test.ts",
         "e2e/mock-api-demo.test.ts",
         "e2e/mock-api-e2e.test.ts",
+        "e2e/native.android.project.ts",
+        "e2e/native.project.ts",
         "e2e/smoke_test.ts",
         "e2e/vitest.config.ts"
       ],
       "publicExports": [],
       "packageEntrypoints": [],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "59b532f07ac6a5e9685e54e1abdbcef22c5689dae2a2d2b4f0d20d3384dc7e31"
+      "sourceFingerprint": "58f73bd92e811a2ca22ddd3bd005ac2de7f8cf900f9c9ee56461f35690687000"
+    },
+    {
+      "name": "@fliwright/native",
+      "path": "packages/fliwright-native",
+      "kind": "typescript",
+      "responsibility": "Own host platform adapters, native sessions and runners for UI automation and device test controls.",
+      "doesNotOwn": [
+        "Flutter instrumentation",
+        "Vitest lifecycle",
+        "cloud scheduling",
+        "CLI or editor UX"
+      ],
+      "mayDependOn": [
+        "@fliwright/core",
+        "@fliwright/devices"
+      ],
+      "ownedCapabilities": [
+        "native UI automation",
+        "device test controls"
+      ],
+      "sourceFiles": [
+        "packages/fliwright-native/src/DeviceLease.ts",
+        "packages/fliwright-native/src/DeviceRecovery.ts",
+        "packages/fliwright-native/src/NativeBinding.ts",
+        "packages/fliwright-native/src/NativeDeviceSession.ts",
+        "packages/fliwright-native/src/NativeDoctor.ts",
+        "packages/fliwright-native/src/NativeSession.ts",
+        "packages/fliwright-native/src/NativeToolOwnership.ts",
+        "packages/fliwright-native/src/OwnedNativeTool.ts",
+        "packages/fliwright-native/src/RecoveryEvidence.ts",
+        "packages/fliwright-native/src/RecoveryTransaction.ts",
+        "packages/fliwright-native/src/ToolExecutor.ts",
+        "packages/fliwright-native/src/android/AdbSession.ts",
+        "packages/fliwright-native/src/android/AndroidApk.ts",
+        "packages/fliwright-native/src/android/AndroidAppJournal.ts",
+        "packages/fliwright-native/src/android/AndroidAppObservation.ts",
+        "packages/fliwright-native/src/android/AndroidDeviceBinding.ts",
+        "packages/fliwright-native/src/android/AndroidManagedApp.ts",
+        "packages/fliwright-native/src/android/AndroidPermissionJournal.ts",
+        "packages/fliwright-native/src/android/AndroidPermissionPreparation.ts",
+        "packages/fliwright-native/src/android/AndroidProcessInventory.ts",
+        "packages/fliwright-native/src/android/AndroidRecovery.ts",
+        "packages/fliwright-native/src/android/AndroidRecoveryApi.ts",
+        "packages/fliwright-native/src/android/AndroidRecoveryPlatform.ts",
+        "packages/fliwright-native/src/android/AndroidRecoveryRecords.ts",
+        "packages/fliwright-native/src/android/AndroidSnapshot.ts",
+        "packages/fliwright-native/src/index.ts",
+        "packages/fliwright-native/src/ios/IosRunnerJournal.ts",
+        "packages/fliwright-native/src/ios/IosRunnerRecovery.ts",
+        "packages/fliwright-native/src/ios/IosRunnerRecoveryApi.ts",
+        "packages/fliwright-native/src/ios/IosSimulatorIdentity.ts",
+        "packages/fliwright-native/src/ios/PrepareIosRunner.ts",
+        "packages/fliwright-native/src/ios/RunnerBroker.ts",
+        "packages/fliwright-native/src/ios/RunnerRecoveryClient.ts",
+        "packages/fliwright-native/src/ios/XctestRunner.ts",
+        "packages/fliwright-native/src/ios/XctestSession.ts",
+        "packages/fliwright-native/src/ios/XctestSnapshot.ts"
+      ],
+      "publicExports": [
+        "AdbSession",
+        "AdbSessionOptions",
+        "AndroidAppInstallInput",
+        "AndroidAppLaunch",
+        "AndroidInstalledApp",
+        "AndroidPermissionState",
+        "AndroidRecoveryOptions",
+        "AndroidRecoveryReceipt",
+        "AndroidRecoveryRequest",
+        "createNativeSession",
+        "CreateNativeSessionOptions",
+        "DeviceLease",
+        "DeviceLeaseDelegation",
+        "DeviceLeaseInspection",
+        "DeviceLeaseInspectionInput",
+        "DeviceLeaseManager",
+        "DeviceLeaseOptions",
+        "DeviceLeaseProcessState",
+        "DeviceLeaseRecordState",
+        "inspectDeviceLease",
+        "inspectIosRunnerRecovery",
+        "inspectNativeEnvironment",
+        "IosRunnerRecoveryInspection",
+        "IosRunnerRecoveryOptions",
+        "IosRunnerRecoveryReceipt",
+        "IosRunnerRecoveryRequest",
+        "NATIVE_DEVICE_LEASE_ENV",
+        "NativeDeviceSession",
+        "NativeDoctorOptions",
+        "NativeDoctorResult",
+        "NativePermissionRequest",
+        "openNativeDevice",
+        "OpenNativeDeviceOptions",
+        "PreparedIosRunner",
+        "prepareIosRunner",
+        "PrepareIosRunnerOptions",
+        "restoreAndroidApp",
+        "restoreIosRunner",
+        "verifyNativeAppProcess"
+      ],
+      "packageEntrypoints": [
+        "."
+      ],
+      "binaryEntrypoints": [],
+      "sourceFingerprint": "8ed1e4d694a3919d4a307a055590d649508fd936195a6d0fa6ed3178c02dcc5a"
     },
     {
       "name": "@fliwright/plugin-riverpod",
@@ -1084,13 +1296,13 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "37bee3579c80b2224e927e40d195fe39bd021ea2b39dd723bc791a37badd6f6b"
+      "sourceFingerprint": "953c8f5fa969ca0915b5b580c39777d4dc4234aee1dcd3e37a6baa457defa82c"
     },
     {
       "name": "@fliwright/tdd",
       "path": "packages/fliwright-tdd",
       "kind": "typescript",
-      "responsibility": "Own persistent TDD execution, baseline reset, focused reruns, red-first generation, and repair planning.",
+      "responsibility": "Own persistent focused test execution, Flutter synchronization, baseline reset and execution evidence. TDD decisions and test authoring belong to agent skills.",
       "doesNotOwn": [
         "general-purpose CLI commands",
         "MCP transport contracts",
@@ -1102,7 +1314,7 @@
       ],
       "ownedCapabilities": [
         "TDD execution",
-        "test repair workflow"
+        "Flutter app synchronization"
       ],
       "sourceFiles": [
         "packages/fliwright-tdd/src/baseline/AppCapabilityResetAdapter.ts",
@@ -1113,99 +1325,51 @@
         "packages/fliwright-tdd/src/daemon/FlutterDaemonEndpointSource.ts",
         "packages/fliwright-tdd/src/daemon/ReloadStrategy.ts",
         "packages/fliwright-tdd/src/daemon/SubprocessDaemonTransport.ts",
-        "packages/fliwright-tdd/src/devassist/DevAssistCoordinator.ts",
         "packages/fliwright-tdd/src/diagnostics/TddFailureContext.ts",
         "packages/fliwright-tdd/src/executor/FocusedRerunRecipe.ts",
         "packages/fliwright-tdd/src/executor/PersistentTestExecutor.ts",
-        "packages/fliwright-tdd/src/executor/ResultReporter.ts",
-        "packages/fliwright-tdd/src/generator/RedFirstTestGenerator.ts",
+        "packages/fliwright-tdd/src/executor/TestRunResults.ts",
         "packages/fliwright-tdd/src/index.ts",
-        "packages/fliwright-tdd/src/repair/TddRepairPlanner.ts",
         "packages/fliwright-tdd/src/runtime/TddRuntime.ts",
-        "packages/fliwright-tdd/src/selectors/SelectorSynthesizer.ts",
-        "packages/fliwright-tdd/src/spec/InteractionSpec.ts",
-        "packages/fliwright-tdd/src/spec/InteractionSpecCoverage.ts",
-        "packages/fliwright-tdd/src/types.ts",
-        "packages/fliwright-tdd/src/workflow/RedFirstWorkflow.ts"
+        "packages/fliwright-tdd/src/types.ts"
       ],
       "publicExports": [
-        "analyzeInteractionSpecCoverage",
         "AppCapabilityResetAdapters",
         "AppHandle",
         "AppStartParams",
         "AuthTokensResetAdapter",
+        "BaselineConfig",
         "BaselineManager",
-        "bestLocatorHint",
         "BootOptions",
         "buildTddFailureContext",
         "BuildTddFailureContextInput",
         "classifyFailure",
         "CollectedResult",
-        "collectResultsFromFiles",
+        "collectResultsFromModules",
         "CycleOpts",
         "DaemonMessage",
         "DaemonTransport",
         "decideSync",
         "defaultArtifactsRoot",
         "defaultStatusFilePath",
-        "DevAssistAction",
-        "DevAssistCoordinator",
-        "DevAssistCoordinatorDeps",
-        "DevAssistCycleInput",
-        "DevAssistCycleResult",
-        "DevAssistInferenceResult",
-        "DevAssistRuntime",
-        "DevAssistStatus",
         "FlutterDaemonController",
         "FlutterDaemonEndpointSource",
         "FlutterDaemonEndpointSourceOptions",
         "focusAndRerun",
-        "generateRedFirstTest",
-        "GenerateRedFirstTestResult",
-        "generateRedFirstTestSuite",
-        "GenerateRedFirstTestSuiteResult",
-        "InteractionSpec",
-        "InteractionSpecCoverageGap",
-        "InteractionSpecCoverageGapKind",
-        "InteractionSpecCoverageReport",
-        "InteractionSpecValidationError",
-        "InteractionSpecValidationIssue",
-        "InteractionSpecValidationResult",
         "IsolatesResetAdapter",
         "isStructuralFileChange",
         "LocalDbResetAdapter",
-        "LocatorHint",
         "looksStructuralAfterReload",
         "parseDaemonLines",
-        "parseInteractionSpec",
         "PermissionsResetAdapter",
         "PersistentTestExecutor",
-        "prepareRedFirstWorkflow",
-        "PrepareRedFirstWorkflowResult",
-        "RedFirstTestGeneratorOptions",
-        "RedFirstTestSuiteGeneratorOptions",
-        "RedFirstWorkflowContext",
-        "RedFirstWorkflowOptions",
-        "RedFirstWorkflowPlan",
-        "RedFirstWorkflowStatus",
         "ResetAdapter",
         "ResetAdapterResult",
         "ResetCategory",
         "ResetContext",
         "ResetReport",
-        "ResultReporter",
         "RuntimeSnapshot",
-        "Scenario",
         "SecureStorageResetAdapter",
-        "SelectorCandidate",
-        "SelectorSynthesisResult",
-        "SelectorSynthesisStatus",
-        "SelectorTraceStep",
-        "SpecAssertion",
-        "SpecElement",
-        "SpecElementRole",
-        "SpecFlow",
-        "SpecStep",
         "StartOpts",
         "StorageBackedResetAdapters",
         "StorageResetAdapter",
@@ -1213,8 +1377,6 @@
         "SubprocessDaemonTransport",
         "SubprocessDaemonTransportOptions",
         "SyncDecision",
-        "synthesizeSelector",
-        "synthesizeSelectorsForElements",
         "TddCycleResult",
         "TddFailureArtifacts",
         "TddFailureAssertion",
@@ -1223,29 +1385,75 @@
         "TddFailureSource",
         "TddRecoveryHint",
         "TddRecoveryHintKind",
-        "TddRepairCycleResult",
-        "TddRepairOpts",
-        "TddRepairPlan",
-        "TddRepairPlanner",
-        "TddRepairPlannerLike",
-        "TddRepairPlannerOptions",
-        "TddRepairProposalEntry",
-        "TddRepairStep",
-        "TddRepairTrace",
         "TddRuntime",
         "TddRuntimeDeps",
         "TddSyncResult",
         "TestRunOutcome",
         "TimersResetAdapter",
-        "validateInteractionSpec",
-        "WebviewResetAdapter",
-        "WidgetCandidate"
+        "WebviewResetAdapter"
       ],
       "packageEntrypoints": [
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "05d349b10d3b987e208791d06e826130576333d5d3da7f9bc69964c3cbc229d4"
+      "sourceFingerprint": "43c106c7310284e8dcd0ca729bfbc3bf8172cb1fc1eff311e3359be745a826b4"
+    },
+    {
+      "name": "@fliwright/test-plan",
+      "path": "packages/test-plan",
+      "kind": "typescript",
+      "responsibility": "Provide deterministic GitLab snapshots, acceptance provenance and coverage validation, and case bindings for skill-authored portable test plans.",
+      "doesNotOwn": [
+        "Flutter automation runtime",
+        "test execution",
+        "release approval",
+        "Fliwright CLI command orchestration",
+        "AI generation or provider orchestration"
+      ],
+      "mayDependOn": [],
+      "ownedCapabilities": [
+        "GitLab Work Item snapshots",
+        "framework-independent test planning",
+        "automation case bindings"
+      ],
+      "sourceFiles": [
+        "packages/test-plan/src/Coverage.ts",
+        "packages/test-plan/src/GitLab.ts",
+        "packages/test-plan/src/Plan.ts",
+        "packages/test-plan/src/cli.ts",
+        "packages/test-plan/src/files.ts",
+        "packages/test-plan/src/index.ts",
+        "packages/test-plan/src/process.ts",
+        "packages/test-plan/src/schema.ts"
+      ],
+      "publicExports": [
+        "assemblePlan",
+        "Automation",
+        "automationSchema",
+        "bindCase",
+        "Execute",
+        "executeProcess",
+        "fetchItems",
+        "generateCoverage",
+        "ItemSource",
+        "parseItemUrl",
+        "planDraftSchema",
+        "ProcessOptions",
+        "readGitLabItem",
+        "renderCoverage",
+        "sourceSnapshotSchema",
+        "TestPlan",
+        "testPlanSchema",
+        "updateAutomation",
+        "validatePlan"
+      ],
+      "packageEntrypoints": [
+        "."
+      ],
+      "binaryEntrypoints": [
+        "test-plan"
+      ],
+      "sourceFingerprint": "68216d4fe8b12421d3a91c6e0838e327bb1261321a7828ee0b1c9f01c672b3c3"
     },
     {
       "name": "@fliwright/vitest",
@@ -1258,7 +1466,8 @@
         "CLI or editor workflows"
       ],
       "mayDependOn": [
-        "@fliwright/core"
+        "@fliwright/core",
+        "@fliwright/native"
       ],
       "ownedCapabilities": [
         "Vitest fixtures",
@@ -1269,6 +1478,9 @@
         "packages/fliwright-vitest/src/FinalizationBudget.ts",
         "packages/fliwright-vitest/src/RecoveryReporter.ts",
         "packages/fliwright-vitest/src/TaskEndpointLease.ts",
+        "packages/fliwright-vitest/src/TaskManagedApp.ts",
+        "packages/fliwright-vitest/src/TaskNativeSession.ts",
+        "packages/fliwright-vitest/src/TaskScenarioPreparation.ts",
         "packages/fliwright-vitest/src/TestRegistration.ts",
         "packages/fliwright-vitest/src/index.ts",
         "packages/fliwright-vitest/src/preset.ts",
@@ -1299,6 +1511,7 @@
         "FliwrightRunnerOptions",
         "FliwrightTest",
         "FliwrightVitestPresetOptions",
+        "NativeDeviceProvider",
         "resolveRunsRoot",
         "ScenarioEnabledFliwrightTest",
         "ScenarioTest",
@@ -1312,7 +1525,7 @@
         "./runner"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "4e7d100fbe9946993412a9ade61649fe984d664139769f03845ffd262e06f1b8"
+      "sourceFingerprint": "f62efbbe452c16da3256e8f42d4c2374a3cccb2daf398aaa73bb6e52063df00e"
     },
     {
       "name": "fliwright_bridge",
@@ -1372,7 +1585,9 @@
         "packages/fliwright-bridge/lib/src/ref_registry.dart",
         "packages/fliwright-bridge/lib/src/selector_tree_evaluator.dart",
         "packages/fliwright-bridge/lib/src/semantics_compat.dart",
-        "packages/fliwright-bridge/lib/src/soft_keyboard.dart"
+        "packages/fliwright-bridge/lib/src/soft_keyboard.dart",
+        "packages/fliwright-bridge/lib/src/testing/biometric_test.dart",
+        "packages/fliwright-bridge/lib/src/testing/camera_test.dart"
       ],
       "publicClasses": [
         "ActionabilityException",
@@ -1386,7 +1601,9 @@
         "FliwrightAppCapability",
         "FliwrightAppInstance",
         "FliwrightAuthCapability",
+        "FliwrightBiometricTestCapability",
         "FliwrightBridge",
+        "FliwrightCameraTestCapability",
         "FliwrightDioMockInterceptor",
         "FliwrightFormControl",
         "FliwrightFormOption",
@@ -1525,7 +1742,7 @@
         "ext.fliwright.websocket.push",
         "ext.fliwright.websocket.setRules"
       ],
-      "sourceFingerprint": "0b53e187b178c704ab85eb6319de2a6257049092f174212cd43edd43a7ace1f0"
+      "sourceFingerprint": "f84075b7f89c0c51f06daa4a5c38de15ca5c814a1c41ea59402ffaf42f04f7c2"
     },
     {
       "name": "fliwright_bridge_riverpod",
@@ -1550,7 +1767,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-bridge-riverpod/lib/fliwright_bridge_riverpod.dart"
       ],
-      "sourceFingerprint": "e84f1f8443fb804f09cf9ef79829cda657c3576078e399777b4ac8a35cab64f9"
+      "sourceFingerprint": "84d55bfc78e5e66e6e1760e47683a6fab68c41462a31fc71cf4972df761289f1"
     },
     {
       "name": "fliwright_design_qa",
@@ -1618,7 +1835,7 @@
       "dartLibraryEntrypoints": [
         "packages/fliwright-design-qa/lib/fliwright_design_qa.dart"
       ],
-      "sourceFingerprint": "16f7701f3628d931b3d204b9d0d46085240a5614ca944a768a1ff6df2383a1ef"
+      "sourceFingerprint": "422b9672f3e9a6345013ed8658150e886a8a680e99c278e6319c34cdda4e15de"
     },
     {
       "name": "fliwright-vscode",
@@ -1671,6 +1888,7 @@
         "packages/fliwright-vscode/src/scripts/ScriptRunner.ts",
         "packages/fliwright-vscode/src/scripts/VitestScriptConfig.ts",
         "packages/fliwright-vscode/src/session/FliwrightSession.ts",
+        "packages/fliwright-vscode/src/session/VmServiceConnectionController.ts",
         "packages/fliwright-vscode/src/session/VmServiceDiscovery.ts",
         "packages/fliwright-vscode/src/state/StateInjectionService.ts",
         "packages/fliwright-vscode/src/state/StateProviderDocumentProvider.ts",
@@ -1682,8 +1900,11 @@
         "packages/fliwright-vscode/src/tddloop/index.ts",
         "packages/fliwright-vscode/src/testing/ProjectRunsRoot.ts",
         "packages/fliwright-vscode/src/testing/RunArtifactStore.ts",
+        "packages/fliwright-vscode/src/testing/TestCatalogCollector.ts",
+        "packages/fliwright-vscode/src/testing/TestCatalogTree.ts",
+        "packages/fliwright-vscode/src/testing/TestCollectionWatcher.ts",
         "packages/fliwright-vscode/src/testing/TestStatusStore.ts",
-        "packages/fliwright-vscode/src/testing/TestTreeBuilder.ts",
+        "packages/fliwright-vscode/src/testing/catalog-worker.ts",
         "packages/fliwright-vscode/src/testing/relPath.ts",
         "packages/fliwright-vscode/src/testing/types.ts",
         "packages/fliwright-vscode/src/types.ts",
@@ -1701,6 +1922,7 @@
         "packages/fliwright-vscode/src/websocket/WebSocketMockService.ts",
         "packages/fliwright-vscode/src/webview/FailurePanel.ts",
         "packages/fliwright-vscode/src/webview/RecordingPanel.ts",
+        "packages/fliwright-vscode/src/webview/components/BrandMark.tsx",
         "packages/fliwright-vscode/src/webview/components/ui/badge.tsx",
         "packages/fliwright-vscode/src/webview/components/ui/button.tsx",
         "packages/fliwright-vscode/src/webview/components/ui/input.tsx",
@@ -1827,7 +2049,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "367d01560f481670a039fc69e5e67f9d7572fa902ef283547cce28e4e2e46783"
+      "sourceFingerprint": "69c16b0d95e8eb0b11eb9dac683440a0c7b3e8232a2448626ef8021b019ebb12"
     }
   ]
 }

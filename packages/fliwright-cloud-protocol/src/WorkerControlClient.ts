@@ -115,7 +115,7 @@ export class WorkerControlClient implements CloudRequestClient {
       const abort = () => {
         done(new Error('Worker control operation timed out or aborted'));
         // Timeline appends are explicitly idempotent diagnostics, independent of lease heartbeats.
-        if (operation !== '/api/worker/timeline') socket.terminate();
+        if (operation !== '/api/worker/timeline' && operation !== '/api/worker/diagnostics') socket.terminate();
       };
       this.pending.set(id, { resolve: value => done(undefined, value), reject: error => done(error) });
       signal.addEventListener('abort', abort, { once: true });

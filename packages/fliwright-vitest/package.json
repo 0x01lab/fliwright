@@ -8,7 +8,9 @@
     "url": "https://github.com/0x01lab/fliwright.git",
     "directory": "packages/fliwright-vitest"
   },
-  "bugs": { "url": "https://github.com/0x01lab/fliwright/issues" },
+  "bugs": {
+    "url": "https://github.com/0x01lab/fliwright/issues"
+  },
   "homepage": "https://github.com/0x01lab/fliwright#readme",
   "type": "module",
   "main": "dist/index.js",
@@ -32,9 +34,17 @@
       "default": "./dist/RecoveryReporter.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
-  "engines": { "node": "^22.12.0 || ^24.0.0 || >=26.0.0" },
-  "publishConfig": { "access": "public" },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -42,10 +52,11 @@
   },
   "dependencies": {
     "@fliwright/core": "workspace:*",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "@fliwright/native": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
+    "@types/node": "^26.0.1",
     "typescript": "^5.5.0"
   }
 }

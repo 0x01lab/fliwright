@@ -36,7 +36,7 @@ Use offline after both capture sources are available, including exports from ext
 | `comparisons` | `--comparisons` | array<object> | no | — | Optional visual/text/token comparison metrics from a diff engine |
 | `autoCompare` | `--auto-compare` | boolean | no | true | Automatically compare runtime/Figma PNG screenshots when both paths are available. Default true. |
 | `pixelThreshold` | `--pixel-threshold` | number | no | — | Per-pixel RGBA delta threshold used by autoCompare. Default 0. |
-| `outputPath` | `--output-path` | string | no | — | Path to write the review report JSON. Defaults to .fliwright/reviews/<flowId>-report.json |
+| `outputPath` | `--output-path` | string | no | — | Path to write the review report JSON. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-report.json |
 
 Requiredness/defaults above come from the input schema. Conditional requirements and effective implementation defaults are explained above; “—” means no Zod default. Every command also accepts [common options](./common.md#common-options). JSON keys use camelCase; flags use kebab-case. Positional fields are supplied positionally or in --input, not as flags.
 
@@ -197,7 +197,7 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
     },
     "outputPath": {
       "type": "string",
-      "description": "Path to write the review report JSON. Defaults to .fliwright/reviews/<flowId>-report.json"
+      "description": "Path to write the review report JSON. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-report.json"
     }
   },
   "additionalProperties": false,

@@ -26,3 +26,10 @@ it('keeps physical device reset policy explicit and never accepts server-supplie
   const custom = hostConfigSchema.parse({ ...config, resetCommands: [{ program: 'local-reset', args: ['{deviceId}'] }] });
   expect(executorSettings(custom, device, '/runtime').resetCommands).toEqual(custom.resetCommands);
 });
+
+it('propagates validated spool retention limits from the paired host to each slot', () => {
+  const config = hostConfigSchema.parse({ serverUrl: 'https://cloud.test', tokenEnv: 'TOKEN',
+    spoolRetention: { maxAttempts: 3, maxAgeHours: 24, maxBytes: 1048576, maxFiles: 1000 } });
+  expect(executorSettings(config, device, '/runtime').spoolRetention).toEqual(config.spoolRetention);
+  expect(hostConfigSchema.safeParse({ ...config, spoolRetention: { maxBytes: 0 } }).success).toBe(false);
+});

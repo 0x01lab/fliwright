@@ -6,6 +6,7 @@ export const workerOperationSchema = z.enum([
   '/api/worker/result', '/api/worker/finish', '/api/worker/recover',
   '/api/worker/timeline',
   '/api/worker/assignments',
+  '/api/worker/diagnostics',
   '/api/worker/scans/claim', '/api/worker/scans/heartbeat',
   '/api/worker/scans/result', '/api/worker/scans/failure',
 ]);

@@ -308,8 +308,7 @@ void main() {
     expect(clicks, hasLength(2));
   });
 
-  testWidgets('action uses precomputed target rect without resolving selector',
-      (
+  testWidgets('action rejects stale precomputed identity without dispatching', (
     tester,
   ) async {
     final types = <Map<String, String>>[];
@@ -332,12 +331,9 @@ void main() {
       },
     );
 
-    expect(result['success'], isTrue);
-    expect(types, hasLength(1));
-    expect(types.single['targetId'], 'precomputed-email');
-    expect(
-        types.single['targetRect'], '{"x":20,"y":40,"width":300,"height":48}');
-    expect(types.single['replaceAll'], 'true');
+    expect(result['success'], isFalse);
+    expect(result['error'], contains('stale'));
+    expect(types, isEmpty);
   });
 
   testWidgets('extended actions can target snapshot refs', (tester) async {
@@ -541,7 +537,11 @@ void main() {
             label: 'Accept terms',
             checked: false,
             onTap: () {},
-            child: const SizedBox(width: 120, height: 48),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {},
+              child: const SizedBox(width: 120, height: 48),
+            ),
           ),
         ),
       ),
@@ -641,7 +641,11 @@ Widget _snapFixture() {
     child: Semantics(
       button: true,
       label: 'Submit',
-      child: const SizedBox(width: 100, height: 40),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {},
+        child: const SizedBox(width: 100, height: 40),
+      ),
     ),
   );
 }

@@ -20,17 +20,26 @@ describe('FliwrightRunner integration', () => {
         import { fliwrightPreset } from ${JSON.stringify(import.meta.resolve('@fliwright/vitest/preset'))};
         export default { root: ${JSON.stringify(root)}, ...fliwrightPreset({
           paths: { tests: 'checks', scripts: 'tasks' },
+          cacheRoot: ${JSON.stringify(join(root, 'cache'))},
+          scenarios: { large: { name: 'large', layers: [{ kind: 'storage', seed: { payload: 'x'.repeat(2 * 1024 * 1024) } }] } },
           recording: { mode: 'off', requireAssertions: false, testFinalScreenshots: false,
             failureCaptureBudgetMs: 1234, testFinalizationBudgetMs: 4567 },
           test: { maxWorkers: 1, reporters: ['dot'] },
         }) };
       `);
       for (const [file, fixture] of [['checks/config.test.ts', 'test'], ['tasks/config.script.ts', 'script']]) {
-        await writeFile(join(root, file), `
+        await writeFile(join(root, file), `import { readFileSync } from 'node:fs';
+          import { spawnSync } from 'node:child_process';
           import { ${fixture} } from ${JSON.stringify(import.meta.resolve('@fliwright/vitest'))};
           import { strict as assert } from 'node:assert';
           ${fixture}('${fixture} receives project settings', async ({ timeline }) => {
-            const config = JSON.parse(process.env.FLIWRIGHT_CONFIG);
+            const config = JSON.parse(readFileSync(process.env.FLIWRIGHT_CONFIG_PATH, 'utf8'));
+            assert.equal(process.env.FLIWRIGHT_CONFIG, undefined);
+            assert.equal(process.env.FLIWRIGHT_SCENARIOS, undefined);
+            assert.equal(config.scenarios.large.layers[0].seed.payload.length, 2 * 1024 * 1024);
+            const child = spawnSync(process.execPath, ['-e', 'process.exit(0)']);
+            assert.equal(child.error, undefined);
+            assert.equal(child.status, 0);
             assert.equal(config.recording.mode, 'off');
             assert.equal(config.recording.requireAssertions, false);
             assert.equal(config.recording.testFinalScreenshots, false);

@@ -85,12 +85,25 @@ export class FliwrightSession implements vscode.Disposable {
     await this.disconnect(false);
     this.setState({ status: 'connecting', url });
 
-    const driver = this.options.createDriver?.() ?? new FliwrightDriver({
-      plugins: [riverpodPlugin()],
-      cacheRoot: (await resolveProjectConfig(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd())).cacheRoot,
-    });
+    let driver: FliwrightDriver | undefined;
     try {
+      driver = this.options.createDriver?.() ?? new FliwrightDriver({
+        plugins: [riverpodPlugin()],
+        cacheRoot: (await resolveProjectConfig(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd())).cacheRoot,
+      });
       await driver.connect(url);
+      let handshake: { status?: string; compatible?: boolean; initialized?: boolean } | null;
+      try {
+        handshake = await driver.sendRequest('ext.fliwright.handshake', { protocolVersion: '2' }) as typeof handshake;
+      } catch (error) {
+        if (error instanceof Error && /-32601|Unknown method|not registered/i.test(error.message)) {
+          throw new Error('Fliwright bridge is not registered. Call FliwrightBridge.init() in the app entrypoint before connecting.');
+        }
+        throw error;
+      }
+      if (handshake?.status !== 'ok' || handshake.compatible !== true || handshake.initialized !== true) {
+        throw new Error('Fliwright bridge is not ready or uses an incompatible protocol. Initialize a compatible bridge before connecting.');
+      }
       this.driver = driver;
       const connectedState: DeviceConnectionState = {
         status: 'connected',
@@ -100,7 +113,7 @@ export class FliwrightSession implements vscode.Disposable {
       this.setState(connectedState);
       return connectedState;
     } catch (error) {
-      await driver.dispose().catch(() => undefined);
+      await driver?.dispose().catch(() => undefined);
       const message = error instanceof Error ? error.message : String(error);
       const errorState: DeviceConnectionState = { status: 'error', url, message };
       this.setState(errorState);

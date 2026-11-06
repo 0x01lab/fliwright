@@ -30,7 +30,8 @@
         "CLI or editor workflows"
       ],
       "mayDependOn": [
-        "@fliwright/core"
+        "@fliwright/core",
+        "@fliwright/native"
       ]
     },
     "@fliwright/plugin-riverpod": {
@@ -52,9 +53,9 @@
       "path": "packages/fliwright-tdd",
       "capabilities": [
         "TDD execution",
-        "test repair workflow"
+        "Flutter app synchronization"
       ],
-      "responsibility": "Own persistent TDD execution, baseline reset, focused reruns, red-first generation, and repair planning.",
+      "responsibility": "Own persistent focused test execution, Flutter synchronization, baseline reset and execution evidence. TDD decisions and test authoring belong to agent skills.",
       "doesNotOwn": [
         "general-purpose CLI commands",
         "MCP transport contracts",
@@ -82,7 +83,8 @@
         "@fliwright/core",
         "@fliwright/tdd",
         "@fliwright/vitest",
-        "@fliwright/devices"
+        "@fliwright/devices",
+        "@fliwright/native"
       ]
     },
     "fliwright-vscode": {
@@ -190,6 +192,41 @@
         "@fliwright/devices",
         "@fliwright/cloud"
       ]
+    },
+    "@fliwright/native": {
+      "path": "packages/fliwright-native",
+      "capabilities": [
+        "native UI automation",
+        "device test controls"
+      ],
+      "responsibility": "Own host platform adapters, native sessions and runners for UI automation and device test controls.",
+      "doesNotOwn": [
+        "Flutter instrumentation",
+        "Vitest lifecycle",
+        "cloud scheduling",
+        "CLI or editor UX"
+      ],
+      "mayDependOn": [
+        "@fliwright/core",
+        "@fliwright/devices"
+      ]
+    },
+    "@fliwright/test-plan": {
+      "path": "packages/test-plan",
+      "capabilities": [
+        "GitLab Work Item snapshots",
+        "framework-independent test planning",
+        "automation case bindings"
+      ],
+      "responsibility": "Provide deterministic GitLab snapshots, acceptance provenance and coverage validation, and case bindings for skill-authored portable test plans.",
+      "doesNotOwn": [
+        "Flutter automation runtime",
+        "test execution",
+        "release approval",
+        "Fliwright CLI command orchestration",
+        "AI generation or provider orchestration"
+      ],
+      "mayDependOn": []
     }
   },
   "dartPackages": {
@@ -244,7 +281,7 @@
   "dartExamples": {
     "form_demo": {
       "path": "examples/form_demo",
-      "responsibility": "Exercise form filling and HTTP mock behavior as a consumer of the public Flutter bridge.",
+      "responsibility": "Exercise form filling, HTTP mocks and camera test seam business flows as a consumer of the public Flutter bridge.",
       "doesNotOwn": [
         "public Fliwright APIs",
         "runtime capabilities",

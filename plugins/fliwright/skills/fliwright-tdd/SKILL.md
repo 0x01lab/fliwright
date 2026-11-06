@@ -16,6 +16,17 @@ description: >
 
 本 Skill 面向 Fliwright 源码开发。若任务是对目标 Flutter app 启动或恢复持续 TDD，使用 `fliwright-cli-workflows` 的 session/TDD 命令指南；它负责 finite 与 persistent 生命周期、managed/attach 启动和操作恢复。
 
+## 流程与执行的边界
+
+Agent 负责选择行为切片、编写普通测试、确认预期红灯、修改业务代码和决定重构/回归范围。
+这些决策通过本 Skill 执行，不再为它们建立 InteractionSpec、readiness 状态机或自动 repair 循环。
+`@fliwright/tdd` 只提供执行机制：聚焦重跑、Flutter 同步、baseline reset、资源管理和失败证据。
+其 red/green 表示测试运行结果；红灯是否证明目标缺失，必须由 Agent 检查失败原因。
+
+目标 Flutter app 的具体命令节奏见
+[持续 TDD](../fliwright-cli-workflows/references/tdd.md)。优先使用已有测试和命名组合场景；
+单次验证可直接 `fliwright run`，只有需要保留连接并反复同步/重跑时才启动 persistent runtime。
+
 ## 组合 Skill
 
 当 TDD 任务涉及 Fliwright 自动化测试或脚本时，先继续遵守本 Skill 的红绿重构流程，再同时使用 `write-fliwright-tests` skill 获取具体写法。典型触发包括 `.fliwright/tests`、`.fliwright/scripts`、`@fliwright/vitest`、`test` / `script` fixture、locator、selector、flow step、mock rule、agent verify、timeline、真实 Flutter app 验证、CLI 录制脚本清理和 E2E 用例。

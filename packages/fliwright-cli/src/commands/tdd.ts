@@ -1,30 +1,9 @@
 import { resolveProjectConfig } from '../config.js';
-import { dirname, extname } from 'node:path';
+import { dirname, extname, resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { defaultStatusFilePath, TddRuntime } from '@fliwright/tdd';
-import type { CycleOpts, RuntimeSnapshot, StartOpts, TddCycleResult } from '@fliwright/tdd';
-
-type TddCliResetCategory =
-  | 'navigation'
-  | 'riverpod'
-  | 'mock'
-  | 'storage'
-  | 'secureStorage'
-  | 'authTokens'
-  | 'webview'
-  | 'localDb'
-  | 'timers'
-  | 'isolates'
-  | 'permissions';
-
-interface TddCliScenario {
-  homeRoute: string;
-  resetCategories: TddCliResetCategory[];
-  riverpodOverrides?: unknown[];
-  mockProfile?: string;
-  mockDir?: string;
-  storageSeed?: Record<string, unknown>;
-}
+import { ScenarioResolver } from '@fliwright/core';
+import type { CycleOpts, RuntimeSnapshot, TddCycleResult } from '@fliwright/tdd';
 
 export interface TddCycleCommandOptions {
   configRoot: string;
@@ -41,16 +20,12 @@ export interface TddCycleCommandOptions {
   fullReset?: boolean;
   autoEscalate?: boolean;
   timeoutMs?: number;
-  homeRoute?: string;
-  resetCategories?: TddCliResetCategory[];
-  riverpodOverrideJson?: string[];
-  mockProfile?: string;
-  mockDir?: string;
-  storageSeedJson?: string;
+  scenario?: string;
   statusFile?: string;
   keepAppAlive?: boolean;
   json?: boolean;
   print?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface TddStatusCommandOptions {
@@ -80,6 +55,7 @@ export interface TddSyncCommandOptions {
 
 export interface TddCommandDeps {
   createRuntime?: () => TddRuntime;
+  resolveConfig?: typeof resolveProjectConfig;
   readFile?: typeof readFile;
   log?: (message: string) => void;
 }
@@ -105,48 +81,33 @@ export async function tddCycleCommand(
     throw new Error('fliwright tdd cycle requires either --vm-url or --device-id.');
   }
 
+  const projectRoot = extname(options.configRoot) ? dirname(options.configRoot) : options.configRoot;
+  const config = await (deps.resolveConfig ?? resolveProjectConfig)(projectRoot);
+  if (options.scenario) new ScenarioResolver(config.scenarios ?? {}).resolve(options.scenario);
   const runtime = deps.createRuntime?.() ?? new TddRuntime();
-  const scenario: TddCliScenario = {
-    homeRoute: options.homeRoute ?? '/',
-    resetCategories: options.resetCategories ?? ['navigation', 'mock'],
-    riverpodOverrides: parseRiverpodOverrideJson(options.riverpodOverrideJson),
-    mockProfile: options.mockProfile,
-    mockDir: options.mockDir,
-    storageSeed: parseStorageSeedJson(options.storageSeedJson),
-  };
-  const statusFilePath = options.statusFile ?? defaultStatusFilePath(options.configRoot);
   const print = options.print ?? true;
-
-  const snapshot = await runtime.start({
-    configRoot: options.configRoot,
-    sharedConfig: await resolveProjectConfig(extname(options.configRoot) ? dirname(options.configRoot) : options.configRoot),
-    vmServiceUrl: options.vmUrl,
-    app: options.deviceId
-      ? {
-        deviceId: options.deviceId,
-        projectId: options.projectId,
-        target: options.target,
-        flutterArgs: options.flutterArgs,
-        mode: options.mode,
-      }
-      : undefined,
-    launchMode: options.vmUrl ? 'attach' : 'start',
-    scenario: scenario as StartOpts['scenario'],
-    statusFilePath,
-  });
-
+  let snapshot: RuntimeSnapshot;
   let result: TddCycleResult;
-  let stopped: RuntimeSnapshot | undefined;
+  let stopped: RuntimeSnapshot;
+  const abort = () => { void runtime.cancel(); };
+  options.signal?.addEventListener('abort', abort, { once: true });
   try {
-    await runtime.focus(options.file, options.testName);
-    result = await runtime.cycle(options.testName, {
-      sync: options.sync ?? 'none',
-      changes: options.changes,
-      fullReset: options.fullReset,
-      autoEscalate: options.autoEscalate ?? true,
-      timeoutMs: options.timeoutMs,
+    options.signal?.throwIfAborted();
+    snapshot = await runtime.start({
+      configRoot: options.configRoot, sharedConfig: config,
+      vmServiceUrl: options.vmUrl,
+      app: options.deviceId ? { deviceId: options.deviceId, projectId: options.projectId,
+        target: options.target, flutterArgs: options.flutterArgs, mode: options.mode } : undefined,
+      launchMode: options.vmUrl ? 'attach' : 'start', defaultScenario: options.scenario,
+      statusFilePath: options.statusFile ?? defaultStatusFilePath(options.configRoot),
     });
+    options.signal?.throwIfAborted();
+    await runtime.focus(resolve(projectRoot, options.file), options.testName);
+    result = await runtime.cycle(options.testName, { sync: options.sync ?? 'none', changes: options.changes,
+      fullReset: options.fullReset, autoEscalate: options.autoEscalate ?? true, timeoutMs: options.timeoutMs });
+    options.signal?.throwIfAborted();
   } finally {
+    options.signal?.removeEventListener('abort', abort);
     await runtime.stop({ keepAppAlive: options.keepAppAlive ?? Boolean(options.vmUrl) });
     stopped = runtime.snapshot();
   }
@@ -292,41 +253,4 @@ function formatSnapshot(snapshot: RuntimeSnapshot): string {
   }
   if (snapshot.unsupportedState?.length) lines.push(`unsupported state: ${snapshot.unsupportedState.join(', ')}`);
   return lines.join('\n');
-}
-
-function parseStorageSeedJson(input: string | undefined): Record<string, unknown> | undefined {
-  if (input === undefined) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(input);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`--storage-seed-json must be valid JSON: ${detail}`);
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('--storage-seed-json must be a JSON object.');
-  }
-  return parsed as Record<string, unknown>;
-}
-
-function parseRiverpodOverrideJson(inputs: string[] | undefined): unknown[] | undefined {
-  if (!inputs?.length) return undefined;
-  return inputs.map((input, index) => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(input);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(`--riverpod-override-json[${index}] must be valid JSON: ${detail}`);
-    }
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(`--riverpod-override-json[${index}] must be a JSON object.`);
-    }
-    const record = parsed as Record<string, unknown>;
-    const hasKey = typeof record.provider === 'string' || typeof record.key === 'string';
-    if (!hasKey || !Object.prototype.hasOwnProperty.call(record, 'value')) {
-      throw new Error(`--riverpod-override-json[${index}] must include { provider | key, value }.`);
-    }
-    return record;
-  });
 }

@@ -50,7 +50,7 @@ describe('whole-test endpoint lease', () => {
       `);
       const child = spawn(process.execPath, [cli, 'run', '--config', join(root, 'vitest.config.mjs')], {
         cwd: root, stdio: ['ignore', 'pipe', 'pipe'], timeout: 8000,
-        env: { ...process.env, FLIWRIGHT_RUN_ID: 'run-preparation-failure', FLIWRIGHT_RECORDING_MODE: '', FLIWRIGHT_CONFIG: '',
+        env: { ...process.env, FLIWRIGHT_RUN_ID: 'run-preparation-failure', FLIWRIGHT_RECORDING_MODE: '', FLIWRIGHT_CONFIG_PATH: '',
           FLIWRIGHT_RUNS_ROOT: join(root, 'runs'), FLIWRIGHT_SESSION_RESULTS_PATH: join(root, 'sessions.jsonl') },
       });
       let output = '';
@@ -122,7 +122,7 @@ describe('whole-test endpoint lease', () => {
       `);
       const child = spawn(process.execPath, [cli, 'run', '--config', join(root, 'vitest.config.mjs')], {
         cwd: root, stdio: ['ignore', 'pipe', 'pipe'], timeout: 6000,
-        env: { ...process.env, FLIWRIGHT_RUN_ID: 'run-cancel-wait', FLIWRIGHT_RECORDING_MODE: '', FLIWRIGHT_CONFIG: '',
+        env: { ...process.env, FLIWRIGHT_RUN_ID: 'run-cancel-wait', FLIWRIGHT_RECORDING_MODE: '', FLIWRIGHT_CONFIG_PATH: '',
           FLIWRIGHT_RUNS_ROOT: join(root, 'runs'), FLIWRIGHT_SESSION_RESULTS_PATH: join(root, 'sessions.jsonl') },
       });
       let output = '';

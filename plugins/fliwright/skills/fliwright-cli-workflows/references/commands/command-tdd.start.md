@@ -19,7 +19,7 @@ Use after an attach session open and before focus/cycle. A managed session open 
 - An explicit connection session is required (--session or FLIWRIGHT_SESSION).
 - Requires --session. By default reuses the host endpoint in attach mode. Routed commands cannot replace the session endpoint with vmUrl/deviceId; choose ownership at session open.
 - Only one runtime can be active per session. TDD_ALREADY_STARTED exits 4; stop it before starting another.
-- scenario must be declared in project configuration. Status is persisted to statusFile or .fliwright/tdd-status.json.
+- scenario must be declared in project configuration. Status is persisted to statusFile or the project runtime root under ~/.fliwright/.
 
 ## Input
 

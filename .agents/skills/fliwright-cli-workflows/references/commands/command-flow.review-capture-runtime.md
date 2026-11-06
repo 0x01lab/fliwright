@@ -30,7 +30,7 @@ Use to gather the app side of a visual review.
 | `pixelDiffTolerance` | `--pixel-diff-tolerance` | number | no | — | Allowed visual diff ratio, default 0.03 |
 | `layoutPxTolerance` | `--layout-px-tolerance` | number | no | — | Allowed layout delta in px, default 4 |
 | `pixelRatio` | `--pixel-ratio` | number | no | 1 | Runtime screenshot pixel ratio, default 1 |
-| `outputDir` | `--output-dir` | string | no | — | Directory to write runtime screenshots. Defaults to .fliwright/reviews/<flowId>-<timestamp>. |
+| `outputDir` | `--output-dir` | string | no | — | Directory to write runtime screenshots. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>. |
 | `targetIds` | `--target-ids` | array<string> | no | — | Optional subset of flow node ids to capture |
 | `limit` | `--limit` | number | no | — | Optional max number of targets to capture |
 | `vmUrl` | `--vm-url` | string | no | — | Dart VM Service websocket URL. Omit to use project/environment endpoint resolution where supported. (minLength=1) |
@@ -101,7 +101,7 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
     },
     "outputDir": {
       "type": "string",
-      "description": "Directory to write runtime screenshots. Defaults to .fliwright/reviews/<flowId>-<timestamp>."
+      "description": "Directory to write runtime screenshots. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>."
     },
     "targetIds": {
       "type": "array",

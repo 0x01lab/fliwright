@@ -78,6 +78,24 @@ describe('manifest-backed artifact commands', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
+  it('preserves native tree schema and surface metadata for offline exports alongside Flutter evidence', async () => {
+    const { root, runDir, attempt, prefix } = await referencedRun();
+    try {
+      const nativeTree = { surface: 'native', schemaVersion: 1, snapshot: { identity: { platform: 'android', generation: 'g1' }, nodes: [] } };
+      await writeFile(join(attempt, 'native-tree.json'), JSON.stringify(nativeTree));
+      await writeFile(join(attempt, 'timeline.json'), JSON.stringify({ version: 2, nodes: [{ kind: 'action', metadata: { surface: 'native' }, artifacts: [
+        { kind: 'snapshot', path: 'native-tree.json', metadata: { surface: 'native', generation: 'g1' } },
+        { kind: 'screenshot', path: 'frame.png', metadata: { surface: 'flutter' } },
+      ] }] }));
+      const output = join(root, 'portable');
+      expect((await artifactsExportCommand({ runsRoot: root, runId: 'run-evidence', output })).partial).toBe(false);
+      await rm(runDir, { recursive: true, force: true });
+      expect(JSON.parse(await readFile(join(output, prefix, 'native-tree.json'), 'utf8'))).toEqual(nativeTree);
+      const timeline = JSON.parse(await readFile(join(output, prefix, 'timeline.json'), 'utf8'));
+      expect(timeline.nodes[0].artifacts.map((item: { metadata: { surface: string } }) => item.metadata.surface)).toEqual(['native', 'flutter']);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   it.each(['tail', 'gap', 'corrupt', 'missing'] as const)('validates a referenced progress journal (%s) before export', async (damage) => {
     const { root, runDir, attempt } = await referencedRun();
     try {

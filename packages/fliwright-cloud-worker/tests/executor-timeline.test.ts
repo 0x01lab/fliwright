@@ -4,12 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ExecutionLease, WorkerTimelinePayload } from '@fliwright/cloud-protocol';
 import { WorkerTimelineChannel } from '../src/WorkerTimelineChannel.js';
+import { fingerprintScenario, prepareManagedAppAttempt, ScenarioResolver, VmServiceEndpointResolver, type VmServiceEndpointLease } from '@fliwright/core';
 
-const mocks = vi.hoisted(() => ({ command: vi.fn(), run: vi.fn(), export: vi.fn(), health: vi.fn(), channel: undefined as WorkerTimelineChannel | undefined, acquire: vi.fn() }));
+const mocks = vi.hoisted(() => ({ command: vi.fn(), run: vi.fn(), export: vi.fn(), health: vi.fn(), channel: undefined as WorkerTimelineChannel | undefined, acquire: vi.fn(), native: vi.fn(), nativeDispose: vi.fn(), prepareAttempt: vi.fn(), ipcAcquire: vi.fn(), ipcPrepare: vi.fn() }));
+vi.mock('../src/native-ownership-ipc.js', () => ({ requestNativeOwnership: mocks.ipcAcquire, requestNativePreparation: mocks.ipcPrepare }));
 vi.mock('../src/worker-timeline-ipc.js', () => ({ executorTimeline: () => ({ channel: mocks.channel, dispose() {} }) }));
 vi.mock('../src/processes.js', () => ({ runCommandProcess: mocks.command }));
 vi.mock('@fliwright/core', async original => ({ ...await original<object>(), waitForVmServiceEndpoint: mocks.health }));
-vi.mock('@fliwright/cli/run', async original => ({ ...await original<object>(), runCommand: mocks.run, artifactsExportCommand: mocks.export }));
+vi.mock('@fliwright/cli/run', async original => ({ ...await original<object>(), runCommand: mocks.run, artifactsExportCommand: mocks.export, prepareNativeRun: mocks.native }));
 vi.mock('@fliwright/tdd', () => ({
   FlutterDaemonController: class { async dispose() {} },
   FlutterDaemonEndpointSource: class { name = 'worker'; acquire = mocks.acquire; },
@@ -25,6 +27,11 @@ beforeEach(() => {
   events = [];
   mocks.channel = new WorkerTimelineChannel(async payload => { events.push(payload); return true; });
   mocks.command.mockResolvedValue('a'.repeat(40));
+  mocks.native.mockResolvedValue(undefined);
+  mocks.nativeDispose.mockResolvedValue(undefined);
+  mocks.prepareAttempt.mockResolvedValue(undefined);
+  mocks.ipcPrepare.mockResolvedValue(undefined);
+  mocks.ipcAcquire.mockResolvedValue({ delegation: { rootDir: '/lease', key: 'a'.repeat(64), token: 'b'.repeat(64) } });
   mocks.acquire.mockResolvedValue({ url: 'ws://localhost:1234/test/ws', source: 'worker', scope: 'execution-worker' });
   mocks.health.mockResolvedValue({ status: 'ok', checkedAt: new Date().toISOString(), bridgeCapabilities: {} });
   mocks.run.mockResolvedValue({ status: 'failed', passed: false, artifacts: { runId: 'run' } });
@@ -34,9 +41,9 @@ beforeEach(() => {
       target: { repository: '/registered/repository', projectPath: '.', entry: 'lib/main.dart', flutterArgs: [], install: [], requiredCapabilities: [], suites: { smoke: '*.test.ts' } } } } as unknown as ExecutionLease;
 });
 afterEach(() => { rmSync(directory, { recursive: true, force: true }); });
-async function execute() {
+async function execute(nativeSupervisor = false) {
   const path = join(directory, 'job.json');
-  writeFileSync(path, JSON.stringify({ lease, directory, flutterBin: 'flutter', resetCommands: [] }));
+  writeFileSync(path, JSON.stringify({ lease, directory, flutterBin: 'flutter', resetCommands: [], nativeSupervisor }));
   return executeJob(path, new AbortController().signal);
 }
 const phases = () => events.filter((p): p is Extract<WorkerTimelinePayload, { type: 'span.started' }> => p.type === 'span.started' && !p.parentSpanId);
@@ -57,6 +64,12 @@ it('marks missing required bridge capabilities as verification failure', async (
   expect(await execute()).toMatchObject({ verdict: 'unknown', infrastructure: 'permanent' });
   expect(completion('app.verify')).toMatchObject({ status: 'failed', error: { code: 'verification_failed' } });
   expect(mocks.run).not.toHaveBeenCalled();
+});
+it('retains a safe protocol mismatch diagnosis on the failed phase and in the local executor log', async () => {
+  mocks.health.mockRejectedValue(Object.assign(new Error('incompatible'), { code: 'BRIDGE_PROTOCOL_INCOMPATIBLE', health: { clientProtocolVersion: 2, bridgeProtocolVersion: 1 } }));
+  await execute();
+  expect(completion('app.verify')).toMatchObject({ status: 'failed', error: { message: expect.stringContaining('client=2, bridge=1') } });
+  expect(readFileSync(join(directory, 'commands.log'), 'utf8')).toContain('BRIDGE_PROTOCOL_INCOMPATIBLE');
 });
 it('records successful runner completion with a failed test verdict and the original run identity', async () => {
   expect(await execute()).toMatchObject({ verdict: 'failed', bundleDir: join(directory, 'bundle') });
@@ -84,4 +97,130 @@ it('preserves the test verdict when report export fails and records export failu
   expect(await execute()).toMatchObject({ verdict: 'failed', error: 'Artifact export failed; original verdict retained' });
   expect(completion('tests.run')).toMatchObject({ status: 'succeeded', testVerdict: 'failed' });
   expect(completion('artifacts.export')).toMatchObject({ status: 'failed' });
+});
+
+it('executes a direct run without selecting a repository default scenario', async () => {
+  delete lease.request.input.scenario;
+  expect(await execute()).toMatchObject({ verdict: 'failed' });
+  expect(mocks.run).toHaveBeenCalledWith(expect.objectContaining({ scenario: null, scenarioMode: 'managed-start' }));
+  expect(mocks.native).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ scenario: null }));
+});
+
+it('owns native devices before reset and launch, delegates to tests and releases after execution', async () => {
+  const delegation = { rootDir: '/private/lease', key: 'a'.repeat(64), token: 'b'.repeat(64) };
+  mocks.native.mockResolvedValue({ delegation, dispose: mocks.nativeDispose });
+  await execute();
+  expect(mocks.native).toHaveBeenCalledWith(join(directory, 'checkout'), expect.objectContaining({ deviceId: 'phone', scenario: 'clean' }));
+  expect(mocks.acquire).not.toHaveBeenCalled();
+  expect(mocks.health).not.toHaveBeenCalled();
+  expect(phases().map(p => p.phase)).not.toContain('app.launch');
+  expect(phases().map(p => p.phase)).not.toContain('app.verify');
+  expect(mocks.run).toHaveBeenCalledWith(expect.objectContaining({ vmUrl: undefined, nativeDelegation: delegation }));
+  expect(mocks.nativeDispose.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.run.mock.invocationCallOrder[0]);
+  expect(mocks.nativeDispose).toHaveBeenCalledWith({ cleanupConfirmed: true });
+  expect(JSON.stringify(events)).not.toContain(delegation.token);
+});
+
+it('refuses launch when native ownership preparation fails', async () => {
+  mocks.native.mockRejectedValue(new Error('device busy'));
+  expect(await execute()).toMatchObject({ verdict: 'unknown', infrastructure: 'permanent' });
+  expect(mocks.acquire).not.toHaveBeenCalled();
+  expect(mocks.run).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('uses the retained installed-app control without a Flutter daemon or preparation relay (supervisor: %s)', async supervised => {
+  const managedAppControl = { url: 'http://127.0.0.1:12345', token: 'd'.repeat(64), sessionId: 'installed-owner', timeoutMs: 600000 };
+  const delegation = { rootDir: '/private/lease', key: 'a'.repeat(64), token: 'b'.repeat(64) };
+  mocks.native.mockResolvedValue({ delegation, managedAppControl, dispose: mocks.nativeDispose });
+  mocks.ipcAcquire.mockResolvedValue({ delegation, managedAppControl });
+  expect(await execute(supervised)).toMatchObject({ verdict: 'failed' });
+  expect(mocks.run).toHaveBeenCalledWith(expect.objectContaining({ vmUrl: undefined, nativeDelegation: delegation, managedAppControl }));
+  expect(mocks.acquire).not.toHaveBeenCalled(); expect(mocks.health).not.toHaveBeenCalled(); expect(mocks.ipcPrepare).not.toHaveBeenCalled();
+  if (!supervised) expect(mocks.native).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ launch: {
+    target: 'lib/main.dart', flutterBin: 'flutter', flutterArgs: [], requiredCapabilities: [],
+  } }));
+  expect(JSON.stringify(events)).not.toContain(managedAppControl.token);
+  expect(readFileSync(join(directory, 'job.json'), 'utf8')).not.toContain(managedAppControl.token);
+});
+
+it.each([false, true])('prepares every relaunch using the retained owner without journaling credentials (supervisor: %s)', async nativeSupervisor => {
+  const scenario = { name: 'clean', layers: [{ kind: 'device' as const, requiredCapabilities: ['native.query'] }] };
+  writeFileSync(join(directory, 'checkout', 'fliwright.config.ts'), `export default {scenarios:{clean:${JSON.stringify(scenario)}}};`);
+  mocks.native.mockResolvedValue({ delegation: {}, dispose: mocks.nativeDispose, prepareAttempt: mocks.prepareAttempt });
+  let token: string | undefined;
+  mocks.run.mockImplementation(async options => {
+    expect(mocks.acquire).not.toHaveBeenCalled();
+    expect(options.vmUrl).toBeUndefined();
+    token = options.managedAppControl.token;
+    for (const attemptKey of ['first', 'retry']) {
+      await prepareManagedAppAttempt(options.managedAppControl, { attemptKey, scenarioName: 'clean',
+        scenarioFingerprint: fingerprintScenario(new ScenarioResolver({ clean: scenario }).resolve('clean')) });
+    }
+    return { status: 'passed', passed: true, artifacts: { runId: 'run' } };
+  });
+  const result = await execute(nativeSupervisor);
+  expect(result, existsSync(join(directory,'commands.log')) ? readFileSync(join(directory,'commands.log'),'utf8') : '').toMatchObject({ verdict: 'passed' });
+  expect(mocks.acquire).toHaveBeenCalledTimes(2);
+  if (nativeSupervisor) {
+    expect(mocks.native).not.toHaveBeenCalled();
+    expect(mocks.ipcPrepare.mock.calls.map(call => call[1].attemptKey)).toEqual(['first', 'retry']);
+    expect(mocks.prepareAttempt).not.toHaveBeenCalled();
+  } else {
+    expect(mocks.native).toHaveBeenCalledOnce();
+    expect(mocks.prepareAttempt.mock.calls.map(call => call[0].attemptKey)).toEqual(['first', 'retry']);
+    expect(mocks.ipcPrepare).not.toHaveBeenCalled();
+  }
+  expect(JSON.stringify(events)).not.toContain(token!);
+  expect(readFileSync(join(directory, 'result.json'), 'utf8')).not.toContain(token!);
+});
+
+it('reports native release failure as infrastructure failure while retaining the test verdict', async () => {
+  mocks.native.mockResolvedValue({ delegation: {}, dispose: mocks.nativeDispose });
+  mocks.nativeDispose.mockRejectedValue(new Error('device remains quarantined'));
+  expect(await execute()).toMatchObject({ verdict: 'failed', infrastructure: 'permanent', error: 'Native device cleanup failed; explicit recovery required' });
+});
+
+it('disposes each attempt endpoint before launching its successor and closes the latest endpoint on runner failure', async () => {
+  mocks.native.mockResolvedValue({ delegation: {}, dispose: mocks.nativeDispose, prepareAttempt: mocks.prepareAttempt });
+  const endpoints: VmServiceEndpointLease[] = [];
+  const acquire = VmServiceEndpointResolver.prototype.acquire;
+  const spy = vi.spyOn(VmServiceEndpointResolver.prototype, 'acquire').mockImplementation(async function(this: VmServiceEndpointResolver, request) {
+    const endpoint = await acquire.call(this, request);
+    endpoints.push(endpoint);
+    return endpoint;
+  });
+  mocks.acquire.mockImplementation(async () => {
+    if (endpoints.length) expect(endpoints.at(-1)!.status).toBe('disposed');
+    return { url: `ws://localhost:${1234 + endpoints.length}/test/ws`, source: 'worker', scope: 'execution-worker' };
+  });
+  mocks.run.mockImplementation(async options => {
+    for (const attemptKey of ['first', 'retry']) {
+      await prepareManagedAppAttempt(options.managedAppControl, { attemptKey });
+      expect(endpoints.at(-1)!.status).toBe('active');
+    }
+    throw new Error('runner stopped unexpectedly');
+  });
+  try {
+    expect(await execute()).toMatchObject({ verdict: 'unknown', infrastructure: 'permanent' });
+    expect(endpoints).toHaveLength(2);
+    expect(endpoints.map(endpoint => endpoint.status)).toEqual(['disposed', 'disposed']);
+    expect(mocks.nativeDispose).toHaveBeenCalledWith({ cleanupConfirmed: true });
+  } finally { spy.mockRestore(); }
+});
+
+it.each(['launch', 'verify'] as const)('fences later attempts after %s fails without running a body or replaying startup', async phase => {
+  mocks.native.mockResolvedValue({ delegation: {}, dispose: mocks.nativeDispose, prepareAttempt: mocks.prepareAttempt });
+  if (phase === 'launch') mocks.acquire.mockRejectedValue(new Error('launch unavailable'));
+  else mocks.health.mockRejectedValue(new Error('bridge unavailable'));
+  const body = vi.fn();
+  mocks.run.mockImplementation(async options => {
+    await expect(prepareManagedAppAttempt(options.managedAppControl, { attemptKey: 'first' }).then(body)).rejects.toThrow();
+    await expect(prepareManagedAppAttempt(options.managedAppControl, { attemptKey: 'retry' }).then(body)).rejects.toThrow();
+    return { status: 'failed', passed: false, artifacts: { runId: 'run' } };
+  });
+  expect(await execute()).toMatchObject({ verdict: 'failed' });
+  expect(body).not.toHaveBeenCalled();
+  expect(mocks.acquire).toHaveBeenCalledOnce();
+  expect(mocks.prepareAttempt).toHaveBeenCalledOnce();
+  expect(completion(`app.${phase}`)).toMatchObject({ status: 'failed' });
 });

@@ -1,3 +1,4 @@
+import { resolveFliwrightRuntimeRoot } from '@fliwright/core';
 import { randomUUID } from 'node:crypto';
 import { resolveProjectConfig } from '../config.js';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
@@ -230,7 +231,7 @@ export async function flowReviewPlanCommand(options: FlowReviewPlanOptions): Pro
 export async function flowReviewBundleCommand(options: FlowReviewBundleOptions): Promise<{ path: string; outputPath: string; bundle: FlowReviewBundle }> {
   const { path, flow } = await flowGetCommand(options);
   const cwd = options.cwd ?? process.cwd();
-  const outputDir = options.outputDir ?? join(cwd, '.fliwright', 'reviews', sanitizeFlowFileId(flow.id));
+  const outputDir = options.outputDir ?? join(resolveFliwrightRuntimeRoot({ projectRoot: cwd }), 'reviews', sanitizeFlowFileId(flow.id));
   const bundle = buildFlowReviewBundle(flow, {
     flowPath: path,
     outputDir,
@@ -246,7 +247,7 @@ export async function flowReviewBundleCommand(options: FlowReviewBundleOptions):
 export async function flowReviewCaptureFigmaCommand(options: FlowReviewCaptureFigmaOptions): Promise<{ path: string; outputDir: string; capturesFile: string; captures: FlowReviewArtifactInput[] }> {
   const { path, flow } = await flowGetCommand(options);
   const cwd = options.cwd ?? process.cwd();
-  const outputDir = options.outputDir ?? join(cwd, '.fliwright', 'reviews', sanitizeFlowFileId(flow.id), 'figma');
+  const outputDir = options.outputDir ?? join(resolveFliwrightRuntimeRoot({ projectRoot: cwd }), 'reviews', sanitizeFlowFileId(flow.id), 'figma');
   const bundle = buildFlowReviewBundle(flow, {
     flowPath: path,
     outputDir: dirname(outputDir),
@@ -287,7 +288,7 @@ export async function flowReviewReportCommand(options: FlowReviewReportOptions):
     ],
   });
   const cwd = options.cwd ?? process.cwd();
-  const reportPath = options.outputPath ?? join(cwd, '.fliwright', 'reviews', `${sanitizeFlowFileId(report.flowId)}-report.json`);
+  const reportPath = options.outputPath ?? join(resolveFliwrightRuntimeRoot({ projectRoot: cwd }), 'reviews', `${sanitizeFlowFileId(report.flowId)}-report.json`);
   await mkdir(dirname(reportPath), { recursive: true });
   await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   return { path, reportPath, report };

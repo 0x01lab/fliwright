@@ -13,6 +13,17 @@ same runtime.
 Requirements: Node.js 22.12+ (22.x), 24.x, or 26+, Flutter 3.x with Dart 3.5 or newer, and a
 Flutter project whose source you control.
 
+For Codex, initialize the Flutter project and install its Agent Skills in one
+command (requires the corresponding CLI and bridge versions to be published):
+
+```sh
+npx --yes --package=@fliwright/cli@latest fliwright init --agent codex --yes
+```
+
+Then open a new Codex chat in the project. Setup preserves existing project
+rules and reports remaining configuration work; live App verification is a
+separate step. See the [integration guide](docs/codex-integration.md).
+
 ```sh
 npm install --save-dev @fliwright/cli @fliwright/vitest vitest@5.0.5 typescript
 npx fliwright init
@@ -33,6 +44,10 @@ test('increments the counter', async ({ page }) => {
 
 Run `npx fliwright doctor` when the Flutter VM Service cannot be discovered or
 the bridge does not report its capabilities.
+
+For Codex setup, see the [Codex integration guide](docs/codex-integration.md)
+（中文）：plugin/Skill installation, Flutter project setup, and a copyable
+`AGENTS.md` contract for AI coding agents.
 
 ## Artifact Storage
 
@@ -63,6 +78,11 @@ or delete it. Use `fliwright artifacts export` to save a portable report.
   artifacts, deterministic scenarios, CLI, and Vitest.
 - **Optional:** HTTP/WebSocket mocks, Riverpod adapter, VS Code.
 - **Labs:** persistent TDD, AI repair, flow/Figma review, and Design QA.
+
+The independent [`gitlab-test-plan` Skill](.agents/skills/gitlab-test-plan/SKILL.md)
+turns GitLab acceptance checklists into traceable test cases; when no checklist
+exists, it derives cases from requirements. Its [test-plan helpers](packages/test-plan/README.md)
+fetch and validate data without an AI subprocess or core runtime dependency.
 
 Coding agents use the bundled Skills and CLI; CI uses finite commands and exit codes.
 Deterministic automation should be expressed through the CLI and versioned

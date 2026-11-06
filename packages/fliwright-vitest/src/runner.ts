@@ -6,8 +6,10 @@ import { relative } from 'node:path';
 import { RunSession, registerRunSession, unregisterRunSession } from '@fliwright/core';
 import type { RunSessionResult, RunnerOutcome } from '@fliwright/core';
 import { AttemptContext, setAttemptContext } from './AttemptContext.js';
-import { releaseTaskEndpointLease, finishTaskEndpointLeasePhase } from './TaskEndpointLease.js';
+import { releaseTaskEndpointLease, finishTaskEndpointLeasePhase, setTaskOwnershipErrorHandler } from './TaskEndpointLease.js';
 import { prepareRegisteredTask } from './TestRegistration.js';
+import { disposeTaskNativeAttempt, hasTaskNativeRuntime, quarantineTaskNativeSession } from './TaskNativeSession.js';
+import { blockTaskManagedApp } from './TaskManagedApp.js';
 
 export interface FliwrightRunnerOptions {
   createSession?: (task: Task, attemptIndex?: number) => RunSession;
@@ -99,6 +101,7 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
               await context?.captureRunnerFailures(task, 'setup-or-body');
             }
             await this.finishAttempt(task, outcome);
+            await releaseTaskEndpointLease(task);
             await this.finalizeTask(task, outcome);
           } finally {
             await releaseTaskEndpointLease(task);
@@ -164,10 +167,8 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
       record.context.runnerEntered = false;
       // Runtime skip returns before onAfterRunTask too.
       if (record.observedStatus === 'skipped') {
-        try {
-          await this.finishAttempt(task, 'skipped');
-          await this.finalizeTask(task, 'skipped');
-        } finally { await finishTaskEndpointLeasePhase(task, 'skipFinalized'); }
+        await this.finishAttempt(task, 'skipped');
+        await finishTaskEndpointLeasePhase(task, 'skipFinalized', () => this.finalizeTask(task, outcomeForTask(task)));
       }
     }
 
@@ -183,6 +184,7 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
             : finalStatus;
           await this.finishAttempt(task, observedStatus);
         }
+        await releaseTaskEndpointLease(task);
         await this.finalizeTask(task, outcomeForTask(task));
       } finally {
         await releaseTaskEndpointLease(task);
@@ -199,6 +201,24 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
         testPath: sourceTestPath(task),
       });
       const context = new AttemptContext(session, runId, task.id, task.name, attemptId);
+      setTaskOwnershipErrorHandler(task, async error => {
+        const message = session.redactReport(error instanceof Error ? error.message : String(error));
+        task.result ??= { state: 'fail' };
+        task.result.state = 'fail';
+        // Vitest applies a pending skip after fixture teardown, even if teardown
+        // changed state to fail. Cleanup failure must survive that projection.
+        delete (task.result as { pending?: boolean }).pending;
+        (task.result.errors ??= []).push({ name: 'OwnershipCleanupError', message });
+        context.recordEvidenceIssue(error);
+        context.runnerErrors.push({ message, phase: 'teardown' });
+        const result = this.completed.get(task.id)?.at(-1)?.result ?? (task as TaskWithResult).fliwrightSessionResult;
+        if (result) {
+          result.status = result.attemptOutcome = result.testOutcome = 'failed';
+          if (result.evidenceStatus !== 'disabled') result.evidenceStatus = 'partial';
+          result.runnerErrors = [...context.runnerErrors];
+          await context.persist(result, result.finalized === true);
+        }
+      });
       if (attemptIndex > 0) context.ignorePriorFailures(task);
       const record = { session, context, attemptIndex, started: false };
       context.beforeFixtures = async () => {
@@ -219,10 +239,8 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
           await this.finishAttempt(task, active.observedStatus ?? 'failed');
           await this.startAttempt(task, this.completed.get(task.id)?.length ?? 0);
         }
-        try {
-          await this.finishAttempt(task, 'skipped');
-          await this.finalizeTask(task, 'skipped');
-        } finally { await finishTaskEndpointLeasePhase(task, 'skipFinalized'); }
+        await this.finishAttempt(task, 'skipped');
+        await finishTaskEndpointLeasePhase(task, 'skipFinalized', () => this.finalizeTask(task, outcomeForTask(task)));
       };
       this.active.set(task.id, record);
       registerRunSession(task.id, session);
@@ -237,6 +255,34 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
       if (!record) return;
       if (record.context.beforeFinish) {
         await record.context.finalizeStep('Passive diagnosis', (signal) => record.context.beforeFinish!(signal));
+      }
+      if (record.context.cleanupManagedAppDriver) try {
+        await record.context.finalization.run('Managed app connection cleanup', signal => record.context.cleanupManagedAppDriver!(signal), record.context.persistenceReserveMs);
+      } catch (error) {
+        status = 'failed';
+        if (task.type === 'test') blockTaskManagedApp(task);
+        task.result ??= { state: 'fail' };
+        task.result.state = 'fail';
+        (task.result.errors ??= []).push({ name: 'ManagedAppCleanupError', message: error instanceof Error ? error.message : String(error) });
+        delete (task.result as { pending?: boolean }).pending;
+        record.context.recordEvidenceIssue(error);
+        record.context.runnerErrors.push({ message: error instanceof Error ? error.message : String(error), phase: 'teardown' });
+        try { await quarantineTaskNativeSession(task); }
+        catch (cleanup) {
+          record.context.recordEvidenceIssue(cleanup);
+          record.context.runnerErrors.push({ message: cleanup instanceof Error ? cleanup.message : String(cleanup), phase: 'teardown' });
+        }
+      }
+      if (hasTaskNativeRuntime(task)) try {
+        await record.context.finalization.run('Native attempt cleanup', () => disposeTaskNativeAttempt(task), record.context.persistenceReserveMs);
+      } catch (error) {
+        status = 'failed';
+        task.result ??= { state: 'fail' };
+        task.result.state = 'fail';
+        (task.result.errors ??= []).push({ name: 'NativeCleanupError', message: error instanceof Error ? error.message : String(error) });
+        delete (task.result as { pending?: boolean }).pending;
+        record.context.recordEvidenceIssue(error);
+        record.context.runnerErrors.push({ message: error instanceof Error ? error.message : String(error), phase: 'teardown' });
       }
       const result = await record.session.finish({ status, evidenceStatus: 'complete' });
       result.expectedFailure = isExpectedFailure(task);

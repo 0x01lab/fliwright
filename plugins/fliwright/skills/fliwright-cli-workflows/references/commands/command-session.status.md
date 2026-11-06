@@ -50,7 +50,7 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 
 | Data field / variant | Meaning |
 | --- | --- |
-| worker | Without operationId: sessionId/pid/generation/connected/endpoint/tdd/workflow/operations. |
+| worker | Without operationId: sessionId/pid/generation/connected/endpoint/tdd/operations. |
 | operation | With operationId: queued/running/succeeded/failed/cancelled journal state and available data/error. |
 
 ## Effects and failure handling

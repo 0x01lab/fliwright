@@ -1,5 +1,7 @@
 # Fliwright
 
+![Fliwright — See. Adapt. Test. Repeat.](media/brand/banner.png)
+
 Flutter automation inside VS Code.
 
 Fliwright connects to a running Flutter VM Service and brings app automation,
@@ -48,6 +50,23 @@ The script process receives both `FLIWRIGHT_VM_SERVICE_URL` and
 `FLIWRIGHT_VM_URL` from the connected session. Runtime stdout/stderr is streamed
 to the `Fliwright` output channel, and the final pass/fail result is added to
 the `Runs` view.
+
+## Discovering Tests
+
+Expand a file in the **Tests** view to collect its cases through Vitest in a
+separate process. Discovery shares the CLI/Cloud catalog implementation and
+supports `test.scenario(...)`, parameterized cases, imported data and generated
+titles. Collection needs a trusted workspace and its installed Vitest; it does
+not need a running Flutter app. Scenario names must be declared in the project.
+
+Collection loads module-level code but does not run test bodies, hooks or app
+fixtures. Results are cached until refresh or a source/configuration change.
+File expansions arriving together are batched (up to 32 files) into one Vitest
+context; only one collection process runs at a time. Listing cases skips Mock
+catalog scanning. Build output, coverage and Fliwright run/cache artifacts do
+not invalidate the cache, and completed runs refresh statuses without collecting
+again. Refresh cancels pending work, and each batch has a 30-second deadline. Failures appear below the file and in the
+**Fliwright** output channel. Use the file's Refresh action to retry.
 
 ## Recording Tests
 
@@ -134,11 +153,10 @@ Run the full release gate before publishing:
 pnpm --filter fliwright-vscode verify:release
 ```
 
-Publish to the VS Code Marketplace with a configured `VSCE_PAT`:
-
-```bash
-pnpm --filter fliwright-vscode publish:vsce
-```
+Publishing runs from the matching `vscode-v<version>` tag in GitHub Actions.
+Before the first tag, configure a Marketplace Trusted Publishing policy for
+`0x01lab/fliwright` and `release-vscode.yml`; the workflow publishes with OIDC
+and does not require a PAT secret.
 
 Release checklist:
 
@@ -146,8 +164,50 @@ Release checklist:
 - Run `pnpm --filter fliwright-vscode test`.
 - Run `pnpm --filter fliwright-vscode build`.
 - Run `pnpm --filter fliwright-vscode test:integration` in a local VS Code-capable environment.
-- Run `pnpm --filter fliwright-vscode package` and install the generated VSIX in an Extension Development Host.
+- Run `pnpm --filter fliwright-vscode package` and `pnpm --filter fliwright-vscode test:vsix` to install and test the generated VSIX in an isolated VS Code profile.
 - Bump `package.json` and `CHANGELOG.md` together, then push a matching
   `vscode-v<version>` tag to trigger the GitHub Marketplace release workflow.
 - Start `examples/riverpod_demo` through a Fliwright bridge entrypoint, connect from VS Code, refresh State, read `counterProvider`, watch it, tap Increment, verify the value updates, then override `counterProvider` with `2`.
-- Publish only after Marketplace metadata, publisher credentials, and manual smoke testing are complete.
+- Publish only after Marketplace metadata, the Trusted Publishing policy, and manual smoke testing are complete.
+
+## Shared project assets and local runtime data
+
+Commit authored `.fliwright/tests`, `scripts`, `mocks`, `forms`, `flows`, and
+support modules with the project configuration. Runs, screenshots, traces,
+caches, raw recordings, review evidence and VM Service metadata default to
+`~/.fliwright/<project-path>/` outside the working tree. The identifier is the
+complete project path with `/` and `\` replaced by `-`, including the leading
+`-` for a Unix absolute path.
+
+For `/Users/alice/app`, the local partition is `~/.fliwright/-Users-alice-app/`:
+
+| Area | Default location |
+| --- | --- |
+| Run history and test status | `runs/` |
+| Reusable caches and inspection captures | `cache/` |
+| Raw recording manifests and frame images | `recordings/` |
+| Design review captures and reports | `reviews/` |
+| VM Service metadata and TDD status | `runtime/` |
+| CLI session journals | `sessions/` |
+| Temporary script runner configuration | `tmp/` |
+
+Set `FLIWRIGHT_RUNTIME_ROOT` to override this project partition. Existing
+`fliwright.config.ts` settings `runsRoot`, `cacheRoot`, and `paths.recordings`
+continue to override their individual areas. Absolute paths, project-relative
+paths and `~/` are supported; invocation options override environment settings,
+which override project configuration. Shared Flow files store target test paths
+relative to the project; their recording screenshots remain local.
+
+Existing project-local artifacts are preserved. They are not moved, merged or
+deleted automatically. Point `runsRoot` at an old directory to inspect its runs.
+Remove explicit `.fliwright/runs` / `.fliwright/cache` / `.fliwright/recordings`
+settings to adopt the new defaults. An unwritable local directory reports an
+error instead of silently writing runtime data back into the project.
+
+Local CLI tests and GitLab Item acceptance should use the same project run root
+as the extension. Keep Item plans, bindings, coverage and report summaries under
+`.fliwright/test-plans/<iid>/` and link the returned run ID and artifact paths.
+`run --output <path>` changes only the JSON report destination. A `--runs-root`
+override applies to that CLI invocation; the Run Viewer does not discover it
+unless the same root is configured for the workspace. CI can still use an
+explicit artifact root for upload.

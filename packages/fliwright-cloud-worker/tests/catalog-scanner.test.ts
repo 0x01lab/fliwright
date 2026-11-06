@@ -24,9 +24,12 @@ it('returns cases through the actual worker collector subprocess without scenari
     await writeFile(join(root, 'package.json'), '{"type":"module"}');
     await symlink(fileURLToPath(new URL('../node_modules', import.meta.resolve('@fliwright/cli/run'))), join(root, 'node_modules'));
     await writeFile(join(root, 'proof.test.mjs'), `import { test } from 'vitest'; test('discovered case', () => {});`);
+    await mkdir(join(root, '.fliwright/mocks/api'), { recursive: true });
+    await writeFile(join(root, '.fliwright/mocks/api/assets.json'), JSON.stringify({ endpoint: '/assets', method: 'GET', rules: [{ name: 'empty', status: 200, body: [] }] }));
     const collected = await collectCheckoutCatalog(root, { smoke: '*.test.mjs' }, scanEnvironment(root), new AbortController().signal);
     expect(collected.scenarios).toEqual([]);
     expect(collected.suites[0].cases[0].titlePath).toEqual(['discovered case']);
+    expect(collected.mocks?.[0]).toEqual({ directory: '.fliwright/mocks', profiles: ['empty'], endpoints: [{ endpoint: '/assets', method: 'GET', rules: ['empty'], activeRule: 'empty' }] });
   } finally { await rm(root, { recursive: true, force: true }); }
 }, 15000);
 

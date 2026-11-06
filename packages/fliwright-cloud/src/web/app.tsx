@@ -1,4 +1,6 @@
+import { Alert } from './components/ui/alert.js';
 import { WorkerPairing } from './WorkerPairing.js';
+import { WorkerDiagnosticsPanel } from './WorkerDiagnostics.js';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -53,6 +55,8 @@ import { Projects } from './Projects.js';
 import { TestBoard } from './TestBoard.js';
 import { WorkerExecutionTimeline } from './WorkerExecutionTimeline.js';
 import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs.js';
+
+const brandLogo = new URL('./assets/fliwright-logo.svg', import.meta.url).href;
 
 type Target = {
   id: string;
@@ -150,13 +154,13 @@ function Badge({ value }: { value: string }) {
 }
 function ErrorBox({ error }: { error: string }) {
   return error ? (
-    <div role="alert" className="error">
+    <Alert asChild variant="destructive"><div role="alert" data-ui="error">
       {error}
-    </div>
+    </div></Alert>
   ) : null;
 }
 function Empty({ children }: { children: ReactNode }) {
-  return <div className="empty">{children}</div>;
+  return <div className="grid justify-items-center gap-2 px-4 py-7 text-center text-muted-foreground [&_svg]:size-6 [&_h3]:text-sm [&_p]:max-w-[44ch] [&_p]:text-xs" data-ui="empty">{children}</div>;
 }
 function PageTitle({
   eyebrow,
@@ -180,7 +184,7 @@ function PageTitle({
       <div>
         <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         {descriptions[eyebrow] && (
-          <p className="lede">{descriptions[eyebrow]}</p>
+          <p className="text-xs text-muted-foreground" data-ui="lede">{descriptions[eyebrow]}</p>
         )}
       </div>
       <div className="ml-auto flex flex-wrap gap-2">{children}</div>
@@ -209,28 +213,35 @@ function Layout({
   const path = useLocation({ select: (location) => location.pathname });
   const navigate = useNavigate();
   const [navigation, setNavigation] = useState('');
+  const [submissionMenu, setSubmissionMenu] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const mainLinks = [
-    ['/queue', '测试任务'],
+    ['/queue', '执行看板'],
+    ['/projects', '测试用例'],
   ] as const;
   const configurationLinks = [
+    ['/overview', '运行概览', 'box', '查看任务统计、主机和设备状态'],
     ['/devices', '设备管理', 'device', '管理测试设备与调度策略'],
     ['/workers', 'Worker 主机', 'cpu', '查看执行主机与槽位状态'],
-    ['/projects', '项目', 'box', '管理仓库、测试目录与自动运行'],
     ['/reports', '测试报告', 'doc', '查看已归档的测试结果与证据'],
   ] as const;
-  const current = path.startsWith('/requests/') || path === '/runs'
+  const current = path === '/' || path.startsWith('/requests/') || path === '/runs'
     ? '/queue'
     : path.startsWith('/devices/')
       ? '/devices'
       : path.startsWith('/reports/')
         ? '/reports'
-        : path;
+        : path.startsWith('/projects/')
+          ? '/projects'
+          : path;
   const title = shared
     ? '分享报告'
     : ([...mainLinks, ...configurationLinks].find(([url]) => url === current)?.[1] ??
       '运行详情');
   const configurationActive = configurationLinks.some(([url]) => url === current);
-  useEffect(() => setNavigation(''), [path]);
+  const isBoardPage = ['/', '/runs', '/queue', '/reports'].includes(path);
+  const isProjectPage = path === '/projects' || path.startsWith('/projects/');
+  useEffect(() => { setNavigation(''); setSubmissionMenu(''); setSearchOpen(false); }, [path]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -245,31 +256,34 @@ function Layout({
         !/INPUT|TEXTAREA|SELECT/.test((event.target as HTMLElement).tagName)
       ) {
         event.preventDefault();
+        setSearchOpen(true);
         document.getElementById('global-search')?.focus();
       }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, []);
+  useEffect(() => { if (searchOpen) document.getElementById('global-search')?.focus(); }, [searchOpen]);
   return (
-    <div className={`cloud-shell${['/runs', '/queue', '/reports'].includes(path) ? ' cloud-shell-board' : ''}`}>
-      <a className="skip" href="#content">
+    <div className={`min-h-screen min-w-0${isBoardPage || isProjectPage ? ' grid h-dvh min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden [&_main]:flex [&_main]:min-h-0 [&_main]:flex-col [&_main]:overflow-y-auto' : ''}${isBoardPage ? ' [&_main]:overflow-hidden [&_main]:pb-4 [&_[data-ui~=test-board]]:h-full [&_[data-ui~=test-column]]:min-h-0' : ''}`} data-ui={`cloud-shell${isBoardPage ? ' cloud-shell-board' : ''}${isProjectPage ? ' cloud-shell-projects' : ''}`}>
+      <a className="absolute -top-16 left-3 z-50 rounded-md bg-card px-4 py-2 shadow-lg transition-all focus:top-3" href="#content" data-ui="skip">
         跳至内容
       </a>
-      <header className="app-header">
-        <div className="topbar">
-          <Link className="brand" to="/" aria-label="Fliwright Cloud 首页" disabled={shared}>
-            <span className="brand-mark" aria-hidden="true">Fw</span>
-            <span className="brand-name">Fliwright <span>Cloud</span></span>
+      <header className="sticky top-0 z-20 min-w-0 border-b border-border bg-card" data-ui="app-header">
+        <div className="flex min-h-12 items-center gap-2 px-4 max-sm:gap-1 max-sm:px-3" data-ui="topbar">
+          <Link data-ui="brand" className="flex shrink-0 items-center gap-2 text-foreground hover:no-underline" to="/" aria-label="Fliwright Cloud 首页" disabled={shared}>
+            <img src={brandLogo} width={32} height={32} alt="" aria-hidden="true" className="size-8 flex-none" data-ui="brand-mark" />
+            <span className="whitespace-nowrap text-sm font-semibold tracking-tight max-[1280px]:hidden [&>span]:ml-1 [&>span]:text-xs [&>span]:font-medium [&>span]:tracking-normal [&>span]:text-muted-foreground" data-ui="brand-name">Fliwright <span>Cloud</span></span>
           </Link>
+          {(path === '/projects' || path.startsWith('/projects/')) && <div className="min-w-0 max-w-48 max-[900px]:max-w-32 max-sm:max-w-20" data-ui="project-switcher-slot" />}
           {shared ? (
-            <span className="share-label">只读报告分享</span>
+            <span className="mr-auto text-xs text-muted-foreground" data-ui="share-label">只读报告分享</span>
           ) : (
             <NavigationMenu
               aria-label="主导航"
               value={navigation}
               onValueChange={setNavigation}
-              className="main-navigation shrink-0 flex-none"
+              className="shrink-0 flex-none [&_a:hover]:no-underline max-sm:[&_ul]:space-x-0 max-sm:[&_button]:px-2 max-sm:[&_a]:px-2 max-sm:[&>div:last-child]:fixed max-sm:[&>div:last-child]:inset-x-3 max-sm:[&>div:last-child]:top-12 max-sm:[&>div:last-child]:justify-end" data-ui="main-navigation"
             >
               <NavigationMenuList>
                 {mainLinks.map(([url, label]) => (
@@ -279,13 +293,13 @@ function Layout({
                       active={current === url}
                       className={navigationMenuTriggerStyle()}
                     >
-                      <Link to={url}>{label}</Link>
+                      <Link to={url} aria-label={label}><span className="max-sm:hidden">{label}</span><span className="sm:hidden">{url === '/queue' ? '看板' : '用例'}</span></Link>
                     </NavigationMenuLink>
                   </NavigationMenuItem>
                 ))}
                 <NavigationMenuItem value="configuration">
                   <NavigationMenuTrigger
-                    className={configurationActive ? 'configuration-active bg-primary/10 text-primary' : undefined}
+                    className={configurationActive ? " bg-primary/10 text-primary" : undefined} data-ui={configurationActive ? 'configuration-active' : undefined}
                   >
                     配置
                   </NavigationMenuTrigger>
@@ -300,7 +314,7 @@ function Layout({
                           >
                             <Link
                               to={url}
-                              className="configuration-link"
+                              className="flex items-start gap-2 rounded-md p-2 text-foreground outline-none transition-colors hover:bg-accent focus:bg-accent aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary [&_svg]:mt-0.5 [&_svg]:text-muted-foreground [&_b]:text-xs [&_b]:font-medium [&_small]:mt-0.5 [&_small]:text-xs [&_small]:text-muted-foreground"
                               onClick={() => setNavigation('')}
                             >
                               <Icon name={icon} />
@@ -312,6 +326,8 @@ function Layout({
                           </NavigationMenuLink>
                         </li>
                       ))}
+                      <li className="sm:hidden"><NavigationMenuLink asChild><Link to="/new" className="block rounded-md p-2" onClick={() => setNavigation('')}>提交测试</Link></NavigationMenuLink></li>
+                      <li className="sm:hidden"><Button variant="ghost" className="w-full justify-start" onClick={() => { setTheme(theme === 'dark' ? 'light' : 'dark'); setNavigation(''); }}><Icon name={theme === 'dark' ? 'sun' : 'moon'} />{theme === 'dark' ? '切换浅色主题' : '切换深色主题'}</Button></li>
                     </ul>
                   </NavigationMenuContent>
                 </NavigationMenuItem>
@@ -320,9 +336,10 @@ function Layout({
           )}
           {!shared && (
             <form
-              className="search"
+              className={`${searchOpen ? 'max-sm:flex' : 'max-sm:hidden'} relative ml-auto w-full min-w-0 max-w-[280px] max-[1100px]:max-w-48 max-sm:absolute max-sm:top-full max-sm:right-3 max-sm:left-3 max-sm:mt-2 max-sm:w-auto max-sm:max-w-none max-sm:rounded-md max-sm:bg-card max-sm:p-2 max-sm:shadow-lg [&>svg]:pointer-events-none [&>svg]:absolute [&>svg]:left-2 [&>svg]:top-1/2 [&>svg]:size-3.5 [&>svg]:-translate-y-1/2 [&>svg]:text-muted-foreground [&_input]:bg-secondary [&_input]:pl-7 [&_input]:pr-8 [&_input]:hover:bg-accent max-sm:[&_input]:h-9 [&_kbd]:pointer-events-none [&_kbd]:absolute [&_kbd]:right-2 [&_kbd]:top-1/2 [&_kbd]:-translate-y-1/2 [&:focus-within_kbd]:hidden`}
               onSubmit={(event) => {
                 event.preventDefault();
+                setSearchOpen(false);
                 const search = String(
                   new FormData(event.currentTarget).get('search') ?? '',
                 ).slice(0, 200);
@@ -330,7 +347,7 @@ function Layout({
                   to: '/queue',
                   search: { search: search || undefined },
                 });
-              }}
+              }} data-ui="search"
             >
               <Icon name="search" />
               <Label className="sr-only" htmlFor="global-search">
@@ -343,11 +360,14 @@ function Layout({
                 name="search"
                 placeholder="搜索任务 / 报告"
                 maxLength={200}
+                onKeyDown={event => { if (event.key === 'Escape') { setSearchOpen(false); document.getElementById('mobile-search-trigger')?.focus(); } }}
               />
               <kbd>/</kbd>
             </form>
           )}
+          {!shared && <Button variant="ghost" size="icon" id="mobile-search-trigger" className="ml-auto shrink-0 sm:hidden" aria-label="打开任务搜索" aria-expanded={searchOpen} onClick={() => setSearchOpen(!searchOpen)}><Icon name="search" /></Button>}
           <Button
+            className={shared ? "ml-auto shrink-0" : "shrink-0 max-sm:hidden"}
             variant="ghost"
             size="icon"
             aria-label={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
@@ -358,18 +378,24 @@ function Layout({
           </Button>
           {!shared && (
             <>
-              <Button asChild variant="default" className="submit-test">
-                <Link
-                  to="/new"
-                  aria-current={current === '/new' ? 'page' : undefined}
-                >
-                  <Icon name="plus" />
-                  <span>提交测试</span>
-                </Link>
-              </Button>
+              <NavigationMenu aria-label="创建与提交" value={submissionMenu} onValueChange={setSubmissionMenu} className="shrink-0 flex-none max-sm:hidden">
+                <NavigationMenuList>
+                  <NavigationMenuItem value="submit">
+                    <NavigationMenuTrigger className="max-sm:size-9 max-sm:p-0 max-sm:[&>span]:sr-only gap-1 bg-primary text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground focus-visible:bg-primary-hover focus-visible:text-primary-foreground data-[state=open]:bg-primary-hover data-[state=open]:text-primary-foreground data-[state=open]:hover:bg-primary-hover data-[state=open]:focus:bg-primary-hover" data-ui="submit-test">
+                      <Icon name="plus" /><span>提交测试</span>
+                    </NavigationMenuTrigger>
+                    <NavigationMenuContent className="w-[220px] md:w-[220px]">
+                      <ul className="grid gap-1 p-2">
+                        <li><NavigationMenuLink asChild onSelect={() => setSubmissionMenu('')}><Link to="/new" className="flex items-start gap-2 rounded-md p-2 text-foreground outline-none transition-colors hover:bg-accent focus:bg-accent aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary [&_svg]:mt-0.5 [&_svg]:text-muted-foreground [&_b]:text-xs [&_b]:font-medium [&_small]:mt-0.5 [&_small]:text-xs [&_small]:text-muted-foreground" onClick={() => setSubmissionMenu('')}><Icon name="play" /><span><b className="block">提交测试</b><small className="block">选择项目与场景，运行测试</small></span></Link></NavigationMenuLink></li>
+                        {me?.role === 'admin' && <li><NavigationMenuLink asChild onSelect={() => setSubmissionMenu('')}><Link to="/projects" search={{ createProject: true }} className="flex items-start gap-2 rounded-md p-2 text-foreground outline-none transition-colors hover:bg-accent focus:bg-accent aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary [&_svg]:mt-0.5 [&_svg]:text-muted-foreground [&_b]:text-xs [&_b]:font-medium [&_small]:mt-0.5 [&_small]:text-xs [&_small]:text-muted-foreground" onClick={() => setSubmissionMenu('')}><Icon name="plus" /><span><b className="block">创建项目</b><small className="block">连接仓库，发现测试用例</small></span></Link></NavigationMenuLink></li>}
+                      </ul>
+                    </NavigationMenuContent>
+                  </NavigationMenuItem>
+                </NavigationMenuList>
+              </NavigationMenu>
               <span
-                className="current-user"
-                title={me ? `${me.name} · ${me.role}` : '未登录'}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground max-[1100px]:hidden"
+                title={me ? `${me.name} · ${me.role}` : '未登录'} data-ui="current-user"
               >
                 <Icon name="user" />
                 <span>{me?.name}</span>
@@ -378,9 +404,9 @@ function Layout({
           )}
         </div>
       </header>
-      <main className="cloud-content" id="content" tabIndex={-1}>
-        {/\/(requests|reports)\//.test(path) && (
-          <div className="crumb">
+      <main className="grid w-full min-w-0 content-start gap-3 p-4 pb-6 max-sm:p-3 max-sm:pb-4" id="content" tabIndex={-1} data-ui="cloud-content">
+        {path.startsWith('/requests/') && (
+          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground [&_b]:font-medium [&_code]:truncate" data-ui="crumb">
             {shared ? (
               <b>{title}</b>
             ) : (
@@ -388,7 +414,7 @@ function Layout({
                 {title}
               </Link>
             )}
-            <span className="sep">/</span>
+            <span className="mx-1.5 font-normal text-muted-foreground" data-ui="sep">/</span>
             <code title={path.split('/').pop()}>
               {path.split('/').pop()?.slice(0, 12)}
             </code>
@@ -440,7 +466,7 @@ function Requests({
       {!history && (
         <PageTitle
           eyebrow={overview ? 'TEAM OVERVIEW' : reportsOnly ? 'TEST REPORTS' : 'EXECUTION QUEUE'}
-          title={overview ? '概览' : reportsOnly ? '测试报告' : '测试任务'}
+          title={overview ? '概览' : reportsOnly ? '测试报告' : '执行看板'}
         >
           <Button asChild variant="default">
             <Link to="/new">
@@ -451,7 +477,7 @@ function Requests({
         </PageTitle>
       )}
       {overview && (
-        <div className="stats [&>div>span]:text-xs [&>div>span]:text-muted-foreground [&_strong]:text-2xl [&_strong]:font-semibold [&_strong]:tabular-nums">
+        <div className="grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-sm:gap-2.5 [&>div>span]:text-xs [&>div>span]:text-muted-foreground [&_strong]:text-2xl [&_strong]:font-semibold [&_strong]:tabular-nums" data-ui="stats">
           <Card className="grid gap-1 p-3">
             <span>等待执行</span>
             <strong>{data?.queue.length ?? '—'}</strong>
@@ -484,13 +510,13 @@ function Requests({
         </div>
       )}
       {overview && <OverviewActivity />}
-      <section className="request-board">
-        <div className="panel-heading">
-          <h2>
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden [&>[data-ui~=panel-heading]]:shrink-0 [&>[data-ui~=panel-heading]]:border-0 [&>[data-ui~=panel-heading]]:px-0 [&>[data-ui~=panel-heading]]:pt-0 [&>[data-ui~=board-caption]]:px-0 [&>[data-ui~=pagination]]:mt-3 [&>[data-ui~=pagination]]:px-0 [&>[data-ui~=pagination]]:pb-0 [&>[data-ui~=test-board-scroll]]:px-0 [&>[data-ui~=test-board-scroll]]:pb-0" data-ui="request-board">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs [&>span]:text-xs [&>span]:text-muted-foreground" data-ui="panel-heading">
+          <h2 className={overview || history ? undefined : 'sr-only'}>
             {overview ? '最近运行' : '测试看板'}
           </h2>
           {!overview && (
-            <div className="filters">
+            <div className="flex w-full flex-wrap items-center gap-2 [&_input]:w-60 max-[1240px]:[&_input]:w-50 max-sm:w-full max-sm:[&_input]:w-full max-sm:[&>[data-slot=native-select-wrapper]]:flex-1" data-ui="filters">
               <Input
                 className="w-full sm:w-[240px]"
                 aria-label="搜索任务"
@@ -520,7 +546,7 @@ function Requests({
           )}
         </div>
         <ErrorBox error={error} />
-        <div className="board-caption">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-3 pb-2 text-xs text-muted-foreground" data-ui="board-caption">
           <span>状态自动流转 · 点击卡片查看详情</span>
           <span>{data ? `本页 ${data.items.length} 条 · 共 ${data.total} 条` : error ? '加载失败，稍后自动重试' : '正在加载…'}</span>
         </div>
@@ -535,7 +561,7 @@ function Requests({
           <Empty>{search || target ? '没有匹配的测试，请调整筛选条件。' : '暂无测试任务，提交一次测试开始记录。'}</Empty>
         )}
         {!overview && data && (
-          <div className="pagination">
+          <div className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground [&>span]:mr-auto" data-ui="pagination">
             <span>第 {Math.floor(offset / 25) + 1} / {Math.max(1, Math.ceil(data.total / 25))} 页 · 列内数量为本页统计</span>
             <Button
               variant="secondary"
@@ -557,7 +583,7 @@ function Requests({
         )}
       </section>
       {overview && (
-        <div className="callout">
+        <div className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground" data-ui="callout">
           测试任务由平台统一排队。报告发布后可独立查看，不依赖 CI 工作目录。
         </div>
       )}
@@ -570,25 +596,25 @@ function OverviewActivity() {
     <>
       <Card asChild>
         <section className="overflow-hidden">
-          <div className="panel-head">
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs max-[900px]:flex-wrap" data-ui="panel-head">
             <h2>设备与 Worker</h2>
-            <span className="sub">{workers?.length ?? '—'} 台执行机</span>
-            <div className="right">
+            <span className="text-xs text-muted-foreground" data-ui="sub">{workers?.length ?? '—'} 台执行机</span>
+            <div className="ml-auto flex flex-wrap items-center gap-2" data-ui="right">
               <Button asChild variant="secondary" size="sm">
                 <Link to="/workers">全部设备</Link>
               </Button>
             </div>
           </div>
-          <div className="panel-body grid-3">
+          <div className="p-3 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3 max-sm:grid-cols-1" data-ui="panel-body grid-3">
             {workers?.map((w) => (
-              <div className="device-overview" key={w.id}>
-                <div className="rowline">
+              <div className="grid gap-3 text-xs [&_[data-slot=badge]]:ml-auto [&_span]:break-words" key={w.id} data-ui="device-overview">
+                <div className="flex min-w-0 items-center gap-2.5" data-ui="rowline">
                   <Icon name="cpu" />
                   <b>{w.id}</b>
                   <Badge value={w.health} />
                 </div>
                 {w.slots.map((slot) => (
-                  <div className="rowline" key={slot.id}>
+                  <div className="flex min-w-0 items-center gap-2.5" key={slot.id} data-ui="rowline">
                     <Icon name="device" />
                     <span>{slot.deviceId}</span>
                     <Badge value={slot.state} />
@@ -596,7 +622,7 @@ function OverviewActivity() {
                 ))}
               </div>
             ))}
-            {!workers?.length && <p className="hint">尚无设备信息。</p>}
+            {!workers?.length && <p className="text-xs leading-[1.45] text-muted-foreground">尚无设备信息。</p>}
           </div>
         </section>
       </Card>
@@ -626,7 +652,7 @@ function NewRequest() {
           targetId: target.id,
           commit,
           suite: suite || target.suites[0],
-          scenario: scenario || target.scenarios[0],
+          ...(scenario ? { scenario } : {}),
         },
         crypto.randomUUID(),
       );
@@ -640,7 +666,7 @@ function NewRequest() {
     <>
       <PageTitle eyebrow="NEW EXECUTION" title="提交测试任务" />
       <Card asChild>
-        <section className="form-panel overflow-hidden">
+        <section className="max-w-[820px] p-4 [&>p]:mt-1 [&>p]:mb-3 [&>p]:text-xs [&_form]:grid [&_form]:gap-3 [&_label]:grid [&_label]:gap-1.5 [&_label]:text-xs [&_label]:font-medium overflow-hidden" data-ui="form-panel">
           <h2>选择测试配置</h2>
           <p>提交后进入队列，等待专用设备执行。</p>
           <ErrorBox error={loadError || error} />
@@ -673,7 +699,7 @@ function NewRequest() {
               />
               <small>固定提交用于准确复现测试。</small>
             </Label>
-            <div className="form-row">
+            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1" data-ui="form-row">
               <Label>
                 测试套件
                 <NativeSelect
@@ -688,16 +714,17 @@ function NewRequest() {
               <Label>
                 测试场景
                 <NativeSelect
-                  value={scenario || target?.scenarios[0] || ''}
+                  value={scenario}
                   onChange={(e) => setScenario(e.target.value)}
                 >
+                  <option value="">直接运行（无场景）</option>
                   {target?.scenarios.map((s) => (
                     <option key={s}>{s}</option>
                   ))}
                 </NativeSelect>
               </Label>
             </div>
-            <div className="form-actions">
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-3" data-ui="form-actions">
               <Link to="/queue">返回测试任务</Link>
               <Button
                 variant="default"
@@ -785,20 +812,20 @@ function RequestDetail({ id }: { id: string }) {
       {r && (
         <>
           <Card asChild>
-            <section className="sum">
-              <div className="sum-top">
-                <div className="sum-title">
+            <section className="grid gap-2.5 p-3" data-ui="sum">
+              <div className="flex flex-wrap items-start gap-4" data-ui="sum-top">
+                <div className="grid min-w-0 gap-1 [&_h1]:flex [&_h1]:flex-wrap [&_h1]:items-center [&_h1]:gap-2 [&_h1]:text-lg" data-ui="sum-title">
                   <h1>
-                    {r.input.scenario}
-                    <span className="id" title={id}>
+                    {r.selection?.titlePath?.join(' › ') || r.input.suite}
+                    <span className="font-mono text-xs font-medium text-muted-foreground" title={id} data-ui="id">
                       #{id.slice(0, 8)}
                     </span>
                   </h1>
-                  <p className="sub">
+                  <p className="text-xs text-muted-foreground" data-ui="sub">
                     {r.input.targetId} · {r.input.suite}
                   </p>
                 </div>
-                <div className="sum-acts">
+                <div className="ml-auto flex flex-wrap items-center gap-2 max-[900px]:ml-0 max-[900px]:w-full" data-ui="sum-acts">
                   <Badge value={r.state} />
                   <Badge value={r.verdict} />
                   <Button asChild variant="secondary">
@@ -810,7 +837,7 @@ function RequestDetail({ id }: { id: string }) {
                   <RequestAction request={r} onChange={reload} />
                 </div>
               </div>
-              <div className="execution-status" role="status">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" role="status" data-ui="execution-status">
                 <span>
                   {terminal(r.state)
                     ? labels[r.state]
@@ -824,7 +851,7 @@ function RequestDetail({ id }: { id: string }) {
             </section>
           </Card>
           {latest?.outcome?.error && (
-            <div className="note warn" role="alert">
+            <div className="flex items-start gap-2.5 rounded-md bg-muted px-3 py-2.5 text-xs text-secondary-foreground [&_svg]:mt-0.5 [&_svg]:size-3.5 [&_svg]:shrink-0 [&_b]:text-foreground [&_code]:rounded-sm [&_code]:bg-card [&_code]:px-1.5 bg-warn-bg text-warn-ink" role="alert" data-ui="note warn">
               <Icon name="alert" />
               {latest.outcome.error}
             </div>
@@ -832,7 +859,7 @@ function RequestDetail({ id }: { id: string }) {
           <WorkerExecutionTimeline requestId={id} attempts={r.attempts} />
           <Card asChild>
             <section className="overflow-hidden">
-              <div className="panel-head">
+              <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs max-[900px]:flex-wrap" data-ui="panel-head">
                 <h2>测试报告</h2>
               </div>
               <Empty>
@@ -851,23 +878,25 @@ function RequestDetail({ id }: { id: string }) {
 function DiagnosticSection({
   title,
   className,
+  'data-ui': dataUi,
   embedded,
   open,
   children,
 }: {
   title: string;
   className: string;
+  'data-ui'?: string;
   embedded: boolean;
   open?: boolean;
   children: ReactNode;
 }) {
   return embedded ? (
-    <section className={`${className} diagnostic-section`}>
+    <section data-ui={`${dataUi} diagnostic-section`} className={`${className} [&>h3]:mb-3 [&>h3]:text-xs [&>h3]:font-semibold`}>
       <h3>{title}</h3>
       {children}
     </section>
   ) : (
-    <details className={className} open={open}>
+    <details data-ui={dataUi} className={className} open={open}>
       <summary>{title}</summary>
       {children}
     </details>
@@ -916,12 +945,12 @@ function RequestDiagnostics({
     <>
       {(!panel || panel === 'run') && (
         <DiagnosticSection
-          className="run-info"
+          className="rounded-lg bg-card px-3 py-2.5 shadow-sm [&>a]:mt-3 [&>a]:inline-block [&>a]:text-xs [&_[data-ui~=meta-grid]]:grid-cols-3 max-[900px]:[&_[data-ui~=meta-grid]]:grid-cols-2"
           title="运行信息"
-          embedded={!!panel}
+          embedded={!!panel} data-ui="run-info"
         >
           {published.length > 1 && (
-            <div className="report-switch">
+            <div className="flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground [&>[data-slot=native-select-wrapper]]:max-w-80" data-ui="report-switch">
               <span>执行报告</span>
               {published.map((report) => (
                 <Link
@@ -939,14 +968,14 @@ function RequestDiagnostics({
               ))}
             </div>
           )}
-          <div className="meta-grid">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3" data-ui="meta-grid">
             {[
               ['来源', r.source?.kind ?? 'manual'],
               ['配置 / 目录版本', `${r.configRevision ?? '—'} / ${r.catalogId ?? '—'}`],
               ['测试选择', r.selection?.mode === 'case' ? r.selection.titlePath?.join(' › ') ?? r.selection.caseId ?? '—' : 'suite'],
               ['自动策略版本', String(r.autoPolicyRevision ?? '—')],
               ['替代任务', r.supersededBy ?? '—'],
-              ['场景', r.input.scenario],
+              ['场景', r.input.scenario ?? '直接运行'],
               ['应用 / 套件', `${r.input.targetId} / ${r.input.suite}`],
               ['分支', r.input.source?.branch ?? '—'],
               ['Commit', r.input.commit],
@@ -959,9 +988,9 @@ function RequestDiagnostics({
                   : '等待分配',
               ],
             ].map(([label, value]) => (
-              <div className="meta-cell" key={label}>
-                <span className="k">{label}</span>
-                <span className="v" title={value}>
+              <div className="grid min-w-0 gap-1" key={label} data-ui="meta-cell">
+                <span className="text-[11px] text-muted-foreground" data-ui="k">{label}</span>
+                <span className="truncate text-xs font-medium" title={value} data-ui="v">
                   {value}
                 </span>
               </div>
@@ -981,14 +1010,14 @@ function RequestDiagnostics({
       )}
       {(!panel || panel === 'attempts') && (
         <DiagnosticSection
-          className="execution-attempts overflow-hidden"
+          className="[&>summary]:px-3 [&>summary]:py-2.5 open:[&>summary]:mb-0 overflow-hidden"
           title={`执行尝试 · ${r.attempts.length} 次`}
           embedded={!!panel}
-          open={!published.length}
+          open={!published.length} data-ui="execution-attempts"
         >
           {r.attempts.length ? (
             r.attempts.map((a) => (
-              <div className="attempt-row" key={a.attemptId}>
+              <div className="grid grid-cols-[1.2fr_1fr_1fr_1fr] items-center gap-3 border-t border-border px-3 py-2.5 text-xs max-[900px]:grid-cols-2 [&>div]:grid [&>div]:min-w-0 [&>div]:justify-items-start [&>div]:gap-1 [&_code]:text-[10px] [&_code]:text-muted-foreground" key={a.attemptId} data-ui="attempt-row">
                 <div>
                   <b>执行 #{a.number}</b>
                   <small>
@@ -997,7 +1026,7 @@ function RequestDiagnostics({
                   <code>{a.attemptId}</code>
                 </div>
                 <div>
-                  <span className="hint">执行阶段</span>
+                  <span className="text-xs leading-[1.45] text-muted-foreground">执行阶段</span>
                   <b>{stageLabel(a.stage)}</b>
                   <small>generation {a.generation}</small>
                 </div>
@@ -1010,7 +1039,7 @@ function RequestDiagnostics({
                   <small>{a.outcome?.error ?? a.result?.error}</small>
                 </div>
                 <div>
-                  <span className="hint">清理 / 发布</span>
+                  <span className="text-xs leading-[1.45] text-muted-foreground">清理 / 发布</span>
                   <small>
                     {a.outcome
                       ? `${labels[a.outcome.cleanup]} · ${labels[a.outcome.publication]}`
@@ -1031,15 +1060,15 @@ function RequestDiagnostics({
       )}
       {(!panel || panel === 'events') && (
         <DiagnosticSection
-          className="runtime-events overflow-hidden"
+          className="rounded-lg bg-card px-3 py-2.5 shadow-sm [&_[data-ui~=panel-head]]:px-0 [&_[data-ui~=panel-head]]:pt-0 [&_[data-ui~=event-list]]:px-0 overflow-hidden"
           title={panel ? '运行动态' : `运行动态 · 最近 ${events.length} 条`}
-          embedded={!!panel}
+          embedded={!!panel} data-ui="runtime-events"
         >
-          <div className="panel-head">
-            <span className="sub">
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs max-[900px]:flex-wrap" data-ui="panel-head">
+            <span className="text-xs text-muted-foreground" data-ui="sub">
               最近 {events.length} 条 · {streamState}
             </span>
-            <div className="right">
+            <div className="ml-auto flex flex-wrap items-center gap-2" data-ui="right">
               <Input
                 aria-label="筛选运行动态"
                 placeholder="筛选阶段 / 日志"
@@ -1048,7 +1077,7 @@ function RequestDiagnostics({
               />
             </div>
           </div>
-          <div className="event-list">
+          <div className="max-h-[380px] overflow-auto" data-ui="event-list">
             {events.length ? (
               events
                 .filter((e) =>
@@ -1057,7 +1086,7 @@ function RequestDiagnostics({
                     .includes(eventSearch.toLowerCase()),
                 )
                 .map((e) => (
-                  <div className="event" key={e.seq}>
+                  <div className="grid grid-cols-[80px_120px_minmax(0,1fr)] gap-3 border-b border-border px-3 py-2 text-xs [&_time]:font-mono [&_time]:text-[11px] [&_time]:text-muted-foreground [&_pre]:text-[11px] [&_b]:break-words max-sm:grid-cols-[70px_minmax(0,1fr)] max-sm:[&_pre]:col-span-full" key={e.seq} data-ui="event">
                     <time>
                       {new Date(e.at).toLocaleTimeString('zh-CN')}
                     </time>
@@ -1099,9 +1128,9 @@ function ReportContent({
   );
   return (
     <>
-      <header className="report-header">
-        <div className="report-heading">
-          <div className="report-identity">
+      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 [&>a]:shrink-0" data-ui="report-header">
+        <div className="grid min-w-0 flex-[1_1_360px] gap-1.5" data-ui="report-heading">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 [&_h1]:min-w-0 [&_h1]:break-words [&_h1]:font-mono [&_h1]:text-lg [&_h1]:font-semibold" data-ui="report-identity">
             <h1 title={r?.manifest.runId}>{r?.manifest.runId ?? id}</h1>
             {r && (
               <span className="inline-flex items-center">
@@ -1111,7 +1140,7 @@ function ReportContent({
             )}
           </div>
           {r && (
-            <dl className="report-metadata">
+            <dl className="m-0 flex flex-wrap gap-x-5 gap-y-1 text-xs [&>div]:flex [&>div]:flex-wrap [&>div]:items-baseline [&>div]:gap-x-2 [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:tabular-nums" data-ui="report-metadata">
               <div>
                 <dt>证据完整性</dt>
                 <dd>{labels[r.manifest.evidenceStatus]}</dd>
@@ -1128,7 +1157,7 @@ function ReportContent({
           )}
         </div>
         {!shared && (
-          <div className="rowline">
+          <div className="flex min-w-0 items-center gap-2.5" data-ui="rowline">
             <Button asChild variant="secondary">
               <Link to="/queue">
                 <Icon name="list" />
@@ -1146,7 +1175,7 @@ function ReportContent({
       {r && (
         <>
           {r.issues.length > 0 && (
-            <details className="evidence-issues">
+            <details className="break-words rounded-lg bg-destructive/10 px-3 py-2.5 text-xs text-destructive" data-ui="evidence-issues">
               <summary>有 {r.issues.length} 项证据不可用</summary>
               {r.issues.map((issue, i) => (
                 <p key={i}>{issue}</p>
@@ -1154,14 +1183,14 @@ function ReportContent({
             </details>
           )}
           {r.manifest.runnerErrors?.map((e, i) => (
-            <div className="error" key={i}>
+            <div className="break-words rounded-lg bg-destructive/10 px-3 py-2.5 text-xs text-destructive" key={i} data-ui="error">
               {e.phase}: {e.message}
             </div>
           ))}
-          {!shared && r.executionAttemptId && <Tabs value={reportView} onValueChange={setReportView} className="report-view-tabs">
+          {!shared && r.executionAttemptId && <Tabs value={reportView} onValueChange={setReportView} className="mb-2 shrink-0" data-ui="report-view-tabs">
             <TabsList aria-label="报告视图"><TabsTrigger value="tests"><Icon name="play" />测试回放</TabsTrigger><TabsTrigger value="worker"><Icon name="cpu" />Worker 执行</TabsTrigger></TabsList>
           </Tabs>}
-          <div className="report-view-pane" hidden={!shared && reportView === 'worker' && !!r.executionAttemptId}>
+          <div className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden" hidden={!shared && reportView === 'worker' && !!r.executionAttemptId} data-ui="report-view-pane">
           <Replay
             key={id}
             report={r}
@@ -1198,7 +1227,7 @@ function ReportContent({
             ]}
           />
           </div>
-          {!shared && r.executionAttemptId && <div className="report-worker-pane" hidden={reportView !== 'worker'}>
+          {!shared && r.executionAttemptId && <div className="min-h-0 flex-1 overflow-y-auto [&[hidden]]:hidden" hidden={reportView !== 'worker'} data-ui="report-worker-pane">
             <WorkerExecutionTimeline requestId={r.requestId} executionAttemptId={r.executionAttemptId} />
           </div>}
         </>
@@ -1233,13 +1262,13 @@ function Shares({ id }: { id: string }) {
   }
   return (
     <Card asChild className="border-0 rounded-none bg-transparent">
-      <section className="share-panel overflow-hidden">
-        <div className="panel-heading">
+      <section className=" overflow-hidden" data-ui="share-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs [&>span]:text-xs [&>span]:text-muted-foreground" data-ui="panel-heading">
           <h2>报告分享</h2>
           <span>只读 · 可撤销 · 内网访问</span>
         </div>
         <ErrorBox error={error || loadError} />
-        <div className="share-controls">
+        <div className="flex flex-wrap items-center gap-2 p-3 [&_label]:text-xs [&_label]:text-muted-foreground max-sm:items-stretch max-sm:[&_label]:w-full" data-ui="share-controls">
           <NativeSelect
             aria-label="分享有效期"
             value={days}
@@ -1261,7 +1290,7 @@ function Shares({ id }: { id: string }) {
           </Button>
         </div>
         {url && (
-          <Label className="share-url">
+          <Label className="grid gap-1.5 px-3 pb-3 text-xs [&_input]:w-full [&_input]:font-mono" data-ui="share-url">
             分享链接
             <Input
               aria-label="分享链接"
@@ -1273,7 +1302,7 @@ function Shares({ id }: { id: string }) {
           </Label>
         )}
         {shares?.map((s) => (
-          <div className="share-row" key={s.id}>
+          <div className="flex flex-wrap items-center gap-3 border-t border-border px-3 py-2 text-xs [&_button]:ml-auto [&_code]:text-[11px]" key={s.id} data-ui="share-row">
             <code>{s.id.slice(0, 8)}</code>
             <span>{time(s.expiresAt)}</span>
             <span>
@@ -1323,7 +1352,7 @@ function Workers() {
       <WorkerPairing role={role} />
       <ErrorBox error={error || actionError} />
       {ops && (
-        <div className="callout">
+        <div className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground" data-ui="callout">
           报告磁盘可用 {(ops.storage.freeBytes / 1024 ** 3).toFixed(1)} GB ·
           已登记产物 {(ops.storage.reservedBytes / 1024 ** 3).toFixed(2)} GB
         </div>
@@ -1331,10 +1360,11 @@ function Workers() {
       {data?.map((w) => (
         <Card asChild>
           <section className="overflow-hidden" key={w.id}>
-            <div className="panel-heading">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs [&>span]:text-xs [&>span]:text-muted-foreground" data-ui="panel-heading">
               <div>
                 <h2>{w.id}</h2>
                 <Badge value={w.health} />
+                {w.service && <p className="text-xs text-muted-foreground">服务：{({ healthy: '运行中', degraded: '需检查', failed: '异常退出', stopped: '已停止', unreachable: '无法联系' })[w.service.status]}{w.service.activeSessions > 1 && ` · 检测到 ${w.service.activeSessions} 个服务实例，请检查重复启动`}</p>}
                 <small>
                   {w.seenAt ? `上次联系 ${time(w.seenAt)}` : '尚未连接'} ·{' '}
                   {w.paused ? '已暂停调度' : '允许领取任务'}
@@ -1359,23 +1389,24 @@ function Workers() {
                 </Button>
               )}
             </div>
-            <div className="panel-body stack">
-              <Link to="/devices" search={{ worker: w.id }} className="link">
+            <div className="p-3 grid content-start gap-3" data-ui="panel-body stack">
+              <Link to="/devices" search={{ worker: w.id }} className="font-medium text-primary hover:underline">
                 查看此主机的设备 →
               </Link>
+              {(role === 'operator' || role === 'admin') && <WorkerDiagnosticsPanel workerId={w.id} />}
               <small>
                 {w.inventory
                   ? `最近检测 ${time(w.inventory.receivedAt)} · ${w.inventory.devices.length} 台设备${w.inventory.stale ? ' · 检测已过期' : ''}`
                   : '尚未收到设备检测结果'}
               </small>
               {w.inventory?.diagnostics.map((d, i) => (
-                <p className="hint" key={i}>
+                <p className="text-xs leading-[1.45] text-muted-foreground" key={i}>
                   {d.source}：{d.message}
                 </p>
               ))}
             </div>
             {w.slots.map((s) => (
-              <div className="attempt-row" key={s.id}>
+              <div className="grid grid-cols-[1.2fr_1fr_1fr_1fr] items-center gap-3 border-t border-border px-3 py-2.5 text-xs max-[900px]:grid-cols-2 [&>div]:grid [&>div]:min-w-0 [&>div]:justify-items-start [&>div]:gap-1 [&_code]:text-[10px] [&_code]:text-muted-foreground" key={s.id} data-ui="attempt-row">
                 <div>
                   <b>{s.id}</b>
                   <small>{s.deviceId}</small>
@@ -1388,7 +1419,7 @@ function Workers() {
           </section>
         </Card>
       ))}
-      <div className="callout">
+      <div className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground" data-ui="callout">
         暂停只阻止领取新任务。隔离设备需要运维在 Mac mini
         上确认进程终止并重置设备后恢复。
       </div>
@@ -1434,7 +1465,8 @@ function Shell() {
 
 const rootRoute = createRootRoute({
   component: Shell,
-  validateSearch: (search: Record<string, unknown>): { search?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { search?: string; createProject?: boolean } => ({
+    createProject: search.createProject === true ? true : undefined,
     search:
       typeof search.search === 'string'
         ? search.search.slice(0, 200)
@@ -1442,7 +1474,7 @@ const rootRoute = createRootRoute({
   }),
   notFoundComponent: () => (
     <Empty>
-      页面不存在。<Link to="/">返回总览</Link>
+      页面不存在。<Link to="/">返回看板</Link>
     </Empty>
   ),
 });
@@ -1470,10 +1502,26 @@ const sharedReportRoute = createRoute({
     return <ReportContent key={id} id={id} shared />;
   },
 });
+const projectsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects',
+  component: function ProjectsPage() {
+    const search = useSearch({ strict: false });
+    const navigate = useNavigate();
+    return <Projects createRequested={search.createProject === true} creationHandled={() => {
+      void navigate({ to: '.', search: (previous: { search?: string; createProject?: boolean }) => ({ ...previous, createProject: undefined }), replace: true });
+    }} />;
+  },
+});
 const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/',
+    component: () => <Requests />,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/overview',
     component: () => <Requests overview />,
   }),
   createRoute({
@@ -1512,11 +1560,10 @@ const routeTree = rootRoute.addChildren([
     path: '/workers',
     component: Workers,
   }),
-  createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/projects',
-    component: Projects,
-  }),
+  projectsRoute.addChildren([
+    createRoute({ getParentRoute: () => projectsRoute, path: '/' }),
+    createRoute({ getParentRoute: () => projectsRoute, path: '$projectId' }),
+  ]),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/targets',

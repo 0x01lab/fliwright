@@ -1,11 +1,37 @@
 import { describe, it, expect } from 'vitest';
-import { chmod, mkdtemp, readdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { collectCatalog, catalogCaseId } from '../src/catalog.js';
 import { runCommand } from '../src/commands/run.js';
 
 describe('catalog collection and exact selection', () => {
+  it('collects mock rule choices without publishing response bodies or requiring scenarios', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fliwright-catalog-mocks-'));
+    try {
+      await mkdir(join(root, '.fliwright/mocks/api'), { recursive: true });
+      await writeFile(join(root, '.fliwright/mocks/api/user.json'), JSON.stringify({
+        endpoint: '/user', method: 'GET', rules: [
+          { name: 'success', status: 200, body: { privateValue: 'must-not-be-published' } },
+          { name: 'guest', status: 200, body: {} },
+        ],
+      }));
+      const result = await collectCatalog({ cwd: root, suites: {} });
+      expect(result.mocks).toEqual([{ directory: '.fliwright/mocks', endpoints: [
+        { endpoint: '/user', method: 'GET', rules: ['success', 'guest'], activeRule: 'success' },
+      ], profiles: ['guest', 'success'] }]);
+      expect(JSON.stringify(result)).not.toContain('must-not-be-published');
+      expect(result.scenarios).toEqual([]);
+      await mkdir(join(root, 'custom-mocks/api'), { recursive: true });
+      await writeFile(join(root, 'custom-mocks/mock-index.json'), JSON.stringify({ defaultRule: 'empty', files: ['api/assets.json'] }));
+      await writeFile(join(root, 'custom-mocks/api/assets.json'), JSON.stringify({ endpoint: '/assets', method: 'GET', rules: [{ name: 'empty', status: 200, body: [] }] }));
+      await writeFile(join(root, 'fliwright.config.ts'), `export default { scenarios: { custom: { name: 'custom', layers: [{ kind: 'mocks', directory: 'custom-mocks' }] } } };`);
+      const custom = await collectCatalog({ cwd: root, suites: {} });
+      expect(custom.mocks.map(item => item.directory)).toEqual(['.fliwright/mocks', 'custom-mocks']);
+      expect(custom.mocks[1]?.endpoints[0]?.activeRule).toBe('empty');
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   it('collects a TypeScript Vitest configuration from a read-only checkout without writing into it', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fliwright-catalog-readonly-'));
     try {
@@ -64,3 +90,18 @@ describe('catalog collection and exact selection', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   }, 30000);
 });
+
+it('collects multiple test files in one cases-only pass without scanning Mock responses', async () => {
+  const { collectTestCases } = await import('../src/catalog.js');
+  const root = await mkdtemp(join(tmpdir(), 'fliwright-cases-only-'));
+  try {
+    await symlink(resolve('../../node_modules'), join(root, 'node_modules'));
+    await mkdir(join(root, '.fliwright/mocks/api'), { recursive: true });
+    await writeFile(join(root, '.fliwright/mocks/api/broken.json'), 'not JSON');
+    for (const name of ['a', 'b']) await writeFile(join(root, `${name}.test.mjs`), `import {test} from 'vitest'; test('${name}', () => {});`);
+    await writeFile(join(root, 'broken.test.mjs'), "throw new Error('invalid fixture');");
+    const result = await collectTestCases({ cwd: root, patterns: ['*.test.mjs'] });
+    expect(result.filter(file => !file.errors.length).flatMap(file => file.cases.map(item => item.titlePath))).toEqual([['a'], ['b']]);
+    expect(result.find(file => file.file === 'broken.test.mjs')?.errors).toEqual([expect.stringContaining('invalid fixture')]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+}, 15000);

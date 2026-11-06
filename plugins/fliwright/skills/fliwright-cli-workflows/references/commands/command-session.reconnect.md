@@ -42,7 +42,7 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 
 | Data field / variant | Meaning |
 | --- | --- |
-| connected / endpoint / tdd / workflow / closed | Host status returned directly. |
+| connected / endpoint / tdd / closed | Host status returned directly. |
 
 ## Effects and failure handling
 

@@ -19,6 +19,7 @@ Use to select a success/error/empty response before exercising the UI.
 - No persistent session required. See usage for finite/session variants.
 - endpoint and ruleName are required. Use mock list to discover exact names; method disambiguates endpoints with multiple verbs.
 - Mutates active routes. It does not clear prior calls or reset the rest of the app.
+- This selects one directory response, not a composed shared/Item rule set. Declare sources/rules in a named scenario and use scenario apply or run for that workflow.
 
 ## Input
 

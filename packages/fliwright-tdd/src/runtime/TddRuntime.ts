@@ -1,4 +1,4 @@
-import { waitForVmServiceEndpoint, EndpointLeaseManager, ScenarioCoordinator, type ResolvedScenario, FliwrightDriver, VmServiceEndpointResolver, explicitEndpointSource } from '@fliwright/core';
+import { waitForVmServiceEndpoint, EndpointLeaseManager, FliwrightDriver, VmServiceEndpointResolver, explicitEndpointSource } from '@fliwright/core';
 import { dirname } from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { FlutterDaemonController } from '../daemon/FlutterDaemonController.js';
@@ -7,31 +7,22 @@ import { SubprocessDaemonTransport } from '../daemon/SubprocessDaemonTransport.j
 import { decideSync, looksStructuralAfterReload } from '../daemon/ReloadStrategy.js';
 import { PersistentTestExecutor } from '../executor/PersistentTestExecutor.js';
 import { BaselineManager } from '../baseline/BaselineManager.js';
-import { TddRepairPlanner } from '../repair/TddRepairPlanner.js';
 import { buildTddFailureContext } from '../diagnostics/TddFailureContext.js';
 import type {
   CycleOpts,
   RuntimeSnapshot,
-  Scenario,
+  BaselineConfig,
   StartOpts,
   TddCycleResult,
-  TddRepairCycleResult,
-  TddRepairOpts,
-  TddRepairPlannerLike,
-  TddRepairStep,
-  TddRepairTrace,
   TddSyncResult,
   TddRuntimeDeps,
 } from '../types.js';
 import { DEFAULT_CYCLE_TIMEOUT_MS } from '../types.js';
 
-const defaultScenario: Scenario = {
+const defaultBaseline: BaselineConfig = {
   homeRoute: '/',
   resetCategories: ['navigation', 'mock'],
 };
-
-/** Default cap on repair→cycle iterations (design §7 P3). Prevents unbounded AI edits. */
-const DEFAULT_REPAIR_ITERATIONS = 3;
 
 export class TddRuntime {
   private readonly daemon: NonNullable<TddRuntimeDeps['daemon']>;
@@ -39,17 +30,14 @@ export class TddRuntime {
   private readonly driverFactory: NonNullable<TddRuntimeDeps['driverFactory']>;
   private readonly injectedBaseline?: NonNullable<TddRuntimeDeps['baseline']>;
   private baseline?: NonNullable<TddRuntimeDeps['baseline']>;
-  /** Optional AI repair planner (design §6.2, wired P3). Absent → no repair loop (additive). */
-  private repairPlanner?: TddRepairPlannerLike;
   private driver?: ReturnType<NonNullable<TddRuntimeDeps['driverFactory']>>;
   private app?: { appId: string; wsUri: string; supportsRestart: boolean };
   private vmServiceUrl?: string;
   private configRoot?: string;
   private sharedConfig?: StartOpts['sharedConfig'];
   private startAppParams?: import('../types.js').StartOpts['app'];
-  private testScenario?: ResolvedScenario;
   private defaultScenarioName?: string;
-  private scenario: Scenario = defaultScenario;
+  private baselineConfig: BaselineConfig = defaultBaseline;
   private focusedTest?: { file: string; testName?: string };
   private lastResult?: TddCycleResult;
   private started = false;
@@ -75,7 +63,6 @@ export class TddRuntime {
     }));
     this.injectedBaseline = deps.baseline;
     this.baseline = deps.baseline;
-    this.repairPlanner = deps.repair;
   }
 
   async start(opts: StartOpts): Promise<RuntimeSnapshot> {
@@ -88,7 +75,7 @@ export class TddRuntime {
     }
 
     try {
-      this.scenario = opts.scenario ?? defaultScenario;
+      this.baselineConfig = opts.baselineConfig ?? defaultBaseline;
       this.launchMode = opts.launchMode ?? (opts.app ? 'start' : 'attach');
       this.startSignature = startSignature;
       this.configRoot = opts.configRoot;
@@ -117,19 +104,11 @@ export class TddRuntime {
       await this.driver.connect(vmServiceUrl);
       this.driverConnections += 1;
 
-      // Auto-wire the repair planner from the real driver's page so fliwright tdd repair works
-      // out of the box. Skipped when a planner was injected, and for non-FliwrightDriver test
-      // doubles (their page lacks the AgentRepair surface) — keeping the path additive.
-      if (!this.repairPlanner && this.driver instanceof FliwrightDriver) {
-        this.repairPlanner = TddRepairPlanner.forPage(this.driver.page);
-      }
-
       this.baseline = this.baseline ?? this.injectedBaseline ?? new BaselineManager(this.driver);
       await this.executor.boot({ sharedConfig: this.sharedConfig, scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach',
         defaultScenario: opts.defaultScenario,
         configRoot: opts.configRoot,
         vmServiceUrl,
-        driverProvider: async () => this.requireDriver(),
       });
 
       this.started = true;
@@ -161,22 +140,24 @@ export class TddRuntime {
     this.persistStatus();
   }
 
-  async setTestScenario(scenario: ResolvedScenario): Promise<RuntimeSnapshot> {
+  /** Select the named scenario that Vitest fixtures prepare before every attempt. */
+  async setDefaultScenario(name: string): Promise<RuntimeSnapshot> {
     return this.enqueueOperation(async () => {
-      // Reboot the worker environment so each retry prepares the named scenario.
+      if (!this.started) throw new Error('TddRuntime is not started.');
       await this.executor.dispose();
-      await this.executor.boot({ sharedConfig: this.sharedConfig, scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach', configRoot: this.configRoot!, vmServiceUrl: this.vmServiceUrl,
-        defaultScenario: scenario.name, driverProvider: async () => this.requireDriver() });
-      this.defaultScenarioName = scenario.name;
-      this.testScenario = scenario;
+      await this.executor.boot({ sharedConfig: this.sharedConfig,
+        scenarioMode: this.launchMode === 'start' ? 'managed-start' : 'attach',
+        configRoot: this.configRoot!, vmServiceUrl: this.vmServiceUrl, defaultScenario: name });
+      this.defaultScenarioName = name;
       this.markUpdated();
+      this.persistStatus();
       return this.snapshot();
     });
   }
 
-  async setScenario(scenario: Scenario): Promise<RuntimeSnapshot> {
+  async setBaselineConfig(config: BaselineConfig): Promise<RuntimeSnapshot> {
     return await this.enqueueOperation(async () => {
-      this.scenario = scenario;
+      this.baselineConfig = config;
       this.markUpdated();
       this.persistStatus();
       return this.snapshot();
@@ -201,10 +182,6 @@ export class TddRuntime {
     // The caller's promise (deferred) is resolved separately so a timeout can return early, while the
     // chain task keeps awaiting the real body — guaranteeing the single-threaded executor is never
     // overlapped by the next cycle even after a timeout.
-    //
-    // When opts.repair is set, the same chain task also runs the AI repair closed loop after the
-    // initial cycle (design §7/§10 P3): the whole loop (initial cycle + repair proposals + re-cycles)
-    // lives inside this serialized task, so it can never overlap another cycle or be reentered.
     const deferred = makeDeferred<TddCycleResult>();
     const task = () => this.runCycleWithEscalation(testName, opts, deferred);
     const run = this.operationChain.then(task, task);
@@ -246,7 +223,6 @@ export class TddRuntime {
         configRoot: this.configRoot,
         defaultScenario: this.defaultScenarioName,
         vmServiceUrl,
-        driverProvider: async () => this.requireDriver(),
       });
     }
 
@@ -254,6 +230,7 @@ export class TddRuntime {
     await this.verifyManagedEndpoint(vmServiceUrl);
     await this.driver.connect(vmServiceUrl);
     this.driverConnections += 1;
+    this.baseline = this.injectedBaseline ?? new BaselineManager(this.driver);
     this.markUpdated();
     this.persistStatus();
     return this.snapshot();
@@ -304,77 +281,16 @@ export class TddRuntime {
     try {
       const result = await runAll();
       clearTimeout(timer);
-      // AI repair closed loop (design §7/§10 P3). Runs only when requested AND a planner is wired.
-      // Entirely serialized: lives inside this chain task, so it never overlaps another cycle and is
-      // not reentrant. 'suggest' stops after one proposal (no apply, no loop); 'safe-apply' loops
-      // cycle(red) → repair → cycle until green or the iteration cap. Omitted → byte-for-byte today.
-      const finalResult = opts.repair && this.repairPlanner && result.status === 'red'
-        ? await this.runRepairLoop(testName, opts, result)
-        : result;
-      this.lastResult = finalResult;
+      this.lastResult = result;
       this.markUpdated();
       this.persistStatus();
-      deferred.resolve(finalResult);
-      return finalResult;
+      deferred.resolve(result);
+      return result;
     } catch (error) {
       clearTimeout(timer);
       deferred.reject(error);
       throw error;
     }
-  }
-
-  /**
-   * The AI repair closed loop (design §7/§10 P3). Runs serialized inside the cycle chain task after
-   * the initial red cycle. Proposes a minimal, guardrail-bounded repair via the wired planner, then
-   * (safe-apply only) re-cycles until green or the iteration cap. Never reentrant: the caller has
-   * already acquired the chain; this method calls {@link performCycle} directly (not {@link cycle}).
-   *
-   * In 'suggest' mode it proposes once, attaches the diff as a repair trace, and returns the original
-   * red result unchanged (nothing applied). In 'safe-apply' mode it applies only guardrail-safe
-   * repairs and re-cycles; reaching the cap still red is a terminal state surfaced via the trace.
-   */
-  private async runRepairLoop(
-    testName: string | undefined,
-    opts: CycleOpts,
-    initialRed: TddCycleResult,
-  ): Promise<TddRepairCycleResult> {
-    const repairOpts: TddRepairOpts = opts.repair!;
-    const planner = this.repairPlanner!;
-    const maxIterations = repairOpts.iterations && repairOpts.iterations > 0 ? repairOpts.iterations : DEFAULT_REPAIR_ITERATIONS;
-
-    const steps: TddRepairStep[] = [];
-    let current: TddCycleResult = initialRed;
-    let capped = false;
-
-    // Re-cycle options for each repair iteration: no nested repair, keep the caller's sync/reset
-    // policy, but disable auto-escalation (already attempted on the initial cycle).
-    const reCycleOpts: CycleOpts = {
-      ...opts,
-      repair: undefined,
-      autoEscalate: false,
-    };
-
-    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-      const planAndApplied = await planner.propose(current, repairOpts.mode);
-      const step: TddRepairStep = { iteration, plan: planAndApplied };
-      if (repairOpts.mode === 'safe-apply' && planAndApplied.applied) {
-        step.applied = planAndApplied.applied;
-      }
-      steps.push(step);
-
-      // 'suggest' never loops or applies: emit the diff and stop on the first proposal.
-      if (repairOpts.mode === 'suggest') break;
-
-      // safe-apply: nothing safe was applied this iteration → no point re-cycling, stop.
-      if (!planAndApplied.applied || planAndApplied.applied.length === 0) break;
-
-      current = await this.performCycle(testName, reCycleOpts);
-      if (current.status === 'green') break;
-      if (iteration === maxIterations) capped = true;
-    }
-
-    const trace: TddRepairTrace = { mode: repairOpts.mode, steps, capped };
-    return { ...current, repair: trace };
   }
 
   private timeoutResult(testName: string | undefined, timeoutMs: number): TddCycleResult {
@@ -435,12 +351,11 @@ export class TddRuntime {
         }),
       };
     }
-    const resetReport = this.defaultScenarioName ? { version: this.requireBaseline().version, applied: [], unsupported: [] } : this.testScenario ? await this.controlPhase(async () => {
-      await new ScenarioCoordinator(this.requireDriver()).apply(this.testScenario!, { mode: 'attach' });
-      return { version: this.requireBaseline().version, applied: [], unsupported: [] };
-    }) : await this.controlPhase(() => this.requireBaseline().reset(this.scenario, {
-      full: opts.fullReset ?? lastSync === 'restart',
-    }));
+    const resetReport = this.defaultScenarioName
+      ? { version: this.requireBaseline().version, unsupported: [] }
+      : await this.controlPhase(() => this.requireBaseline().reset(this.baselineConfig, {
+        full: opts.fullReset ?? lastSync === 'restart',
+      }));
     const outcome = await this.executor.rerun(focused.file, actualTestName);
 
     const unsupportedState = resetReport.unsupported;
@@ -593,6 +508,8 @@ export class TddRuntime {
           this.app = undefined;
           this.vmServiceUrl = undefined;
           this.configRoot = undefined;
+          this.sharedConfig = undefined;
+          this.defaultScenarioName = undefined;
           this.startAppParams = undefined;
           this.baseline = undefined;
           this.focusedTest = undefined;
@@ -620,7 +537,9 @@ function startOptsSignature(opts: StartOpts): string {
     configRoot: opts.configRoot,
     sharedConfig: opts.sharedConfig,
     launchMode: opts.launchMode ?? (opts.app ? 'start' : 'attach'),
-    scenario: opts.scenario ?? defaultScenario,
+    baselineConfig: opts.baselineConfig ?? defaultBaseline,
+    defaultScenario: opts.defaultScenario,
+    statusFilePath: opts.statusFilePath,
     vmServiceUrl: opts.vmServiceUrl,
   });
 }

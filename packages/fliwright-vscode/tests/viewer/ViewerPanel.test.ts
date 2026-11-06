@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { env, Uri, window } from 'vscode';
 import type { LoadedRun } from '../../src/runviewer/RunViewerService.js';
-import type { RunViewerService } from '../../src/runviewer/RunViewerService.js';
+import { RunViewerService } from '../../src/runviewer/RunViewerService.js';
 import { ViewerPanel } from '../../src/viewer/ViewerPanel.js';
 
 function makeLoadedRun(overrides: Partial<LoadedRun> = {}): LoadedRun {
@@ -30,6 +33,47 @@ function fakeService(loaded: LoadedRun | undefined): RunViewerService {
 }
 
 describe('ViewerPanel', () => {
+  it('opens the executed test when a focused canonical run finishes with skipped siblings', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'fliwright-viewer-focused-'));
+    try {
+      const runDir = join(root, 'run-focused');
+      const tests = [
+        { testId: 'executed', status: 'passed', time: '00:00:01', nodes: [{
+          id: 'assertion-1', kind: 'assertion', title: 'visible', status: 'passed',
+          startedAt: '2026-11-06T00:00:01Z',
+        }] },
+        { testId: 'filtered', status: 'skipped', time: '00:00:02', nodes: [] },
+      ];
+      const manifestTests = tests.map(test => {
+        const resultPath = `tests/${test.testId}/attempts/attempt-0/result.json`;
+        const attemptDir = join(runDir, resultPath, '..');
+        mkdirSync(attemptDir, { recursive: true });
+        writeFileSync(join(attemptDir, 'timeline.json'), JSON.stringify({
+          version: 2, runId: 'run-focused', testName: test.testId, mode: 'test',
+          status: test.status, startedAt: `2026-11-06T${test.time}Z`, nodes: test.nodes,
+        }));
+        return { testId: test.testId, attempts: [{ attemptId: 'attempt-0', resultPath }] };
+      });
+      writeFileSync(join(runDir, 'run.json'), JSON.stringify({
+        schemaVersion: 1, runId: 'run-focused', status: 'passed', evidenceStatus: 'complete', tests: manifestTests,
+      }));
+      const service = new RunViewerService();
+      vi.spyOn(service, 'getWorkspaceRoot').mockReturnValue(Uri.file('/workspace'));
+      vi.spyOn(service, 'getRunsDir').mockResolvedValue(Uri.file(root));
+      const panel = new ViewerPanel(Uri.file('/extension'), service);
+      const open = vi.spyOn(panel, 'openForRun').mockResolvedValue();
+
+      await panel.openLatest();
+
+      const [directory, selection] = open.mock.calls[0];
+      const loaded = await service.loadRun(directory, selection);
+      expect(loaded?.timeline.testName).toBe('executed');
+      expect(loaded?.timeline.status).toBe('passed');
+      expect(loaded?.timeline.nodes).toHaveLength(1);
+      expect((await service.listRuns(Uri.file(root))).some(run => run.status === 'skipped')).toBe(true);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
   it('opens the latest failed attempt even when a newer test passed', async () => {
     const passed = { runDir: Uri.file('/runs/newer-pass'), status: 'passed', testId: 'pass', attemptId: 'a' };
     const failed = { runDir: Uri.file('/runs/older-failure'), status: 'failed', testId: 'fail', attemptId: 'b' };

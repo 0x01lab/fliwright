@@ -9,7 +9,8 @@ export interface ScreenshotPreview {
 
 export class ScreenshotService {
   async capture(driver: FliwrightDriver, options?: { fullPage?: boolean }): Promise<ScreenshotPreview> {
-    const bytes = await driver.page.screenshot({ pixelRatio: 1, ...(options?.fullPage ? { fullPage: true } : {}) });
+    // Capture detail at the source so HiDPI previews do not enlarge a 1x bitmap.
+    const bytes = await driver.page.screenshot({ pixelRatio: 3, ...(options?.fullPage ? { fullPage: true } : {}) });
     return {
       dataUri: `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`,
       mimeType: 'image/png',

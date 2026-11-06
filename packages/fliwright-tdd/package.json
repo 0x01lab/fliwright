@@ -1,7 +1,7 @@
 {
   "name": "@fliwright/tdd",
   "version": "0.1.0",
-  "description": "Experimental persistent red-green-refactor workflows for Fliwright.",
+  "description": "Experimental persistent focused test execution and Flutter synchronization for Fliwright.",
   "license": "MIT",
   "repository": {
     "type": "git",

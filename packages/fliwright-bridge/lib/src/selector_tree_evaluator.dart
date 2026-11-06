@@ -38,22 +38,23 @@ class SelectorTreeEvaluator {
   final bool Function(Element, Map<String, dynamic>) _passesFilter;
   final SelectorEvaluationBudget? budget;
 
+  bool _isLeaf(ParsedSelectorAst selector) => !const {
+        'descendant',
+        'ancestor',
+        'and',
+        'or',
+        'nth',
+        'last',
+        'filter',
+        'containing',
+        'fallback',
+      }.contains(selector.kind);
+
   bool matches(Element element, ParsedSelectorAst selector) {
     budget?.visit();
-    switch (selector.kind) {
-      case 'descendant':
-      case 'ancestor':
-      case 'and':
-      case 'or':
-      case 'nth':
-      case 'last':
-      case 'filter':
-      case 'containing':
-      case 'fallback':
-        return evaluate(element, selector).contains(element);
-      default:
-        return _matchesLeaf(element, selector);
-    }
+    return _isLeaf(selector)
+        ? _matchesLeaf(element, selector)
+        : evaluate(element, selector).contains(element);
   }
 
   List<Element> evaluate(
@@ -68,12 +69,9 @@ class SelectorTreeEvaluator {
         final matching = selector.child('matching');
         final result = <Element>[];
         for (final parent in parents) {
-          _walkTreeCollect(parent, (element) {
-            if (element == parent && selector.boolValue('matchRoot') != true) {
-              return false;
-            }
-            return matches(element, matching);
-          }, result);
+          result.addAll(evaluate(parent, matching).where((element) =>
+              !identical(element, parent) ||
+              selector.boolValue('matchRoot') == true));
         }
         return _dedupeElements(result);
       case 'ancestor':
@@ -89,13 +87,21 @@ class SelectorTreeEvaluator {
         }
         return _dedupeElements(result);
       case 'and':
-        return _allElements(root)
-            .where(
-              (element) => selector
-                  .children('selectors')
-                  .every((child) => matches(element, child)),
-            )
-            .toList();
+        final children = selector.children('selectors');
+        if (children.isEmpty) return <Element>[];
+        var result = evaluate(root, children.first);
+        for (final child in children.skip(1)) {
+          if (result.isEmpty) break;
+          if (_isLeaf(child)) {
+            result =
+                result.where((element) => matches(element, child)).toList();
+          } else {
+            final intersection = Set<Element>.identity()
+              ..addAll(evaluate(root, child));
+            result = result.where(intersection.contains).toList();
+          }
+        }
+        return result;
       case 'or':
         return _dedupeElements(
           selector
@@ -124,16 +130,13 @@ class SelectorTreeEvaluator {
         final descAst = selector.child('descendant');
         final result = <Element>[];
         for (final parent in parents) {
-          bool hasMatch = false;
-          _walkTreeCollect(parent, (element) {
-            if (identical(element, parent)) return false;
-            if (matches(element, descAst)) {
-              hasMatch = true;
-              return false;
-            }
-            return true;
-          }, []);
-          if (hasMatch) result.add(parent);
+          final hasMatch = _isLeaf(descAst)
+              ? _hasDescendant(parent, descAst)
+              : evaluate(parent, descAst)
+                  .any((element) => !identical(element, parent));
+          if (hasMatch) {
+            result.add(parent);
+          }
         }
         return _dedupeElements(result);
       case 'fallback':
@@ -151,10 +154,14 @@ class SelectorTreeEvaluator {
     }
   }
 
-  List<Element> _allElements(Element root) {
-    final result = <Element>[];
-    _walkTreeCollect(root, (_) => true, result);
-    return result;
+  bool _hasDescendant(Element root, ParsedSelectorAst selector) {
+    var found = false;
+    root.debugVisitOnstageChildren((child) {
+      if (found) return;
+      budget?.visit();
+      found = matches(child, selector) || _hasDescendant(child, selector);
+    });
+    return found;
   }
 
   void _walkTreeCollect(
@@ -170,10 +177,10 @@ class SelectorTreeEvaluator {
   }
 
   List<Element> _dedupeElements(List<Element> elements) {
-    final seen = <int>{};
+    final seen = Set<Element>.identity();
     final result = <Element>[];
     for (final element in elements) {
-      if (seen.add(element.hashCode)) result.add(element);
+      if (seen.add(element)) result.add(element);
     }
     return result;
   }

@@ -9,15 +9,13 @@ const defaultPluginPath = path.join(root, 'plugins/fliwright');
 const pluginCreatorRoot = path.join(os.homedir(), '.codex/skills/.system/plugin-creator');
 const skillCreatorRoot = path.join(os.homedir(), '.codex/skills/.system/skill-creator');
 const bundledSkillNames = [
+  'gitlab-test-plan',
   'fliwright-cli-workflows',
+  'fliwright-agent-memory',
   'fliwright-tdd',
   'write-fliwright-mock-rules',
   'write-fliwright-tests',
 ];
-const commandEnv = {
-  ...process.env,
-  FLIWRIGHT_RUNS_ROOT: process.env.FLIWRIGHT_RUNS_ROOT ?? path.join(os.tmpdir(), 'fliwright-plugin-check-runs'),
-};
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const skillNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 let cachedPythonHasYaml;
@@ -110,7 +108,7 @@ Options:
 function runCommand(label, command, args) {
   const result = spawnSync(command, args, {
     cwd: root,
-    env: commandEnv,
+    env: process.env,
     encoding: 'utf8',
     stdio: 'pipe',
   });

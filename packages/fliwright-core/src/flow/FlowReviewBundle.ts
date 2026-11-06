@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { resolveFliwrightRuntimeRoot } from '../runArtifacts.js';
 import { buildFlowReviewPlan, type FlowReviewPlanOptions } from './FlowReviewPlan.js';
 import { sanitizeFlowFileId } from './FlowFile.js';
 import type { FliwrightFlowDocument } from './types.js';
@@ -63,7 +65,7 @@ export function buildFlowReviewBundle(
   options: FlowReviewBundleOptions = {},
 ): FlowReviewBundle {
   const reviewPlan = buildFlowReviewPlan(flow, options);
-  const rootDir = trimTrailingSlash(options.outputDir ?? `.fliwright/reviews/${sanitizeFlowFileId(flow.id)}`);
+  const rootDir = trimTrailingSlash(options.outputDir ?? join(resolveFliwrightRuntimeRoot(), 'reviews', sanitizeFlowFileId(flow.id)));
   const runtimeDir = `${rootDir}/runtime`;
   const figmaDir = `${rootDir}/figma`;
   const reportPath = `${rootDir}/${sanitizeFlowFileId(flow.id)}-report.json`;

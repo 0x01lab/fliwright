@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionLease, Outcome, WorkerTimelineBatch, WorkerTimelineClock, WorkerTimelineFinish, WorkerStopReason } from '@fliwright/cloud-protocol';
 import { WorkerTimelineRecorder } from './WorkerTimelineRecorder.js';
 import type { WorkerTimelineChannel } from './WorkerTimelineChannel.js';
+import { compactSpoolAttempt, pruneSpool, type SpoolRetention } from './spool.js';
 
 export interface ExecutionResult {
   verdict: Outcome['verdict'];
@@ -54,6 +55,7 @@ export interface WorkerAgentOptions {
   deviceId: string;
   root: string;
   heartbeatMs?: number;
+  spoolRetention?: Partial<SpoolRetention>;
 }
 interface Journal {
   pid: number;
@@ -99,6 +101,7 @@ export class WorkerAgent {
     }
     let journal: Journal = { pid: process.pid, stage: 'claiming' };
     writeJournal(lock, journal);
+    await pruneSpool(this.options.root, this.options.spoolRetention, directory => this.deps.stopOwned(directory));
     let lease: ExecutionLease | null;
     try {
       lease = await this.deps.claim(signal);
@@ -283,12 +286,21 @@ export class WorkerAgent {
       throw new Error(
         'Device cleanup failed; slot remains locked for recovery',
       );
+    recording.close();
+    writeJournal(join(directory, 'retention.json'), { completedAt: Date.now(), published: publication === 'published', bundleReady: Boolean(result.bundleDir) });
+    await compactSpoolAttempt(directory, publication === 'published', Boolean(result.bundleDir));
+    await pruneSpool(this.options.root, this.options.spoolRetention, directory => this.deps.stopOwned(directory));
     rmSync(lock, { force: true });
     return true;
     } finally { recording.close(); }
   }
   async recover() {
     const lock = join(this.options.root, 'slot.lock');
+    if (!existsSync(lock)) {
+      // Fence idle executors/retry-uploads before recovery starts touching the device or spool.
+      closeSync(openSync(lock, 'wx', 0o600));
+      writeJournal(lock, { pid: process.pid, stage: 'recovering' });
+    }
     const journal: Journal = existsSync(lock)
       ? JSON.parse(readFileSync(lock, 'utf8'))
       : { pid: 0, stage: 'unknown' };
@@ -313,6 +325,7 @@ export class WorkerAgent {
     await this.deps.recover(
       'Local supervisor confirmed owned process groups terminated and dedicated device reset',
     );
+    await pruneSpool(this.options.root, this.options.spoolRetention, directory => this.deps.stopOwned(directory));
     rmSync(lock, { force: true });
   }
 }

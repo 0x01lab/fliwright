@@ -113,7 +113,7 @@ export const targetSchema = z
       .default('.'),
     entry: z.string().default('lib/main.dart'),
     suites: z.record(z.string().min(1)),
-    scenarios: z.array(z.string().min(1)).min(1),
+    scenarios: z.array(z.string().min(1)).default([]),
     requiredCapabilities: z.array(z.string()).default([]),
     install: z.array(commandSchema).default([]),
     flutterArgs: z.array(z.string()).default([]),
@@ -133,7 +133,7 @@ export const projectSchema = targetSchema
         branch: z.string().trim().min(1).max(200).default('main'),
         selections: z
           .array(
-            z.object({ suite: z.string().min(1).max(100), scenario: z.string().min(1).max(100) }).strict(),
+            z.object({ suite: z.string().min(1).max(100), scenario: z.string().min(1).max(100).optional() }).strict(),
           )
           .max(100)
           .default([]),
@@ -149,7 +149,7 @@ export const projectSchema = targetSchema
     for (const selection of project.autoRun.selections) {
       if (!Object.hasOwn(project.suites, selection.suite))
         ctx.addIssue({ code: 'custom', path: ['autoRun', 'selections'], message: `Unknown suite ${selection.suite}` });
-      if (!project.scenarios.includes(selection.scenario))
+      if (selection.scenario && !project.scenarios.includes(selection.scenario))
         ctx.addIssue({ code: 'custom', path: ['autoRun', 'selections'], message: `Unknown scenario ${selection.scenario}` });
     }
   });
@@ -173,7 +173,7 @@ export const submissionSchema = z
     targetId: idSchema,
     commit: z.string().regex(/^[0-9a-f]{40}$/),
     suite: z.string().min(1).max(100),
-    scenario: z.string().min(1).max(100),
+    scenario: z.string().min(1).max(100).optional(),
     source: z
       .object({
         branch: z.string().max(200).optional(),
@@ -189,7 +189,7 @@ export const projectSubmissionSchema = z.object({
   commit: z.string().regex(/^[0-9a-f]{40}$/),
   mode: z.enum(['suite', 'case']),
   suite: z.string().min(1).max(100),
-  scenario: z.string().min(1).max(100),
+  scenario: z.string().min(1).max(100).optional(),
   caseId: z.string().regex(/^[a-zA-Z0-9._:/-]{1,300}$/).optional(),
   catalogId: idSchema.optional(),
   source: z.object({
@@ -261,6 +261,17 @@ export const catalogScenarioSchema = z.object({
   name: z.string().min(1).max(100),
   fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
+export const catalogMockDirectorySchema = z.object({
+  directory: z.string().min(1).max(500).refine(value => !value.startsWith('/') && !value.includes('\\') && !value.split('/').includes('..'), 'Mock directory must stay inside the checkout'),
+  // Profiles aggregate rule names across up to 1,000 endpoints with 100 rules each.
+  profiles: z.array(z.string().min(1).max(100)).max(100_000).optional(),
+  endpoints: z.array(z.object({
+    endpoint: z.string().min(1).max(1000),
+    method: z.string().min(1).max(30),
+    rules: z.array(z.string().min(1).max(100)).min(1).max(100),
+    activeRule: z.string().min(1).max(100),
+  }).strict()).max(1000),
+}).strict();
 export const catalogSchema = z.object({
   catalogId: idSchema,
   projectId: idSchema,
@@ -270,6 +281,7 @@ export const catalogSchema = z.object({
   status: z.enum(['ready', 'failed']),
   errorSummary: z.string().max(4000).optional(),
   scenarios: z.array(catalogScenarioSchema).max(100),
+  mocks: z.array(catalogMockDirectorySchema).max(20).optional(),
   suites: z.array(catalogSuiteSchema).max(100),
   scannerVersion: z.string().min(1).max(100),
   fliwrightVersion: z.string().min(1).max(100),
@@ -331,7 +343,7 @@ export interface TestRequest {
   attempts: number;
   configRevision?: number;
   catalogId?: string;
-  selection?: { mode: 'suite' | 'case'; suite: string; scenario: string; caseId?: string; file?: string; titlePath?: string[]; duplicateIndex?: number };
+  selection?: { mode: 'suite' | 'case'; suite: string; scenario?: string; caseId?: string; file?: string; titlePath?: string[]; duplicateIndex?: number };
   source?: ProjectSubmission['source'];
   autoPolicyRevision?: number;
   supersededBy?: string;
@@ -371,6 +383,8 @@ export interface ExecutionWorker {
   slots: ExecutionSlot[];
   /** Last host scan. Staleness uses server receipt time, independent of worker lease health. */
   inventory?: DeviceInventory & { receivedAt: number; stale: boolean };
+  /** Independent service monitoring is separate from device/lease health. */
+  service?: { status: 'healthy' | 'degraded' | 'failed' | 'stopped' | 'unreachable'; receivedAt: number; sessionId: string; activeSessions: number };
 }
 export class CloudError extends Error {
   constructor(

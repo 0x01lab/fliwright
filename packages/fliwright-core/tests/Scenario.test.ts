@@ -98,6 +98,47 @@ describe('ScenarioResolver', () => {
 });
 
 describe('ScenarioCoordinator', () => {
+  it('loads one mock baseline and applies independent method-specific rule selections before auth', async () => {
+    const calls: string[] = [];
+    const driver = {
+      mock: {
+        clearFlutterRoutes: vi.fn(async () => { calls.push('clear'); }),
+        clearCalls: vi.fn(async () => {}),
+        setPassthrough: vi.fn(async () => {}),
+        loadRules: vi.fn(async (directory?: string) => { calls.push(`load:${directory}`); }),
+        listRules: () => [
+          { endpoint: '/user', method: 'GET', rules: ['success', 'member'], activeRule: 'success' },
+          { endpoint: '/user', method: 'POST', rules: ['success', 'empty'], activeRule: 'success' },
+        ],
+        switchRule: vi.fn(async (endpoint: string, rule: string, method?: string) => { calls.push(`${method}:${endpoint}:${rule}`); }),
+      },
+      app: { invoke: vi.fn(async (_capability: string, method: string) => { calls.push(method); return { isAuthenticated: true }; }) },
+    };
+    await new ScenarioCoordinator(driver).apply({ name: 'combined', layers: [
+      { kind: 'auth', state: 'authenticated' },
+      { kind: 'mocks', directory: '.fliwright/mocks', rules: [
+        { endpoint: '/user', method: 'GET', rule: 'member' },
+        { endpoint: '/user', method: 'POST', rule: 'empty' },
+      ] },
+    ] }, { mode: 'attach' });
+    expect(calls).toEqual(['clear', 'load:.fliwright/mocks', 'GET:/user:member', 'POST:/user:empty', 'seedLoggedIn', 'getStatus']);
+  });
+
+  it('rejects stale or duplicate mock selections without switching any rules', async () => {
+    const switchRule = vi.fn(async () => {});
+    const coordinator = new ScenarioCoordinator({ mock: {
+      clearFlutterRoutes: async () => {}, clearCalls: async () => {}, setPassthrough: async () => {}, loadRules: async () => {},
+      listRules: () => [{ endpoint: '/user', method: 'GET', rules: ['success'], activeRule: 'success' }], switchRule,
+    } });
+    for (const rules of [
+      [{ endpoint: '/user', method: 'GET', rule: 'missing' }],
+      [{ endpoint: '/user', method: 'GET', rule: 'success' }, { endpoint: '/user', method: 'get', rule: 'success' }],
+    ]) {
+      await expect(coordinator.apply({ name: 'invalid', layers: [{ kind: 'mocks', rules }] }, { mode: 'attach' })).rejects.toThrow(/mock.*(selection|rule)/i);
+    }
+    expect(switchRule).not.toHaveBeenCalled();
+  });
+
   it('applies mocks, storage, auth, state, navigation, and readiness in order', async () => {
     const calls: string[] = [];
     const state = { override: vi.fn(async () => { calls.push('state'); }) };

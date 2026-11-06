@@ -19,7 +19,7 @@ export const projectSetupDefaults = {
   projectPath: '.',
   entry: 'lib/main.dart',
   suites: { smoke: '.fliwright/tests/**/*.test.ts' },
-  scenarios: ['clean'],
+  scenarios: [],
   install: [],
   flutterArgs: [],
   requiredCapabilities: [],

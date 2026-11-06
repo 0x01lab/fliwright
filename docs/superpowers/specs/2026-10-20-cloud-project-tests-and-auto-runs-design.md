@@ -1,6 +1,6 @@
 # Fliwright Cloud 项目、测试目录与自动运行设计
 
-日期：2026-10-20。状态：设计稿，待实现。
+日期：2026-10-20。状态：已实现；2026-10-27 更新运行场景可选契约。
 
 ## 1. 目标
 
@@ -15,6 +15,14 @@
 - 从任务详情追溯来源 commit、测试选择、项目配置版本、扫描目录版本和报告。
 
 不在本设计范围：多租户 SaaS、任意仓库上传、自然语言生成测试、从 Cloud 编辑仓库文件、自动重试业务断言失败、自动中断正在运行的旧 commit 测试。
+
+## 2026-10-27 运行场景可选契约
+
+- 项目场景列表默认为空，scenario 不再是项目就绪或测试提交的前置条件。
+- 手动运行默认「直接运行（无场景）」。提交省略 scenario，Worker 显式关闭仓库和环境中的 defaultScenario，不自动加载 Mock 规则；测试代码自己的准备逻辑照常执行。
+- 显式选择命名场景时仍需匹配所选 Catalog，避免运行旧配置中的场景。
+- 自动运行可只选择 suite；无场景的自动任务沿用固定 SHA、幂等和旧任务替代规则。
+- 以下历史设计中要求 suite/scenario 组合的描述，以本节为准。
 
 ## 2. 当前基础与缺口
 
@@ -70,7 +78,7 @@ Catalog 是某个 Project 在一个确切 commit 和 `configRevision` 下的不�
 2. Cloud 发出 `catalog_scan` 工作项。Worker 在独立临时目录中以只读凭据解析默认分支 HEAD，固定该 SHA，clone/fetch 后安装受控依赖并扫描。
 3. 扫描器读取 Fliwright 配置中的 suites/scenarios，并通过 Vitest collection 发现测试 title path。它不得启动 Flutter、连接 VM Service、调用设备 reset 或执行 test/hook body。
 4. Worker 返回有大小上限的 Catalog JSON。Server 校验相对路径、case 数、字符串长度、项目 revision、SHA 和 schema 后持久化；扫描失败保留旧 Catalog 并记录错误。
-5. UI 展示 HEAD SHA、扫描时间和差异。Admin 检查配置后将 Project 标记为 ready。ready 需要仓库可访问、至少一个有效 suite、scenario 可解析，且存在测试用例。
+5. UI 展示 HEAD SHA、扫描时间和差异。Admin 检查配置后将 Project 标记为 ready。ready 需要仓库可访问、至少一个有效 suite 且存在测试用例；不要求声明 scenario。
 
 **发现执行隔离门槛：**Vitest 收集需要 import 项目测试代码和配置，仍可能运行模块顶层副作用。扫描必须使用可终止的独立子进程、无设备连接、无 Cloud Server/Worker token 注入、最小化环境变量、只读 checkout 和资源/时间限制。仅在团队授权的仓库执行。实现前先做 collection-only 技术验证，证明 hooks/test body 不运行；如果现有 Vitest 生命周期无法提供该保证，新增 Fliwright 自己的 catalog runner 或声明式 manifest，不得把普通 `run` 命令伪装成扫描。
 
@@ -82,7 +90,7 @@ Catalog 是某个 Project 在一个确切 commit 和 `configRevision` 下的不�
 
 - 显示当前 Catalog commit、配置 revision、扫描状态及“重新扫描”。
 - 按 suite 分组，可筛选文件、名称和 scenario；显示用例 title path 与最近结果。
-- Suite 行提供“运行套件”；具体用例行提供“运行此用例”。每个入口都要求选择/确认 scenario 和 commit。
+- Suite 行提供“运行套件”；具体用例行提供“运行此用例”。每个入口都要求确认 commit，默认直接运行，也可选择该 Catalog 中已声明的 scenario。
 - Commit 选择优先显示 Cloud 已观察到的分支头；也允许输入完整 SHA。branch 选择在提交时解析为 SHA 并立即固定。
 - 无可用 Catalog、Catalog 与目标 commit 不匹配或扫描失败时，不允许提交 case 级任务；可通过先扫描该 commit 解决。
 

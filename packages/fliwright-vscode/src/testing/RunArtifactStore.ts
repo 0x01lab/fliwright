@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type * as vscode from 'vscode';
 import { TraceStore } from '@fliwright/core';
 import type { RunResult, TestCaseResult } from '../types.js';
@@ -35,7 +35,7 @@ export class RunArtifactStore {
   constructor(private readonly options: RunArtifactStoreOptions = {}) {}
 
   projectRoot(workspaceRoot: vscode.Uri): string {
-    return projectRunsRoot(workspaceRoot, this.options).rootDir;
+    return dirname(this.runsDir(workspaceRoot));
   }
 
   runsDir(workspaceRoot: vscode.Uri): string {
@@ -50,14 +50,6 @@ export class RunArtifactStore {
     const runsDir = await ensureProjectRunsRoot(workspaceRoot, this.options);
     this.resolvedRoots.set(workspaceRoot.fsPath, runsDir);
     return runsDir;
-  }
-
-  legacyRunsDir(workspaceRoot: vscode.Uri): string {
-    return join(workspaceRoot.fsPath, '.fliwright', 'runs');
-  }
-
-  legacyTraceDir(workspaceRoot: vscode.Uri): string {
-    return join(workspaceRoot.fsPath, '.fliwright', 'traces');
   }
 
   indexPath(workspaceRoot: vscode.Uri): string {
@@ -106,6 +98,8 @@ export class RunArtifactStore {
 
     const map = await this.loadIndex(workspaceRoot);
     for (const tc of result.results) {
+      // Name-filtered runs also report unexecuted siblings. Keep their last result.
+      if (tc.status === 'skipped') continue;
       const { ancestors, title } = splitName(tc.name);
       const tcRelPath = relPathForTestCase(workspaceRoot, relPath, tc);
       const id = testNodeId(tcRelPath, ancestors, title);

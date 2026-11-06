@@ -1,6 +1,7 @@
 // packages/fliwright-vscode/src/webview/viewer/components/RunStatusBar.tsx
 import type { SerializableRun } from '../types.js';
 import { Badge } from '../../components/ui/badge.js';
+import { BrandMark } from '../../components/BrandMark.js';
 
 function statusGlyph(status: string): string {
   if (status === 'passed') return '✓';
@@ -45,6 +46,7 @@ export function RunStatusBar({ run }: { run: SerializableRun }): JSX.Element {
 
   return (
     <div className="flex flex shrink-0 items-center gap-2.5 border-b border-border bg-card px-3 py-1.5">
+      <BrandMark className="size-6" />
       <Badge variant={STATUS_VARIANT[tl.status] ?? 'secondary'} className="normal-case">
         {statusGlyph(tl.status)} {tl.status}
       </Badge>

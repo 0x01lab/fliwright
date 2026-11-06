@@ -38,7 +38,7 @@ describe('Selector', () => {
 
     it('supports regex text selectors', () => {
       expect(wire(new Selector(/log in/i))).toEqual({
-        match: { textRegex: 'log in' },
+        match: { textRegex: 'log in', textCaseSensitive: false },
       });
     });
 

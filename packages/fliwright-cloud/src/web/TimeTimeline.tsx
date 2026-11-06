@@ -173,22 +173,22 @@ export function TimeTimeline({
   const frameLaneHeight = frameHeight + 8;
   const height = actionsHeight + (frames.length ? frameLaneCount * frameLaneHeight + 8 : 0);
   return (
-    <section className="trace-timeline" aria-label="执行时间轴">
-      <div className="trace-heading">
-        <div className="trace-title">
+    <section className="min-w-0 border-b border-border bg-card" aria-label="执行时间轴" data-ui="trace-timeline">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 max-sm:px-2.5" data-ui="trace-heading">
+        <div className="flex items-center gap-2 text-xs [&>svg]:size-3.5 [&>svg]:text-muted-foreground [&>span]:text-[11px] [&>span]:text-muted-foreground" data-ui="trace-title">
           <Icon name="clock" />
           <b>执行时间轴</b>
           <span>
             {durationLabel(axis.durationMs)}
-            <span className="trace-separator">/</span>
+            <span className="mx-2 text-border" data-ui="trace-separator">/</span>
             {axis.entries.length} 个操作
           </span>
         </div>
-        <div className="trace-tools">
-          <span className="trace-legend">
-            <i />
+        <div className="flex items-center gap-2 max-sm:ml-auto" data-ui="trace-tools">
+          <span className="mr-3 flex items-center gap-2 text-[10px] text-muted-foreground max-sm:hidden [&_i]:size-2 [&_i]:rounded-sm" data-ui="trace-legend">
+            <i className="bg-pass" />
             通过
-            <i className="failed" />
+            <i className="bg-destructive" data-ui="failed" />
             失败
           </span>
           <Button
@@ -204,9 +204,9 @@ export function TimeTimeline({
           <Button
             variant="secondary"
             size="sm"
-            className="trace-zoom"
+            className="w-8.5 font-mono text-[10px]"
             aria-label="重置时间轴缩放"
-            onClick={() => setZoom(1)}
+            onClick={() => setZoom(1)} data-ui="trace-zoom"
           >
             {zoom}×
           </Button>
@@ -224,14 +224,14 @@ export function TimeTimeline({
       </div>
       {axis.entries.length ? (
         <>
-          <div className="trace-viewport" ref={viewport}>
+          <div className="max-h-60 overflow-auto overscroll-contain px-3 [scrollbar-width:thin] max-sm:px-2.5" ref={viewport} data-ui="trace-viewport">
             <div
-              className="trace-surface"
+              className="relative"
               ref={surface}
-              style={{ width: `${zoom * 100}%`, minWidth: 600 }}
+              style={{ width: `${zoom * 100}%`, minWidth: 600 }} data-ui="trace-surface"
             >
-              <div className="trace-ruler">
-                <div className="trace-ruler-ticks" aria-hidden="true">
+              <div className="sticky top-0 z-10 h-9 border-b border-border bg-card" data-ui="trace-ruler">
+                <div className="pointer-events-none absolute inset-0 overflow-hidden [&>span]:absolute [&>span]:h-full [&>span]:border-l [&>span]:border-border [&>span]:px-1 [&>span]:pt-1 [&>span]:font-mono [&>span]:text-[10px] [&>span]:whitespace-nowrap [&>span]:text-muted-foreground" aria-hidden="true" data-ui="trace-ruler-ticks">
                   {axis.ticks.map((t) => (
                     <span key={t} style={{ left: percent(t) }}>
                       {elapsed(t)}
@@ -241,7 +241,7 @@ export function TimeTimeline({
                 <button
                   type="button"
                   role="slider"
-                  className={`trace-playhead ${dragging ? 'dragging' : ''}`}
+                  className={`absolute bottom-0 z-10 size-6 -translate-x-1/2 cursor-ew-resize touch-none border-0 bg-transparent p-0 select-none before:absolute before:inset-x-1 before:top-1 before:bottom-0 before:rounded-sm before:bg-primary before:[clip-path:polygon(0_0,100%_0,100%_60%,50%_100%,0_60%)] after:absolute after:top-2 after:left-2.5 after:h-2 after:w-1 after:border-x after:border-primary-foreground after:opacity-80 hover:before:brightness-110 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-1 disabled:cursor-default disabled:opacity-50 ${dragging ? "before:brightness-110" : ''}`}
                   style={{ left: percent(cursorTime ?? 0) }}
                   aria-label="定位执行时间"
                   aria-orientation="horizontal"
@@ -300,11 +300,11 @@ export function TimeTimeline({
                     e.preventDefault();
                     e.stopPropagation();
                     seek(target);
-                  }}
+                  }} data-ui={`trace-playhead ${dragging ? 'dragging' : ''}`}
                 />
               </div>
               <div
-                className="trace-tracks"
+                className="relative cursor-crosshair"
                 style={{ height }}
                 onPointerMove={(e) => {
                   const time = pointerTime(e.clientX, e.currentTarget);
@@ -314,22 +314,22 @@ export function TimeTimeline({
                 onClick={(e) => {
                   if ((e.target as HTMLElement).closest('button')) return;
                   seek(pointerTime(e.clientX, e.currentTarget));
-                }}
+                }} data-ui="trace-tracks"
               >
                 {axis.ticks.map((t) => (
                   <span
                     key={t}
-                    className="trace-gridline"
-                    style={{ left: percent(t) }}
+                    className="pointer-events-none absolute inset-y-0 border-l border-dashed border-border"
+                    style={{ left: percent(t) }} data-ui="trace-gridline"
                   />
                 ))}
                 {selected && (
                   <span
-                    className="trace-selection"
+                    className="pointer-events-none absolute inset-y-0 bg-accent opacity-55"
                     style={{
                       left: percent(selected.startMs),
                       width: intervalWidth(selected.startMs, selected.endMs),
-                    }}
+                    }} data-ui="trace-selection"
                   />
                 )}
                 {axis.entries.map((entry) => {
@@ -341,7 +341,7 @@ export function TimeTimeline({
                       variant="ghost"
                       key={n.id}
                       ref={active ? selectedBar : undefined}
-                      className={`trace-action block h-3 min-h-0 rounded-none border-0 p-0 ${n.status} ${point ? 'point' : ''} ${active ? 'selected' : ''} ${entry.complete ? '' : 'incomplete'}`}
+                      className={`absolute z-10 block h-3 min-h-0 min-w-0 rounded-none border-0 bg-transparent p-0 after:absolute after:inset-x-0 after:top-1 after:h-0.5 after:rounded-full after:bg-pass after:opacity-65 hover:z-20 hover:bg-accent hover:after:opacity-100 data-[selected=true]:z-20 data-[selected=true]:bg-accent data-[selected=true]:after:opacity-100 data-[status=failed]:after:bg-destructive data-[status=running]:after:bg-muted-foreground data-[status=interrupted]:after:bg-warn data-[status=skipped]:after:bg-muted-foreground ${point ? "-translate-x-1/2" : ''} ${active ? "bg-accent" : ''} ${entry.complete ? '' : "after:opacity-40"}`}
                       style={{
                         left: percent(entry.startMs),
                         width: point
@@ -350,27 +350,29 @@ export function TimeTimeline({
                         top: entry.lane * 12,
                       }}
                       data-step-id={n.id}
+                      data-status={n.status}
+                      data-selected={active}
                       aria-pressed={active}
                       aria-label={`时间轴：${n.title}，${statuses[n.status] ?? n.status}，${durationLabel(durationMs(n))}`}
                       title={`${n.title}\n${elapsed(entry.startMs)} → ${entry.complete ? elapsed(entry.endMs) : '结束时间未采集'} · ${durationLabel(durationMs(n))}`}
                       onClick={() => {
                         setCursor(undefined);
                         onSelect(n.id);
-                      }}
+                      }} data-ui={`trace-action ${point ? 'point' : ''} ${active ? 'selected' : ''} ${entry.complete ? '' : 'incomplete'}`}
                     />
                   );
                 })}
                 {frames.map(({ entry, url, imageIndex, time, left, lane }) => (
                   <React.Fragment key={`${entry.node.id}-${imageIndex}`}>
                     <span
-                      className="trace-frame-marker"
+                      className="pointer-events-none absolute w-px bg-border"
                       style={{ left: percent(time), top: actionsHeight, height: lane * frameLaneHeight + 6 }}
-                      aria-hidden="true"
+                      aria-hidden="true" data-ui="trace-frame-marker"
                     />
                     <Button
                       variant="ghost"
                       ref={entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? selectedFrame : undefined}
-                      className={`trace-frame grid h-40 w-28 min-h-0 rounded-sm p-0 ${entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? 'selected' : ''}`}
+                      className={`absolute z-10 grid h-40 min-h-0 w-28 overflow-hidden rounded-sm bg-muted p-0 shadow-sm hover:bg-accent [&_img]:block [&_img]:h-full [&_img]:min-h-0 [&_img]:w-full [&_img]:object-contain ${entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? "bg-accent" : ''}`}
                       style={{ left, top: actionsHeight + lane * frameLaneHeight + 6 }}
                       data-step-id={entry.node.id}
                       data-time-ms={time}
@@ -380,20 +382,20 @@ export function TimeTimeline({
                       onClick={() => {
                         setCursor({ id: entry.node.id, time });
                         onSelect(entry.node.id, imageIndex);
-                      }}
+                      }} data-ui={`trace-frame ${entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? 'selected' : ''}`}
                     >
                       <TimelineScreenshot key={url} url={url} title={entry.node.title} />
                     </Button>
                   </React.Fragment>
                 ))}
                 <span
-                  className="trace-cursor"
-                  style={{ left: percent(cursorTime ?? 0) }}
+                  className="pointer-events-none absolute inset-y-0 z-20 w-px bg-primary"
+                  style={{ left: percent(cursorTime ?? 0) }} data-ui="trace-cursor"
                 />
                 {hover && (
                   <span
-                    className="trace-hover-line"
-                    style={{ left: percent(hover.time) }}
+                    className="pointer-events-none absolute inset-y-0 z-20 w-px bg-muted-foreground opacity-55"
+                    style={{ left: percent(hover.time) }} data-ui="trace-hover-line"
                   />
                 )}
               </div>
@@ -401,13 +403,13 @@ export function TimeTimeline({
           </div>
         </>
       ) : (
-        <div className="empty compact">
+        <div className="grid justify-items-center gap-2 px-4 py-7 text-center text-muted-foreground [&_svg]:size-6 [&_h3]:text-sm [&_p]:max-w-[44ch] [&_p]:text-xs px-2.5 py-4 text-xs" data-ui="empty compact">
           此尝试未采集有效时间，可在步骤列表中查看已有证据。
         </div>
       )}
-      <div className="trace-controls">
+      <div className="flex flex-wrap items-center gap-3 border-t border-border px-3 py-2" data-ui="trace-controls">
         {controls}
-        <span className="trace-current-time" aria-label="当前时间 / 总时长">
+        <span className="ml-auto inline-flex items-center gap-2 font-mono text-[11px] whitespace-nowrap text-muted-foreground tabular-nums [&_b]:font-medium [&_b]:text-foreground" aria-label="当前时间 / 总时长" data-ui="trace-current-time">
           <b>{elapsed(cursorTime ?? 0)}</b>
           <span>/</span>
           {elapsed(axis.durationMs)}
@@ -420,7 +422,7 @@ export function TimeTimeline({
 function TimelineScreenshot({ url, title }: { url: string; title: string }) {
   const [failed, setFailed] = useState(false);
   return failed ? (
-    <span className="trace-frame-missing"><Icon name="camera" />截图不可用</span>
+    <span className="grid h-full content-center justify-items-center text-[9px] whitespace-normal text-muted-foreground" data-ui="trace-frame-missing"><Icon name="camera" />截图不可用</span>
   ) : (
     <img src={url} alt={`${title} · 时间轴截图`} loading="lazy" draggable={false} onError={() => setFailed(true)} />
   );

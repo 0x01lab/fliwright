@@ -92,7 +92,7 @@ export async function collectCheckoutCatalog(project: string, suites: Record<str
   const output = await scanProcess(process.execPath, ['--input-type=module', '--eval', bootstrap], project, env, signal);
   const lines = output.split(/\r?\n/).filter(line => line.startsWith(marker));
   if (lines.length !== 1) throw new CatalogScanFailure('The collector did not return exactly one catalog result. Check the repository test configuration.');
-  return JSON.parse(lines[0]!.slice(marker.length)) as Pick<TestCatalog, 'suites' | 'scenarios' | 'scannerVersion' | 'fliwrightVersion'>;
+  return JSON.parse(lines[0]!.slice(marker.length)) as Pick<TestCatalog, 'suites' | 'scenarios' | 'mocks' | 'scannerVersion' | 'fliwrightVersion'>;
 }
 export async function executeCatalogScan(lease: CatalogScanLease, root: string, signal: AbortSignal, credentialHomes: Record<string, string> = {}): Promise<{ catalog: TestCatalog; head?: string }> {
   await mkdir(root, { recursive: true, mode: 0o700 });

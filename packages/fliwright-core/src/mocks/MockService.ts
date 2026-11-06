@@ -3,6 +3,7 @@ import type { MockRouteResponse } from '../types.js';
 import { readWorkspaceConfigSync } from '../WorkspaceConfig.js';
 import { MockRuntime } from './MockRuntime.js';
 import type { ActivateMockRulesOptions, NormalizedRequestMatcher, WaitForMockCallOptions } from './types.js';
+import type { MockRuleSet, MockRuleSetReport } from './MockRuleSet.js';
 
 export interface FliwrightMockServiceOptions {
   createDriver?: () => FliwrightDriver;
@@ -58,6 +59,10 @@ export class FliwrightMockService {
 
   async loadRules(mockDir?: string): Promise<void> {
     return this.requireRuntime().loadRules(mockDir);
+  }
+
+  async applyRuleSet(config: MockRuleSet): Promise<MockRuleSetReport> {
+    return this.requireRuntime().applyRuleSet(config);
   }
 
   async activateRules(options: ActivateMockRulesOptions): Promise<void> {

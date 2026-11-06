@@ -30,6 +30,14 @@ it('persists events before acknowledging operations and records monotonic durati
   recorder.close();
 });
 
+it('keeps a protocol diagnosis through durable recording and upload', async () => {
+  const { root, recorder } = setup();
+  const error = Object.assign(new Error('protocol mismatch'), { workerDiagnostic: 'Bridge protocol incompatible (client=2, bridge=1)' });
+  await expect(recorder.channel.run('app.verify', async () => { throw error; })).rejects.toBe(error);
+  expect(readFileSync(join(root, 'worker-timeline.jsonl'), 'utf8')).toContain('Bridge protocol incompatible (client=2, bridge=1)');
+  recorder.close();
+});
+
 it('keeps an unacknowledged tail and never blocks business work when delivery fails', async () => {
   const { recorder, root } = setup(async () => { throw new Error('offline'); });
   expect(await recorder.channel.run('tests.run', async () => 42)).toBe(42);

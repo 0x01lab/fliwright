@@ -1,3 +1,5 @@
+import { mkdir, symlink } from 'node:fs/promises';
+import { resolve, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Uri } from 'vscode';
 import { ScriptRunner } from '../src/scripts/ScriptRunner.js';
@@ -56,6 +58,8 @@ describe('ScriptRunner', () => {
   it('runs @fliwright/vitest scripts through the Vitest runner', async () => {
     const root = await createWorkspace();
     await writeText(root, 'package.json', JSON.stringify({ type: 'module' }));
+    await mkdir(join(root, 'node_modules/@fliwright'), { recursive: true });
+    await symlink(resolve('../fliwright-vitest'), join(root, 'node_modules/@fliwright/vitest'), 'dir');
     await writeText(root, '.fliwright/scripts/auto.mjs', [
       "import { script } from '@fliwright/vitest';",
       "script('auto', async () => {});",
@@ -105,7 +109,7 @@ describe('ScriptRunner', () => {
       expect.stringMatching(/fliwright-vitest[\\/]dist[\\/]RecoveryReporter\.js$/),
     ]);
     expect(payload.config).not.toContain("from 'vitest/config'");
-    expect(payload.config).toContain("from '@fliwright/vitest/preset'");
+    expect(payload.config).toMatch(/from "file:.*preset\.js"/);
     expect(payload.config).toContain(`root: ${JSON.stringify(root)}`);
     expect(payload.config).toContain('include: [".fliwright/scripts/auto.mjs"]');
     expect(payload.config).toContain('maxWorkers: 1');
@@ -118,6 +122,8 @@ describe('ScriptRunner', () => {
   it('builds the VS Code terminal command without pnpm exec for @fliwright/vitest scripts', async () => {
     const root = await createWorkspace();
     await writeText(root, 'package.json', JSON.stringify({ type: 'module' }));
+    await mkdir(join(root, 'node_modules/@fliwright'), { recursive: true });
+    await symlink(resolve('../fliwright-vitest'), join(root, 'node_modules/@fliwright/vitest'), 'dir');
     await writeText(root, '.fliwright/scripts/auto.mjs', [
       "import { script } from '@fliwright/vitest';",
       "script('auto', async () => {});",

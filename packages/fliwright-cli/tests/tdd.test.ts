@@ -25,12 +25,12 @@ describe('tddCycleCommand', () => {
     })).rejects.toThrow(/vm-url or --device-id/i);
   });
 
-  it('starts, focuses, cycles, and stops a temporary runtime', async () => {
+  it.each(['/repo/vitest.config.ts', '/repo'])('resolves the focus relative to %s and stops a temporary runtime', async (configRoot) => {
     const start = vi.fn(async () => snapshot());
     const focus = vi.fn(async () => {});
     const result: TddCycleResult = {
       status: 'green',
-      file: '/tmp/sample.test.ts',
+      file: '/repo/sample.test.ts',
       testName: 'passes',
       durationMs: 12,
       lastSync: 'reload',
@@ -47,44 +47,27 @@ describe('tddCycleCommand', () => {
     } as any;
 
     const output = await tddCycleCommand({
-      configRoot: '/repo/vitest.config.ts',
+      configRoot,
       vmUrl: 'ws://vm/ws',
-      file: '/tmp/sample.test.ts',
+      file: 'sample.test.ts',
       testName: 'passes',
       sync: 'reload',
       changes: ['lib/page.dart'],
-      homeRoute: '/dashboard',
-      resetCategories: ['navigation', 'riverpod', 'mock', 'storage', 'authTokens'],
-      riverpodOverrideJson: [
-        '{"provider":"cartProvider","value":[]}',
-        '{"key":"authStateProvider","value":{"signedIn":false}}',
-      ],
-      mockProfile: 'empty',
-      mockDir: '/repo/.fliwright/mocks',
-      storageSeedJson: '{"draftOrderId":"order-1"}',
+      scenario: 'guest',
       print: false,
     }, {
       createRuntime: () => runtime,
+      resolveConfig: async () => ({ scenarios: { guest: { name: 'guest', layers: [] } } }) as never,
     });
 
     expect(output.result).toBe(result);
     expect(start).toHaveBeenCalledWith(expect.objectContaining({
-      configRoot: '/repo/vitest.config.ts',
+      configRoot,
       vmServiceUrl: 'ws://vm/ws',
       launchMode: 'attach',
-      scenario: {
-        homeRoute: '/dashboard',
-        resetCategories: ['navigation', 'riverpod', 'mock', 'storage', 'authTokens'],
-        riverpodOverrides: [
-          { provider: 'cartProvider', value: [] },
-          { key: 'authStateProvider', value: { signedIn: false } },
-        ],
-        mockProfile: 'empty',
-        mockDir: '/repo/.fliwright/mocks',
-        storageSeed: { draftOrderId: 'order-1' },
-      },
+      defaultScenario: 'guest',
     }));
-    expect(focus).toHaveBeenCalledWith('/tmp/sample.test.ts', 'passes');
+    expect(focus).toHaveBeenCalledWith('/repo/sample.test.ts', 'passes');
     expect(cycle).toHaveBeenCalledWith('passes', expect.objectContaining({
       sync: 'reload',
       changes: ['lib/page.dart'],
@@ -117,37 +100,16 @@ describe('tddCycleCommand', () => {
     expect(stop).toHaveBeenCalledWith({ keepAppAlive: true });
   });
 
-  it('rejects non-object storage seed JSON before starting the runtime', async () => {
+  it('rejects an unknown named scenario before starting the runtime', async () => {
     const start = vi.fn(async () => snapshot());
-
-    await expect(tddCycleCommand({
-      configRoot: '/repo/vitest.config.ts',
-      vmUrl: 'ws://vm/ws',
-      file: '/tmp/sample.test.ts',
-      storageSeedJson: '[]',
-      print: false,
-    }, {
+    await expect(tddCycleCommand({ configRoot: '/repo/vitest.config.ts', vmUrl: 'ws://vm/ws',
+      file: '/tmp/sample.test.ts', scenario: 'unknown', print: false }, {
       createRuntime: () => ({ start }) as any,
-    })).rejects.toThrow(/storage-seed-json must be a JSON object/i);
-
+      resolveConfig: async () => ({ scenarios: {} }) as never,
+    })).rejects.toThrow(/unknown/i);
     expect(start).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid riverpod override JSON before starting the runtime', async () => {
-    const start = vi.fn(async () => snapshot());
-
-    await expect(tddCycleCommand({
-      configRoot: '/repo/vitest.config.ts',
-      vmUrl: 'ws://vm/ws',
-      file: '/tmp/sample.test.ts',
-      riverpodOverrideJson: ['{"provider":"cartProvider"}'],
-      print: false,
-    }, {
-      createRuntime: () => ({ start }) as any,
-    })).rejects.toThrow(/riverpod-override-json.*provider \| key, value/i);
-
-    expect(start).not.toHaveBeenCalled();
-  });
 });
 
 describe('tddStatusCommand', () => {

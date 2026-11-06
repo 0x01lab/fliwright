@@ -1,11 +1,9 @@
 import * as vscode from 'vscode';
 import type { TestDiscoveryService } from '../runner/TestDiscoveryService.js';
-import type { TestStatusStore } from '../testing/TestStatusStore.js';
+import type { AssertionStatusEntry, TestStatusStore } from '../testing/TestStatusStore.js';
 import { relPathOf } from '../testing/relPath.js';
-// Namespace import so test spies (vi.spyOn(builder, 'buildTestTree')) on the
-// module namespace are observed at call time — required by the lazy-parse test.
-import * as TestTreeBuilder from '../testing/TestTreeBuilder.js';
-import type { ParsedFile, ParsedNode } from '../testing/TestTreeBuilder.js';
+import { TestCatalogCollector } from '../testing/TestCatalogCollector.js';
+import type { CollectedFile, CollectedNode } from '../testing/TestCatalogTree.js';
 import {
   aggregateStatus,
   testNodeId,
@@ -23,19 +21,7 @@ interface StatusEntry {
   durationMs?: number;
 }
 
-/**
- * VS Code TreeDataProvider for the Tests panel.
- *
- * Renders a three-level tree: file -> describe (group) -> test (case). Statuses
- * from {@link TestStatusStore} are joined onto case nodes by node id; group and
- * file statuses aggregate upward.
- *
- * LAZY PARSING CONTRACT: root `getChildren()` only lists files (status-map
- * lookup + findFiles; zero source parsing). Source parsing happens the first
- * time a file row is expanded; the parsed subtree is cached per file and reused
- * on subsequent expands. {@link invalidateFile} drops ONE file's cache entry so
- * Task 9's debounced save listener can refresh an edited file.
- */
+/** Tests panel with lazy, cancellable Vitest collection and per-file caching. */
 export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> {
   private readonly emitter = new vscode.EventEmitter<TestTreeNode | undefined>();
   readonly onDidChangeTreeData = this.emitter.event;
@@ -45,46 +31,63 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   private runningWorkspace = false;
   private runningFile: string | undefined;
   private runningTestId: string | undefined;
-  /** Per-file parse cache: key = fileUri.toString(). */
-  private readonly parseCache: Map<string, ParsedFile> = new Map();
+  private disposed = false;
+  private readonly assertionCache = new Map<string, Promise<AssertionStatusEntry[]>>();
+  private readonly collectionCache = new Map<string, { promise: Promise<CollectedFile>; controller: AbortController }>();
 
   constructor(
     private readonly discovery: TestDiscoveryService,
     private readonly statusStore: TestStatusStore,
+    private readonly collector: Pick<TestCatalogCollector, 'collect'> = new TestCatalogCollector(),
+    private readonly onCollectionError: (message: string) => void = () => {},
   ) {}
 
-  /** Full refresh — drop roots, status map, and ALL parse caches. */
+  /** Full refresh — drop roots, status map, and all collection caches. */
   refresh(): void {
     this.roots = undefined;
     this.statusMap = new Map();
-    this.parseCache.clear();
+    this.assertionCache.clear();
+    this.clearCollections();
     this.emitter.fire(undefined);
   }
 
-  /**
-   * Drop ONE file's parse cache entry and re-fire its subtree. Called by the
-   * debounced onDidSaveTextDocument listener (Task 9) so an edited file's tree
-   * is re-parsed on next expand while every other file stays cached.
-   */
-  invalidateFile(uri: vscode.Uri): void {
-    this.parseCache.delete(uri.toString());
-    const fileNode = this.roots?.find((f) => f.uri.toString() === uri.toString());
-    this.emitter.fire(fileNode);
+  /** Reload execution results without invalidating expensive test collection. */
+  async refreshStatuses(): Promise<void> {
+    this.statusMap = await this.loadStatusMap();
+    this.assertionCache.clear();
+    this.emitter.fire(undefined);
   }
 
-  /**
-   * Refresh ONE test file from the Tests panel inline action. This keeps the
-   * root file list and every other file's parse cache intact; source parsing
-   * remains lazy and happens only if this file row is expanded again.
-   */
-  async refreshFile(uri: vscode.Uri): Promise<void> {
-    this.parseCache.delete(uri.toString());
-    this.statusMap = await this.loadStatusMap();
-    const fileNode = this.roots?.find((f) => f.uri.toString() === uri.toString());
-    if (fileNode) {
-      fileNode.status = this.statusForFile(fileNode.relPath, 'unknown');
+  /** Cancel and invalidate a file, preserving every other file's collection. */
+  invalidateFile(uri: vscode.Uri): void {
+    const key = uri.toString();
+    this.collectionCache.get(key)?.controller.abort();
+    this.collectionCache.delete(key);
+    const file = this.roots?.find(node => node.uri.toString() === key);
+    if (file) for (const testId of this.assertionCache.keys()) {
+      if (testId.startsWith(`${file.relPath}::`)) this.assertionCache.delete(testId);
     }
-    this.emitter.fire(fileNode);
+    this.emitter.fire(file);
+  }
+
+  /** Refresh an individual file and its persisted run status. */
+  async refreshFile(uri: vscode.Uri): Promise<void> {
+    this.statusMap = await this.loadStatusMap();
+    const file = this.roots?.find(node => node.uri.toString() === uri.toString());
+    if (file) file.status = this.statusForFile(file.relPath, 'unknown');
+    this.invalidateFile(uri);
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.assertionCache.clear();
+    this.clearCollections();
+    this.emitter.dispose();
+  }
+
+  private clearCollections(): void {
+    for (const entry of this.collectionCache.values()) entry.controller.abort();
+    this.collectionCache.clear();
   }
 
   setRunning(target?: { workspace?: boolean; relPath?: string; testId?: string }): void {
@@ -96,8 +99,11 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   }
 
   async getChildren(element?: TestTreeNode): Promise<TestTreeNode[]> {
-    // Activation path: status map (index.json only) + file list (findFiles only).
-    // NO source parsing happens here.
+    if (this.disposed) return [];
+    if (!vscode.workspace.isTrusted) {
+      return [{ kind: 'empty', label: 'Trust this workspace to discover Fliwright tests' }];
+    }
+    // Root expansion lists files; Vitest starts only when a file is expanded.
     if (!this.roots) {
       this.statusMap = await this.loadStatusMap();
       this.roots = await this.discoverRoots();
@@ -111,9 +117,14 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
 
     switch (element.kind) {
       case 'testFile': {
-        // LAZY: parses the file ONCE on first expand, caches the result.
-        const parsed = await this.parsedFileFor(element);
-        const children = parsed.nodes.map((n) =>
+        let collected: CollectedFile;
+        try { collected = await this.collectedFileFor(element); }
+        catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.onCollectionError(`${element.relPath}: ${message}`);
+          return [{ kind: 'empty', label: message }];
+        }
+        const children = collected.nodes.map((n) =>
           this.toNode(element.relPath, [], n, element.uri),
         );
         // Aggregate file status from top-level children now that they exist.
@@ -131,7 +142,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
     }
   }
 
-  getTreeItem(element: TestTreeNode): vscode.TreeItem {
+  async getTreeItem(element: TestTreeNode): Promise<vscode.TreeItem> {
     switch (element.kind) {
       case 'empty':
         return iconItem(
@@ -164,10 +175,11 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
           'testGroup',
         );
       case 'testCase': {
+        const assertions = await this.assertionsForCase(element);
         const item = iconItem(
           element.label,
           statusIcon(element.status),
-          hasRunnableStatus(element.status)
+          assertions.length > 0
             ? vscode.TreeItemCollapsibleState.Collapsed
             : vscode.TreeItemCollapsibleState.None,
           element.status === 'running' ? 'testCaseRunning' : 'testCase',
@@ -206,15 +218,29 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
 
   // ── internals ────────────────────────────────────────────────────────
 
-  private async parsedFileFor(file: TestFileNode): Promise<ParsedFile> {
+  private async collectedFileFor(file: TestFileNode): Promise<CollectedFile> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) return { nodes: [] };
     const key = file.uri.toString();
-    const cached = this.parseCache.get(key);
-    if (cached) return cached;
-    const bytes = await vscode.workspace.fs.readFile(file.uri);
-    const code = new TextDecoder().decode(bytes);
-    const parsed = TestTreeBuilder.buildTestTree(code);
-    this.parseCache.set(key, parsed);
-    return parsed;
+    while (!this.disposed) {
+      let entry = this.collectionCache.get(key);
+      if (!entry) {
+        const controller = new AbortController();
+        entry = { controller, promise: this.collector.collect(root.fsPath, file.relPath, controller.signal) };
+        this.collectionCache.set(key, entry);
+      }
+      try {
+        const result = await entry.promise;
+        if (this.collectionCache.get(key) === entry) return result;
+      } catch (error) {
+        if (!entry.controller.signal.aborted) {
+          if (this.collectionCache.get(key) === entry) this.collectionCache.delete(key);
+          throw error;
+        }
+      }
+      // A refresh overtook this request. Join the replacement collection.
+    }
+    return { nodes: [] };
   }
 
   private async discoverRoots(): Promise<TestFileNode[]> {
@@ -244,27 +270,25 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   }
 
   /**
-   * Build a tree node (and its full subtree for groups) from a parsed node.
-   * Approach (a) from the brief: recurse eagerly so each TestGroupNode carries
-   * its `children` array; getChildren(testGroup) then just returns it.
+   * Build groups and cases from collected Vitest titles, retaining run-status IDs.
    */
   private toNode(
     relPath: string,
     ancestors: string[],
-    parsed: ParsedNode,
+    collected: CollectedNode,
     fileUri: vscode.Uri,
   ): TestGroupNode | TestCaseNode {
-    const id = testNodeId(relPath, ancestors, parsed.title);
+    const id = testNodeId(relPath, ancestors, collected.title);
 
-    if (parsed.kind === 'group') {
-      const childAncestors = [...ancestors, parsed.title];
-      const children = parsed.children.map((child) =>
+    if (collected.kind === 'group') {
+      const childAncestors = [...ancestors, collected.title];
+      const children = collected.children.map((child) =>
         this.toNode(relPath, childAncestors, child, fileUri),
       );
       return {
         kind: 'testGroup',
         id,
-        label: parsed.title,
+        label: collected.title,
         status: aggregateStatus(children.map((c) => c.status)),
         children,
       };
@@ -274,7 +298,8 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
     return {
       kind: 'testCase',
       id,
-      label: parsed.title,
+      label: collected.title,
+      testNamePattern: `^${[...ancestors, collected.title].join(' ').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
       status: this.statusForCase(relPath, id, entry?.status ?? 'unknown'),
       durationMs: entry?.durationMs,
       fileUri,
@@ -302,7 +327,12 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   }
 
   private async assertionsForCase(testCase: TestCaseNode): Promise<TestAssertionNode[]> {
-    const entries = await this.statusStore.loadAssertions(testCase.id);
+    let pending = this.assertionCache.get(testCase.id);
+    if (!pending) {
+      pending = this.statusStore.loadAssertions(testCase.id);
+      this.assertionCache.set(testCase.id, pending);
+    }
+    const entries = await pending;
     return entries.map((entry) => ({
       kind: 'testAssertion' as const,
       id: `${testCase.id}::assertion/${entry.id}`,
@@ -335,8 +365,4 @@ function statusIcon(s: TestNodeStatus): string {
   if (s === 'running') return 'loading~spin';
   if (s === 'skipped') return 'debug-step-over';
   return 'circle-outline';
-}
-
-function hasRunnableStatus(s: TestNodeStatus): boolean {
-  return s === 'passed' || s === 'failed' || s === 'running' || s === 'skipped';
 }

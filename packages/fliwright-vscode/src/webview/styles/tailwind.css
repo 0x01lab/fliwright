@@ -2,10 +2,8 @@
  *
  * Shared Tailwind v4 entry for BOTH webviews (viewer + recording-canvas).
  *
- * The @theme block remaps shadcn/ui semantic color tokens onto VS Code theme
- * variables (--vscode-*). VS Code injects those vars for whatever theme the
- * user has (light/dark/high-contrast), so every utility and shadcn component
- * auto-follows the host theme with NO runtime theme switching and NO .dark class.
+ * Neutral surfaces and status colors follow VS Code. Brand actions use
+ * contrast-adjusted teal, with native host colors in high-contrast themes.
  */
 
 @import "tailwindcss";
@@ -13,8 +11,34 @@
 /* Explicitly include both webview apps' source for class scanning. */
 @source "../viewer";
 @source "../recording-canvas";
+@source "../components";
 
-@theme {
+:root {
+  --fliwright-cyan: #00c9d8;
+  --fliwright-teal: #00bfa6;
+  --fliwright-green: #36d98a;
+  --fliwright-lime: #b7f34a;
+  --fliwright-yellow: #ffd84d;
+  --fliwright-navy: #142d4e;
+  --fliwright-action: var(--fliwright-teal);
+  --fliwright-action-ink: var(--fliwright-navy);
+  --fliwright-link: var(--fliwright-cyan);
+}
+body.vscode-light {
+  --fliwright-action: #007f73;
+  --fliwright-action-ink: #ffffff;
+  --fliwright-link: #007f73;
+}
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --fliwright-action: var(--vscode-button-background);
+  --fliwright-action-ink: var(--vscode-button-foreground);
+  --fliwright-link: var(--vscode-textLink-foreground);
+}
+body.vscode-high-contrast .brand-mark { filter: grayscale(1) brightness(0) invert(1); }
+body.vscode-high-contrast-light .brand-mark { filter: grayscale(1) brightness(0); }
+
+@theme inline {
   /* shadcn semantic colors -> VS Code tokens */
   --color-background: var(--vscode-editor-background);
   --color-foreground: var(--vscode-foreground);
@@ -22,8 +46,8 @@
   --color-card-foreground: var(--vscode-foreground);
   --color-popover: var(--vscode-sideBar-background);
   --color-popover-foreground: var(--vscode-foreground);
-  --color-primary: var(--vscode-button-background);
-  --color-primary-foreground: var(--vscode-button-foreground);
+  --color-primary: var(--fliwright-action);
+  --color-primary-foreground: var(--fliwright-action-ink);
   --color-secondary: var(--vscode-list-hoverBackground);
   --color-secondary-foreground: var(--vscode-foreground);
   --color-muted: var(--vscode-editorWidget-background);
@@ -47,12 +71,12 @@
   --color-value-string: var(--vscode-charts-orange, #d18616);
   --color-value-number: var(--vscode-charts-blue, #1a85ff);
   --color-value-key: var(--vscode-symbolIcon-propertyForeground, var(--vscode-foreground));
-  --color-link: var(--vscode-textLink-foreground);
+  --color-link: var(--fliwright-link);
   --color-match: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 179, 8, 0.4));
 
   /* React Flow accents */
   --color-flow-grid: var(--vscode-editorGutter-commentRangeForeground, rgba(128, 128, 128, 0.25));
-  --color-flow-edge: var(--vscode-charts-blue, #1a85ff);
+  --color-flow-edge: var(--fliwright-action);
 
   /* radii (shadcn convention, derived from --radius) */
   --radius: 0.375rem;
@@ -110,7 +134,7 @@
   overflow: hidden;
 }
 .frame-node--error {
-  border-color: var(--vscode-errorForeground);
+  background: color-mix(in srgb, var(--vscode-errorForeground) 7%, var(--vscode-sideBar-background));
 }
 .frame-node--ignored {
   opacity: 0.58;
@@ -137,8 +161,8 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--vscode-charts-blue, #1a85ff);
-  color: #071512;
+  background: var(--fliwright-action);
+  color: var(--fliwright-action-ink);
   font-weight: 750;
   font-size: 12px;
 }

@@ -1,5 +1,7 @@
 # Fliwright 测试编写参考 — 索引
 
+原生 UIKit / Android 控件、系统权限弹窗、原生输入与 Flutter 混合测试见 [native.md](./native.md)。
+
 本目录是 **`write-fliwright-tests`** 技能的支撑知识库。
 按需加载你需要的主题；写测试前不需要全部读完。
 
@@ -11,6 +13,10 @@
 
 | 文档 | 覆盖内容 | 何时读… |
 | --- | --- | --- |
+| [test-templates.md](./test-templates.md) | 脚本内显式首页/Mock 清理 hooks、单条用例、`for` / `each`、不同场景、提交与请求验证 | 新建文件时选择包含显式 hooks 的用例结构 |
+| [scenario-design.md](./scenario-design.md) | 从测试目标推导用例、前置状态、命名场景及契约匹配的 Mock，验证关键请求和 UI 分支 | 创建测试或调整覆盖行为，不依赖 GitLab |
+| [vitest-authoring.md](./vitest-authoring.md) | 官方 API 与安装版本、参数化、hooks/cleanup、串行隔离、用例收集与编辑器发现 | 新建测试或调整注册、参数化、生命周期 |
+| [mock-rule-sets.md](./mock-rule-sets.md) | 项目共享与 Item 专属 Mock、显式覆盖、用例隔离和规则追溯 | 你在为 Item 验收组合数据或迁移重复 Mock helper |
 | [getting-started.md](./getting-started.md) | 桥接设置、第一个测试、环境变量、运行测试 | 你在写第一个 Fliwright 测试 |
 | [timeline-native.md](./timeline-native.md) | 新版 `script`/`test`、`flow`、timeline-aware `mock`、`agent`、`expect(locator, title?)`、timeline/CLI inspection | 你在写新版自动化脚本、清理录制产物、或需要 AI/agent 可读失败 |
 | [logging.md](./logging.md) | `logger` fixture、结构化 JSONL 日志、pretty/compact/jsonl 格式、stderr/stdout/file 输出、日志环境变量 | 你需要脚本进度输出、agent 可读日志、CI 日志或调试细节 |

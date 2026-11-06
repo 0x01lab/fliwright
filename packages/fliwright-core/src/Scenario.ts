@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { StateAdapter } from './interfaces/StateAdapter.js';
+import type { ScenarioDevicePreparation, ScenarioDeviceReport } from './ScenarioDevicePreparation.js';
+import type { MockRuleSelection, MockRuleSet, MockRuleSetReport, MockRuleSource } from './mocks/MockRuleSet.js';
 
 export type ScenarioStartupIsolation = 'required' | 'optional';
 export type ScenarioExecutionMode = 'managed-start' | 'attach';
@@ -13,6 +15,7 @@ export interface TestScenario {
 }
 
 export type ScenarioLayer =
+  | ScenarioDeviceLayer
   | ScenarioMocksLayer
   | ScenarioStorageLayer
   | ScenarioAuthLayer
@@ -20,11 +23,31 @@ export type ScenarioLayer =
   | ScenarioAppLayer
   | ScenarioNavigationLayer;
 
+/** Portable device requirements, prepared separately from the connected app. */
+export interface ScenarioDeviceLayer {
+  kind: 'device';
+  requiredCapabilities?: string[];
+  baseline?: string;
+  biometricBaseline?: string;
+  permissions?: Array<{ permission: string; state: 'granted' | 'denied' | 'prompt' }>;
+  media?: Array<{ kind: 'image'; fixtureId: string }>;
+  cameraSource?: { front?: ScenarioCameraSource; back?: ScenarioCameraSource };
+}
+
+export interface ScenarioCameraSource {
+  kind: 'image' | 'video';
+  fixtureId: string;
+}
+
 export interface ScenarioMocksLayer {
   kind: 'mocks';
+  /** Explicit shared/Item sources. Inherited source layers are applied together once. */
+  sources?: MockRuleSource[];
   profile?: string;
   directory?: string;
   denyUnmatchedRequests?: boolean;
+  /** With sources, select only named responses; use replace for an inherited endpoint. */
+  rules?: Array<{ endpoint: string; method: string; rule: string; source?: string; replace?: boolean }>;
 }
 
 export interface ScenarioStorageLayer {
@@ -75,10 +98,13 @@ export interface ScenarioApplicationReport {
   mode: ScenarioExecutionMode;
   appliedLayers: ScenarioLayer['kind'][];
   ready: true;
+  device?: ScenarioDeviceReport;
+  mocks?: MockRuleSetReport;
 }
 
 export interface ScenarioDriver {
   mock?: {
+    applyRuleSet?(config: MockRuleSet): Promise<MockRuleSetReport>;
     clearFlutterRoutes?(): Promise<void>;
     clearCalls?(): Promise<void>;
     setPassthrough?(enabled: boolean): Promise<void>;
@@ -159,6 +185,7 @@ export class ScenarioResolver {
   }
 
   private assertUniqueResources(scenario: ResolvedScenario): void {
+    composeScenarioMocks(scenario.layers);
     const owners = new Set<string>();
     for (const layer of scenario.layers) {
       for (const resource of resourcesFor(layer)) {
@@ -177,8 +204,16 @@ export class ScenarioCoordinator {
 
   async apply(
     scenario: ResolvedScenario | TestScenario,
-    options: { mode: ScenarioExecutionMode },
+    options: { mode: ScenarioExecutionMode; attemptId?: string; devicePreparation?: ScenarioDevicePreparation },
   ): Promise<ScenarioApplicationReport> {
+    const mockConfig = composeScenarioMocks(scenario.layers);
+    let device: ScenarioDeviceReport | undefined;
+    if (scenario.layers.some(layer => layer.kind === 'device')) {
+      if (!options.attemptId || typeof options.devicePreparation?.consume !== 'function') {
+        throw new ScenarioPreparationError(`Scenario '${scenario.name}' requires device preparation before application setup.`);
+      }
+      device = await options.devicePreparation.consume(scenario, { mode: options.mode, attemptId: options.attemptId });
+    }
     if (scenario.startupIsolation === 'required' && options.mode === 'attach') {
       throw new ScenarioPreparationError(`Scenario '${scenario.name}' requires startup isolation and cannot run in attach mode.`);
     }
@@ -190,8 +225,19 @@ export class ScenarioCoordinator {
       }
     }
 
-    const appliedLayers: ScenarioLayer['kind'][] = [];
-    for (const kind of ['mocks', 'storage', 'auth', 'state', 'app', 'navigation'] as const) {
+    const appliedLayers: ScenarioLayer['kind'][] = device ? ['device'] : [];
+    let mocks: MockRuleSetReport | undefined;
+    const mockLayer = scenario.layers.find((layer) => layer.kind === 'mocks');
+    if (mockLayer?.kind === 'mocks') {
+      if (mockConfig) {
+        if (!this.driver.mock?.applyRuleSet) throw new ScenarioPreparationError('Scenario mock sources require MockManager.applyRuleSet.');
+        mocks = await this.driver.mock.applyRuleSet(mockConfig);
+      } else {
+        await this.applyMocks(mockLayer);
+      }
+      appliedLayers.push('mocks');
+    }
+    for (const kind of ['storage', 'auth', 'state', 'app', 'navigation'] as const) {
       for (const layer of scenario.layers.filter((candidate) => candidate.kind === kind)) {
         await this.applyLayer(layer);
         appliedLayers.push(layer.kind);
@@ -206,7 +252,7 @@ export class ScenarioCoordinator {
       await this.sendBootstrapRequest('ext.fliwright.testBootstrap.release');
     }
 
-    return { scenario: scenario.name, mode: options.mode, appliedLayers, ready: true };
+    return { scenario: scenario.name, mode: options.mode, appliedLayers, ready: true, ...(device ? { device } : {}), ...(mocks ? { mocks } : {}) };
   }
 
   private async applyLayer(layer: ScenarioLayer): Promise<void> {
@@ -239,17 +285,31 @@ export class ScenarioCoordinator {
     await mock.clearFlutterRoutes();
     await mock.clearCalls();
     await mock.setPassthrough(layer.denyUnmatchedRequests !== false ? false : true);
-    if (!layer.profile) return;
+    if (!layer.profile && !layer.directory && !layer.rules?.length) return;
     if (!mock.loadRules || !mock.listRules || !mock.switchRule) {
-      throw new ScenarioPreparationError(`Scenario mock profile '${layer.profile}' requires rule-profile support.`);
+      throw new ScenarioPreparationError('Scenario mock selections require rule-profile support.');
     }
     await mock.loadRules(layer.directory);
-    const matching = mock.listRules().filter((endpoint) => endpoint.rules.includes(layer.profile!));
-    if (matching.length === 0) {
+    const endpoints = mock.listRules();
+    const matching = layer.profile ? endpoints.filter((endpoint) => endpoint.rules.includes(layer.profile!)) : [];
+    if (layer.profile && matching.length === 0) {
       throw new ScenarioPreparationError(`Scenario mock profile '${layer.profile}' was not found.`);
     }
+    const selected = new Set<string>();
+    for (const selection of layer.rules ?? []) {
+      const method = selection.method.toUpperCase();
+      const key = JSON.stringify([selection.endpoint, method]);
+      const endpoint = endpoints.find((item) => item.endpoint === selection.endpoint && item.method.toUpperCase() === method);
+      if (selected.has(key) || !endpoint?.rules.includes(selection.rule)) {
+        throw new ScenarioPreparationError(`Invalid scenario mock rule selection: ${method} ${selection.endpoint} -> ${selection.rule}.`);
+      }
+      selected.add(key);
+    }
     for (const endpoint of matching) {
-      await mock.switchRule(endpoint.endpoint, layer.profile, endpoint.method);
+      await mock.switchRule(endpoint.endpoint, layer.profile!, endpoint.method);
+    }
+    for (const selection of layer.rules ?? []) {
+      await mock.switchRule(selection.endpoint, selection.rule, selection.method.toUpperCase());
     }
   }
 
@@ -331,6 +391,7 @@ export class ScenarioCoordinator {
 
 function resourcesFor(layer: ScenarioLayer): string[] {
   switch (layer.kind) {
+    case 'device': return ['device'];
     case 'auth': return ['auth'];
     case 'navigation': return ['navigation'];
     case 'state': return [`state:${layer.adapter}:${layer.key}`];
@@ -338,6 +399,43 @@ function resourcesFor(layer: ScenarioLayer): string[] {
     case 'storage': return Object.keys(layer.seed ?? {}).map((key) => `storage:${key}`);
     case 'mocks': return [];
   }
+}
+
+/** Compose declarations first: a parent and child must never clear each other's routes. */
+function composeScenarioMocks(layers: ScenarioLayer[]): MockRuleSet | undefined {
+  const mocks = layers.filter((layer): layer is ScenarioMocksLayer => layer.kind === 'mocks');
+  if (!mocks.length) return undefined;
+  if (mocks.every(layer => layer.sources === undefined)) {
+    if (mocks.length > 1 || mocks.some(layer => layer.rules?.some(rule => rule.source !== undefined || rule.replace !== undefined))) {
+      throw new ScenarioResolutionError('Composed mock layers require explicit sources and source-qualified rules.');
+    }
+    return undefined;
+  }
+  const sources: MockRuleSource[] = [];
+  const rules: MockRuleSelection[] = [];
+  const names = new Set<string>();
+  let denyUnmatchedRequests: boolean | undefined;
+  for (const layer of mocks) {
+    if (!Array.isArray(layer.sources) || layer.directory !== undefined || layer.profile !== undefined) {
+      throw new ScenarioResolutionError('Mock sources cannot be combined with directory/profile layers.');
+    }
+    for (const source of layer.sources) {
+      if (names.has(source.name)) throw new ScenarioResolutionError(`Duplicate mock source '${source.name}'.`);
+      names.add(source.name);
+      sources.push(source);
+    }
+    if (layer.denyUnmatchedRequests !== undefined) {
+      if (denyUnmatchedRequests !== undefined && denyUnmatchedRequests !== layer.denyUnmatchedRequests) {
+        throw new ScenarioResolutionError('Composed mock layers disagree on denyUnmatchedRequests.');
+      }
+      denyUnmatchedRequests = layer.denyUnmatchedRequests;
+    }
+    for (const rule of layer.rules ?? []) {
+      if (!rule.source || !names.has(rule.source)) throw new ScenarioResolutionError(`Unknown mock source '${rule.source}'.`);
+      rules.push({ ...rule, source: rule.source });
+    }
+  }
+  return { sources, rules, denyUnmatchedRequests };
 }
 
 function compactAuthInput(layer: ScenarioAuthLayer): Record<string, unknown> {

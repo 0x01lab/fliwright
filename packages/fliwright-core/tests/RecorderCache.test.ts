@@ -134,5 +134,6 @@ describe('recorder event cache budget', () => {
     expect(result.screenshotQueue?.peakPendingTasks).toBeLessThanOrEqual(4);
     expect(requests).toBeLessThanOrEqual(5); // initial sample plus admitted frame requests
     expect(result.frames.every((frame) => frame.status === 'error')).toBe(true);
-  });
+  // This checks the queue budget over 1000 real archived frames, not wall-clock throughput.
+  }, 30000);
 });

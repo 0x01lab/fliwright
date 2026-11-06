@@ -1,3 +1,4 @@
+import { writeFliwrightConfigSnapshot } from '@fliwright/core';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -56,7 +57,7 @@ describe('recordCommand', () => {
       scenarios: { ready: { name: 'ready', layers: [] } },
     };`);
     const scenarios = { ready: { name: 'ready', layers: [{ kind: 'storage' as const, seed: { source: 'env' } }] } };
-    vi.stubEnv('FLIWRIGHT_CONFIG', JSON.stringify({ paths: { scripts: 'tasks', recordings: 'captures' }, scenarios }));
+    vi.stubEnv('FLIWRIGHT_CONFIG_PATH', writeFliwrightConfigSnapshot({ paths: { scripts: 'tasks', recordings: 'captures' }, scenarios }));
     const resolver = vi.fn(resolveVmUrl);
     const result = await recordCommand({ cwd, scenario: 'ready', testName: 'shared' }, {
       resolveVmUrl: resolver, openCapture: async () => capture(), waitForStop: async () => {},

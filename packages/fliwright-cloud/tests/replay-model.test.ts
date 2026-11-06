@@ -10,6 +10,7 @@ import {
   createTimeScale,
   stepAtTime,
   type ReplayNode,
+  evidenceLabel,
 } from '../src/web/replay-model.js';
 
 const step = (id: string, extra: Partial<ReplayNode> = {}): ReplayNode => ({
@@ -22,6 +23,11 @@ const step = (id: string, extra: Partial<ReplayNode> = {}): ReplayNode => ({
 });
 
 describe('report replay evidence', () => {
+  it('labels native and Flutter evidence independently without changing archived artifact paths', () => {
+    expect(evidenceLabel({ kind: 'snapshot', path: 'native.json', metadata: { surface: 'native' } })).toBe('原生 snapshot');
+    expect(evidenceLabel({ kind: 'screenshot', path: 'flutter.png', metadata: { surface: 'flutter' } })).toBe('Flutter screenshot');
+    expect(evidenceLabel({ kind: 'log', path: 'events.jsonl' })).toBe('log');
+  });
   it('maps unequal durations, idle gaps and pointer positions on the same elapsed scale', () => {
     const scale = createTimeScale(13000);
     expect(scale(1300)).toBeCloseTo(10);

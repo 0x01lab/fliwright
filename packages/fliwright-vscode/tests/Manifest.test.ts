@@ -30,7 +30,7 @@ describe('VS Code manifest', () => {
     expect(manifest.homepage).toContain('packages/fliwright-vscode');
     expect(manifest.categories).toContain('Testing');
     expect(manifest.keywords).toContain('flutter');
-    expect(manifest.galleryBanner).toEqual({ color: '#111827', theme: 'dark' });
+    expect(manifest.galleryBanner).toEqual({ color: '#142D4E', theme: 'dark' });
   });
 
   it('declares commands required by the VS Code extension design', () => {

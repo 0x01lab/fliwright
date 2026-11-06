@@ -153,3 +153,41 @@ describe('TestStatusStore', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 });
+
+it('loads only the latest canonical attempt for the indexed source identity', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fliwright-assertions-canonical-'));
+  try {
+    const testId = 'tests/a.test.ts::suite/case / [USD]';
+    writeFileSync(join(dir, 'index.json'), JSON.stringify({ [testId]: {
+      runId: 'run-case-USD', resultRunId: 'run', status: 'failed', ranAt: 1,
+    } }));
+    mkdirSync(join(dir, 'run'), { recursive: true });
+    const attempts = [];
+    for (const [id, file, attemptIndex, title] of [
+      ['other', 'tests/b.test.ts', 0, 'wrong source'],
+      ['first', 'tests/a.test.ts', 0, 'old attempt'],
+      ['latest', 'tests/a.test.ts', 1, 'latest assertion'],
+    ] as const) {
+      const relative = `tests/${id}/attempts/attempt-${attemptIndex}`;
+      mkdirSync(join(dir, 'run', relative), { recursive: true });
+      writeFileSync(join(dir, 'run', relative, 'result.json'), JSON.stringify({
+        testFile: file, testPath: ['suite', 'case / [USD]'], attemptIndex,
+      }));
+      writeFileSync(join(dir, 'run', relative, 'timeline.json'), JSON.stringify({ nodes: [
+        { id, kind: 'assertion', title, status: 'passed' },
+      ] }));
+      attempts.push({ attemptId: id, resultPath: `${relative}/result.json` });
+    }
+    writeFileSync(join(dir, 'run/run.json'), JSON.stringify({ schemaVersion: 1, tests: [
+      { testId: 'vitest-other', attempts: [attempts[0]] },
+      { testId: 'vitest-case', attempts: [attempts[1], attempts[2]] },
+    ] }));
+    const store = new TestStatusStore(dir);
+    expect(await store.loadAssertions(testId)).toEqual([
+      expect.objectContaining({ label: 'latest assertion', status: 'passed' }),
+    ]);
+    // A retry that fails before any assertion must not show the previous attempt's assertions.
+    writeFileSync(join(dir, 'run', 'tests/latest/attempts/attempt-1/timeline.json'), JSON.stringify({ nodes: [] }));
+    expect(await store.loadAssertions(testId)).toEqual([]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

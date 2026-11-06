@@ -3,6 +3,7 @@ import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { WorkerTimelineStore } from './WorkerTimelineStore.js';
+import { WorkerDiagnosticsStore } from './WorkerDiagnosticsStore.js';
 import {
   CloudError,
   workerPairingRequestSchema,
@@ -58,6 +59,7 @@ const targetFromProject = (project: Project): ApplicationTarget => {
 export class CloudStore {
   readonly db: DatabaseSync;
   readonly workerTimelines: WorkerTimelineStore;
+  readonly workerDiagnostics: WorkerDiagnosticsStore;
   private readonly controlListeners = new Set<(requestId: string | null, kind: string) => void>();
   private controlChanges: Array<[string | null, string]> = [];
   onControlChange(listener: (requestId: string | null, kind: string) => void): () => void {
@@ -143,6 +145,7 @@ export class CloudStore {
       `);
     });
     this.workerTimelines = new WorkerTimelineStore(this);
+    this.workerDiagnostics = new WorkerDiagnosticsStore(this);
   }
   close() {
     this.db.close();
@@ -442,7 +445,7 @@ export class CloudStore {
       if (job.push && catalog.status === 'ready' && current.autoRun.enabled && current.autoRun.revision === job.push.policyRevision && current.configRevision === project.configRevision && catalog.commit === this.branchHead(project.id, job.push.branch)?.commit) {
         for (const selection of project.autoRun.selections) {
           // Discovery remains valid when a repository removes an automatic-run selection.
-          if (!catalog.scenarios.some(scenario => scenario.name === selection.scenario) || !catalog.suites.some(suite => suite.id === selection.suite && suite.cases.length)) continue;
+          if ((selection.scenario && !catalog.scenarios.some(scenario => scenario.name === selection.scenario)) || !catalog.suites.some(suite => suite.id === selection.suite && suite.cases.length)) continue;
           const autoKey = `auto:${digest(JSON.stringify([project.id, job.push.branch, catalog.commit, job.push.policyRevision, selection]))}`;
           if (this.db.prepare('SELECT 1 FROM requests WHERE actor=? AND idem=?').get(`webhook:${project.id}`, autoKey)) continue;
           const request = this.submitProject({ projectId: project.id, catalogId: catalog.catalogId, commit: catalog.commit, mode: 'suite', ...selection, source: { kind: 'push', branch: job.push.branch, deliveryId: job.push.deliveryId }, autoPolicyRevision: job.push.policyRevision }, `webhook:${project.id}`, autoKey);
@@ -474,25 +477,25 @@ export class CloudStore {
       return JSON.parse(String(old.data));
     }
     const project = this.project(input.projectId);
-    if (!Object.hasOwn(project.suites, input.suite) || (!input.catalogId && !project.scenarios.includes(input.scenario))) throw new CloudError(400, 'Unknown project suite or scenario');
+    if (!Object.hasOwn(project.suites, input.suite) || (!input.catalogId && input.scenario && !project.scenarios.includes(input.scenario))) throw new CloudError(400, 'Unknown project suite or scenario');
     let selectedCase: TestCatalog['suites'][number]['cases'][number] | undefined;
     if (input.mode === 'case' || input.catalogId) {
       if (!input.catalogId) throw new CloudError(400, 'Case selection requires catalogId');
       const catalog = this.catalog(input.projectId, input.catalogId);
       if (catalog.commit !== input.commit || catalog.configRevision !== project.configRevision || catalog.status !== 'ready') throw new CloudError(409, 'Catalog does not match project commit or revision');
       const suite = catalog.suites.find((candidate) => candidate.id === input.suite);
-      if (!suite || !catalog.scenarios.some(scenario => scenario.name === input.scenario)) throw new CloudError(400, 'Unknown catalog suite or scenario');
+      if (!suite || (input.scenario && !catalog.scenarios.some(scenario => scenario.name === input.scenario))) throw new CloudError(400, 'Unknown catalog suite or scenario');
       selectedCase = input.mode === 'case' ? suite?.cases.find((candidate) => candidate.caseId === input.caseId) : undefined;
       if (input.mode === 'case' && !selectedCase) throw new CloudError(400, 'Unknown catalog case');
     }
-    const snapshot: Submission = { targetId: project.id, commit: input.commit, suite: input.suite, scenario: input.scenario, source: input.source };
+    const snapshot: Submission = { targetId: project.id, commit: input.commit, suite: input.suite, ...(input.scenario ? { scenario: input.scenario } : {}), source: input.source };
     return this.transaction(() => {
       const old = this.db.prepare('SELECT fingerprint,data FROM requests WHERE actor=? AND idem=?').get(actor, key) as Row | undefined;
       if (old) {
         if (old.fingerprint !== fingerprint) throw new CloudError(409, 'Idempotency conflict');
         return JSON.parse(String(old.data));
       }
-      const req: TestRequest = { id: identifier(), input: snapshot, target: targetFromProject(project), actor, createdAt: this.now(), queuedAt: this.now(), state: 'queued', verdict: 'unknown', attempts: 0, projectId: project.id, configRevision: project.configRevision, ...(input.catalogId ? { catalogId: input.catalogId } : {}), selection: { mode: input.mode, suite: input.suite, scenario: input.scenario, ...(selectedCase ? { caseId: selectedCase.caseId, file: selectedCase.file, titlePath: selectedCase.titlePath, duplicateIndex: selectedCase.duplicateIndex } : {}) }, source: input.source, ...(input.autoPolicyRevision ? { autoPolicyRevision: input.autoPolicyRevision } : {}) };
+      const req: TestRequest = { id: identifier(), input: snapshot, target: targetFromProject(project), actor, createdAt: this.now(), queuedAt: this.now(), state: 'queued', verdict: 'unknown', attempts: 0, projectId: project.id, configRevision: project.configRevision, ...(input.catalogId ? { catalogId: input.catalogId } : {}), selection: { mode: input.mode, suite: input.suite, ...(input.scenario ? { scenario: input.scenario } : {}), ...(selectedCase ? { caseId: selectedCase.caseId, file: selectedCase.file, titlePath: selectedCase.titlePath, duplicateIndex: selectedCase.duplicateIndex } : {}) }, source: input.source, ...(input.autoPolicyRevision ? { autoPolicyRevision: input.autoPolicyRevision } : {}) };
       this.db.prepare('INSERT INTO requests VALUES(?,?,?,?,?,?,?,?)').run(req.id, actor, key, fingerprint, req.createdAt, req.queuedAt, req.state, JSON.stringify(req));
       this.event(req.id, 'submitted', { actor, projectId: project.id, source: input.source.kind, selection: req.selection });
       return req;
@@ -529,7 +532,7 @@ export class CloudStore {
       return next;
     });
   }
-  supersedeQueued(projectId: string, branch: string, policyRevision: number, suite: string, scenario: string, replacementId: string): string[] {
+  supersedeQueued(projectId: string, branch: string, policyRevision: number, suite: string, scenario: string | undefined, replacementId: string): string[] {
     const replaced: string[] = [];
     this.transaction(() => {
       const rows = this.db.prepare("SELECT data FROM requests WHERE state='queued'").all() as Row[];
@@ -596,7 +599,7 @@ export class CloudStore {
       if (
         !target ||
         !Object.hasOwn(target.suites, input.suite) ||
-        !target.scenarios.includes(input.scenario)
+        (input.scenario && !target.scenarios.includes(input.scenario))
       )
         throw new CloudError(
           400,
@@ -1005,6 +1008,7 @@ export class CloudStore {
         health,
         slots,
         inventory,
+        service: this.workerDiagnostics.summary(String(r.id)),
       };
     });
   }

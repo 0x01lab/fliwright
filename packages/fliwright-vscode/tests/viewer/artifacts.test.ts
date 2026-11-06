@@ -78,6 +78,15 @@ const TRACE: TraceData = {
 };
 
 describe('screenshot resolvers', () => {
+  it('keeps native evidence selectable and identifies its tree separately from Flutter widgets', () => {
+    const native: TimelineNode = { ...NODES[1], id: 'native', metadata: { surface: 'native' }, artifacts: [
+      { kind: 'screenshot', path: 'artifacts/screenshots/native.png', metadata: { surface: 'native' } },
+      { kind: 'snapshot', path: 'artifacts/snapshots/native.json', metadata: { surface: 'native', generation: 'g1' } },
+    ] };
+    const selection = deriveSelection({ ...RUN, timeline: { ...RUN.timeline, nodes: [native] } }, 'native', 'timeline');
+    expect(selection).toMatchObject({ surface: 'native', screenshotUri: 'vscode-webview://base/artifacts/screenshots/native.png',
+      snapshotPath: 'artifacts/snapshots/native.json' });
+  });
   it('resolves a node screenshot artifact', () => {
     expect(screenshotOfNode(NODES[1], 'B')).toBe('B/artifacts/screenshots/click.png');
   });

@@ -26,3 +26,5 @@ export 'src/extensions/websocket_mock.dart';
 export 'src/form_control.dart';
 export 'src/ref_registry.dart';
 export 'src/semantics_compat.dart';
+export 'src/testing/camera_test.dart';
+export 'src/testing/biometric_test.dart';

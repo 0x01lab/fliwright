@@ -1,3 +1,6 @@
+import { resolve } from 'node:path';
+import { generateTestCommand } from '../commands/generate-test.js';
+import { GenerateTestParamsSchema } from './generation-schema.js';
 import { waitForVmServiceEndpoint } from '@fliwright/core';
 import { z } from 'zod';
 import { FlutterDaemonController, SubprocessDaemonTransport } from '@fliwright/tdd';
@@ -14,8 +17,12 @@ import { scenarioListCommand, scenarioResolveCommand, scenarioApplyCommand } fro
 import * as mocks from '../commands/mock-management.js';
 import { artifactsShowCommand, artifactsExportCommand } from '../commands/artifacts.js';
 import * as artifacts from '../commands/artifact-query.js';
+import { artifactsReportCommand } from '../commands/artifact-report.js';
+import { releaseMetadataSchema } from '../ReleaseReview.js';
 import { mockStartCommand } from '../commands/mock.js';
 import type { AppSessionDeps } from '../capabilities/session.js';
+import { prepareNativeRun, type ManagedNativeRun } from '../ManagedNativeRun.js';
+import { startManagedAppControl } from '../ManagedAppRun.js';
 
 export const str = z.string().min(1).optional();
 export const bool = z.boolean().optional();
@@ -32,8 +39,12 @@ export function registerFinite(registry: CommandRegistry, deps: FiniteDeps = {})
   const add = (path: string, input: z.ZodRawShape, execute: (input: any, context: CommandContext) => unknown, effects: string[] = [], extra: Partial<Parameters<CommandRegistry['add']>[0]> = {}) =>
     registry.add({ path, input: z.object(input), execute, effects, description: path.replaceAll('.', ' '), ...extra });
   const withContext = (fn: (options: any, deps?: AppSessionDeps) => unknown) => (input: any, context: CommandContext) => fn({ ...input, cwd: context.cwd, signal: context.signal }, deps.app);
+  registry.add({ path: 'generate-test', description: 'Generate a test draft from source or snapshot',
+    input: GenerateTestParamsSchema, effects: ['filesystem-write'],
+    execute: (input, context) => generateTestCommand({ ...input,
+      outputFile: input.outputFile ? resolve(context.cwd, input.outputFile) : undefined }) });
   add('schema', { path: str }, (input) => registry.schema(input.path), [], { positional: ['path'] });
-  add('init', { install: bool, node: bool, flutter: bool, pm: z.enum(['npm', 'pnpm', 'yarn', 'bun']).optional() }, (input, context) => initCommand(context.cwd, { ...input, packageManager: input.pm }, { log: console.error }), ['project-files', 'dependency-install']);
+  add('init', { install: bool, node: bool, flutter: bool, pm: z.enum(['npm', 'pnpm', 'yarn', 'bun']).optional(), agent: z.enum(['codex']).optional(), yes: bool, entrypoint: str }, (input, context) => initCommand(context.cwd, { ...input, packageManager: input.pm }, { log: console.error, signal: context.signal }), ['project-files', 'dependency-install']);
   add('doctor', { ...connection, strict: bool }, async (input, context) => {
     const checks = await doctorCommand(context.cwd, { vmServiceUrl: input.vmUrl, print: false, signal: context.signal });
     const optional = new Set(['Riverpod observer', 'Mock server']);
@@ -47,29 +58,67 @@ export function registerFinite(registry: CommandRegistry, deps: FiniteDeps = {})
   }, ['trusted-project-import'], { description: 'Collect test catalog without running test or hook bodies', needsApp: false });
   const runFields = { deviceId: str, target: str, flutterArgs: z.array(z.string()).optional(), keepAppAlive: bool, test: str, testName: str, caseSelection: z.object({ caseId: z.string().regex(/^[a-f0-9]{64}$/), file: z.string().min(1), titlePath: z.array(z.string()).min(1), duplicateIndex: z.number().int().nonnegative() }).strict().optional(), ...connection, reporter: z.enum(['pretty', 'json', 'junit']).optional(), timeout: positive,
     screenshot: z.enum(['file', 'base64', 'off']).optional(), recordingMode: z.enum(['standard', 'full', 'off']).optional(),
-    output: str, junitOutput: str, runsRoot: str, scenario: str };
+    output: str, junitOutput: str, runsRoot: str, scenario: str, release: releaseMetadataSchema.optional() };
   const run = async (input: any, context: CommandContext) => {
     if (input.vmUrl && input.deviceId) throw new CliError('INVALID_INPUT', 'Choose vmUrl or deviceId.', 2);
-    const daemon = input.deviceId ? new FlutterDaemonController(new SubprocessDaemonTransport()) : undefined;
+    let daemon = input.deviceId ? new FlutterDaemonController(new SubprocessDaemonTransport()) : undefined;
     let appId: string | undefined;
+    let nativeRun: ManagedNativeRun | undefined;
+    let managedApp: Awaited<ReturnType<typeof startManagedAppControl>> | undefined;
     const abortLaunch = () => { void daemon?.dispose(); };
     context.signal.addEventListener('abort', abortLaunch, { once: true });
     try {
       context.signal.throwIfAborted();
       let vmUrl = input.vmUrl;
       if (daemon) {
-        await daemon.start();
-        const app = await daemon.startApp({ deviceId: input.deviceId, target: input.target, projectId: context.cwd, flutterArgs: input.flutterArgs });
-        appId = app.appId; vmUrl = app.wsUri;
-        await waitForVmServiceEndpoint({ url: vmUrl, kind: 'direct-vm', source: 'managed-launch', scope: 'execution-worker', acquiredAt: new Date().toISOString() }, { signal: context.signal });
+        nativeRun = await prepareNativeRun(context.cwd, { deviceId: input.deviceId, signal: context.signal, scenario: input.scenario,
+          launch: { target: input.target, flutterArgs: input.flutterArgs, keepAppAlive: input.keepAppAlive } });
+        if (nativeRun?.managedAppControl) {
+          await daemon.dispose(); daemon = undefined;
+        }
+        else if (nativeRun) managedApp = await startManagedAppControl(context.cwd, { signal: context.signal,
+          prepareDevice: (request, signal) => nativeRun!.prepareAttempt(request, signal),
+          cancel: async () => { await daemon?.dispose(); },
+          async stop(signal) {
+            signal.throwIfAborted();
+            if (appId) await daemon!.stop(appId);
+            await daemon!.dispose();
+            appId = undefined;
+          },
+          async launch(signal, _request, reportPhase) {
+            signal.throwIfAborted();
+            daemon = new FlutterDaemonController(new SubprocessDaemonTransport());
+            await daemon.start();
+            signal.throwIfAborted();
+            const next = await daemon.startApp({ deviceId: input.deviceId, target: input.target, projectId: context.cwd, flutterArgs: input.flutterArgs },
+              { debugPortTimeoutMs: 120000 });
+            appId = next.appId;
+            reportPhase('verify-endpoint');
+            await waitForVmServiceEndpoint({ url: next.wsUri, kind: 'direct-vm', source: 'managed-relaunch', scope: 'execution-worker', acquiredAt: new Date().toISOString() }, { signal });
+            return { url: next.wsUri };
+          },
+        });
+        else {
+          await daemon.start();
+          const app = await daemon.startApp({ deviceId: input.deviceId, target: input.target, projectId: context.cwd, flutterArgs: input.flutterArgs });
+          appId = app.appId; vmUrl = app.wsUri;
+          await waitForVmServiceEndpoint({ url: vmUrl, kind: 'direct-vm', source: 'managed-launch', scope: 'execution-worker', acquiredAt: new Date().toISOString() }, { signal: context.signal });
+        }
       }
-      const data = await runCommand({ ...input, vmUrl, testPattern: input.test, scenarioMode: daemon ? 'managed-start' : 'attach', cwd: context.cwd, signal: context.signal, print: false });
+      const data = await runCommand({ ...input, vmUrl, nativeDelegation: nativeRun?.delegation, managedAppControl: nativeRun?.managedAppControl ?? managedApp?.control, testPattern: input.test, scenarioMode: input.deviceId ? 'managed-start' : 'attach', cwd: context.cwd, signal: context.signal, print: false });
       if (!data.passed) throw new CliError(data.runnerErrors?.length ? 'RUNNER_FAILED' : 'TEST_FAILED', 'Run did not pass.', data.runnerErrors?.length ? 3 : 1, data);
       return data;
     } finally {
       context.signal.removeEventListener('abort', abortLaunch);
-      try { if (daemon && appId && !input.keepAppAlive) await daemon.stop(appId); }
-      finally { await daemon?.dispose({ keepAppAlive: input.keepAppAlive }); }
+      let cleanupConfirmed = false;
+      try {
+        try { await managedApp?.dispose(); }
+        finally {
+          try { if (daemon && appId && !input.keepAppAlive) await daemon.stop(appId); }
+          finally { await daemon?.dispose({ keepAppAlive: input.keepAppAlive }); }
+        }
+        cleanupConfirmed = true;
+      } finally { await nativeRun?.dispose({ cleanupConfirmed }); }
     }
   };
   add('run', runFields, run, ['app', 'run-artifacts'], { needsApp: true, output: 'CliRunResult' });
@@ -108,6 +157,11 @@ export function registerFinite(registry: CommandRegistry, deps: FiniteDeps = {})
   add('mock.start', { host: str, port: z.number().int().min(0).max(65535).optional(), mockDir: str }, (input, context) => mockStartCommand({ ...input, cwd: context.cwd, signal: context.signal }), ['local-http-listener']);
   add('artifacts.show', artifact, withContext(artifactsShowCommand), [], { positional: ['runId'] });
   add('artifacts.export', { ...artifact, output: z.string().min(1) }, withContext(artifactsExportCommand), ['export-files'], { positional: ['runId'] });
+  add('artifacts.report', { ...artifact, output: str, review: str, plan: str, release: releaseMetadataSchema.optional(), requireQualified: bool }, async (input, context) => {
+    const data = await artifactsReportCommand({ ...input, cwd: context.cwd, signal: context.signal });
+    if (input.requireQualified && !data.releaseReady) throw new CliError('RELEASE_NOT_QUALIFIED', 'Release tests did not qualify.', 1, data);
+    return data;
+  }, ['html-report'], { positional: ['runId'], description: 'Generate an offline release test review report' });
   add('artifacts.failures', { ...artifact, testName: str }, withContext(artifacts.artifactsFailuresCommand), [], { positional: ['runId'] });
   const timeline = { ...artifact, path: str, testId: str, attemptId: str, nodeId: str, includeArtifacts: bool, includeFlow: bool };
   add('artifacts.timeline', timeline, withContext(artifacts.artifactsTimelineCommand), [], { positional: ['runId'] });

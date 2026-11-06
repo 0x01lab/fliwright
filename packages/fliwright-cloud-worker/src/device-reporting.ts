@@ -11,6 +11,8 @@ export async function reportWorkerDevices(
     signal: AbortSignal;
     tools?: DeviceDiscoveryOptions['tools'];
     intervalMs?: number;
+    onError?: (error: unknown) => void;
+    onHealthy?: () => void;
   },
 ): Promise<void> {
   const discovery = new DeviceDiscovery({ tools: options.tools });
@@ -40,8 +42,10 @@ export async function reportWorkerDevices(
           body: inventory,
           signal: AbortSignal.any([options.signal, AbortSignal.timeout(15000)]),
         });
-      } catch {
+        options.onHealthy?.();
+      } catch (error) {
         if (options.signal.aborted) break;
+        options.onError?.(error);
         console.warn('Device inventory report failed; previous inventory will become stale.');
       }
     }

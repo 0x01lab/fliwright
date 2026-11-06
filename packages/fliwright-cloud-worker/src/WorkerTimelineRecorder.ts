@@ -1,7 +1,7 @@
 import { openSync, closeSync, fsyncSync, writeSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  workerTimelineEventSchema, workerErrorMessages,
+  workerTimelineEventSchema, workerErrorMessage,
   type LeaseKey, type WorkerTimelineBatch, type WorkerTimelineClock, type WorkerTimelineEvent,
   type WorkerTimelinePayload, type WorkerRecordingIssue, type WorkerStopReason,
 } from '@fliwright/cloud-protocol';
@@ -42,7 +42,7 @@ export class WorkerTimelineRecorder {
     if (this.disabled) return false;
     try {
       let payload = input.type === 'span.finished' && input.error
-        ? { ...input, error: { code: input.error.code, message: workerErrorMessages[input.error.code] } } : input;
+        ? { ...input, error: { code: input.error.code, message: workerErrorMessage(input.error.code, input.error.message) } } : input;
       if (payload.type === 'span.finished' && payload.status === 'interrupted' && source === 'executor' && this.stopReason)
         payload = { ...payload, reason: this.stopReason };
       if (payload.type === 'span.started' && payload.parentSpanId && !this.active.has(payload.parentSpanId)) return false;
@@ -52,7 +52,7 @@ export class WorkerTimelineRecorder {
       }
       if (this.events.length >= 8000 && payload.type === 'span.started' && payload.parentSpanId) { this.issue('capacity'); return false; }
       const offsetMs = this.offset();
-      const event = workerTimelineEventSchema.parse({ schemaVersion: 1, seq: this.events.length + 1, recordedAt: new Date(Date.parse(this.originAt) + offsetMs).toISOString(), offsetMs, payload });
+      const event = workerTimelineEventSchema.parse({ schemaVersion: 2, seq: this.events.length + 1, recordedAt: new Date(Date.parse(this.originAt) + offsetMs).toISOString(), offsetMs, payload });
       const data = Buffer.from(JSON.stringify(event) + '\n');
       if (this.events.length >= 10000 || this.bytes + data.length > 16 * 1024 * 1024) { this.issue('capacity'); this.disabled = true; return false; }
       if (this.fd === undefined) return false;

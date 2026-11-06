@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "367d01560f481670a039fc69e5e67f9d7572fa902ef283547cce28e4e2e46783"
+source_fingerprint: "69c16b0d95e8eb0b11eb9dac683440a0c7b3e8232a2448626ef8021b019ebb12"
 generated: true
 ---
 
@@ -159,6 +159,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/scripts/ScriptRunner.ts`
 - `packages/fliwright-vscode/src/scripts/VitestScriptConfig.ts`
 - `packages/fliwright-vscode/src/session/FliwrightSession.ts`
+- `packages/fliwright-vscode/src/session/VmServiceConnectionController.ts`
 - `packages/fliwright-vscode/src/session/VmServiceDiscovery.ts`
 - `packages/fliwright-vscode/src/state/StateInjectionService.ts`
 - `packages/fliwright-vscode/src/state/StateProviderDocumentProvider.ts`
@@ -170,8 +171,11 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/tddloop/index.ts`
 - `packages/fliwright-vscode/src/testing/ProjectRunsRoot.ts`
 - `packages/fliwright-vscode/src/testing/RunArtifactStore.ts`
+- `packages/fliwright-vscode/src/testing/TestCatalogCollector.ts`
+- `packages/fliwright-vscode/src/testing/TestCatalogTree.ts`
+- `packages/fliwright-vscode/src/testing/TestCollectionWatcher.ts`
 - `packages/fliwright-vscode/src/testing/TestStatusStore.ts`
-- `packages/fliwright-vscode/src/testing/TestTreeBuilder.ts`
+- `packages/fliwright-vscode/src/testing/catalog-worker.ts`
 - `packages/fliwright-vscode/src/testing/relPath.ts`
 - `packages/fliwright-vscode/src/testing/types.ts`
 - `packages/fliwright-vscode/src/types.ts`
@@ -189,6 +193,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/websocket/WebSocketMockService.ts`
 - `packages/fliwright-vscode/src/webview/FailurePanel.ts`
 - `packages/fliwright-vscode/src/webview/RecordingPanel.ts`
+- `packages/fliwright-vscode/src/webview/components/BrandMark.tsx`
 - `packages/fliwright-vscode/src/webview/components/ui/badge.tsx`
 - `packages/fliwright-vscode/src/webview/components/ui/button.tsx`
 - `packages/fliwright-vscode/src/webview/components/ui/input.tsx`

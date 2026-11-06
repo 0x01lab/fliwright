@@ -16,10 +16,17 @@ export async function focusAndRerun(vitest: Vitest, file: string, testName?: str
   const savedPatterns = specifications.map((spec) => spec.testNamePattern);
   try {
     if (testName) {
-      const pattern = new RegExp(testName);
+      // Names are literal, including punctuation. A leaf name may occur in
+      // several suites; the executor aggregates all matching results.
+      const escaped = testName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`(?:^| > )${escaped}$`);
       for (const spec of specifications) spec.testNamePattern = pattern;
     }
-    return await vitest.rerunTestSpecifications(specifications);
+    const run = await vitest.rerunTestSpecifications(specifications);
+    // Vitest returns its accumulated module state, including previously run
+    // files. Only this request's files belong to the focused result.
+    const moduleIds = new Set(specifications.map((spec) => spec.moduleId));
+    return { ...run, testModules: run.testModules.filter((module) => moduleIds.has(module.moduleId)) };
   } finally {
     specifications.forEach((spec, index) => {
       spec.testNamePattern = savedPatterns[index];

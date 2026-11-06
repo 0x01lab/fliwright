@@ -40,7 +40,11 @@ A Flutter developer or product team that:
 
 ### 2.3 Explicit non-goals for the first stable release
 
-- Cross-framework Web, React Native, or native iOS/Android testing.
+- Standalone cross-framework Web, React Native, or native iOS/Android testing.
+  Native system UI and SDK flows surrounding the instrumented Flutter app are
+  an optional extension proposed in the
+  [2026-11-03 native/device design](2026-11-03-native-device-automation-design.md),
+  without expanding Fliwright into an arbitrary APK/IPA automation framework.
 - Testing arbitrary production APK/IPA binaries without instrumentation.
 - A hosted device farm or SaaS execution control plane.
 - Figma Design QA, autonomous repair, and business-flow authoring as required

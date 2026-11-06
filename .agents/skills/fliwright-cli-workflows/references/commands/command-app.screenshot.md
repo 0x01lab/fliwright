@@ -26,7 +26,7 @@ Use when the Skill needs a visual artifact to inspect or compare.
 | JSON field | CLI syntax | Type / values | Required | Schema default | Meaning |
 | --- | --- | --- | --- | --- | --- |
 | `vmUrl` | `--vm-url` | string | no | — | Dart VM Service websocket URL. Omit to use project/environment endpoint resolution where supported. (minLength=1) |
-| `output` | `--output` | string | no | — | PNG destination; otherwise a unique file in configured cacheRoot/inspect (default .fliwright/cache/inspect). (minLength=1) |
+| `output` | `--output` | string | no | — | PNG destination; otherwise a unique file in configured cacheRoot/inspect (default ~/.fliwright/<project-path>/cache/inspect). (minLength=1) |
 | `pixelRatio` | `--pixel-ratio` | number | no | — | Runtime screenshot scale. (exclusiveMinimum=0) |
 | `fullPage` | `--full-page` | boolean | no | — | Capture vertical scroll content as one long PNG; default false. |
 | `scrollable` | `--scrollable` | string | no | — | Selector for a visible scroll view, for example key=feed; requires fullPage. (minLength=1) |
@@ -56,7 +56,7 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 
 | Data field / variant | Meaning |
 | --- | --- |
-| path | Written PNG path; default is a unique capture in cacheRoot/inspect (project default .fliwright/cache/inspect). |
+| path | Written PNG path; default is a unique capture in cacheRoot/inspect (default ~/.fliwright/<project-path>/cache/inspect). |
 | bytes | PNG byte length. |
 
 ## Effects and failure handling

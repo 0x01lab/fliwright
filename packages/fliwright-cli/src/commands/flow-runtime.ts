@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { sanitizeFlowFileId } from '@fliwright/core';
+import { resolveFliwrightRuntimeRoot, sanitizeFlowFileId } from '@fliwright/core';
 import { withAppSession, type AppSessionOptions, type AppSessionDeps } from '../capabilities/session.js';
 import { flowReviewPlanCommand, flowReviewBundleCommand, flowReviewCaptureFigmaCommand, flowReviewReportCommand, type FlowReviewPlanOptions } from './flow.js';
 export interface FlowRuntimeOptions extends FlowReviewPlanOptions, AppSessionOptions {
@@ -9,7 +9,7 @@ export interface FlowRuntimeOptions extends FlowReviewPlanOptions, AppSessionOpt
 }
 export async function flowReviewCaptureRuntimeCommand(options: FlowRuntimeOptions, deps: AppSessionDeps = {}) {
   const { path, reviewPlan } = await flowReviewPlanCommand(options);
-  const outputDir = resolve(options.cwd ?? process.cwd(), options.outputDir ?? `.fliwright/reviews/${sanitizeFlowFileId(reviewPlan.flowId)}-${Date.now()}/runtime`);
+  const outputDir = resolve(options.cwd ?? process.cwd(), options.outputDir ?? join(resolveFliwrightRuntimeRoot({ projectRoot: options.cwd }), 'reviews', `${sanitizeFlowFileId(reviewPlan.flowId)}-${Date.now()}`, 'runtime'));
   await mkdir(outputDir, { recursive: true });
   return withAppSession(options, async ({ driver }) => {
     const targets = reviewPlan.targets.filter((target) => !options.targetIds || options.targetIds.includes(target.flowNodeId)).slice(0, options.limit);

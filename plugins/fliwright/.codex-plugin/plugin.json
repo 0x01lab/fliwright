@@ -1,6 +1,6 @@
 {
   "name": "fliwright",
-  "version": "0.1.0+codex.20260712075300",
+  "version": "0.1.1",
   "description": "Fliwright Flutter automation with Skills, CLI workflows, and CI artifacts.",
   "author": {
     "name": "Fliwright"
@@ -8,6 +8,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Fliwright",
+    "logo": "./assets/icon.png",
+    "composerIcon": "./assets/icon.png",
     "shortDescription": "Test and automate Flutter apps through the Dart VM Service.",
     "longDescription": "Write, run, record, diagnose, and review Fliwright Flutter automation with timeline-aware tests, mocks, flows, and TDD.",
     "developerName": "Fliwright",

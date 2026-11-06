@@ -48,7 +48,7 @@ export interface LoadedRun {
 /**
  * Reads timeline run data from run directories.
  *
- * Reads the configured project runsRoot; defaults to <workspace>/.fliwright/runs.
+ * Reads the configured project runsRoot; defaults to ~/.fliwright/<project-path>/runs.
  * Attempts own their timeline, logs, trace and evidence. Historical roots are
  * never selected implicitly.
  */
@@ -165,7 +165,8 @@ export class RunViewerService {
 
   /**
    * Scan runs newest-first and return the first run whose timeline or result
-   * matches `testNodeId`. Pure find — no UI.
+   * matches `testNodeId`. Skipped attempts do not replace executed evidence.
+   * Pure find — no UI.
    *
    * The test node id has the form `<relPath>::<anc1>/<anc2>/.../<title>`. The
    * Timeline directories are written per test by `@fliwright/vitest` under the
@@ -177,7 +178,7 @@ export class RunViewerService {
     runsDir: vscode.Uri,
     testNodeId: string,
   ): Promise<LoadedRun | undefined> {
-    const summaries = await this.listRuns(runsDir); // newest-first
+    const summaries = (await this.listRuns(runsDir)).filter(run => run.status !== 'skipped'); // newest-first
 
     // Canonical runs carry the stable file/suite/test identity in run.json.
     // Resolve that identity before considering legacy title-only layouts, so
@@ -239,16 +240,16 @@ export class RunViewerService {
       // test identity from the index so resolveTimelineDir does not reject a
       // valid run merely because it has more than one attempt.
       const loaded = await this.loadRun(vscode.Uri.joinPath(runsDir, entry.runId), { testId: testNodeId });
-      if (loaded) return loaded;
+      if (loaded && loaded.timeline.status !== 'skipped') return loaded;
       const derivedRunId = deriveTimelineRunId(entry, testNodeId, this.artifacts);
       if (derivedRunId && derivedRunId !== entry.runId) {
         const derived = await this.loadRun(vscode.Uri.joinPath(runsDir, derivedRunId));
-        if (derived) return derived;
+        if (derived && derived.timeline.status !== 'skipped') return derived;
       }
       const leafRunId = deriveLeafTimelineRunId(entry, testNodeId, this.artifacts);
       if (leafRunId && leafRunId !== entry.runId && leafRunId !== derivedRunId) {
         const leaf = await this.loadRun(vscode.Uri.joinPath(runsDir, leafRunId));
-        if (leaf) return leaf;
+        if (leaf && leaf.timeline.status !== 'skipped') return leaf;
       }
       // Indexed run dir is gone (pruned) — fall through to the scan.
     }

@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { analyzeInteractionSpecCoverage, generateRedFirstTestSuite, prepareRedFirstWorkflow } from '@fliwright/tdd';
-import type { InteractionSpec, WidgetCandidate } from '@fliwright/tdd';
-import type { TddWorkflowContext } from '../WorkflowContext.js';
-interface GenerationContext { setTddWorkflowContext(context: TddWorkflowContext): void; }
-import type { GenerateTestResult } from '../WorkflowContext.js';
+export interface GenerateTestResult {
+  testCode: string;
+  testName: string;
+  testFile?: string;
+}
 
 interface ParsedWidget {
   type: 'text' | 'textField' | 'button' | 'appBar';
@@ -19,21 +19,6 @@ export interface SnapshotRefInput {
   type?: string;
   selector?: string;
   textField?: boolean;
-}
-
-export interface RedFirstGenerateTestParams {
-  mode?: 'red-first';
-  spec: InteractionSpec;
-  flowId?: string;
-  allFlows?: boolean;
-  flowIds?: string[];
-  testNamePrefix?: string;
-  snapshot?: string;
-  refs?: SnapshotRefInput[];
-  testName?: string;
-  resetToHomeBeforeEach?: boolean;
-  homeRoute?: string;
-  outputFile?: string;
 }
 
 function parseFlutterSource(source: string): ParsedWidget[] {
@@ -173,12 +158,6 @@ function toPascal(value: string): string {
 
 export async function generateTestCommand(
   params: {
-    mode?: 'default' | 'red-first';
-    spec?: InteractionSpec;
-    flowId?: string;
-    allFlows?: boolean;
-    flowIds?: string[];
-    testNamePrefix?: string;
     source?: string;
     snapshot?: string;
     refs?: SnapshotRefInput[];
@@ -188,13 +167,7 @@ export async function generateTestCommand(
     homeRoute?: string;
     outputFile?: string;
   },
-  state?: GenerationContext,
 ): Promise<GenerateTestResult> {
-  if (params.mode === 'red-first') {
-    if (!params.spec) throw new Error("mode 'red-first' requires an InteractionSpec in params.spec.");
-    return await prepareRedFirstGeneratedTest(params as RedFirstGenerateTestParams, state);
-  }
-
   const testName = params.testName ?? 'generated test';
   const resetToHomeBeforeEach = params.resetToHomeBeforeEach ?? true;
   const homeRoute = params.homeRoute ?? '/';
@@ -229,86 +202,11 @@ export async function generateTestCommand(
   return await persistGeneratedTest(output, params.outputFile);
 }
 
-export async function prepareRedFirstGeneratedTest(
-  params: RedFirstGenerateTestParams,
-  state?: GenerationContext,
-): Promise<GenerateTestResult> {
-  const outputFile = params.outputFile ? resolve(params.outputFile) : undefined;
-  const refs = normalizeSnapshotRefs(params.refs, params.snapshot);
-  if (params.allFlows) {
-    const coverage = analyzeInteractionSpecCoverage(params.spec);
-    const result = generateRedFirstTestSuite(params.spec, {
-      flowIds: params.flowIds,
-      testNamePrefix: params.testNamePrefix,
-      homeRoute: params.homeRoute,
-      resetToHomeBeforeEach: params.resetToHomeBeforeEach,
-      widgets: snapshotRefsToWidgetCandidates(refs),
-    });
-    const output = {
-      testCode: result.testCode,
-      testName: params.testName ?? params.testNamePrefix ?? 'red-first suite',
-      testFile: outputFile,
-      warnings: result.warnings,
-      selectorDiagnostics: result.selectorDiagnostics,
-      tests: result.tests,
-      coverage,
-    };
-    const persisted = await persistGeneratedTest(output, outputFile);
-    state?.setTddWorkflowContext({
-      testFile: persisted.testFile,
-      selectorDiagnostics: result.selectorDiagnostics,
-      tests: result.tests,
-      coverage,
-    });
-    return persisted;
-  }
-
-  const result = prepareRedFirstWorkflow(params.spec, {
-    flowId: params.flowId,
-    testName: params.testName,
-    homeRoute: params.homeRoute,
-    resetToHomeBeforeEach: params.resetToHomeBeforeEach,
-    widgets: snapshotRefsToWidgetCandidates(refs),
-    testFile: outputFile,
-  });
-  const output = {
-    testCode: result.testCode,
-    testName: result.testName,
-    testFile: outputFile,
-    warnings: result.warnings,
-    selectorDiagnostics: result.selectorDiagnostics,
-    workflow: result.workflow,
-    coverage: result.workflow.coverage,
-  };
-  const persisted = await persistGeneratedTest(output, outputFile);
-  state?.setTddWorkflowContext({
-    testName: result.testName,
-    flowId: result.flowId,
-    testFile: persisted.testFile,
-    selectorDiagnostics: result.selectorDiagnostics,
-    coverage: result.workflow.coverage,
-    workflow: result.workflow,
-  });
-  return persisted;
-}
-
-function snapshotRefsToWidgetCandidates(refs: SnapshotRefInput[]): WidgetCandidate[] {
-  return refs.map((ref) => ({
-    key: ref.key,
-    text: ref.label,
-    type: ref.type,
-    role: ref.role,
-  }));
-}
-
-
 async function persistGeneratedTest(result: GenerateTestResult, outputFile: string | undefined): Promise<GenerateTestResult> {
   if (!outputFile) return result;
   const absolutePath = resolve(outputFile);
   await mkdir(dirname(absolutePath), { recursive: true });
   await writeFile(absolutePath, result.testCode, 'utf8');
-  const { testCode: _testCode, ...metadata } = result;
-  await writeFile(`${absolutePath}.workflow.json`, JSON.stringify({ schemaVersion: 1, ...metadata, testFile: absolutePath }, null, 2) + '\n', 'utf8');
   return {
     ...result,
     testFile: absolutePath,

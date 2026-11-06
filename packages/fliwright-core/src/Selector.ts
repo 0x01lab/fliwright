@@ -8,6 +8,11 @@ import type {
   TextMatchMode,
 } from './types.js';
 
+/**
+ * Immutable structured Flutter query. Chain composition retains every predicate,
+ * scope, fallback and filter; AST conversion preserves compound criteria.
+ * Text RegExp inputs retain i/m/s options across the TS-to-Dart boundary.
+ */
 export class Selector {
   readonly query: SelectorQuery;
 
@@ -93,32 +98,25 @@ export class Selector {
   }
 
   ancestor(matching: SelectorInput): Selector {
-    return Selector.fromAst({
-      kind: 'ancestor',
-      of: Selector.queryToAst(this.query),
-      matching: Selector.queryToAst(Selector.normalize(matching)),
-    });
+    return new Selector({ ...Selector.normalize(matching), containing: this.query });
   }
 
   and(...selectors: SelectorInput[]): Selector {
-    return Selector.fromAst({
-      kind: 'and',
-      selectors: [this.query, ...selectors.map((selector) => Selector.normalize(selector))].map(Selector.queryToAst),
-    });
+    return new Selector({ and: [this.query, ...selectors.map(Selector.normalize)] });
   }
 
   or(...selectors: SelectorInput[]): Selector {
-    return Selector.fromAst({
-      kind: 'or',
-      selectors: [this.query, ...selectors.map((selector) => Selector.normalize(selector))].map(Selector.queryToAst),
-    });
+    return new Selector({ or: [this.query, ...selectors.map(Selector.normalize)] });
   }
 
   nth(index: number): Selector {
     if (!Number.isInteger(index) || index < 0) {
       throw new Error('Selector index must be a non-negative integer');
     }
-    return new Selector({ ...this.query, position: { ...this.query.position, nth: index } });
+    return new Selector({ ...this.query, position: {
+      ...(this.query.position?.visible != null ? { visible: this.query.position.visible } : {}),
+      nth: index,
+    } });
   }
 
   first(): Selector {
@@ -126,7 +124,10 @@ export class Selector {
   }
 
   last(): Selector {
-    return new Selector({ ...this.query, position: { ...this.query.position, last: true } });
+    return new Selector({ ...this.query, position: {
+      ...(this.query.position?.visible != null ? { visible: this.query.position.visible } : {}),
+      last: true,
+    } });
   }
 
   filter(criteria: FilterCriteria): Selector {
@@ -136,11 +137,7 @@ export class Selector {
 
   containing(descendant: SelectorInput): Selector {
     const descQuery = Selector.normalize(descendant);
-    return Selector.fromAst({
-      kind: 'containing',
-      parent: Selector.queryToAst(this.query),
-      descendant: Selector.queryToAst(descQuery),
-    });
+    return new Selector({ ...this.query, containing: descQuery });
   }
 
   get ast(): SelectorAst {
@@ -223,7 +220,9 @@ export class Selector {
       kind: 'text',
       value: input.source,
       match: 'regex',
-      caseSensitive: !input.ignoreCase,
+      ...(input.ignoreCase ? { caseSensitive: false } : {}),
+      ...(input.multiline ? { multiline: true } : {}),
+      ...(input.dotAll ? { dotAll: true } : {}),
     };
   }
 
@@ -295,11 +294,19 @@ export class Selector {
 
   private static validateAst(ast: SelectorAst): SelectorAst {
     switch (ast.kind) {
+      case 'all':
+        return ast;
+      case 'match':
+        return { kind: 'match', criteria: Selector.validateMatch(ast.criteria) };
+      case 'fallback':
+        return { ...ast, ...(ast.primary ? { primary: Selector.validateAst(ast.primary) } : {}), fallback: Selector.validateFallback(ast.fallback) };
+      case 'position':
+        return { ...ast, selector: Selector.validateAst(ast.selector), position: Selector.validatePosition(ast.position) };
       case 'text':
-        return Selector.textAst(ast.value, {
-          match: ast.match,
-          caseSensitive: ast.caseSensitive,
-        });
+        return { ...Selector.textAst(ast.value, { match: ast.match, caseSensitive: ast.caseSensitive }),
+          ...(ast.multiline != null ? { multiline: ast.multiline } : {}),
+          ...(ast.dotAll != null ? { dotAll: ast.dotAll } : {}),
+        };
       case 'key':
       case 'type':
       case 'id':
@@ -381,6 +388,13 @@ export class Selector {
       const value = match[key];
       if (value != null) out[key] = Selector.nonEmptyString(key, value);
     }
+    for (const key of ['textCaseSensitive', 'textMultiline', 'textDotAll', 'semanticsCaseSensitive'] as const) {
+      if (match[key] != null) out[key] = match[key];
+    }
+    if (match.semanticsMatch != null) {
+      if (!['exact', 'contains', 'regex'].includes(match.semanticsMatch)) throw new Error('Invalid semantics match mode');
+      out.semanticsMatch = match.semanticsMatch;
+    }
     if (match.enabled != null) out.enabled = Boolean(match.enabled);
     if (match.checked != null) out.checked = Boolean(match.checked);
     if (match.iconCodePoint != null) out.iconCodePoint = typeof match.iconCodePoint === 'number' ? match.iconCodePoint : 0;
@@ -437,10 +451,21 @@ export class Selector {
 
   private static astToQuery(ast: SelectorAst): SelectorQuery {
     switch (ast.kind) {
+      case 'all':
+        return {};
+      case 'match':
+        return { match: ast.criteria };
+      case 'fallback':
+        return { ...(ast.primary ? Selector.astToQuery(ast.primary) : {}), fallback: ast.fallback };
+      case 'position':
+        return { ...Selector.astToQuery(ast.selector), position: ast.position };
       case 'text':
-        if (ast.match === 'regex') return { match: { textRegex: ast.value } };
-        if (ast.match === 'contains') return { match: { textContains: ast.value } };
-        return { match: { text: ast.value } };
+        return { match: {
+          ...(ast.match === 'regex' ? { textRegex: ast.value } : ast.match === 'contains' ? { textContains: ast.value } : { text: ast.value }),
+          ...(ast.caseSensitive != null ? { textCaseSensitive: ast.caseSensitive } : {}),
+          ...(ast.multiline != null ? { textMultiline: ast.multiline } : {}),
+          ...(ast.dotAll != null ? { textDotAll: ast.dotAll } : {}),
+        } };
       case 'key':
         return { match: { key: ast.value } };
       case 'type':
@@ -462,6 +487,8 @@ export class Selector {
             ...(ast.label ? { semanticsLabel: ast.label } : {}),
             ...(ast.hint ? { semanticsHint: ast.hint } : {}),
             ...(ast.role ? { role: ast.role } : {}),
+            ...(ast.match ? { semanticsMatch: ast.match } : {}),
+            ...(ast.caseSensitive != null ? { semanticsCaseSensitive: ast.caseSensitive } : {}),
           },
         };
       case 'icon':
@@ -490,48 +517,40 @@ export class Selector {
       case 'containing':
         return { ...Selector.astToQuery(ast.parent), containing: Selector.astToQuery(ast.descendant) };
       default:
-        return { match: { type: 'Widget' } };
+        throw new Error('Invalid selector AST');
     }
   }
 
   private static queryToAst(query: SelectorQuery): SelectorAst {
-    // Handle top-level and/or composition
-    if (query.and) {
-      const ast: SelectorAst = { kind: 'and', selectors: query.and.map(Selector.queryToAst) };
-      if (query.position?.nth != null) return { kind: 'nth', selector: ast, index: query.position.nth };
-      if (query.position?.last) return { kind: 'last', selector: ast };
-      if (query.filter) return { kind: 'filter', selector: ast, filter: query.filter };
-      return ast;
+    let ast: SelectorAst;
+    if (query.and || query.or) {
+      ast = query.and
+        ? { kind: 'and', selectors: query.and.map(Selector.queryToAst) }
+        : { kind: 'or', selectors: query.or!.map(Selector.queryToAst) };
+      if (query.match) ast = { kind: 'and', selectors: [Selector.matchToAst(query.match), ast] };
+    } else {
+      ast = Selector.matchToAst(query.match);
     }
-    if (query.or) {
-      const ast: SelectorAst = { kind: 'or', selectors: query.or.map(Selector.queryToAst) };
-      if (query.position?.nth != null) return { kind: 'nth', selector: ast, index: query.position.nth };
-      if (query.position?.last) return { kind: 'last', selector: ast };
-      if (query.filter) return { kind: 'filter', selector: ast, filter: query.filter };
-      return ast;
+    if (query.fallback) ast = { kind: 'fallback', ...(ast.kind === 'all' ? {} : { primary: ast }), fallback: query.fallback };
+    if (query.within) ast = { kind: 'descendant', of: Selector.queryToAst(query.within), matching: ast };
+    if (query.containing) ast = { kind: 'containing', parent: ast, descendant: Selector.queryToAst(query.containing) };
+    if (query.filter) ast = { kind: 'filter', selector: ast, filter: query.filter };
+    if (query.position?.visible != null || query.position?.first != null) {
+      return { kind: 'position', selector: ast, position: query.position };
     }
-
-    const base = Selector.matchToAst(query.match);
-    const scoped = query.within
-      ? { kind: 'descendant' as const, of: Selector.queryToAst(query.within), matching: base }
-      : base;
-    const withFilter = query.filter
-      ? { kind: 'filter' as const, selector: scoped, filter: query.filter } as SelectorAst
-      : scoped;
-    const withContaining = query.containing
-      ? { kind: 'containing' as const, parent: withFilter, descendant: Selector.queryToAst(query.containing) } as SelectorAst
-      : withFilter;
-    if (query.position?.nth != null) {
-      return { kind: 'nth', selector: withContaining, index: query.position.nth };
-    }
-    if (query.position?.last) {
-      return { kind: 'last', selector: withContaining };
-    }
-    return withContaining;
+    if (query.position?.nth != null) return { kind: 'nth', selector: ast, index: query.position.nth };
+    if (query.position?.last) return { kind: 'last', selector: ast };
+    return ast;
   }
 
   private static matchToAst(match?: MatchCriteria): SelectorAst {
-    if (!match) return { kind: 'type', value: 'Widget' };
+    if (!match) return { kind: 'all' };
+    // Compound predicates and matching options must survive AST round trips.
+    const keys = Object.keys(match);
+    const iconOnly = match.iconCodePoint != null && keys.every(key => ['type', 'iconCodePoint', 'iconFontFamily', 'iconFontPackage'].includes(key)) && (!match.type || match.type === 'Icon');
+    if (!iconOnly && (keys.length > 1 || match.enabled != null || match.checked != null)) {
+      return { kind: 'match', criteria: match };
+    }
     // Icon must be checked before type since icon match includes type: 'Icon'
     if (match.iconCodePoint != null) {
       return {

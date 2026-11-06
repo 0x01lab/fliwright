@@ -18,7 +18,7 @@ Use to turn a reviewed flow into an editable starting point for durable tests.
 - No live app required by the registry. Check command-specific runtime requirements below.
 - No persistent session required. See usage for finite/session variants.
 - Writes only when outputFile is supplied. The skeleton is not executed or verified; review selectors, assertions and scenario setup.
-- useFlowSteps defaults to true. This differs from top-level generate-test, which accepts source/snapshot/InteractionSpec.
+- useFlowSteps defaults to true. This differs from top-level generate-test, which accepts source/snapshot.
 
 ## Input
 
@@ -105,6 +105,6 @@ Refresh the installed contract with `fliwright schema flow.generate-test --json`
 ## Related commands
 
 - [flow validate](./command-flow.validate.md) — Validate flow structure and report design/code/runtime binding issues.
-- [generate-test](./command-generate-test.md) — Generate a test draft from Flutter source, snapshot candidates or an InteractionSpec.
+- [generate-test](./command-generate-test.md) — Generate an editable test draft from Flutter source or snapshot candidates.
 - [run](./command-run.md) — Run selected Vitest automation tests and save canonical run evidence.
 - [Command index](./index.md)

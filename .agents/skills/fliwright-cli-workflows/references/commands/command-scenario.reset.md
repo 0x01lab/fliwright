@@ -18,7 +18,7 @@ Use when exploration has changed state and the same scenario should be establish
 - A running Flutter app with fliwright_bridge; attach with vmUrl/project configuration or use a connection session.
 - No persistent session required. See usage for finite/session variants.
 - This command requires name and calls the same implementation as scenario.apply. It is not a generic inverse or a universal wipe.
-- Only state covered by the named layers is restored.
+- Only state covered by the named layers is restored. Device layers require run --scenario and are rejected before connecting the Bridge.
 
 ## Input
 

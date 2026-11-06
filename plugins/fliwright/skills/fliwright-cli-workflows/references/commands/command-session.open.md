@@ -60,7 +60,7 @@ With --json, read the versioned envelope’s ok and data fields. The following d
 | --- | --- |
 | sessionId | Pass this value as --session on later commands. |
 | connected / endpoint | Connection state and resolved endpoint. |
-| tdd / workflow | Current runtime and generation context when present. |
+| tdd | Current execution runtime when present. |
 | pid / generation / operations | Worker identity and active operation ids. |
 
 ## Effects and failure handling

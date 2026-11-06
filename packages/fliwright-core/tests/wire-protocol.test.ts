@@ -133,7 +133,7 @@ describe('wire protocol: basic selectors', () => {
   });
 
   it('text regex selector', () => {
-    expect(validate(new Selector(/log in/i))).toEqual({ match: { textRegex: 'log in' } });
+    expect(validate(new Selector(/log in/i))).toEqual({ match: { textRegex: 'log in', textCaseSensitive: false } });
   });
 
   it('text contains selector', () => {
@@ -156,8 +156,8 @@ describe('wire protocol: string prefix selectors', () => {
     ['name=email', { match: { name: 'email' } }],
     ['ancestorKey=form', { match: { ancestorKey: 'form' } }],
     ['semanticsId=btn.submit', { match: { semanticIdentifier: 'btn.submit' } }],
-    ['semantics=Submit', { match: { semanticsLabel: 'Submit' } }],
-    ['semanticsLabel=Submit', { match: { semanticsLabel: 'Submit' } }],
+    ['semantics=Submit', { match: { semanticsLabel: 'Submit', semanticsMatch: 'contains' } }],
+    ['semanticsLabel=Submit', { match: { semanticsLabel: 'Submit', semanticsMatch: 'contains' } }],
     ['role=button', { match: { role: 'button' } }],
     ['tooltip=Save', { match: { tooltip: 'Save' } }],
     ['subtype=Widget', { match: { subtype: 'Widget' } }],

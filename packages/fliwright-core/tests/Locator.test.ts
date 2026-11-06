@@ -155,7 +155,7 @@ describe('Locator', () => {
       action: 'scrollIntoView',
       selector: JSON.stringify({ match: { key: 'submit' } }),
       strict: 'true',
-      visible: 'hitTestable',
+      visible: 'any',
       alignment: '0',
       duration: '500',
     });

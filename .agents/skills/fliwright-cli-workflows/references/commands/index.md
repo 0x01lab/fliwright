@@ -4,7 +4,7 @@ purpose: Progressive CLI command routing for Skills
 
 # Fliwright CLI command index
 
-66 commands, one page per leaf command. Read [common conventions](./common.md) once, then open only the relevant command pages. Parameters and schemas are generated from the command registry; semantic guidance is maintained with the CLI package.
+69 commands, one page per leaf command. Read [common conventions](./common.md) once, then open only the relevant command pages. Parameters and schemas are generated from the command registry; semantic guidance is maintained with the CLI package.
 
 ## Choose a workflow
 
@@ -18,7 +18,7 @@ purpose: Progressive CLI command routing for Skills
 | Investigate failed attempts | [artifacts show](./command-artifacts.show.md) | [timeline](./command-artifacts.timeline.md), [diagnose](./command-artifacts.diagnose.md) |
 | Capture a human demonstration | [record](./command-record.md) | [flow get](./command-flow.get.md), [run](./command-run.md) |
 | Compare UI to Figma | [review bundle](./command-flow.review-bundle.md) | [runtime capture](./command-flow.review-capture-runtime.md), [Figma capture](./command-flow.review-capture-figma.md), [report](./command-flow.review-report.md) |
-| Create a test from intent | [validate spec](./command-tdd.validate-spec.md) | [generate-test](./command-generate-test.md) or [tdd prepare](./command-tdd.prepare.md) |
+| Author a behavior test | [write-fliwright-tests](../../../write-fliwright-tests/SKILL.md) | [agent-driven TDD](../tdd.md), then [focus](./command-tdd.focus.md) and [cycle](./command-tdd.cycle.md) |
 | Develop with persistent TDD | [session open](./command-session.open.md) | [start](./command-tdd.start.md), [focus](./command-tdd.focus.md), [cycle](./command-tdd.cycle.md), [stop](./command-tdd.stop.md), [close](./command-session.close.md) |
 | Recover/cancel uncertain work | [session status](./command-session.status.md) | [cancel](./command-session.cancel.md) |
 
@@ -27,7 +27,7 @@ purpose: Progressive CLI command routing for Skills
 | Command | Purpose |
 | --- | --- |
 | [schema](./command-schema.md) | Discover available commands or inspect one command’s machine contract. |
-| [init](./command-init.md) | Create project configuration, example tests/scripts and optional Flutter bridge setup. |
+| [init](./command-init.md) | Initialize project dependencies, Flutter bridge scaffolding and optional project-local Codex Skills. |
 | [doctor](./command-doctor.md) | Check local tooling, configuration and the Flutter automation connection. |
 | [devices list](./command-devices.list.md) | Discover local iOS and Android physical devices and simulators without a running app. |
 
@@ -60,6 +60,19 @@ purpose: Progressive CLI command routing for Skills
 | [app debug-snapshot](./command-app.debug-snapshot.md) | Collect a structural snapshot plus independent debug evidence channels. |
 | [app interact](./command-app.interact.md) | Perform one tap, text entry, navigation, wait, drag or extended action. |
 
+## Inspect native UI and prepare the XCTest Runner
+
+Start with [native workflows](../native.md) for platform configuration, managed/attach runs, capability limits and recovery. Individual command schemas follow below.
+
+| Command | Purpose |
+| --- | --- |
+| [native recovery inspect](./command-native.recovery.inspect.md) | Read the selected device’s local lease, quarantine and recovery evidence without modifying it. |
+| [native recovery verify](./command-native.recovery.verify.md) | Compare an abandoned XCTest Runner journal with the selected iOS Simulator boot generation and launchd identity. |
+| [native recovery restore](./command-native.recovery.restore.md) | Restore the exact isolated resource recorded for an abandoned iOS Simulator or Android Emulator lease. |
+| [native doctor](./command-native.doctor.md) | Inspect the explicitly selected native device, installed target and platform prerequisites without starting a Runner. |
+| [native snapshot](./command-native.snapshot.md) | Capture an explicitly selected device’s native UI hierarchy using ADB or the owned XCTest Runner. |
+| [native prepare](./command-native.prepare.md) | Explicitly build or reuse the unsigned iOS Simulator XCTest Runner in the local build cache. |
+
 ## Prepare a named app baseline
 
 | Command | Purpose |
@@ -87,6 +100,7 @@ purpose: Progressive CLI command routing for Skills
 | --- | --- |
 | [artifacts show](./command-artifacts.show.md) | Read a saved run report, manifest and the available run list. |
 | [artifacts export](./command-artifacts.export.md) | Export a saved run and its referenced evidence to a directory. |
+| [artifacts report](./command-artifacts.report.md) | Generate an offline App release test review report grouped by GitLab Item. |
 | [artifacts failures](./command-artifacts.failures.md) | Extract saved assertion failures and runner errors from a run. |
 | [artifacts timeline](./command-artifacts.timeline.md) | Read a saved attempt timeline or inspect one node and its neighbors. |
 | [artifacts diagnose](./command-artifacts.diagnose.md) | Request optional AI diagnosis of a saved or explicitly supplied agent-visible failure. |
@@ -109,12 +123,11 @@ purpose: Progressive CLI command routing for Skills
 | [flow review-capture-runtime](./command-flow.review-capture-runtime.md) | Navigate review target routes and save runtime screenshots plus a capture manifest. |
 | [flow review-run](./command-flow.review-run.md) | Build a bundle, capture runtime and Figma screenshots, then write a review report. |
 
-## Generate test drafts from source or intent
+## Generate test drafts from source or snapshots
 
 | Command | Purpose |
 | --- | --- |
-| [generate-test](./command-generate-test.md) | Generate a test draft from Flutter source, snapshot candidates or an InteractionSpec. |
-| [tdd validate-spec](./command-tdd.validate-spec.md) | Validate an InteractionSpec and report its executable intent coverage. |
+| [generate-test](./command-generate-test.md) | Generate an editable test draft from Flutter source or snapshot candidates. |
 
 ## Iterate on a focused test
 
@@ -124,13 +137,10 @@ purpose: Progressive CLI command routing for Skills
 | [tdd status](./command-tdd.status.md) | Read TDD status from a live session or the saved local status file. |
 | [tdd focus](./command-tdd.focus.md) | Select the file and optional test name for persistent TDD cycles. |
 | [tdd cycle](./command-tdd.cycle.md) | Sync the app, restore test state and rerun a focused test once. |
-| [tdd repair](./command-tdd.repair.md) | Run the focused cycle with bounded repair planning or guarded runtime actions. |
 | [tdd reconnect](./command-tdd.reconnect.md) | Reconnect the persistent TDD runtime and refresh its host app connection. |
 | [tdd sync](./command-tdd.sync.md) | Apply an explicit app synchronization level without running tests. |
 | [tdd scenario](./command-tdd.scenario.md) | Select the named scenario used by subsequent focused test attempts. |
 | [tdd stop](./command-tdd.stop.md) | Stop the persistent TDD runtime while leaving the connection worker available. |
-| [tdd prepare](./command-tdd.prepare.md) | Generate a red-first test, store workflow context and optionally focus it in a session. |
-| [devassist cycle](./command-devassist.cycle.md) | Coordinate a design/development request through the persistent DevAssist workflow. |
 
 ## Manage a reusable local connection
 

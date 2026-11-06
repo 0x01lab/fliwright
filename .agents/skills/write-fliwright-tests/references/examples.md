@@ -1,5 +1,7 @@
 # 示例
 
+新建业务测试先从 [基础测试模板](./test-templates.md) 选择结构，特别是参数化、不同场景和状态恢复。下面是专题 API 示例；Mock、认证和项目配置按当前 [场景规范](./scenarios.md) 接入，不将旧示例的独立环境设置直接作为新业务测试基线。
+
 可直接复制、带注释的完整测试脚本。每个都改编自 `e2e/` 或
 `.agents/skills/write-fliwright-tests/examples/` 下的真实文件。套用时请去掉解释性注释。
 
@@ -160,9 +162,9 @@ liveTest('register flow: mock → fill → submit → verify request', async ({ 
 
 ```typescript
 import { expect } from 'vitest';
-import { test, beforeEach } from '@fliwright/vitest';
+import { test } from '@fliwright/vitest';
 
-beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   await page.navigate('/');      // known starting route
 });
 

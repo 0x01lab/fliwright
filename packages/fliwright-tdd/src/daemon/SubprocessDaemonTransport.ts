@@ -35,6 +35,8 @@ export class SubprocessDaemonTransport implements DaemonTransport {
   private starting?: { resolve: (value: unknown) => void; reject: (error: unknown) => void };
   private stderr = '';
   private startingApp?: Record<string, unknown>;
+  private closing?: Promise<void>;
+  private exited?: Promise<void>;
 
   async connect(): Promise<void> { this.connected = true; }
 
@@ -50,6 +52,7 @@ export class SubprocessDaemonTransport implements DaemonTransport {
       const child = spawn(bin, args, { cwd: typeof params.projectId === 'string' ? params.projectId : this.opts.cwd,
         stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
       this.child = child;
+      this.exited = new Promise(resolve => { child.once('exit', () => resolve()); });
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', (chunk: string) => {
         this.buffer += chunk;
@@ -94,27 +97,36 @@ export class SubprocessDaemonTransport implements DaemonTransport {
     };
   }
 
-  async dispose(options: { keepAppAlive?: boolean } = {}): Promise<void> {
+  dispose(options: { keepAppAlive?: boolean } = {}): Promise<void> {
+    return this.closing ??= this.close(options);
+  }
+
+  private async close(options: { keepAppAlive?: boolean }): Promise<void> {
     const child = this.child;
     this.child = undefined;
     this.buffer = '';
     this.rejectAll(new Error('SubprocessDaemonTransport disposed'));
     this.connected = false;
     if (child?.pid && child.exitCode === null && child.signalCode === null) {
+      const wait = async () => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([this.exited!.then(() => true), new Promise<boolean>(resolve => {
+            timer = setTimeout(() => resolve(false), 2000);
+          })]);
+        } finally { clearTimeout(timer); }
+      };
       if (options.keepAppAlive) {
         child.stdin.end();
-        await new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, 2000);
-          child.once('exit', () => { clearTimeout(timer); resolve(); });
-        });
+        if (await wait()) return;
       }
       if (child.exitCode === null && child.signalCode === null) {
         const terminate = (signal: NodeJS.Signals) => { try { process.kill(process.platform === 'win32' ? child.pid! : -child.pid!, signal); } catch {} };
         terminate('SIGTERM');
-        await new Promise<void>((resolve) => {
-          const timer = setTimeout(() => { terminate('SIGKILL'); resolve(); }, 2000);
-          child.once('exit', () => { clearTimeout(timer); resolve(); });
-        });
+        if (!await wait()) {
+          terminate('SIGKILL');
+          if (!await wait()) throw new Error('Owned Flutter process termination could not be confirmed.');
+        }
       }
     }
   }

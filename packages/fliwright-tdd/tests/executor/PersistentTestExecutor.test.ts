@@ -1,3 +1,4 @@
+import { resolveFliwrightRunsRoot } from '@fliwright/core';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdir, mkdtemp, readdir, writeFile, rm, realpath, stat } from 'node:fs/promises';
@@ -8,10 +9,39 @@ import { defaultArtifactsRoot, PersistentTestExecutor } from '../../src/executor
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('PersistentTestExecutor.rerun', () => {
-  it('places default artifacts under the project root for file and directory config roots', () => {
-    expect(defaultArtifactsRoot('/repo/app/vitest.config.ts')).toBe('/repo/app/.fliwright/runs');
-    expect(defaultArtifactsRoot('/repo/app/custom.vitest.mjs')).toBe('/repo/app/.fliwright/runs');
-    expect(defaultArtifactsRoot('/repo/app')).toBe('/repo/app/.fliwright/runs');
+  it('loads large shared configuration by path in fork workers and restores the parent path after disposal', async () => {
+    const project = await mkdtemp(resolve(tmpdir(), 'fliwright-tdd-large-config-'));
+    const executor = new PersistentTestExecutor();
+    const previousPath = process.env.FLIWRIGHT_CONFIG_PATH;
+    try {
+      const testFile = resolve(project, 'proof.test.mjs');
+      const configFile = resolve(project, 'vitest.config.mjs');
+      await writeFile(configFile, `export default { root: ${JSON.stringify(project)}, test: { include: ['proof.test.mjs'] } };`);
+      await writeFile(testFile, `import { test, expect } from ${JSON.stringify(import.meta.resolve('vitest'))};
+        import { readFileSync } from 'node:fs';
+        import { spawnSync } from 'node:child_process';
+        test('large config', () => {
+          expect(process.env.FLIWRIGHT_CONFIG).toBeUndefined();
+          const config = JSON.parse(readFileSync(process.env.FLIWRIGHT_CONFIG_PATH, 'utf8'));
+          expect(config.scenarios.large.layers[0].seed.payload.length).toBe(2 * 1024 * 1024);
+          const child = spawnSync(process.execPath, ['-e', 'process.exit(0)']);
+          expect(child.error).toBeUndefined();
+          expect(child.status).toBe(0);
+        });`);
+      await executor.boot({ configRoot: configFile, runsRoot: resolve(project, 'runs'),
+        sharedConfig: { cacheRoot: resolve(project, 'cache'), recording: { mode: 'off' },
+          scenarios: { large: { name: 'large', layers: [{ kind: 'storage', seed: { payload: 'x'.repeat(2 * 1024 * 1024) } }] } } } });
+      expect(process.env.FLIWRIGHT_CONFIG_PATH).toBeTruthy();
+      expect(await executor.rerun(testFile, 'large config')).toMatchObject({ status: 'green' });
+      await executor.dispose();
+      expect(process.env.FLIWRIGHT_CONFIG_PATH).toBe(previousPath);
+    } finally { await executor.dispose(); await rm(project, { recursive: true, force: true }); }
+  }, 20000);
+
+  it('places default artifacts outside the project for file and directory config roots', () => {
+    expect(defaultArtifactsRoot('/repo/app/vitest.config.ts')).toBe(resolveFliwrightRunsRoot({ projectRoot: '/repo/app' }));
+    expect(defaultArtifactsRoot('/repo/app/custom.vitest.mjs')).toBe(resolveFliwrightRunsRoot({ projectRoot: '/repo/app' }));
+    expect(defaultArtifactsRoot('/repo/app')).toBe(resolveFliwrightRunsRoot({ projectRoot: '/repo/app' }));
   });
 
   it('does not restore runtime env before boot has applied it', async () => {
@@ -37,7 +67,6 @@ describe('PersistentTestExecutor.rerun', () => {
       runsRoot: artifactsRoot,
       vmServiceUrl: 'ws://runtime/ws',
       scenarioMode: 'managed-start',
-      driverProvider: async () => ({}),
     });
 
     try {
@@ -64,7 +93,6 @@ describe('PersistentTestExecutor.rerun', () => {
       configRoot: resolve(fixtureRoot, 'vitest.config.ts'),
       runsRoot: artifactsRoot,
       vmServiceUrl: 'ws://runtime/ws',
-      driverProvider: async () => ({}),
     });
 
     try {
@@ -102,14 +130,14 @@ describe('PersistentTestExecutor.rerun', () => {
           if (method === 'ext.fliwright.snap') return { widgets: [{ type: 'Root' }] };
           if (method === 'ext.fliwright.captureFrame') return { diagnostics: [] };
           return { success: true };
-        }, healing: { getReports: () => [] }, dispose: async () => {},
+        }, getDiagnostics: () => [], healing: { getReports: () => [] }, dispose: async () => {},
       };
       const test = createFliwrightTest({ vmServiceUrl: 'ws://unused', requireAssertions: false, log: { format: 'silent' } }, { driverProvider: async () => driver });
       test('beta fails', async ({ page }) => { throw new Error('current attempt error'); });
     `);
     const executor = new PersistentTestExecutor();
     try {
-      await executor.boot({ configRoot: configFile, runsRoot: storage === 'explicit' ? artifactsRoot : undefined, driverProvider: async () => ({}) });
+      await executor.boot({ configRoot: configFile, runsRoot: storage === 'explicit' ? artifactsRoot : undefined });
       const first = await executor.rerun(testFile, 'beta fails');
       expect(first.status).toBe('red');
       expect(first.failureDetails, JSON.stringify(first)).toMatchObject({
@@ -139,7 +167,7 @@ describe('PersistentTestExecutor.rerun', () => {
       test('explicit only', () => writeFileSync(${JSON.stringify(marker)}, 'ran'));`);
     const executor = new PersistentTestExecutor();
     try {
-      await executor.boot({ configRoot: config, runsRoot: resolve(project, 'artifacts'), driverProvider: async () => ({}) });
+      await executor.boot({ configRoot: config, runsRoot: resolve(project, 'artifacts') });
       await expect(stat(marker)).rejects.toThrow();
       const result = await executor.rerun(testFile, 'explicit only');
       expect(result.status, JSON.stringify(result)).toBe('green');

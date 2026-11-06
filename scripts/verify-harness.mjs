@@ -2,6 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { validateNativeStack } from './native-stack-contract.mjs';
 
 const root = process.cwd();
 const errors = [];
@@ -152,7 +153,7 @@ function changedFiles(base, includeWorkingTree = false) {
 }
 
 function sourceChange(relativePath) {
-  return /^(packages\/[^/]+\/(src|lib)\/.+\.(ts|tsx|dart)|e2e\/.+\.ts|examples\/[^/]+\/lib\/.+\.dart)$/.test(relativePath);
+  return /^(packages\/[^/]+\/(src|lib)\/.+\.(ts|tsx|dart)|packages\/[^/]+\/runners\/.+\.(swift|pbxproj|xcscheme)|e2e\/.+\.ts|examples\/[^/]+\/lib\/.+\.dart)$/.test(relativePath);
 }
 
 function dependencyChange(relativePath) {
@@ -413,6 +414,7 @@ const architecture = readJson('harness/architecture/dependency-rules.json');
 validateWorkspaceLock(stack);
 validateWorkspaceCoverage(stack, architecture);
 validateDependencyManifests(stack, architecture);
+for (const message of validateNativeStack(root, stack)) error(message);
 validateTypeScript(stack);
 validateImportBoundaries(architecture, stack);
 validateLedger();

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { VMServiceConnector } from '../src/VMServiceConnector.js';
+import { verifyVmServiceEndpoint } from '../src/VmServiceEndpoint.js';
 import {
   VmServiceEndpointResolver,
   waitForVmServiceEndpoint,
@@ -139,4 +141,16 @@ it('bounds managed bridge readiness and preserves cancellation', async () => {
   const verify = vi.fn(async () => ({ status: 'invalid' as const, reason: 'bridge-not-ready', checkedAt: '' }));
   await expect(waitForVmServiceEndpoint(endpoint, { verify, timeoutMs: 10, pollIntervalMs: 1 })).rejects.toMatchObject({ name: 'TimeoutError' });
   await expect(waitForVmServiceEndpoint(endpoint, { verify, signal: AbortSignal.abort(new DOMException('cancelled', 'AbortError')) })).rejects.toMatchObject({ name: 'AbortError' });
+});
+
+it('reports protocol incompatibility with both versions and stops retrying a permanently incompatible bridge', async () => {
+  const connect = vi.spyOn(VMServiceConnector.prototype, 'connect').mockResolvedValue();
+  const request = vi.spyOn(VMServiceConnector.prototype, 'sendRequest').mockResolvedValue({ status: 'ok', initialized: true, compatible: false, protocolVersion: 1 });
+  try {
+    const endpoint: VmServiceEndpoint = { url: 'ws://managed/ws', kind: 'direct-vm', source: 'managed', scope: 'execution-worker', acquiredAt: '' };
+    const health = await verifyVmServiceEndpoint(endpoint);
+    expect(health).toMatchObject({ status: 'invalid', reason: 'bridge-protocol-incompatible', clientProtocolVersion: 2, bridgeProtocolVersion: 1 });
+    await expect(waitForVmServiceEndpoint(endpoint)).rejects.toMatchObject({ code: 'BRIDGE_PROTOCOL_INCOMPATIBLE', health: { reason: health.reason, clientProtocolVersion: 2, bridgeProtocolVersion: 1 } });
+    expect(request).toHaveBeenCalledTimes(2);
+  } finally { connect.mockRestore(); request.mockRestore(); }
 });

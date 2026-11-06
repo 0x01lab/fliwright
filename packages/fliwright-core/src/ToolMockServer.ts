@@ -119,6 +119,7 @@ export class ToolMockServer {
 
   clear(): void {
     this.routes = [];
+    this.ruleStore.clear();
   }
 
   clearCalls(): void {

@@ -1,3 +1,4 @@
+import { resolveFliwrightRuntimeRoot } from '@fliwright/core';
 import { createConnection } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { spawn } from 'node:child_process';
@@ -13,7 +14,7 @@ export const SESSION_PACKAGE_VERSION: string = JSON.parse(readFileSync(new URL('
 export interface SessionControl { id: string; generation: string; pid: number; version: number; packageVersion: string; socket: string; cwd: string; }
 export function sessionDirectory(cwd: string, id: string): string {
   if (!/^[a-zA-Z0-9-]{1,64}$/.test(id)) throw new CliError('INVALID_INPUT', 'Invalid session ID.', 2);
-  return join(resolve(cwd), '.fliwright', 'sessions', id);
+  return join(resolveFliwrightRuntimeRoot({ projectRoot: cwd }), 'sessions', id);
 }
 export function sessionSocket(cwd: string, id: string): string {
   const hash = createHash('sha256').update(`${resolve(cwd)}:${id}`).digest('hex').slice(0, 24);
@@ -81,7 +82,7 @@ export async function sessionOpenCommand(options: { cwd: string; vmUrl?: string;
   }
 }
 export async function sessionListCommand(cwd: string) {
-  const root = join(resolve(cwd), '.fliwright', 'sessions');
+  const root = join(resolveFliwrightRuntimeRoot({ projectRoot: cwd }), 'sessions');
   const ids = await readdir(root).catch(() => []);
   return { sessions: await Promise.all(ids.map(async (id) => {
     try { return { sessionId: id, ...await sessionRequest(cwd, id, { type: 'status' }, AbortSignal.timeout(1000)) as object }; }

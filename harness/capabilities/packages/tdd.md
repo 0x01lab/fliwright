@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/tdd"
 path: "packages/fliwright-tdd"
-source_fingerprint: "05d349b10d3b987e208791d06e826130576333d5d3da7f9bc69964c3cbc229d4"
+source_fingerprint: "43c106c7310284e8dcd0ca729bfbc3bf8172cb1fc1eff311e3359be745a826b4"
 generated: true
 ---
 
@@ -9,7 +9,7 @@ generated: true
 
 ## Responsibility
 
-Own persistent TDD execution, baseline reset, focused reruns, red-first generation, and repair planning.
+Own persistent focused test execution, Flutter synchronization, baseline reset and execution evidence. TDD decisions and test authoring belong to agent skills.
 
 ## Boundary
 
@@ -27,7 +27,7 @@ Own persistent TDD execution, baseline reset, focused reruns, red-first generati
 ## Owned Capabilities
 
 - `TDD execution`
-- `test repair workflow`
+- `Flutter app synchronization`
 
 ## Package Entrypoints
 
@@ -35,83 +35,42 @@ Own persistent TDD execution, baseline reset, focused reruns, red-first generati
 
 ## Public Exports
 
-- `analyzeInteractionSpecCoverage`
 - `AppCapabilityResetAdapters`
 - `AppHandle`
 - `AppStartParams`
 - `AuthTokensResetAdapter`
+- `BaselineConfig`
 - `BaselineManager`
-- `bestLocatorHint`
 - `BootOptions`
 - `buildTddFailureContext`
 - `BuildTddFailureContextInput`
 - `classifyFailure`
 - `CollectedResult`
-- `collectResultsFromFiles`
+- `collectResultsFromModules`
 - `CycleOpts`
 - `DaemonMessage`
 - `DaemonTransport`
 - `decideSync`
 - `defaultArtifactsRoot`
 - `defaultStatusFilePath`
-- `DevAssistAction`
-- `DevAssistCoordinator`
-- `DevAssistCoordinatorDeps`
-- `DevAssistCycleInput`
-- `DevAssistCycleResult`
-- `DevAssistInferenceResult`
-- `DevAssistRuntime`
-- `DevAssistStatus`
 - `FlutterDaemonController`
 - `FlutterDaemonEndpointSource`
 - `FlutterDaemonEndpointSourceOptions`
 - `focusAndRerun`
-- `generateRedFirstTest`
-- `GenerateRedFirstTestResult`
-- `generateRedFirstTestSuite`
-- `GenerateRedFirstTestSuiteResult`
-- `InteractionSpec`
-- `InteractionSpecCoverageGap`
-- `InteractionSpecCoverageGapKind`
-- `InteractionSpecCoverageReport`
-- `InteractionSpecValidationError`
-- `InteractionSpecValidationIssue`
-- `InteractionSpecValidationResult`
 - `IsolatesResetAdapter`
 - `isStructuralFileChange`
 - `LocalDbResetAdapter`
-- `LocatorHint`
 - `looksStructuralAfterReload`
 - `parseDaemonLines`
-- `parseInteractionSpec`
 - `PermissionsResetAdapter`
 - `PersistentTestExecutor`
-- `prepareRedFirstWorkflow`
-- `PrepareRedFirstWorkflowResult`
-- `RedFirstTestGeneratorOptions`
-- `RedFirstTestSuiteGeneratorOptions`
-- `RedFirstWorkflowContext`
-- `RedFirstWorkflowOptions`
-- `RedFirstWorkflowPlan`
-- `RedFirstWorkflowStatus`
 - `ResetAdapter`
 - `ResetAdapterResult`
 - `ResetCategory`
 - `ResetContext`
 - `ResetReport`
-- `ResultReporter`
 - `RuntimeSnapshot`
-- `Scenario`
 - `SecureStorageResetAdapter`
-- `SelectorCandidate`
-- `SelectorSynthesisResult`
-- `SelectorSynthesisStatus`
-- `SelectorTraceStep`
-- `SpecAssertion`
-- `SpecElement`
-- `SpecElementRole`
-- `SpecFlow`
-- `SpecStep`
 - `StartOpts`
 - `StorageBackedResetAdapters`
 - `StorageResetAdapter`
@@ -119,8 +78,6 @@ Own persistent TDD execution, baseline reset, focused reruns, red-first generati
 - `SubprocessDaemonTransport`
 - `SubprocessDaemonTransportOptions`
 - `SyncDecision`
-- `synthesizeSelector`
-- `synthesizeSelectorsForElements`
 - `TddCycleResult`
 - `TddFailureArtifacts`
 - `TddFailureAssertion`
@@ -129,23 +86,12 @@ Own persistent TDD execution, baseline reset, focused reruns, red-first generati
 - `TddFailureSource`
 - `TddRecoveryHint`
 - `TddRecoveryHintKind`
-- `TddRepairCycleResult`
-- `TddRepairOpts`
-- `TddRepairPlan`
-- `TddRepairPlanner`
-- `TddRepairPlannerLike`
-- `TddRepairPlannerOptions`
-- `TddRepairProposalEntry`
-- `TddRepairStep`
-- `TddRepairTrace`
 - `TddRuntime`
 - `TddRuntimeDeps`
 - `TddSyncResult`
 - `TestRunOutcome`
 - `TimersResetAdapter`
-- `validateInteractionSpec`
 - `WebviewResetAdapter`
-- `WidgetCandidate`
 
 ## Source Anchors
 
@@ -157,17 +103,10 @@ Own persistent TDD execution, baseline reset, focused reruns, red-first generati
 - `packages/fliwright-tdd/src/daemon/FlutterDaemonEndpointSource.ts`
 - `packages/fliwright-tdd/src/daemon/ReloadStrategy.ts`
 - `packages/fliwright-tdd/src/daemon/SubprocessDaemonTransport.ts`
-- `packages/fliwright-tdd/src/devassist/DevAssistCoordinator.ts`
 - `packages/fliwright-tdd/src/diagnostics/TddFailureContext.ts`
 - `packages/fliwright-tdd/src/executor/FocusedRerunRecipe.ts`
 - `packages/fliwright-tdd/src/executor/PersistentTestExecutor.ts`
-- `packages/fliwright-tdd/src/executor/ResultReporter.ts`
-- `packages/fliwright-tdd/src/generator/RedFirstTestGenerator.ts`
+- `packages/fliwright-tdd/src/executor/TestRunResults.ts`
 - `packages/fliwright-tdd/src/index.ts`
-- `packages/fliwright-tdd/src/repair/TddRepairPlanner.ts`
 - `packages/fliwright-tdd/src/runtime/TddRuntime.ts`
-- `packages/fliwright-tdd/src/selectors/SelectorSynthesizer.ts`
-- `packages/fliwright-tdd/src/spec/InteractionSpec.ts`
-- `packages/fliwright-tdd/src/spec/InteractionSpecCoverage.ts`
 - `packages/fliwright-tdd/src/types.ts`
-- `packages/fliwright-tdd/src/workflow/RedFirstWorkflow.ts`

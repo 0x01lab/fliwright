@@ -1,14 +1,16 @@
 {
-  "name": "personal",
+  "name": "fliwright",
   "interface": {
-    "displayName": "Personal"
+    "displayName": "Fliwright"
   },
   "plugins": [
     {
       "name": "fliwright",
       "source": {
-        "source": "local",
-        "path": "./plugins/fliwright"
+        "source": "git-subdir",
+        "url": "https://github.com/0x01lab/fliwright.git",
+        "path": "./plugins/fliwright",
+        "ref": "main"
       },
       "policy": {
         "installation": "AVAILABLE",

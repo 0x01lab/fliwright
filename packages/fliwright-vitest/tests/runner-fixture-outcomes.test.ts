@@ -240,6 +240,7 @@ describe('runner outcomes with real Fliwright fixtures', () => {
       import { beforeEach, afterEach, expect } from 'vitest';
       import { createFliwrightTest } from ${JSON.stringify(integration)};
       let state = 'body';
+      const vmEvents = [];
       const driver = {
         sendRequest: async (method, params) => {
           if (method === 'ext.fliwright.screenshot' && state === 'stall') return new Promise(() => {});
@@ -251,7 +252,8 @@ describe('runner outcomes with real Fliwright fixtures', () => {
           if (method === 'ext.fliwright.click' && params.x === '99') return { success: false, error: 'caught action' };
           return { success: true, diagnostics: { state } };
         },
-        getDiagnostics: () => [{ state }], healing: { getReports: () => [] },
+        getDiagnostics: () => vmEvents, clearDiagnostics: () => { vmEvents.length = 0; },
+        healing: { getReports: () => [] },
         mock: {}, dispose: async () => {},
       };
       const test = createFliwrightTest({ vmServiceUrl: 'ws://unused', runsRoot: ${JSON.stringify(runs)},
@@ -268,7 +270,12 @@ describe('runner outcomes with real Fliwright fixtures', () => {
         state = 'cleanup';
         if (task.name === 'teardown failure') throw new Error('teardown original error');
       });
-      test('ordinary throw', async ({ page }) => { throw new Error('body original error'); });
+      test('ordinary throw', async ({ page }) => {
+        vmEvents.push({ kind: 'Logging', streamId: 'Logging', timestamp: Date.now(), data: {
+          logRecord: { level: 1000, message: 'Dart failure: StateError', stackTrace: '#0 HomePage.build (lib/home.dart:42:9)' },
+        } });
+        throw new Error('body original error');
+      });
       test('last assertion failure', async ({ page }) => { await page.clickAt(1, 2); expect(1).toBe(2); });
       test('setup failure', async ({ page }) => { throw new Error('must not run'); });
       test('teardown failure', async ({ page }) => { expect(true).toBe(true); });
@@ -335,7 +342,15 @@ describe('runner outcomes with real Fliwright fixtures', () => {
       expect(JSON.stringify(failureReport)).not.toContain('private-input-42');
       const thrown = attempts.find(({ result }) => result.testName === 'ordinary throw')!;
       const failureEntry = failureReport.flat().find((entry: { testName: string }) => entry.testName === 'ordinary throw');
+      expect(failureEntry.dartDiagnostics).toContainEqual(expect.objectContaining({
+        streamId: 'Logging',
+        data: expect.objectContaining({ logRecord: expect.objectContaining({
+          message: 'Dart failure: StateError', stackTrace: '#0 HomePage.build (lib/home.dart:42:9)',
+        }) }),
+      }));
       expect(await readFile(join(thrown.dir, failureEntry.screenshot.path), 'utf8')).toBe('body');
+      const assertionFailure = failureReport.flat().find((entry: { testName: string }) => entry.testName === 'last assertion failure');
+      expect(assertionFailure.dartDiagnostics).toBeUndefined();
       const stalled = attempts.find(({ result }) => result.testName === 'evidence timeout')!;
       expect(stalled.result).toMatchObject({ evidenceStatus: 'partial', testOutcome: 'failed',
         runnerErrors: [expect.objectContaining({ message: 'original with hung evidence' })] });

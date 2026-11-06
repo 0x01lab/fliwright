@@ -164,7 +164,7 @@ it('manages projects with admin writes, monotonic revisions, case catalog checks
   expect(store.branchHead(id, 'main')).toBeUndefined(); // Remote HEAD is verified by the scan worker.
   expect(store.queue().length).toBe(0);
 });
-it('keeps scenario-free catalogs browsable and bases readiness on discovered scenarios', async () => {
+it('approves scenario-free catalogs and accepts direct case and suite runs', async () => {
   const { server, store, browser } = setup();
   const publish = (commit: string, scenarios: Array<{ name: string; fingerprint: string }>) => {
     store.createCatalogScan('app', commit);
@@ -173,14 +173,23 @@ it('keeps scenario-free catalogs browsable and bases readiness on discovered sce
     store.finishCatalogScan('mac', lease.scan.scanId, lease.token, {
       catalogId: lease.scan.scanId, projectId: 'app', commit, configRevision: 1,
       status: 'ready', createdAt: Date.now(), scannerVersion: 'test', fliwrightVersion: 'test', scenarios,
+      mocks: [{ directory: '.fliwright/mocks', endpoints: [{ endpoint: '/assets', method: 'GET', rules: ['success', 'empty'], activeRule: 'success' }] }],
       suites: [{ id: 'smoke', pattern: '*.test.ts', files: [file], cases: [{ file, titlePath, duplicateIndex: 0, caseId: digest(JSON.stringify([file, titlePath, 0])) }] }],
     });
   };
   publish('a'.repeat(40), []);
   const status = (await server.inject({ url: '/api/projects/app/status', headers: browser() })).json();
-  expect(status.blockers).toContain('仓库尚未声明运行场景，可浏览用例；运行前请在 fliwright.config.ts 中声明场景');
+  expect(status.blockers).toEqual(['等待管理员确认项目就绪']);
   expect((await server.inject({ url: '/api/projects/app/catalogs', headers: browser() })).json()[0].suites[0].cases).toHaveLength(1);
-  expect((await server.inject({ method: 'POST', url: '/api/projects/app/ready', headers: browser('admin'), payload: {} })).statusCode).toBe(409);
+  expect((await server.inject({ url: '/api/projects/app/catalogs', headers: browser() })).json()[0].mocks[0].endpoints[0]).toEqual({ endpoint: '/assets', method: 'GET', rules: ['success', 'empty'], activeRule: 'success' });
+  expect((await server.inject({ method: 'POST', url: '/api/projects/app/ready', headers: browser('admin'), payload: {} })).statusCode).toBe(200);
+  expect((await server.inject({ url: '/api/projects/app/status', headers: browser() })).json().ready).toBe(true);
+  const catalog = store.catalogs('app')[0]!;
+  for (const mode of ['suite', 'case']) {
+    const response = await server.inject({ method: 'POST', url: '/api/projects/app/requests', headers: { ...browser(), 'idempotency-key': `direct-${mode}` }, payload: { projectId: 'app', commit: catalog.commit, catalogId: catalog.catalogId, mode, suite: 'smoke', ...(mode === 'case' ? { caseId: catalog.suites[0]!.cases[0]!.caseId } : {}) } });
+    expect(response.statusCode).toBe(201);
+    expect(store.getRequest(response.json().id).input).not.toHaveProperty('scenario');
+  }
   publish('b'.repeat(40), [{ name: 'guest', fingerprint: digest('guest') }]);
   expect((await server.inject({ method: 'POST', url: '/api/projects/app/ready', headers: browser('admin'), payload: {} })).statusCode).toBe(200);
   expect((await server.inject({ url: '/api/projects/app/status', headers: browser() })).json().ready).toBe(true);
@@ -190,7 +199,7 @@ it('creates a project from only its repository URL and keeps identifiers server 
   const create = (payload: unknown) => server.inject({ method: 'POST', url: '/api/projects', headers: browser('admin'), payload });
   const first = await create({ repository: ' https://git.example.com/group/subgroup/my-app.git/ ' });
   expect(first.statusCode).toBe(201);
-  expect(first.json()).toMatchObject({ name: 'my-app', repository: 'https://git.example.com/group/subgroup/my-app.git', defaultBranch: 'main', projectPath: '.', entry: 'lib/main.dart', suites: { smoke: '.fliwright/tests/**/*.test.ts' }, scenarios: ['clean'], autoRun: { enabled: false, branch: 'main' } });
+  expect(first.json()).toMatchObject({ name: 'my-app', repository: 'https://git.example.com/group/subgroup/my-app.git', defaultBranch: 'main', projectPath: '.', entry: 'lib/main.dart', suites: { smoke: '.fliwright/tests/**/*.test.ts' }, scenarios: [], autoRun: { enabled: false, branch: 'main' } });
   const second = await create({ repository: 'git@git.example.com:other/my-app.git', name: 'Custom name', defaultBranch: 'develop' });
   expect(second.statusCode).toBe(201);
   expect(second.json()).toMatchObject({ name: 'Custom name', repository: 'ssh://git@git.example.com/other/my-app.git', defaultBranch: 'develop', autoRun: { branch: 'develop' } });

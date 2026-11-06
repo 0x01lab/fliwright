@@ -1,4 +1,4 @@
-import { ScenarioCoordinator, ScenarioResolver } from '@fliwright/core';
+import { ScenarioCoordinator, ScenarioPreparationError, ScenarioResolver } from '@fliwright/core';
 import { loadConfig } from '../config.js';
 import { withAppSession, type AppSessionDeps, type AppSessionOptions } from '../capabilities/session.js';
 
@@ -19,6 +19,9 @@ export async function scenarioApplyCommand(
 ) {
   const config = await loadConfig(options.cwd ?? process.cwd());
   const scenario = new ScenarioResolver(config.scenarios ?? {}).resolve(options.name);
+  if (scenario.layers.some(layer => layer.kind === 'device')) {
+    throw new ScenarioPreparationError('Device scenario preparation requires an owned test attempt. Use run --scenario instead of scenario.apply/reset.');
+  }
   return withAppSession(options, ({ driver }) => new ScenarioCoordinator(driver).apply(scenario, {
     mode: options.mode ?? config.scenarioMode ?? 'attach',
   }), deps);

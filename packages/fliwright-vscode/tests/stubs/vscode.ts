@@ -124,7 +124,7 @@ export interface Disposable {
 
 export interface TreeDataProvider<T> {
   onDidChangeTreeData?: unknown;
-  getTreeItem(element: T): TreeItem;
+  getTreeItem(element: T): TreeItem | Promise<TreeItem>;
   getChildren(element?: T): T[] | Promise<T[]>;
 }
 
@@ -150,6 +150,12 @@ export const __webviewPanels: Array<{
 }> = [];
 
 export const workspace = {
+  isTrusted: true,
+  onDidGrantWorkspaceTrust(_listener: () => void) { return { dispose() {} }; },
+  createFileSystemWatcher(_pattern: unknown) {
+    return { onDidChange(_listener: (uri: Uri) => void) {}, onDidCreate(_listener: (uri: Uri) => void) {},
+      onDidDelete(_listener: (uri: Uri) => void) {}, dispose() {} };
+  },
   get workspaceFolders() {
     return workspaceFoldersValue;
   },

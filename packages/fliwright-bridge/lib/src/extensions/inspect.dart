@@ -98,6 +98,26 @@ class InspectExtension {
   static Future<Map<String, dynamic>> _action(
     Map<String, String> params,
   ) async {
+    final timeoutMs = int.tryParse(params['timeout'] ?? '') ?? 0;
+    final clock = Stopwatch()..start();
+    while (true) {
+      final result = await _actionAttempt(params);
+      // Retry only failures detected before dispatch. A dispatched gesture or
+      // text operation must never be replayed after a partial failure.
+      final retryable = result['count'] == 0 || result['actionability'] is Map;
+      if (result['success'] != false ||
+          !retryable ||
+          clock.elapsedMilliseconds >= timeoutMs) {
+        return result;
+      }
+      final remaining = timeoutMs - clock.elapsedMilliseconds;
+      await Future<void>.delayed(
+          Duration(milliseconds: remaining < 16 ? remaining : 16));
+    }
+  }
+
+  static Future<Map<String, dynamic>> _actionAttempt(
+      Map<String, String> params) async {
     final action = params['action'] ?? '';
     if (action.isEmpty) {
       return {'error': 'Missing required parameter: action', 'success': false};
@@ -116,88 +136,31 @@ class InspectExtension {
     final ref = params['ref'];
     if (ref != null && ref.isNotEmpty) {
       final entry = RefRegistry.lookupEntry(ref) ?? _resolveQueryRef(ref);
-      if (entry == null) {
+      if (entry == null)
         return {'error': 'Unknown or stale ref: $ref', 'success': false};
-      }
-      Rect actionableRect;
-      var keyboardDismissed = false;
-      try {
-        actionableRect = await ensureActionable(
-          entry,
-          ref: ref,
-          checkStable: params['checkStable'] != 'false',
-          checkReceivesEvents: params['checkReceivesEvents'] == 'true',
-        );
-      } on ActionabilityException catch (error) {
-        if (!error.keyboardObscured) {
-          return _actionabilityError(ref, error);
-        }
-        await SoftKeyboard.dismiss();
-        keyboardDismissed = true;
-        try {
-          actionableRect = await ensureActionable(
-            entry,
-            ref: ref,
-            checkStable: params['checkStable'] != 'false',
-            checkReceivesEvents: params['checkReceivesEvents'] == 'true',
-          );
-        } on ActionabilityException catch (retryError) {
-          return _actionabilityError(ref, retryError);
-        }
-      }
-      final rect = {
-        'x': actionableRect.left,
-        'y': actionableRect.top,
-        'width': actionableRect.width,
-        'height': actionableRect.height,
-      };
-      final result = await _actionWithResolvedTarget(
-        action: action,
-        rect: rect,
-        targetId: '${entry.element.hashCode}',
-        params: {...params, 'selector': params['selector'] ?? 'ref=$ref'},
-      );
-      return {
-        ...result,
-        if (keyboardDismissed) 'keyboardDismissed': true,
-      };
+      return _performElementAction(entry.element, action,
+          {...params, 'selector': params['selector'] ?? 'ref=$ref'},
+          ref: ref);
     }
 
+    // A resolved id is an identity hint, never permission to reuse old coordinates.
     final precomputedTargetId = params['targetId'];
-    final precomputedRect = _parseRectJson(params['targetRect']);
-    if (precomputedTargetId != null && precomputedRect != null) {
-      final keyboard = SoftKeyboard.current();
-      final alignment = _alignmentFromString(params['alignment'] ?? 'center');
-      final covered = keyboard.restricts(
-        _pointInRect(precomputedRect, alignment),
-      );
-      if (covered) {
-        await SoftKeyboard.dismiss();
-        final selector = params['selector'];
-        if (selector != null && selector.isNotEmpty) {
-          final retryParams = Map<String, String>.from(params)
-            ..remove('targetId')
-            ..remove('targetRect');
-          final result = await _action(retryParams);
-          return {...result, 'keyboardDismissed': true};
-        }
-      }
-      final result = await _actionWithResolvedTarget(
-        action: action,
-        rect: precomputedRect,
-        targetId: precomputedTargetId,
-        params: params,
-      );
-      return {
-        ...result,
-        if (covered) 'keyboardDismissed': true,
-      };
+    if (precomputedTargetId != null) {
+      final element = _findElementById(precomputedTargetId);
+      if (element == null)
+        return {
+          'success': false,
+          'error': 'Resolved target is stale: $precomputedTargetId'
+        };
+      return _performElementAction(element, action, params);
     }
 
-    final resolveParams = Map<String, String>.from(params);
-    resolveParams['strict'] = params['strict'] ?? 'true';
-    resolveParams['visible'] = params['visible'] ?? 'hitTestable';
-    resolveParams['limit'] = params['limit'] ?? '2';
+    final resolveParams = Map<String, String>.from(params)
+      ..['strict'] = params['strict'] ?? 'true'
+      ..['visible'] = action == 'scrollIntoView'
+          ? 'any'
+          : params['visible'] ?? 'hitTestable'
+      ..['limit'] = '2';
     var resolveResult = await _resolve(resolveParams);
     var keyboardDismissed = false;
     if (resolveResult['success'] == false &&
@@ -208,37 +171,81 @@ class InspectExtension {
       resolveResult = await _resolve(resolveParams);
     }
     if (resolveResult['success'] == false) return resolveResult;
-
     final matches = resolveResult['matches'];
     if (matches is! List || matches.isEmpty) {
       return {'error': 'No widget found matching selector', 'success': false};
     }
+    final target = matches.first as Map<String, dynamic>;
+    final element = _findElementById(target['id'].toString());
+    if (element == null)
+      return {'success': false, 'error': 'Resolved target is stale'};
+    final result = await _performElementAction(element, action, params);
+    return {...result, if (keyboardDismissed) 'keyboardDismissed': true};
+  }
 
-    final targetId = params['targetId'];
-    final target = targetId == null
-        ? matches.first as Map<String, dynamic>
-        : matches.cast<Map<String, dynamic>>().firstWhere(
-              (candidate) => candidate['id'].toString() == targetId,
-              orElse: () => matches.first as Map<String, dynamic>,
-            );
-    final rect = target['rect'];
+  static Future<Map<String, dynamic>> _performElementAction(
+      Element element, String action, Map<String, String> params,
+      {String? ref}) async {
+    if (!element.mounted)
+      return {'success': false, 'error': 'Resolved target is stale'};
+    final info = extractWidgetInfo(element);
+    final rect = info?['rect'];
     if (rect is! Map<String, dynamic>) {
       return {
-        'error': 'Widget matching selector has no render bounds',
         'success': false,
+        'error': 'Widget matching selector has no render bounds'
       };
     }
-
-    final result = await _actionWithResolvedTarget(
-      action: action,
-      rect: rect,
-      targetId: target['id'].toString(),
-      params: params,
+    final id = '${element.hashCode}';
+    if (action == 'scrollIntoView') {
+      return _actionWithResolvedTarget(
+          action: action, rect: rect, targetId: id, params: params);
+    }
+    final entry = RefEntry(
+      rect: Rect.fromLTWH(
+          (rect['x'] as num).toDouble(),
+          (rect['y'] as num).toDouble(),
+          (rect['width'] as num).toDouble(),
+          (rect['height'] as num).toDouble()),
+      element: element,
+      groupId: 'action',
+      isTextField: _roleForElement(element, info) == 'textbox',
+      enabled: _enabledForElement(element) ??
+          (info?['properties'] as Map?)?['enabled'] as bool?,
     );
-    return {
-      ...result,
-      if (keyboardDismissed) 'keyboardDismissed': true,
-    };
+    var keyboardDismissed = false;
+    Rect actionableRect;
+    try {
+      actionableRect = await ensureActionable(entry,
+          ref: ref ?? id,
+          checkStable: params['checkStable'] != 'false',
+          checkReceivesEvents: params['checkReceivesEvents'] != 'false',
+          alignment: _alignmentFromString(params['alignment'] ?? 'center'));
+    } on ActionabilityException catch (error) {
+      if (!error.keyboardObscured) return _actionabilityError(ref ?? id, error);
+      await SoftKeyboard.dismiss();
+      keyboardDismissed = true;
+      try {
+        actionableRect = await ensureActionable(entry,
+            ref: ref ?? id,
+            checkStable: params['checkStable'] != 'false',
+            checkReceivesEvents: params['checkReceivesEvents'] != 'false',
+            alignment: _alignmentFromString(params['alignment'] ?? 'center'));
+      } on ActionabilityException catch (retryError) {
+        return _actionabilityError(ref ?? id, retryError);
+      }
+    }
+    final result = await _actionWithResolvedTarget(
+        action: action,
+        rect: {
+          'x': actionableRect.left,
+          'y': actionableRect.top,
+          'width': actionableRect.width,
+          'height': actionableRect.height,
+        },
+        targetId: id,
+        params: params);
+    return {...result, if (keyboardDismissed) 'keyboardDismissed': true};
   }
 
   static Map<String, dynamic> _actionabilityError(
@@ -349,17 +356,6 @@ class InspectExtension {
       default:
         return {'error': 'Unknown action: $action', 'success': false};
     }
-  }
-
-  static Map<String, dynamic>? _parseRectJson(String? json) {
-    if (json == null || json.isEmpty) return null;
-    try {
-      final decoded = jsonDecode(json);
-      if (decoded is Map<String, dynamic>) return decoded;
-    } catch (_) {
-      return null;
-    }
-    return null;
   }
 
   static RefEntry? _resolveQueryRef(String ref) {
@@ -687,7 +683,48 @@ class InspectExtension {
   }
 
   static Map<String, dynamic> _queryToAst(Map<String, dynamic> query) {
-    if (query['kind'] is String) return query;
+    if (query['kind'] == 'match') {
+      return _matchCriteriaToAst(query['criteria'] as Map<String, dynamic>) ??
+          {'kind': 'all'};
+    }
+    if (query['kind'] == 'position') {
+      return _applyPositionAst(
+          _queryToAst(query['selector'] as Map<String, dynamic>),
+          query['position']);
+    }
+    if (query['kind'] == 'fallback') {
+      final fallback = query['fallback'] as Map<String, dynamic>;
+      final fallbackAst = fallback['kind'] is String
+          ? _queryToAst(fallback)
+          : _fallbackCriteriaToAst(fallback) ??
+              {'kind': 'or', 'selectors': <dynamic>[]};
+      if (query['primary'] == null) return fallbackAst;
+      return {
+        'kind': 'fallback',
+        'primary': _queryToAst(query['primary'] as Map<String, dynamic>),
+        'fallback': fallbackAst,
+      };
+    }
+    if (query['kind'] is String) {
+      final ast = Map<String, dynamic>.from(query);
+      for (final key in [
+        'of',
+        'matching',
+        'selector',
+        'parent',
+        'descendant'
+      ]) {
+        if (ast[key] is Map<String, dynamic>)
+          ast[key] = _queryToAst(ast[key] as Map<String, dynamic>);
+      }
+      if (ast['selectors'] is List) {
+        ast['selectors'] = (ast['selectors'] as List)
+            .whereType<Map<String, dynamic>>()
+            .map(_queryToAst)
+            .toList();
+      }
+      return ast;
+    }
 
     final match = query['match'];
     final fallback = query['fallback'];
@@ -698,64 +735,34 @@ class InspectExtension {
     final filter = query['filter'];
     final containing = query['containing'];
 
-    // Handle top-level and/or composition
-    if (andFields is List) {
-      var ast = <String, dynamic>{
-        'kind': 'and',
-        'selectors': andFields
+    // Build the candidate set first, then apply every outer constraint.
+    Map<String, dynamic>? ast =
+        _matchCriteriaToAst(match is Map<String, dynamic> ? match : null);
+    for (final entry in {'and': andFields, 'or': orFields}.entries) {
+      if (entry.value is! List) continue;
+      final composition = <String, dynamic>{
+        'kind': entry.key,
+        'selectors': (entry.value as List)
             .whereType<Map<String, dynamic>>()
             .map(_queryToAst)
             .toList(),
       };
-      if (filter is Map<String, dynamic>) {
-        ast = {'kind': 'filter', 'selector': ast, 'filter': filter};
-      }
-      if (position is Map<String, dynamic>) {
-        final nth = position['nth'];
-        if (nth is int) {
-          ast = {'kind': 'nth', 'selector': ast, 'index': nth};
-        } else if (position['first'] == true) {
-          ast = {'kind': 'nth', 'selector': ast, 'index': 0};
-        } else if (position['last'] == true) {
-          ast = {'kind': 'last', 'selector': ast};
-        }
-      }
-      return ast;
+      ast = ast == null
+          ? composition
+          : {
+              'kind': 'and',
+              'selectors': [ast, composition]
+            };
     }
-    if (orFields is List) {
-      var ast = <String, dynamic>{
-        'kind': 'or',
-        'selectors': orFields
-            .whereType<Map<String, dynamic>>()
-            .map(_queryToAst)
-            .toList(),
-      };
-      if (filter is Map<String, dynamic>) {
-        ast = {'kind': 'filter', 'selector': ast, 'filter': filter};
-      }
-      if (position is Map<String, dynamic>) {
-        final nth = position['nth'];
-        if (nth is int) {
-          ast = {'kind': 'nth', 'selector': ast, 'index': nth};
-        } else if (position['first'] == true) {
-          ast = {'kind': 'nth', 'selector': ast, 'index': 0};
-        } else if (position['last'] == true) {
-          ast = {'kind': 'last', 'selector': ast};
-        }
-      }
-      return ast;
-    }
-
     final fallbackAst = fallback is Map<String, dynamic>
         ? _fallbackCriteriaToAst(fallback)
         : null;
-    var ast = _matchCriteriaToAst(match is Map<String, dynamic> ? match : null);
     if (ast != null && fallbackAst != null) {
       ast = {'kind': 'fallback', 'primary': ast, 'fallback': fallbackAst};
-    } else if (ast == null) {
-      ast = fallbackAst;
+    } else {
+      ast ??= fallbackAst;
     }
-    ast ??= {'kind': 'type', 'value': 'Widget'};
+    ast ??= {'kind': 'all'};
 
     if (within is Map<String, dynamic>) {
       ast = {'kind': 'descendant', 'of': _queryToAst(within), 'matching': ast};
@@ -773,17 +780,24 @@ class InspectExtension {
       ast = {'kind': 'filter', 'selector': ast, 'filter': filter};
     }
 
-    if (position is Map<String, dynamic>) {
-      final nth = position['nth'];
-      if (nth is int) {
-        ast = {'kind': 'nth', 'selector': ast, 'index': nth};
-      } else if (position['first'] == true) {
-        ast = {'kind': 'nth', 'selector': ast, 'index': 0};
-      } else if (position['last'] == true) {
-        ast = {'kind': 'last', 'selector': ast};
-      }
-    }
+    return _applyPositionAst(ast, position);
+  }
 
+  static Map<String, dynamic> _applyPositionAst(
+      Map<String, dynamic> ast, dynamic position) {
+    if (position is! Map<String, dynamic>) return ast;
+    if (position['visible'] is bool) {
+      ast = {
+        'kind': 'filter',
+        'selector': ast,
+        'filter': {'visible': position['visible']}
+      };
+    }
+    if (position['nth'] is int)
+      return {'kind': 'nth', 'selector': ast, 'index': position['nth']};
+    if (position['first'] == true)
+      return {'kind': 'nth', 'selector': ast, 'index': 0};
+    if (position['last'] == true) return {'kind': 'last', 'selector': ast};
     return ast;
   }
 
@@ -810,7 +824,13 @@ class InspectExtension {
 
     final text = match['text'];
     if (text is String && text.isNotEmpty) {
-      selectors.add({'kind': 'text', 'value': text, 'match': 'exact'});
+      selectors.add({
+        'kind': 'text',
+        'value': text,
+        'match': 'exact',
+        if (match['textCaseSensitive'] is bool)
+          'caseSensitive': match['textCaseSensitive']
+      });
     }
     final textContains = match['textContains'];
     if (textContains is String && textContains.isNotEmpty) {
@@ -818,11 +838,21 @@ class InspectExtension {
         'kind': 'text',
         'value': textContains,
         'match': 'contains',
+        if (match['textCaseSensitive'] is bool)
+          'caseSensitive': match['textCaseSensitive'],
       });
     }
     final textRegex = match['textRegex'];
     if (textRegex is String && textRegex.isNotEmpty) {
-      selectors.add({'kind': 'text', 'value': textRegex, 'match': 'regex'});
+      selectors.add({
+        'kind': 'text',
+        'value': textRegex,
+        'match': 'regex',
+        if (match['textCaseSensitive'] is bool)
+          'caseSensitive': match['textCaseSensitive'],
+        if (match['textMultiline'] is bool) 'multiline': match['textMultiline'],
+        if (match['textDotAll'] is bool) 'dotAll': match['textDotAll'],
+      });
     }
 
     final iconCodePoint = match['iconCodePoint'];
@@ -854,7 +884,9 @@ class InspectExtension {
         if (semanticsHint is String) 'hint': semanticsHint,
         if (role is String) 'role': role,
         if (semanticsLabel is String || semanticsHint is String)
-          'match': 'contains',
+          'match': match['semanticsMatch'] ?? 'contains',
+        if (match['semanticsCaseSensitive'] is bool)
+          'caseSensitive': match['semanticsCaseSensitive'],
       });
     }
 
@@ -958,13 +990,18 @@ class InspectExtension {
   static bool _matchesAst(Element element, ParsedSelectorAst selector) {
     final widget = element.widget;
     switch (selector.kind) {
+      case 'all':
+        return true;
       case 'text':
+        if (widget is RichText && _hasTextAncestor(element)) return false;
         final text = extractText(widget);
         return _matchString(
           text,
           selector.stringValue('value'),
           selector.stringValue('match') ?? 'exact',
           selector.boolValue('caseSensitive') ?? true,
+          multiline: selector.boolValue('multiline') ?? false,
+          dotAll: selector.boolValue('dotAll') ?? false,
         );
       case 'key':
         return _keyMatches(widget.key, selector.stringValue('value')!);
@@ -983,7 +1020,8 @@ class InspectExtension {
       case 'ancestorKey':
         return findAncestorKey(element) == selector.stringValue('value');
       case 'tooltip':
-        return _extractTooltip(element) == selector.stringValue('value');
+        return _directTooltip(widget) == selector.stringValue('value') &&
+            !_hasTooltipOwnerAncestor(element, selector.stringValue('value')!);
       case 'state':
         final property = selector.stringValue('property');
         final expected = selector.boolValue('value');
@@ -1648,8 +1686,10 @@ class InspectExtension {
     String? actual,
     String? expected,
     String match,
-    bool caseSensitive,
-  ) {
+    bool caseSensitive, {
+    bool multiline = false,
+    bool dotAll = false,
+  }) {
     if (actual == null || expected == null) return false;
     final actualValue = caseSensitive ? actual : actual.toLowerCase();
     final expectedValue = caseSensitive ? expected : expected.toLowerCase();
@@ -1657,7 +1697,11 @@ class InspectExtension {
       case 'contains':
         return actualValue.contains(expectedValue);
       case 'regex':
-        return RegExp(expected, caseSensitive: caseSensitive).hasMatch(actual);
+        return RegExp(expected,
+                caseSensitive: caseSensitive,
+                multiLine: multiline,
+                dotAll: dotAll)
+            .hasMatch(actual);
       case 'exact':
       default:
         return actualValue == expectedValue;
@@ -1812,6 +1856,42 @@ class InspectExtension {
       if (text == null || !RegExp(hasTextRegex).hasMatch(text)) return false;
     }
     return true;
+  }
+
+  static bool _hasTextAncestor(Element element) {
+    var found = false;
+    element.visitAncestorElements((ancestor) {
+      if (ancestor.widget is Text) {
+        found = true;
+        return false;
+      }
+      return ancestor.widget is! RenderObjectWidget;
+    });
+    return found;
+  }
+
+  static String? _directTooltip(Widget widget) {
+    if (widget is Tooltip)
+      return widget.message ?? widget.richMessage?.toPlainText();
+    if (widget is RawTooltip) return widget.semanticsTooltip;
+    try {
+      final value = (widget as dynamic).tooltip;
+      return value is String ? value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static bool _hasTooltipOwnerAncestor(Element element, String tooltip) {
+    var found = false;
+    element.visitAncestorElements((ancestor) {
+      if (_directTooltip(ancestor.widget) == tooltip) {
+        found = true;
+        return false;
+      }
+      return ancestor.widget is! Scaffold && ancestor.widget is! WidgetsApp;
+    });
+    return found;
   }
 
   static String? _extractTooltip(Element element) {

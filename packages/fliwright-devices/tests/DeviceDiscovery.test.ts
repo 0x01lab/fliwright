@@ -13,7 +13,7 @@ describe('device discovery', () => {
     command.mockImplementation(async (_bin, args) => {
       if (args[0] === 'simctl') return JSON.stringify({ devices: {
         'com.apple.CoreSimulator.SimRuntime.iOS-18-5': [
-          { udid: 'sim-booted', name: 'iPhone', state: 'Booted', isAvailable: true },
+          { udid: 'sim-booted', name: 'QA phone', deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro', state: 'Booted', isAvailable: true },
           { udid: 'sim-stopped', name: 'iPad', state: 'Shutdown', isAvailable: true },
           { udid: 'sim-broken', name: 'Old iPhone', state: 'Shutdown', isAvailable: false },
         ],
@@ -30,7 +30,7 @@ describe('device discovery', () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.devices).toHaveLength(5);
     expect(result.devices).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'sim-booted', platform: 'ios', kind: 'simulator', state: 'online', osVersion: '18.5' }),
+      expect.objectContaining({ id: 'sim-booted', name: 'QA phone', model: 'iPhone 17 Pro', platform: 'ios', kind: 'simulator', state: 'online', osVersion: '18.5' }),
       expect.objectContaining({ id: 'sim-stopped', kind: 'simulator', state: 'shutdown' }),
       expect.objectContaining({ id: 'sim-broken', state: 'unavailable' }),
       expect.objectContaining({ id: 'phone', kind: 'physical', state: 'online', osVersion: '18.5 (build)' }),

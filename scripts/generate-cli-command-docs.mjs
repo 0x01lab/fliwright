@@ -5,7 +5,6 @@ import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import { createRegistry } from '../packages/fliwright-cli/dist/index.js';
-import { validateInteractionSpec } from '../packages/fliwright-tdd/dist/index.js';
 import { buildCommandReferences, exampleInvocation } from './cli-command-docs.mjs';
 
 const check = process.argv.includes('--check');
@@ -25,10 +24,7 @@ try {
     program.configureOutput({ writeOut: () => {}, writeErr: () => {} });
     await program.parseAsync([...args, '--cwd', temporary], { from: 'user' });
     assert.equal(calls, 1, `${definition.path}: example did not reach input validation`);
-    if (example.input.spec) {
-      const validation = validateInteractionSpec(example.input.spec);
-      assert.equal(validation.ok, true, `${definition.path}: invalid spec example: ${JSON.stringify(validation)}`);
-    }
+
   });
   const roots = [path.resolve('.agents/skills/fliwright-cli-workflows/references/commands')];
   if (check) roots.push(path.resolve('plugins/fliwright/skills/fliwright-cli-workflows/references/commands'));

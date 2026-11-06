@@ -5,6 +5,10 @@ import {
   writeFileSync,
   existsSync,
   readFileSync,
+  mkdirSync,
+  readdirSync,
+  chmodSync,
+  symlinkSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -82,6 +86,168 @@ it('preserves business failure when upload fails and resets before releasing', a
     cleanup: 'clean',
   });
   expect(calls.indexOf('reset')).toBeLessThan(calls.indexOf('finish'));
+});
+
+it('reclaims checkout, dependencies, raw runs and uploaded bundles only after finish is acknowledged', async () => {
+  const { worker, root, deps } = setup();
+  const attempt = join(root, 'spool', 'attempt');
+  deps.execute = async () => {
+    for (const path of ['checkout/node_modules/pkg', 'checkout/build', 'runs', 'bundle']) {
+      mkdirSync(join(attempt, path), { recursive: true });
+      writeFileSync(join(attempt, path, 'data'), 'large generated content');
+    }
+    writeFileSync(join(attempt, 'executor.log'), 'diagnostics');
+    return { verdict: 'failed', bundleDir: join(attempt, 'bundle') };
+  };
+  deps.finish = async () => {
+    expect(existsSync(join(attempt, 'checkout'))).toBe(true);
+    expect(existsSync(join(attempt, 'bundle'))).toBe(true);
+  };
+  await worker.runOnce();
+  expect(existsSync(join(attempt, 'checkout'))).toBe(false);
+  expect(existsSync(join(attempt, 'runs'))).toBe(false);
+  expect(existsSync(join(attempt, 'bundle'))).toBe(false);
+  expect(readFileSync(join(attempt, 'executor.log'), 'utf8')).toBe('diagnostics');
+  expect(existsSync(join(attempt, 'worker-timeline.jsonl'))).toBe(true);
+});
+
+it('keeps the retry bundle but drops frozen checkouts without traversing external symlinks', async () => {
+  const { worker, root, deps } = setup({ publish: async () => { throw new Error('offline'); } });
+  const attempt = join(root, 'spool', 'attempt');
+  const outside = join(root, 'shared-cache');
+  mkdirSync(outside);
+  writeFileSync(join(outside, 'keep'), 'shared');
+  deps.execute = async () => {
+    mkdirSync(join(attempt, 'checkout', 'nested'), { recursive: true });
+    symlinkSync(outside, join(attempt, 'checkout', 'nested', 'external'));
+    chmodSync(join(attempt, 'checkout', 'nested'), 0o555);
+    chmodSync(join(attempt, 'checkout'), 0o555);
+    mkdirSync(join(attempt, 'bundle'));
+    writeFileSync(join(attempt, 'bundle', 'run.json'), '{}');
+    mkdirSync(join(attempt, 'runs'));
+    return { verdict: 'failed', bundleDir: join(attempt, 'bundle') };
+  };
+  await worker.runOnce();
+  expect(existsSync(join(attempt, 'checkout'))).toBe(false);
+  expect(existsSync(join(attempt, 'runs'))).toBe(false);
+  expect(existsSync(join(attempt, 'bundle', 'run.json'))).toBe(true);
+  expect(readFileSync(join(outside, 'keep'), 'utf8')).toBe('shared');
+});
+
+it.each(['finish', 'reset', 'stopOwned'] as const)('preserves the working directory when %s fails and the slot needs recovery', async failure => {
+  const { worker, root, deps } = setup();
+  const checkout = join(root, 'spool', 'attempt', 'checkout');
+  deps.execute = async () => {
+    mkdirSync(checkout);
+    writeFileSync(join(checkout, 'evidence'), 'keep');
+    return { verdict: 'unknown' };
+  };
+  deps[failure] = async () => { throw new Error('unconfirmed cleanup'); };
+  await expect(worker.runOnce()).rejects.toThrow();
+  expect(existsSync(join(root, 'slot.lock'))).toBe(true);
+  expect(readFileSync(join(checkout, 'evidence'), 'utf8')).toBe('keep');
+});
+
+it('bounds retained attempts during idle startup and after each completion', async () => {
+  const { worker, root, deps, lease } = setup();
+  worker.options.spoolRetention = { maxAttempts: 2 };
+  const spool = join(root, 'spool');
+  for (let i = 0; i < 5; i++) {
+    const directory = join(spool, `legacy-${i}`);
+    mkdirSync(join(directory, 'checkout'), { recursive: true });
+    writeFileSync(join(directory, 'job.json'), '{}');
+    writeFileSync(join(directory, 'retention.json'), JSON.stringify({ completedAt: Date.now() - (5 - i) * 1000, published: false }));
+  }
+  deps.claim = async () => null;
+  expect(await worker.runOnce()).toBe(false);
+  expect(readdirSync(spool).sort()).toEqual(['legacy-3', 'legacy-4']);
+  expect(existsSync(join(spool, 'legacy-4', 'checkout'))).toBe(false);
+  deps.claim = async () => lease;
+  await worker.runOnce();
+  expect(readdirSync(spool).sort()).toEqual(['attempt', 'legacy-4']);
+});
+
+it.each([
+  { maxAgeHours: 1 },
+  { maxBytes: 100 },
+  { maxFiles: 2 },
+])('evicts expired or oversized retained evidence with %j', async limits => {
+  const { worker, root, deps } = setup();
+  worker.options.spoolRetention = limits;
+  const directory = join(root, 'spool', 'old');
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, 'retention.json'), JSON.stringify({ completedAt: Date.now() - 7200000, published: false }));
+  writeFileSync(join(directory, 'executor.log'), 'x'.repeat(101));
+  writeFileSync(join(directory, 'result.json'), '{}');
+  deps.claim = async () => null;
+  await worker.runOnce();
+  expect(existsSync(directory)).toBe(false);
+});
+
+it('keeps raw evidence when artifact export left an incomplete bundle', async () => {
+  const { worker, root, deps } = setup();
+  const attempt = join(root, 'spool', 'attempt');
+  deps.execute = async () => {
+    mkdirSync(join(attempt, 'runs'), { recursive: true });
+    mkdirSync(join(attempt, 'bundle'));
+    writeFileSync(join(attempt, 'runs', 'evidence'), 'not exported');
+    return { verdict: 'unknown' };
+  };
+  await worker.runOnce();
+  expect(readFileSync(join(attempt, 'runs', 'evidence'), 'utf8')).toBe('not exported');
+});
+
+it('leaves active or unrecovered attempts untouched even when they exceed retention limits', async () => {
+  const { worker, root } = setup();
+  worker.options.spoolRetention = { maxFiles: 1 };
+  const attempt = join(root, 'spool', 'active');
+  mkdirSync(attempt, { recursive: true });
+  writeFileSync(join(attempt, 'evidence'), 'keep');
+  writeFileSync(join(root, 'slot.lock'), JSON.stringify({ pid: 0, directory: attempt, stage: 'running' }));
+  await expect(worker.runOnce()).rejects.toThrow(/lock|recover/i);
+  expect(readFileSync(join(attempt, 'evidence'), 'utf8')).toBe('keep');
+});
+
+it('compacts legacy attempts only after confirming their owned processes stopped', async () => {
+  const { worker, root, deps } = setup();
+  const attempt = join(root, 'spool', 'legacy');
+  mkdirSync(join(attempt, 'checkout'), { recursive: true });
+  writeFileSync(join(attempt, 'job.json'), '{}');
+  deps.claim = async () => null;
+  deps.stopOwned = async directory => {
+    expect(directory).toBe(attempt);
+    throw new Error('ambiguous process');
+  };
+  await expect(worker.runOnce()).rejects.toThrow('ambiguous process');
+  expect(existsSync(join(attempt, 'checkout'))).toBe(true);
+  deps.stopOwned = async () => {};
+  await worker.recover();
+  expect(existsSync(join(attempt, 'checkout'))).toBe(false);
+  expect(existsSync(join(root, 'slot.lock'))).toBe(false);
+});
+
+it('holds the slot lock during recovery before any historical pruning', async () => {
+  const { worker, root, deps } = setup();
+  deps.reset = async () => {
+    expect(existsSync(join(root, 'slot.lock'))).toBe(true);
+    await expect(worker.runOnce()).rejects.toThrow(/lock|recover/i);
+  };
+  await worker.recover();
+  expect(existsSync(join(root, 'slot.lock'))).toBe(false);
+});
+
+it('enforces the combined file budget across retained attempts', async () => {
+  const { worker, root, deps } = setup();
+  worker.options.spoolRetention = { maxFiles: 6 };
+  for (let i = 0; i < 3; i++) {
+    const attempt = join(root, 'spool', `attempt-${i}`);
+    mkdirSync(attempt, { recursive: true });
+    writeFileSync(join(attempt, 'retention.json'), JSON.stringify({ completedAt: Date.now() - (3 - i) * 1000, published: false }));
+    writeFileSync(join(attempt, 'evidence'), 'keep within budget');
+  }
+  deps.claim = async () => null;
+  await worker.runOnce();
+  expect(readdirSync(join(root, 'spool')).sort()).toEqual(['attempt-1', 'attempt-2']);
 });
 
 it('records publication and device cleanup independently after a failed test run', async () => {

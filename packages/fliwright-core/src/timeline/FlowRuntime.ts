@@ -1,3 +1,4 @@
+import { resolveFliwrightRuntimeRoot } from '../runArtifacts.js';
 import type { Page } from '../Page.js';
 import type { RunSession } from '../RunSession.js';
 import { FliwrightAgentError } from '../agent/FliwrightAgentError.js';
@@ -392,7 +393,7 @@ function isRecord(value: unknown): value is Record<string, any> {
 }
 
 async function defaultManualConfirm(prompt: string, options: { signal: AbortSignal }): Promise<void> {
-  const dir = resolve(process.env.FLIWRIGHT_MANUAL_DIR ?? join(process.cwd(), '.fliwright', 'manual'));
+  const dir = resolve(process.env.FLIWRIGHT_MANUAL_DIR ?? join(resolveFliwrightRuntimeRoot(), 'manual'));
   const id = `manual-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const requestPath = join(dir, `${id}.json`);
   const continuePath = join(dir, `${id}.continue.json`);

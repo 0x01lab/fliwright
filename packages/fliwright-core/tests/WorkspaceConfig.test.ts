@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   clearWorkspaceVmServiceUrl,
@@ -27,6 +27,8 @@ describe('WorkspaceConfig', () => {
     expect(readWorkspaceConfigSync(cwd).vmServiceUrl).toBe('ws://127.0.0.1:12345/ws');
     expect(await readFile(workspaceConfigPath(cwd), 'utf-8')).toContain('"vmServiceUrl"');
 
+    expect(workspaceConfigPath(cwd)).not.toContain(cwd + '/');
+    await expect(access(join(cwd, '.fliwright'))).rejects.toThrow();
     await clearWorkspaceVmServiceUrl({ cwd, source: 'test-clear' });
 
     expect(await readWorkspaceConfig(cwd)).toMatchObject({
@@ -36,10 +38,18 @@ describe('WorkspaceConfig', () => {
     expect((await readWorkspaceConfig(cwd)).vmServiceUrl).toBeUndefined();
   });
 
+  it('uses the same project runtime state when invoked from a nested directory', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'fliwright-config-nested-'));
+    const child = join(cwd, 'lib/features');
+    await mkdir(child, { recursive: true });
+    await writeFile(join(cwd, 'fliwright.config.ts'), 'export default {};');
+    expect(workspaceConfigPath(child)).toBe(workspaceConfigPath(cwd));
+  });
+
   it('ignores invalid VM Service metadata while preserving custom config fields', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'fliwright-config-'));
     const filePath = workspaceConfigPath(cwd);
-    await mkdir(join(cwd, '.fliwright'), { recursive: true });
+    await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, JSON.stringify({
       version: 99,
       vmServiceUrl: 123,
