@@ -19,6 +19,7 @@ Use when a Figma API token is available and targets have file/node bindings.
 - No persistent session required. See usage for finite/session variants.
 - Reads accessToken or FIGMA_ACCESS_TOKEN/FIGMA_TOKEN. Prefer environment credentials over command-line tokens.
 - Alternatively use an external Figma tool and produce the same capture-array input for review-report.
+- Deadline and cancellation propagate to both Figma requests and stop subsequent targets.
 - Inspect capture errors even if the wrapper exits 0; individual REST capture errors may be represented in capture entries.
 
 ## Input

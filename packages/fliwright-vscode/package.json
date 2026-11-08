@@ -2,7 +2,7 @@
   "name": "fliwright-vscode",
   "displayName": "Fliwright",
   "description": "Flutter automation, recording, mocks, traces, and Riverpod state tools for Fliwright.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "fliwright",
   "license": "MIT",
   "repository": {
@@ -96,6 +96,7 @@
     "onCommand:fliwright.fillForm",
     "onCommand:fliwright.fillFormWithRules",
     "onCommand:fliwright.runCurrentTest",
+    "onCommand:fliwright.openTestSource",
     "onCommand:fliwright.runWorkspaceTests",
     "onCommand:fliwright.refreshTestFile",
     "onCommand:fliwright.stopTests",
@@ -378,6 +379,11 @@
         "command": "fliwright.runCurrentTest",
         "title": "Fliwright: Run Current Test",
         "icon": "$(run)"
+      },
+      {
+        "command": "fliwright.openTestSource",
+        "title": "Fliwright: Open Test Source File",
+        "icon": "$(go-to-file)"
       },
       {
         "command": "fliwright.runWorkspaceTests",
@@ -877,6 +883,11 @@
           "command": "fliwright.refreshTestFile",
           "when": "view == fliwright.tests && viewItem == testFile",
           "group": "inline@2"
+        },
+        {
+          "command": "fliwright.openTestSource",
+          "when": "view == fliwright.tests && viewItem =~ /^(testFile|testCase)(Running)?$/",
+          "group": "inline@3"
         },
         {
           "command": "fliwright.stopTests",

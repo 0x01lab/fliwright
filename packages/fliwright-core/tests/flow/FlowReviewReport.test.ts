@@ -1,8 +1,47 @@
 import { describe, expect, it } from 'vitest';
 import { buildFlowReviewReport } from '../../src/flow/FlowReviewReport.js';
 import type { FlowReviewPlan } from '../../src/flow/FlowReviewPlan.js';
+import { buildFlowReviewPlan } from '../../src/flow/FlowReviewPlan.js';
 
 describe('buildFlowReviewReport', () => {
+  it('preserves comparison failures when additional metrics are supplied', () => {
+    const report = buildFlowReviewReport({
+      reviewPlan: { version: 1, flowId: 'test', targets: [target('screen', 0.03, 4)], missing: { figmaBindings: [], runtimeEntryPoints: [] } },
+      runtimeCaptures: [{ flowNodeId: 'screen', screenshotPath: 'runtime.png' }],
+      figmaCaptures: [{ flowNodeId: 'screen', screenshotPath: 'figma.png' }],
+      comparisons: [
+        { flowNodeId: 'screen', pixelDiff: 1, error: 'Decode failed', tokenMismatches: ['color'] },
+        { flowNodeId: 'screen', pixelDiff: 0, tokenMismatches: [], textMismatches: [] },
+      ],
+    });
+    expect(report.items[0]).toMatchObject({ status: 'failed', comparison: { pixelDiff: 1, error: 'Decode failed', tokenMismatches: ['color'], textMismatches: [] } });
+  });
+
+  it('includes incomplete Figma targets in missing coverage', () => {
+    const reviewPlan = buildFlowReviewPlan({
+      version: 1, id: 'test', createdAt: '2026-11-06', updatedAt: '2026-11-06', edges: [],
+      nodes: [
+        { id: 'binding', type: 'figma', title: 'Missing binding', figma: { fileKey: 'FILE', nodeId: '' } },
+        { id: 'runtime', type: 'screen', title: 'Missing runtime', figma: { fileKey: 'FILE', nodeId: '1:2' } },
+      ],
+    });
+    const report = buildFlowReviewReport({ reviewPlan });
+    expect(report.summary).toMatchObject({ total: 2, missing: 2, passed: 0 });
+    expect(report.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ flowNodeId: 'binding', status: 'missing', issues: ['missing nodeId'] }),
+      expect.objectContaining({ flowNodeId: 'runtime', status: 'missing', issues: ['missing route, selector, recordingFrameId, or screenshot'] }),
+    ]));
+  });
+
+  it('keeps empty comparisons pending', () => {
+    const report = buildFlowReviewReport({
+      reviewPlan: { version: 1, flowId: 'test', targets: [target('screen', 0.03, 4)], missing: { figmaBindings: [], runtimeEntryPoints: [] } },
+      runtimeCaptures: [{ flowNodeId: 'screen', screenshotPath: 'runtime.png' }],
+      figmaCaptures: [{ flowNodeId: 'screen', screenshotPath: 'figma.png' }],
+      comparisons: [{ flowNodeId: 'screen' }],
+    });
+    expect(report.items[0].status).toBe('pending');
+  });
   it('classifies review items as passed, failed, missing, or pending', () => {
     const reviewPlan: FlowReviewPlan = {
       version: 1,

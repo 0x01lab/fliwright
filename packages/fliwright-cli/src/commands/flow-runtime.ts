@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { resolveFliwrightRuntimeRoot, sanitizeFlowFileId } from '@fliwright/core';
 import { withAppSession, type AppSessionOptions, type AppSessionDeps } from '../capabilities/session.js';
@@ -29,7 +29,15 @@ export async function flowReviewCaptureRuntimeCommand(options: FlowRuntimeOption
   }, deps);
 }
 export async function flowReviewRunCommand(options: FlowRuntimeOptions, deps: AppSessionDeps = {}) {
-  const bundle = await flowReviewBundleCommand(options);
+  options.signal?.throwIfAborted();
+  let outputDir = options.outputDir && resolve(options.cwd ?? process.cwd(), options.outputDir);
+  if (!outputDir) {
+    const { reviewPlan } = await flowReviewPlanCommand(options);
+    const reviewsDir = join(resolveFliwrightRuntimeRoot({ projectRoot: options.cwd }), 'reviews');
+    await mkdir(reviewsDir, { recursive: true });
+    outputDir = await mkdtemp(join(reviewsDir, `${sanitizeFlowFileId(reviewPlan.flowId)}-${Date.now()}-`));
+  }
+  const bundle = await flowReviewBundleCommand({ ...options, outputDir });
   const runtime = await flowReviewCaptureRuntimeCommand({ ...options, outputDir: bundle.bundle.artifacts.runtimeDir }, deps);
   const figma = await flowReviewCaptureFigmaCommand({ ...options, outputDir: bundle.bundle.artifacts.figmaDir, capturesFile: bundle.bundle.figmaMcp.capturesFile });
   const report = await flowReviewReportCommand({ ...options, outputPath: bundle.bundle.artifacts.reportPath, runtimeCaptures: runtime.captures, figmaCaptures: figma.captures });

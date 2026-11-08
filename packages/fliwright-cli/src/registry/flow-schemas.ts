@@ -60,7 +60,7 @@ export const FlowReviewCaptureFigmaParamsSchema = FlowReviewPlanParamsSchema.ext
 });
 
 export const FlowReviewRunParamsSchema = FlowReviewPlanParamsSchema.extend({
-  outputDir: z.string().optional().describe('Review artifact root directory. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>.'),
+  outputDir: z.string().optional().describe('Review artifact root directory. Defaults to a unique ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>-<suffix> directory.'),
   accessToken: z.string().optional().describe('Figma access token. Defaults to FIGMA_ACCESS_TOKEN or FIGMA_TOKEN.'),
   scale: z.number().optional().describe('Figma image render scale.'),
   pixelRatio: z.number().optional().default(1).describe('Runtime screenshot pixel ratio, default 1.'),

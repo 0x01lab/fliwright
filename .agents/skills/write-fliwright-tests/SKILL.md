@@ -122,6 +122,10 @@ Treat captcha, slider verification, QR login, SMS approval, and WebView/Platform
 
 ## Validation
 
+- When implementing UI against a supplied Figma reference, capture the actual
+  app state and inspect it against the matching design after the change and
+  visual fixes. See [screenshot-based UI review](../fliwright-cli-workflows/references/visual-review.md).
+  Functional assertions alone do not verify appearance.
 - For new or changed cases, complete the [scenario and mock verification](references/scenario-design.md#验证与交付): check setup, critical request facts and branch-specific outcomes. Report static validation and real execution separately, including unresolved goals.
 - For generated or edited test code, run the narrowest relevant TypeScript check or package test available. Use `pnpm lint`, `pnpm --filter @fliwright/vitest test`, `pnpm --filter @fliwright/core test`, or a targeted `pnpm vitest run path/to/file.ts` as appropriate.
 - For new, renamed or parameterized cases, collect the target file with the installed Vitest runner and check expected names, count and uniqueness. When editor discovery is relevant, also check the Tests tree; runtime collection does not prove static discovery. See [collection checks](references/vitest-authoring.md#用例收集与交付).

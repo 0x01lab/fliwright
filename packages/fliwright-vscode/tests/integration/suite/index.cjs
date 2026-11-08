@@ -57,6 +57,7 @@ async function run() {
   for (const command of [
     'fliwright.connect',
     'fliwright.runCurrentTest',
+    'fliwright.openTestSource',
     'fliwright.runWorkspaceTests',
     'fliwright.openFailure',
     'fliwright.startRecording',
@@ -68,6 +69,21 @@ async function run() {
   ]) {
     assert.ok(commands.includes(command), `${command} should be registered`);
   }
+
+  const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fw-open-test-source-'));
+  try {
+    for (const kind of ['testFile', 'testCase']) {
+      const sourcePath = path.join(sourceRoot, `${kind}.test.ts`);
+      fs.writeFileSync(sourcePath, '// Test source navigation fixture.\n');
+      const uri = vscode.Uri.file(sourcePath);
+      const node = kind === 'testFile' ? { kind, uri } : { kind, fileUri: uri };
+      await vscode.commands.executeCommand('fliwright.openTestSource', node);
+      assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, sourcePath,
+        `${kind} should open its source file`);
+      await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    }
+    await vscode.commands.executeCommand('fliwright.openTestSource');
+  } finally { fs.rmSync(sourceRoot, { recursive: true, force: true }); }
 }
 
 module.exports = { run };

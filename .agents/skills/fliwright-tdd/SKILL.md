@@ -93,6 +93,7 @@ Agent 负责选择行为切片、编写普通测试、确认预期红灯、修�
 - TypeScript ESM 相对导入保留显式 `.js` 后缀。
 - 不要在没有测试的情况下扩大选择器、协议 payload、生成输出或 CLI 契约。
 - 不要更新 `dist` 之类的生成构建产物。
+- UI 改动有 Figma 参考时，在功能变绿后完成[实际截图与设计稿复核](../fliwright-cli-workflows/references/visual-review.md)，修正视觉差异后重新截图。功能断言通过不能替代视觉验证。
 
 ## 重构与文档
 

@@ -37,6 +37,8 @@ describe('buildFlowReviewBundle', () => {
       flowPath: '/workspace/.fliwright/flows/checkout.flow.json',
       outputDir: '.fliwright/reviews/checkout-bundle',
       generatedAt: '2026-07-01T00:00:00.000Z',
+      pixelDiffTolerance: 0.6,
+      layoutPxTolerance: 8,
     });
 
     expect(bundle).toMatchObject({
@@ -73,6 +75,8 @@ describe('buildFlowReviewBundle', () => {
       path: '/workspace/.fliwright/flows/checkout.flow.json',
       outputPath: '.fliwright/reviews/checkout-bundle/checkout-report.json',
       autoCompare: true,
+      pixelDiffTolerance: 0.6,
+      layoutPxTolerance: 8,
       runtimeCapturesFile: '.fliwright/reviews/checkout-bundle/runtime/runtime-captures.json',
       figmaCapturesFile: '.fliwright/reviews/checkout-bundle/figma/figma-captures.json',
     });

@@ -6,6 +6,31 @@ import { captureFigmaReviewScreenshots, FigmaRestScreenshotProvider } from '../.
 import type { FlowReviewFigmaCaptureTask } from '../../src/flow/FlowReviewBundle.js';
 
 describe('FigmaRestScreenshotProvider', () => {
+  it.each(['metadata', 'image'])('cancels an in-flight %s request and stops later captures', async (phase) => {
+    const controller = new AbortController();
+    const reason = new DOMException('Review deadline exceeded', 'TimeoutError');
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => { requestStarted = resolve; });
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (phase === 'image' && input instanceof URL) {
+        return new Response(JSON.stringify({ images: { '10:20': 'https://figma.test/image.png' } }));
+      }
+      requestStarted();
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+      });
+    });
+    const provider = new FigmaRestScreenshotProvider({ accessToken: 'test', fetch: fetch as typeof globalThis.fetch });
+    const capture = captureFigmaReviewScreenshots([task({}), task({ flowNodeId: 'second' })], provider, controller.signal);
+    await started;
+    controller.abort(reason);
+    const result = await Promise.race([
+      capture.then(() => 'resolved', (error: unknown) => error),
+      new Promise<string>((resolve) => { setTimeout(() => resolve('cancellation ignored'), 100); }),
+    ]);
+    expect(result).toBe(reason);
+    expect(fetch).toHaveBeenCalledTimes(phase === 'metadata' ? 1 : 2);
+  });
   it('resolves a Figma image URL and downloads the screenshot', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fliwright-figma-'));
     const screenshotPath = join(root, 'figma', 'node.png');

@@ -23,7 +23,8 @@ export interface FlowReviewReportItem {
   flowNodeId: string;
   title: string;
   route?: string;
-  figma: FlowReviewPlan['targets'][number]['figma'];
+  /** Absent for targets excluded by incomplete bindings or runtime entry points. */
+  figma?: FlowReviewPlan['targets'][number]['figma'];
   runtimeScreenshotPath?: string;
   figmaScreenshotPath?: string;
   comparison?: FlowReviewComparisonInput;
@@ -54,11 +55,15 @@ export interface FlowReviewReportInput {
   generatedAt?: string;
 }
 
+/** Builds review coverage, retaining plan omissions and failures from all comparison sources. */
 export function buildFlowReviewReport(input: FlowReviewReportInput): FlowReviewReport {
   const runtimeByNode = new Map((input.runtimeCaptures ?? []).map((capture) => [capture.flowNodeId, capture]));
   const figmaByNode = new Map((input.figmaCaptures ?? []).map((capture) => [capture.flowNodeId, capture]));
-  const comparisonByNode = new Map((input.comparisons ?? []).map((comparison) => [comparison.flowNodeId, comparison]));
-  const items = input.reviewPlan.targets.map((target) => {
+  const comparisonByNode = new Map<string, FlowReviewComparisonInput>();
+  for (const comparison of input.comparisons ?? []) {
+    comparisonByNode.set(comparison.flowNodeId, mergeComparisons(comparisonByNode.get(comparison.flowNodeId), comparison));
+  }
+  const items: FlowReviewReportItem[] = input.reviewPlan.targets.map((target) => {
     const runtime = runtimeByNode.get(target.flowNodeId);
     const figma = figmaByNode.get(target.flowNodeId);
     const comparison = comparisonByNode.get(target.flowNodeId);
@@ -76,6 +81,16 @@ export function buildFlowReviewReport(input: FlowReviewReportInput): FlowReviewR
     };
   });
 
+  for (const missing of [...input.reviewPlan.missing.figmaBindings, ...input.reviewPlan.missing.runtimeEntryPoints]) {
+    const existing = items.find((item) => item.flowNodeId === missing.flowNodeId);
+    if (existing) {
+      existing.status = 'missing';
+      existing.issues.push(missing.reason);
+    } else {
+      items.push({ flowNodeId: missing.flowNodeId, title: missing.title, status: 'missing', issues: [missing.reason] });
+    }
+  }
+
   return {
     version: 1,
     flowId: input.reviewPlan.flowId,
@@ -90,6 +105,25 @@ export function buildFlowReviewReport(input: FlowReviewReportInput): FlowReviewR
     },
     items,
   };
+}
+
+function mergeComparisons(
+  previous: FlowReviewComparisonInput | undefined,
+  next: FlowReviewComparisonInput,
+): FlowReviewComparisonInput {
+  const merged = { ...previous, ...next };
+  for (const key of ['pixelDiff', 'layoutPx'] as const) {
+    const values = [previous?.[key], next[key]].filter((value): value is number => value != null);
+    if (values.length) merged[key] = Math.max(...values);
+  }
+  for (const key of ['textMismatches', 'tokenMismatches', 'componentMismatches'] as const) {
+    if (previous?.[key] || next[key]) merged[key] = [...new Set([...(previous?.[key] ?? []), ...(next[key] ?? [])])];
+  }
+  for (const key of ['error', 'notes'] as const) {
+    const values = [previous?.[key], next[key]].filter((value): value is string => Boolean(value));
+    if (values.length) merged[key] = [...new Set(values)].join('; ');
+  }
+  return merged;
 }
 
 function issuesForTarget(
@@ -122,6 +156,7 @@ function statusForIssues(
   issues: string[],
 ): FlowReviewItemStatus {
   if (!runtime?.screenshotPath || !figma?.screenshotPath) return 'missing';
-  if (!comparison) return 'pending';
+  if (!comparison || !['pixelDiff', 'layoutPx', 'textMismatches', 'tokenMismatches', 'componentMismatches', 'error']
+    .some((key) => comparison[key as keyof FlowReviewComparisonInput] != null)) return 'pending';
   return issues.length ? 'failed' : 'passed';
 }

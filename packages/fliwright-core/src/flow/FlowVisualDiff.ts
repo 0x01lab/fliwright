@@ -116,6 +116,7 @@ function decodePng(buffer: Buffer): DecodedPng {
   let height = 0;
   let bitDepth = 0;
   let colorType = 0;
+  let transparentColor: Buffer | undefined;
   const idatChunks: Buffer[] = [];
 
   while (offset < buffer.length) {
@@ -134,6 +135,7 @@ function decodePng(buffer: Buffer): DecodedPng {
       continue;
     }
     if (type === 'IDAT') idatChunks.push(Buffer.from(data));
+    if (type === 'tRNS') transparentColor = data;
     if (type === 'IEND') break;
   }
 
@@ -151,7 +153,7 @@ function decodePng(buffer: Buffer): DecodedPng {
   return {
     width,
     height,
-    rgba: toRgba(unfiltered, width, height, colorType, channels),
+    rgba: toRgba(unfiltered, width, height, colorType, channels, transparentColor),
   };
 }
 
@@ -213,7 +215,10 @@ function applyPngFilter(filter: number, raw: number, left: number, up: number, u
   }
 }
 
-function toRgba(raw: Uint8Array, width: number, height: number, colorType: number, channels: number): Uint8Array {
+function toRgba(raw: Uint8Array, width: number, height: number, colorType: number, channels: number, transparentColor?: Buffer): Uint8Array {
+  if (transparentColor && !((colorType === 0 && transparentColor.length === 2) || (colorType === 2 && transparentColor.length === 6))) {
+    throw new Error('Invalid PNG transparency data');
+  }
   const rgba = new Uint8Array(width * height * 4);
   for (let index = 0; index < width * height; index++) {
     const source = index * channels;
@@ -223,13 +228,15 @@ function toRgba(raw: Uint8Array, width: number, height: number, colorType: numbe
         rgba[target] = raw[source];
         rgba[target + 1] = raw[source];
         rgba[target + 2] = raw[source];
-        rgba[target + 3] = 255;
+        rgba[target + 3] = transparentColor && raw[source] === transparentColor.readUInt16BE(0) ? 0 : 255;
         break;
       case 2:
         rgba[target] = raw[source];
         rgba[target + 1] = raw[source + 1];
         rgba[target + 2] = raw[source + 2];
-        rgba[target + 3] = 255;
+        rgba[target + 3] = transparentColor && raw[source] === transparentColor.readUInt16BE(0)
+          && raw[source + 1] === transparentColor.readUInt16BE(2)
+          && raw[source + 2] === transparentColor.readUInt16BE(4) ? 0 : 255;
         break;
       case 4:
         rgba[target] = raw[source];

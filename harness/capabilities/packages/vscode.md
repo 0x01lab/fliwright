@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "69c16b0d95e8eb0b11eb9dac683440a0c7b3e8232a2448626ef8021b019ebb12"
+source_fingerprint: "67ac9241ce31094b2cd845c3c7e4a2aab616401161218df19a88621cbbd7fd7b"
 generated: true
 ---
 
@@ -80,6 +80,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.openRunViewer`
 - `fliwright.openScript`
 - `fliwright.openTddLoop`
+- `fliwright.openTestSource`
 - `fliwright.openTraceViewer`
 - `fliwright.openVisualEditor`
 - `fliwright.openWebSocketMockProfile`
