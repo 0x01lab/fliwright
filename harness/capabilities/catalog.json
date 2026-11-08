@@ -121,7 +121,7 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "9e2d87041e357bc26f3dc0609f4e07bb94f452e7d4e21dc3b646f225c89044fb"
+      "sourceFingerprint": "a16ca1f59f66878fccc3492dcc8a1a451db6382220f613d976eb28a7c4d236ad"
     },
     {
       "name": "@fliwright/cloud",
@@ -1077,7 +1077,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "fbc73a29e280b9a3e18052abd4abdeb18f5ee6a650b2c0000ecc274c172efc12"
+      "sourceFingerprint": "0bf9d2f7a248a45973124e2342890f66550f685bd6e2dca62f88cfa8a7e6e601"
     },
     {
       "name": "@fliwright/devices",
@@ -2003,6 +2003,7 @@
         "fliwright.openRunViewer",
         "fliwright.openScript",
         "fliwright.openTddLoop",
+        "fliwright.openTestSource",
         "fliwright.openTraceViewer",
         "fliwright.openVisualEditor",
         "fliwright.openWebSocketMockProfile",
@@ -2049,7 +2050,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "69c16b0d95e8eb0b11eb9dac683440a0c7b3e8232a2448626ef8021b019ebb12"
+      "sourceFingerprint": "67ac9241ce31094b2cd845c3c7e4a2aab616401161218df19a88621cbbd7fd7b"
     }
   ]
 }

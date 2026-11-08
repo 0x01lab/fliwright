@@ -53,6 +53,8 @@ export interface FlowReviewBundle {
         path?: string;
         outputPath: string;
         autoCompare: true;
+        pixelDiffTolerance?: number;
+        layoutPxTolerance?: number;
         runtimeCapturesFile: string;
         figmaCapturesFile: string;
       };
@@ -112,6 +114,8 @@ export function buildFlowReviewBundle(
           ...(flowPath ? { path: flowPath } : {}),
           outputPath: reportPath,
           autoCompare: true,
+          ...(options.pixelDiffTolerance != null ? { pixelDiffTolerance: options.pixelDiffTolerance } : {}),
+          ...(options.layoutPxTolerance != null ? { layoutPxTolerance: options.layoutPxTolerance } : {}),
           runtimeCapturesFile: `${runtimeDir}/runtime-captures.json`,
           figmaCapturesFile: `${figmaDir}/figma-captures.json`,
         },

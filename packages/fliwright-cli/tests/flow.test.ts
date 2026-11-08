@@ -18,6 +18,15 @@ import {
 } from '../src/commands/flow.js';
 
 describe('flow commands', () => {
+  it('fails review reports when Figma-bound targets have no runtime entry', async () => {
+    const root = await makeWorkspace();
+    await writeFlow(root, sampleFlow({ nodes: [
+      { id: 'screen', type: 'screen', title: 'Unreachable', figma: { fileKey: 'FILE', nodeId: '1:2' } },
+    ], edges: [] }));
+    const result = await executeCli(['flow', 'review-report', 'checkout', '--cwd', root, '--json']);
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout).data.report.summary).toMatchObject({ total: 1, missing: 1 });
+  });
   it('executes review bundle report arguments using capture files', async () => {
     const root = await makeWorkspace();
     await writeFlow(root, sampleFlow({ nodes: [{ id: 'screen', type: 'screen', title: 'Checkout', route: '/checkout', figma: { fileKey: 'FILE123', nodeId: '1:2' } }], edges: [] }));
@@ -291,7 +300,7 @@ describe('flow commands', () => {
       fileKey: 'FILE123',
       nodeId: '120:340',
       screenshotPath: join(outputDir, '001-screen-1.png'),
-    }));
+    }), undefined);
     expect(result.captures).toEqual([
       { flowNodeId: 'screen-1', screenshotPath: join(outputDir, '001-screen-1.png') },
     ]);
@@ -349,6 +358,20 @@ describe('flow commands', () => {
       layoutPx: 0,
     }));
     expect(await readFile(outputPath, 'utf8')).toContain('"pixelDiff": 0.5');
+
+    const supplemented = await flowReviewReportCommand({
+      cwd: root,
+      id: 'checkout',
+      outputPath,
+      runtimeCaptures: [{ flowNodeId: 'screen-1', screenshotPath: runtimePath }],
+      figmaCaptures: [{ flowNodeId: 'screen-1', screenshotPath: figmaPath }],
+      comparisons: [{ flowNodeId: 'screen-1', textMismatches: [] }],
+    });
+    expect(supplemented.report.items[0]).toMatchObject({
+      status: 'failed',
+      comparison: { pixelDiff: 0.5, layoutPx: 0, textMismatches: [] },
+      issues: ['pixel diff 0.5 exceeds tolerance 0.03'],
+    });
   });
 
   it('returns a failing exit code for JSON UI review reports with failed items', async () => {

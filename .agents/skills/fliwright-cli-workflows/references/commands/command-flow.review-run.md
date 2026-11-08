@@ -18,6 +18,7 @@ Use for one finite review when routed app states and Figma credentials are ready
 - A running Flutter app with fliwright_bridge; attach with vmUrl/project configuration or use a connection session.
 - No persistent session required. See usage for finite/session variants.
 - Requires a live app and Figma token. Runtime capture navigates routes; it does not replay interactions.
+- Without outputDir, each run creates a separate timestamped directory with a unique suffix, preserving previous evidence. Explicit outputDir reuses the selected directory.
 - targetIds/limit narrow runtime captures; the report is still based on the full plan, so uncollected targets can be missing.
 - Failed or missing report targets exit 1. Use separate capture/report commands for manually established states or external Figma tools.
 
@@ -29,7 +30,7 @@ Use for one finite review when routed app states and Figma credentials are ready
 | `path` | `--path` | string | no | — | Direct path to a .flow.json file |
 | `pixelDiffTolerance` | `--pixel-diff-tolerance` | number | no | — | Allowed visual diff ratio, default 0.03 |
 | `layoutPxTolerance` | `--layout-px-tolerance` | number | no | — | Allowed layout delta in px, default 4 |
-| `outputDir` | `--output-dir` | string | no | — | Review artifact root directory. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>. |
+| `outputDir` | `--output-dir` | string | no | — | Review artifact root directory. Defaults to a unique ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>-<suffix> directory. |
 | `accessToken` | `--access-token` | string | no | — | Figma access token. Defaults to FIGMA_ACCESS_TOKEN or FIGMA_TOKEN. |
 | `scale` | `--scale` | number | no | — | Figma image render scale. |
 | `pixelRatio` | `--pixel-ratio` | number | no | 1 | Runtime screenshot pixel ratio, default 1. |
@@ -91,7 +92,7 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
     },
     "outputDir": {
       "type": "string",
-      "description": "Review artifact root directory. Defaults to ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>."
+      "description": "Review artifact root directory. Defaults to a unique ~/.fliwright/<project-path>/reviews/<flowId>-<timestamp>-<suffix> directory."
     },
     "accessToken": {
       "type": "string",

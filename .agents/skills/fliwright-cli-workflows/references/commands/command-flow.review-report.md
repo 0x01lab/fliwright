@@ -18,8 +18,10 @@ Use offline after both capture sources are available, including exports from ext
 - No live app required by the registry. Check command-specific runtime requirements below.
 - No persistent session required. See usage for finite/session variants.
 - runtimeCaptures and figmaCaptures are arrays of flowNodeId/screenshotPath/error records. File alternatives must contain JSON arrays, not CLI envelopes.
-- Each array is mutually exclusive with its matching *CapturesFile field. autoCompare defaults to true; comparisons can add layout/text/token/component metrics.
+- Each array is mutually exclusive with its matching *CapturesFile field. autoCompare defaults to true; comparisons add metrics per node, retaining the largest pixel/layout deltas, all mismatches and errors.
+- Incomplete Figma bindings and missing runtime entry points remain missing items in the report. Empty comparisons remain pending.
 - Failed or missing report targets exit 1 with data retained. autoCompare=false disables pixel comparison only; inspect report coverage before claiming a review passed.
+- Pixel checks support agent visual review; they do not automatically inspect typography, design tokens or component mapping. Built-in layoutPx measures image dimension differences only.
 
 ## Input
 

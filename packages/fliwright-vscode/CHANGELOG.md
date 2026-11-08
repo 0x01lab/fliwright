@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2
+
+- Open test source files directly from file and test case rows in the Tests panel,
+  including while tests are running.
+- Preserve missing coverage and evidence from all visual review comparison sources,
+  forward custom tolerances, and handle PNG transparency in pixel comparisons.
+- Keep each visual review run in a unique artifact directory and propagate Figma
+  capture cancellation to active requests.
+
 ## 0.2.1
 
 - Discover test groups and parameterized cases through isolated Vitest collection,

@@ -55,6 +55,7 @@ import { StateTreeProvider } from './views/StateTreeProvider.js';
 import { TestsTreeProvider } from './views/TestsTreeProvider.js';
 import { watchTestCollection } from './testing/TestCollectionWatcher.js';
 import { TestStatusStore } from './testing/TestStatusStore.js';
+import type { TestTreeNode } from './testing/types.js';
 import { relPathOf } from './testing/relPath.js';
 import { RunArtifactStore } from './testing/RunArtifactStore.js';
 import { FailurePanel } from './webview/FailurePanel.js';
@@ -879,6 +880,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('fliwright.runWorkspaceTests', async () => {
       await runTests(undefined, { workspace: true });
+    }),
+    vscode.commands.registerCommand('fliwright.openTestSource', async (node?: TestTreeNode) => {
+      const uri = node?.kind === 'testFile' ? node.uri
+        : node?.kind === 'testCase' ? node.fileUri : undefined;
+      if (!uri) return;
+      await vscode.window.showTextDocument(uri, { preview: false });
     }),
     vscode.commands.registerCommand('fliwright.refreshTestFile', async (node?: unknown) => {
       const n = node as { kind?: string; uri?: vscode.Uri; fileUri?: vscode.Uri } | undefined;

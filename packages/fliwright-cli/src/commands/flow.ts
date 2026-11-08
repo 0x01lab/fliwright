@@ -37,6 +37,7 @@ import type {
 } from '@fliwright/core';
 
 export interface FlowCommandOptions {
+  signal?: AbortSignal;
   cwd?: string;
   id?: string;
   path?: string;
@@ -262,7 +263,7 @@ export async function flowReviewCaptureFigmaCommand(options: FlowReviewCaptureFi
     ...task,
     screenshotPath: join(outputDir, `${task.screenshotPath.split('/').pop()}`),
     metadataPath: join(outputDir, `${task.metadataPath.split('/').pop()}`),
-  })), provider);
+  })), provider, options.signal);
   const capturesFile = options.capturesFile ?? join(outputDir, 'figma-captures.json');
   await mkdir(dirname(capturesFile), { recursive: true });
   await writeFile(capturesFile, `${JSON.stringify(captures, null, 2)}\n`, 'utf8');

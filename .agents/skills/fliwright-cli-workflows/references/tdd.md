@@ -18,6 +18,10 @@ apply repairs. Author ordinary tests with
 5. Refactor only after green; rerun the same test, then the affected regression
    suite. A focused green does not establish that the rest of the suite passes.
 
+For UI implementation with a Figma reference, also perform the
+[screenshot-based UI review](visual-review.md) after the visual change and its
+fixes. Functional assertions and a green test do not verify visual fidelity.
+
 ## Choose execution by need
 
 For one run, use `fliwright run --test <file> --scenario <name> --json`. Open a

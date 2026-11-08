@@ -12,7 +12,8 @@ export interface FigmaRestScreenshotProviderOptions {
 }
 
 export interface FigmaScreenshotProvider {
-  capture(task: FlowReviewFigmaCaptureTask): Promise<FlowReviewArtifactInput>;
+  /** Capture one design target; implementations must propagate cancellation to owned work. */
+  capture(task: FlowReviewFigmaCaptureTask, signal?: AbortSignal): Promise<FlowReviewArtifactInput>;
 }
 
 export class FigmaRestScreenshotProvider implements FigmaScreenshotProvider {
@@ -30,21 +31,26 @@ export class FigmaRestScreenshotProvider implements FigmaScreenshotProvider {
     this.scale = options.scale;
   }
 
-  async capture(task: FlowReviewFigmaCaptureTask): Promise<FlowReviewArtifactInput> {
+  async capture(task: FlowReviewFigmaCaptureTask, signal?: AbortSignal): Promise<FlowReviewArtifactInput> {
     try {
+      signal?.throwIfAborted();
       if (!this.accessToken) throw new Error('Missing Figma access token. Set FIGMA_ACCESS_TOKEN or pass accessToken.');
-      const imageUrl = await this.resolveImageUrl(task);
-      const image = await this.fetchImpl(imageUrl);
+      const imageUrl = await this.resolveImageUrl(task, signal);
+      signal?.throwIfAborted();
+      const image = await this.fetchImpl(imageUrl, signal ? { signal } : undefined);
       if (!image.ok) {
         throw new Error(`Figma image download failed (${image.status} ${image.statusText})`);
       }
+      const bytes = Buffer.from(await image.arrayBuffer());
+      signal?.throwIfAborted();
       await mkdir(dirname(task.screenshotPath), { recursive: true });
-      await writeFile(task.screenshotPath, Buffer.from(await image.arrayBuffer()));
+      await writeFile(task.screenshotPath, bytes, { signal });
       return {
         flowNodeId: task.flowNodeId,
         screenshotPath: task.screenshotPath,
       };
     } catch (error) {
+      signal?.throwIfAborted();
       return {
         flowNodeId: task.flowNodeId,
         error: error instanceof Error ? error.message : String(error),
@@ -52,13 +58,14 @@ export class FigmaRestScreenshotProvider implements FigmaScreenshotProvider {
     }
   }
 
-  private async resolveImageUrl(task: FlowReviewFigmaCaptureTask): Promise<string> {
+  private async resolveImageUrl(task: FlowReviewFigmaCaptureTask, signal?: AbortSignal): Promise<string> {
     const url = new URL(`${this.baseUrl}/v1/images/${encodeURIComponent(task.fileKey)}`);
     url.searchParams.set('ids', task.nodeId);
     url.searchParams.set('format', this.format);
     if (this.scale != null) url.searchParams.set('scale', String(this.scale));
 
     const response = await this.fetchImpl(url, {
+      ...(signal ? { signal } : {}),
       headers: {
         'X-Figma-Token': this.accessToken,
       },
@@ -77,12 +84,18 @@ export class FigmaRestScreenshotProvider implements FigmaScreenshotProvider {
   }
 }
 
+/** Captures in order and propagates cancellation instead of recording it as a target error. */
 export async function captureFigmaReviewScreenshots(
   tasks: FlowReviewFigmaCaptureTask[],
   provider: FigmaScreenshotProvider,
+  signal?: AbortSignal,
 ): Promise<FlowReviewArtifactInput[]> {
   const captures: FlowReviewArtifactInput[] = [];
-  for (const task of tasks) captures.push(await provider.capture(task));
+  for (const task of tasks) {
+    signal?.throwIfAborted();
+    captures.push(await provider.capture(task, signal));
+    signal?.throwIfAborted();
+  }
   return captures;
 }
 

@@ -6,6 +6,27 @@ import { deflateSync } from 'node:zlib';
 import { compareFlowScreenshots } from '../../src/flow/FlowVisualDiff.js';
 
 describe('compareFlowScreenshots', () => {
+  it.each([0, 2])('compares transparent color keys in PNG color type %s', async (colorType) => {
+    const dir = await mkdtemp(join(tmpdir(), 'fliwright-visual-trns-'));
+    const runtime = join(dir, 'transparent.png');
+    const figma = join(dir, 'opaque.png');
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(1, 0);
+    ihdr.writeUInt32BE(1, 4);
+    ihdr[8] = 8;
+    ihdr[9] = colorType;
+    const transparentColor = Buffer.alloc(colorType === 0 ? 2 : 6);
+    transparentColor.writeUInt16BE(255, 0);
+    await writeFile(runtime, Buffer.concat([
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      chunk('IHDR', ihdr), chunk('tRNS', transparentColor),
+      chunk('IDAT', deflateSync(Buffer.from(colorType === 0 ? [0, 255] : [0, 255, 0, 0]))),
+      chunk('IEND', Buffer.alloc(0)),
+    ]));
+    await writeFile(figma, pngRgba(1, 1, [colorType === 0 ? [255, 255, 255, 255] : [255, 0, 0, 255]]));
+    expect(await compareFlowScreenshots({ flowNodeId: 'screen', runtimeScreenshotPath: runtime, figmaScreenshotPath: figma }))
+      .toMatchObject({ pixelDiff: 1, layoutPx: 0 });
+  });
   it('compares two PNG screenshots', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'fliwright-visual-diff-'));
     const runtime = join(dir, 'runtime.png');

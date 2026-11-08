@@ -18,6 +18,7 @@ Use to coordinate runtime capture and external Figma export through separate too
 - No live app required by the registry. Check command-specific runtime requirements below.
 - No persistent session required. See usage for finite/session variants.
 - Default root is ~/.fliwright/<project-path>/reviews/<flowId>. This command prepares tasks; it does not execute screenshots or a review.
+- Generated report arguments preserve custom pixel/layout tolerances.
 - The bundle’s figmaMcp field describes external Figma tasks, not a Fliwright MCP server.
 
 ## Input
