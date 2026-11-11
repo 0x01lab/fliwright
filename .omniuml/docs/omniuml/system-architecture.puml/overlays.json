@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "path": "docs/omniuml/system-architecture.puml"
+  },
+  "stages": [],
+  "activity": {
+    "draftNodes": []
+  },
+  "navigationEdges": []
+}

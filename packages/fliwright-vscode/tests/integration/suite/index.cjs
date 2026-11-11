@@ -66,9 +66,14 @@ async function run() {
     'fliwright.refreshStateProviders',
     'fliwright.takeScreenshot',
     'fliwright.takeLongScreenshot',
+    'fliwright.searchMockApis',
+    'fliwright.clearMockApiSearch',
+    'fliwright.toggleActiveMockRules',
   ]) {
     assert.ok(commands.includes(command), `${command} should be registered`);
   }
+  await vscode.commands.executeCommand('fliwright.toggleActiveMockRules');
+  await vscode.commands.executeCommand('fliwright.toggleActiveMockRules');
 
   const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fw-open-test-source-'));
   try {

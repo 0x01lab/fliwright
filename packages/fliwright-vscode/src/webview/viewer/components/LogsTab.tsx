@@ -59,11 +59,11 @@ function LogRow({ log }: { log: FliwrightLogEvent }): JSX.Element {
       </div>
       <div className="mt-0.5 whitespace-pre-wrap break-words text-[11px]">{log.message}</div>
       {log.error ? (
-        <details className="mt-1">
+        <details open className="mt-1">
           <summary className="cursor-pointer text-[10px] text-muted-foreground">error</summary>
-          <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[10px] text-fail">
-            {log.error.name ? `${log.error.name}: ` : ''}{log.error.message}{log.error.stack ? `\n${log.error.stack}` : ''}
-          </pre>
+          <div className="mt-1 whitespace-pre-wrap">
+            <JsonTree data={log.error} query="" />
+          </div>
         </details>
       ) : null}
       {log.data ? (

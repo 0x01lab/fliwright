@@ -21,6 +21,7 @@ const DEFAULT_STATE: ViewerState = {
 
 function ViewerApp(): JSX.Element {
   const [run, setRun] = useState<SerializableRun | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
   const [viewerState, setViewerState] = useState<ViewerState>(
     () => vscode.getState<ViewerState>() ?? DEFAULT_STATE,
   );
@@ -30,6 +31,7 @@ function ViewerApp(): JSX.Element {
   useEffect(() => {
     const onMessage = (event: MessageEvent<ViewerInbound>) => {
       if (event.data.type === 'run') setRun(event.data.run);
+      if (event.data.type === 'reportState') setGeneratingReport(event.data.generating);
     };
     window.addEventListener('message', onMessage);
     vscode.postMessage({ type: 'ready' });
@@ -79,7 +81,8 @@ function ViewerApp(): JSX.Element {
 
   return (
     <div className="flex h-screen flex-col">
-      <RunStatusBar run={run} />
+      <RunStatusBar run={run} generatingReport={generatingReport}
+        onGenerateReport={() => vscode.postMessage({ type: 'generateReport' })} />
       <ResizablePanelGroup
         direction="horizontal"
         autoSaveId="fliwright-viewer-panels"

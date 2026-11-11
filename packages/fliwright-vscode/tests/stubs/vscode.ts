@@ -229,6 +229,20 @@ export const workspace = {
 };
 
 export const window = {
+  createInputBox() {
+    const change = new EventEmitter<string>();
+    const accept = new EventEmitter<void>();
+    const hide = new EventEmitter<void>();
+    return {
+      value: '', title: '', prompt: '', placeholder: '', ignoreFocusOut: false,
+      onDidChangeValue: change.event, onDidAccept: accept.event, onDidHide: hide.event,
+      show() {},
+      hide() { hide.fire(); },
+      dispose() { change.dispose(); accept.dispose(); hide.dispose(); },
+      __change(value: string) { this.value = value; change.fire(value); },
+      __accept() { accept.fire(); },
+    };
+  },
   createOutputChannel() {
     return { appendLine() {}, show() {}, dispose() {} };
   },
@@ -316,6 +330,7 @@ export const debug = {
 };
 
 export const env = {
+  openExternal: async (_uri: Uri) => true,
   clipboard: {
     writeText: async () => undefined,
   },

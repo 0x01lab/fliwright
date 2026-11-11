@@ -1077,7 +1077,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "0bf9d2f7a248a45973124e2342890f66550f685bd6e2dca62f88cfa8a7e6e601"
+      "sourceFingerprint": "7567904e8e4a9cdca0a71db4ebd75991c8fd4440a075eb8d38ed133edfc0f764"
     },
     {
       "name": "@fliwright/devices",
@@ -1903,6 +1903,7 @@
         "packages/fliwright-vscode/src/testing/TestCatalogCollector.ts",
         "packages/fliwright-vscode/src/testing/TestCatalogTree.ts",
         "packages/fliwright-vscode/src/testing/TestCollectionWatcher.ts",
+        "packages/fliwright-vscode/src/testing/TestReportService.ts",
         "packages/fliwright-vscode/src/testing/TestStatusStore.ts",
         "packages/fliwright-vscode/src/testing/catalog-worker.ts",
         "packages/fliwright-vscode/src/testing/relPath.ts",
@@ -1913,6 +1914,7 @@
         "packages/fliwright-vscode/src/views/DevicesTreeProvider.ts",
         "packages/fliwright-vscode/src/views/FlowsTreeProvider.ts",
         "packages/fliwright-vscode/src/views/FormDataTreeProvider.ts",
+        "packages/fliwright-vscode/src/views/MockApiSearchController.ts",
         "packages/fliwright-vscode/src/views/MockApiTreeProvider.ts",
         "packages/fliwright-vscode/src/views/ScriptsTreeProvider.ts",
         "packages/fliwright-vscode/src/views/StateTreeProvider.ts",
@@ -1968,6 +1970,7 @@
         "fliwright.applyMockRule",
         "fliwright.applyWebSocketMockProfile",
         "fliwright.cleanFlowFile",
+        "fliwright.clearMockApiSearch",
         "fliwright.clearWebSocketMockCalls",
         "fliwright.clearWebSocketMockRules",
         "fliwright.confirmRecordingCheckpoints",
@@ -1988,6 +1991,7 @@
         "fliwright.fillForm",
         "fliwright.fillFormWithRules",
         "fliwright.generateFlowTest",
+        "fliwright.generateTestReport",
         "fliwright.importDartVerification",
         "fliwright.insertFormFieldSelector",
         "fliwright.insertRecordedTest",
@@ -2023,6 +2027,7 @@
         "fliwright.runCurrentTest",
         "fliwright.runScript",
         "fliwright.runWorkspaceTests",
+        "fliwright.searchMockApis",
         "fliwright.sendWebSocketMockPush",
         "fliwright.showLastRun",
         "fliwright.showLastTrace",
@@ -2034,6 +2039,7 @@
         "fliwright.takeLongScreenshot",
         "fliwright.takeScreenshot",
         "fliwright.tddTakeOver",
+        "fliwright.toggleActiveMockRules",
         "fliwright.unwatchStateProvider",
         "fliwright.verifyRecording",
         "fliwright.viewScriptRun",
@@ -2050,7 +2056,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "67ac9241ce31094b2cd845c3c7e4a2aab616401161218df19a88621cbbd7fd7b"
+      "sourceFingerprint": "86a0dab2211bc464d8b9a7a787cbb25a3fe0aa25b397542b73400f42b52884e7"
     }
   ]
 }

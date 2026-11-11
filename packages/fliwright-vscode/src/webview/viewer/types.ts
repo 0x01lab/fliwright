@@ -28,11 +28,13 @@ export interface SerializableRun {
 /** Extension -> webview. */
 export type ViewerInbound =
   | { type: 'run'; run: SerializableRun }
+  | { type: 'reportState'; generating: boolean }
   | { type: 'snapshot'; path: string; data: unknown | null };
 
 /** Webview -> extension. */
 export type ViewerOutbound =
   | { type: 'ready' }
+  | { type: 'generateReport' }
   | { type: 'openSource'; file: string; line: number; column?: number }
   | { type: 'copy'; text: string }
   | { type: 'requestSnapshot'; path: string };

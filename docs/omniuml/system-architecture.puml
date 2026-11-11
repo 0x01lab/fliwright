@@ -1,0 +1,55 @@
+@startuml FliwrightArchitecture
+' Audience: developers navigating Fliwright.
+' Question: how do entry points reach the app, locally and through Cloud?
+' Scope: main product modules; component view, not a complete import graph.
+' Omitted: Riverpod, Design QA, test-plan, examples and internal implementation.
+title Fliwright 系统架构
+top to bottom direction
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+package "开发入口" {
+  component "VS Code\n编辑、录制与报告" as VSCode [[code://packages/fliwright-vscode/src/extension.ts#L76]]
+  component "CLI\n开发者 / Agent / CI 命令" as CLI [[code://packages/fliwright-cli/src/index.ts#L17]]
+}
+
+package "Cloud 协作" {
+  component "Cloud\n队列、租约与报告" as Cloud [[code://packages/fliwright-cloud/src/server.ts#L67]]
+  component "Cloud Worker\n宿主机执行与结果上传" as Worker [[code://packages/fliwright-cloud-worker/src/worker.ts#L43]]
+  component "Cloud Protocol\n共享契约与通信客户端" as CloudProtocol [[code://packages/fliwright-cloud-protocol/src/index.ts#L1]]
+}
+
+package "自动化运行时 · TypeScript" {
+  component "TDD\n常驻执行、重置与热更新" as TDD [[code://packages/fliwright-tdd/src/runtime/TddRuntime.ts#L27]]
+  component "Vitest\n测试 / 脚本与生命周期" as Vitest [[code://packages/fliwright-vitest/src/index.ts#L188]]
+  component "Core\nDriver、定位、Mock 与证据" as Core [[code://packages/fliwright-core/src/Driver.ts#L25]]
+}
+
+package "宿主机设备支持" {
+  component "Native\nADB / XCTest 与原生会话" as Native [[code://packages/fliwright-native/src/NativeDeviceSession.ts#L50]]
+  component "Devices\n设备发现与状态归一化" as Devices [[code://packages/fliwright-devices/src/DeviceDiscovery.ts#L35]]
+}
+
+component "Flutter Bridge · Dart\n应用内检查、交互与采集" as Bridge [[code://packages/fliwright-bridge/lib/src/bridge.dart#L36]]
+
+VSCode --> CLI : 复用命令能力
+VSCode --> Core : 交互与录制
+Worker --> CLI : 执行任务
+Worker <--> Cloud : WebSocket / HTTP
+Cloud ..> CloudProtocol
+Worker ..> CloudProtocol
+CLI --> TDD : 持续执行
+CLI --> Vitest : 单次执行
+TDD --> Vitest : 常驻测试执行
+Vitest --> Core : Flutter 自动化
+Vitest --> Native : 原生 UI / 权限
+Native --> Devices : 发现目标设备
+Worker --> Devices : 设备上报
+Core --> Bridge : VM Service / WebSocket
+
+legend bottom
+  实线：主要调用 / 通信；虚线：共享契约依赖
+  箭头指向被调用模块；双向箭头表示通信
+  点击模块跳转源码；省略次要及传递依赖
+endlegend
+@enduml

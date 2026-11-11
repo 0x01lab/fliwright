@@ -21,6 +21,8 @@ export type FliwrightLogMode = 'test' | 'script';
 export type FliwrightLogStatus = 'running' | 'passed' | 'failed' | 'skipped' | 'interrupted';
 
 export interface FliwrightLogError {
+  /** Structured fields supplied by serialized runtime errors. */
+  [key: string]: unknown;
   name?: string;
   message: string;
   stack?: string;
@@ -279,6 +281,13 @@ export function normalizeLogError(error: unknown): FliwrightLogError {
       name: error.name,
       message: error.message,
       ...(error.stack ? { stack: error.stack } : {}),
+    };
+  }
+  if (error !== null && typeof error === 'object') {
+    const fields = error as Record<string, unknown>;
+    return {
+      ...fields,
+      message: typeof fields.message === 'string' ? fields.message : JSON.stringify(error),
     };
   }
   return { message: String(error) };
