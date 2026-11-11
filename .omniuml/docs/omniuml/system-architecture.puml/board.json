@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "path": "docs/omniuml/system-architecture.puml"
+  },
+  "diagram": {
+    "kind": "component"
+  },
+  "canvas": {
+    "layoutMode": "manual",
+    "nodes": {
+      "Native": {
+        "position": {
+          "x": 601.4789311408016,
+          "y": 647.2517985611511
+        }
+      },
+      "Devices": {
+        "position": {
+          "x": 654.5169578622816,
+          "y": 770.8304213771839
+        }
+      },
+      "VSCode": {
+        "position": {
+          "x": -74,
+          "y": 94
+        }
+      },
+      "CLI": {
+        "position": {
+          "x": 270,
+          "y": 99
+        }
+      },
+      "TDD": {
+        "position": {
+          "x": 46,
+          "y": 338
+        }
+      },
+      "Vitest": {
+        "position": {
+          "x": 261,
+          "y": 472
+        }
+      },
+      "Core": {
+        "position": {
+          "x": -107,
+          "y": 614
+        }
+      },
+      "Cloud": {
+        "position": {
+          "x": 856.8756423432683,
+          "y": 68.67831449126413
+        }
+      },
+      "Worker": {
+        "position": {
+          "x": 832.8756423432683,
+          "y": 204.67831449126413
+        }
+      },
+      "CloudProtocol": {
+        "position": {
+          "x": 598,
+          "y": 39
+        }
+      },
+      "Bridge": {
+        "position": {
+          "x": -38,
+          "y": 819
+        }
+      }
+    }
+  }
+}

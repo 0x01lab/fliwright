@@ -2,6 +2,8 @@
 import type { SerializableRun } from '../types.js';
 import { Badge } from '../../components/ui/badge.js';
 import { BrandMark } from '../../components/BrandMark.js';
+import { Button } from '../../components/ui/button.js';
+import { FileText } from 'lucide-react';
 
 function statusGlyph(status: string): string {
   if (status === 'passed') return '✓';
@@ -32,7 +34,9 @@ const STATUS_VARIANT: Record<string, 'pass' | 'fail' | 'info'> = {
   running: 'info',
 };
 
-export function RunStatusBar({ run }: { run: SerializableRun }): JSX.Element {
+export function RunStatusBar({ run, onGenerateReport, generatingReport }: {
+  run: SerializableRun; onGenerateReport: () => void; generatingReport: boolean;
+}): JSX.Element {
   const tl = run.timeline;
   let passed = 0;
   let failed = 0;
@@ -45,7 +49,7 @@ export function RunStatusBar({ run }: { run: SerializableRun }): JSX.Element {
   const dur = durationOf(tl.startedAt, tl.endedAt);
 
   return (
-    <div className="flex flex shrink-0 items-center gap-2.5 border-b border-border bg-card px-3 py-1.5">
+    <div className="flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b border-border bg-card px-3 py-1.5">
       <BrandMark className="size-6" />
       <Badge variant={STATUS_VARIANT[tl.status] ?? 'secondary'} className="normal-case">
         {statusGlyph(tl.status)} {tl.status}
@@ -61,6 +65,12 @@ export function RunStatusBar({ run }: { run: SerializableRun }): JSX.Element {
         <span className="text-fail">{failed} failed</span>
         <span className="text-muted-foreground">{skipped} skipped</span>
       </span>
+      <Button variant="secondary" size="sm" className="shrink-0" onClick={onGenerateReport}
+        disabled={generatingReport || tl.status === 'running'}
+        title="Generate an HTML report for all tests in this run">
+        <FileText aria-hidden="true" />
+        {generatingReport ? 'Generating…' : 'Generate Report'}
+      </Button>
     </div>
   );
 }

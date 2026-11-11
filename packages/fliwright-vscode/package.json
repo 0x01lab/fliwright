@@ -2,7 +2,7 @@
   "name": "fliwright-vscode",
   "displayName": "Fliwright",
   "description": "Flutter automation, recording, mocks, traces, and Riverpod state tools for Fliwright.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "fliwright",
   "license": "MIT",
   "repository": {
@@ -59,6 +59,9 @@
   "activationEvents": [
     "onDebug",
     "onCommand:fliwright.reloadMocks",
+    "onCommand:fliwright.searchMockApis",
+    "onCommand:fliwright.clearMockApiSearch",
+    "onCommand:fliwright.toggleActiveMockRules",
     "onCommand:fliwright.reloadWebSocketMocks",
     "onCommand:fliwright.reloadFormRules",
     "onCommand:fliwright.reloadScripts",
@@ -132,6 +135,7 @@
     "onCommand:fliwright.openExportedRun",
     "onCommand:fliwright.showLastRun",
     "onCommand:fliwright.viewTestRun",
+    "onCommand:fliwright.generateTestReport",
     "onCommand:fliwright.viewScriptRun",
     "onCommand:fliwright.refreshTests",
     "onCommand:fliwright.openTddLoop",
@@ -234,6 +238,22 @@
         "command": "fliwright.reloadMocks",
         "title": "Fliwright: Reload Mock Configs",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "fliwright.searchMockApis",
+        "title": "Fliwright: Search Mock APIs",
+        "icon": "$(search)"
+      },
+      {
+        "command": "fliwright.clearMockApiSearch",
+        "title": "Fliwright: Clear Mock API Search",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "fliwright.toggleActiveMockRules",
+        "title": "Fliwright: Show Only Active Mock Rules",
+        "icon": "$(filter)",
+        "toggled": "fliwright.mockApis.activeOnly"
       },
       {
         "command": "fliwright.reloadWebSocketMocks",
@@ -569,6 +589,11 @@
         "icon": "$(history)"
       },
       {
+        "command": "fliwright.generateTestReport",
+        "title": "Fliwright: Generate Test Report",
+        "icon": "$(file-text)"
+      },
+      {
         "command": "fliwright.viewScriptRun",
         "title": "Fliwright: View Script Run",
         "category": "Fliwright",
@@ -641,6 +666,21 @@
           "command": "fliwright.reloadMocks",
           "when": "view == fliwright.mockApis",
           "group": "navigation@1"
+        },
+        {
+          "command": "fliwright.searchMockApis",
+          "when": "view == fliwright.mockApis",
+          "group": "navigation@0"
+        },
+        {
+          "command": "fliwright.clearMockApiSearch",
+          "when": "view == fliwright.mockApis && fliwright.mockApis.hasFilter",
+          "group": "navigation@0.1"
+        },
+        {
+          "command": "fliwright.toggleActiveMockRules",
+          "when": "view == fliwright.mockApis",
+          "group": "navigation@0.2"
         },
         {
           "command": "fliwright.createMockConfig",
@@ -898,6 +938,11 @@
           "command": "fliwright.viewTestRun",
           "when": "view == fliwright.tests && viewItem == testCase",
           "group": "inline@2"
+        },
+        {
+          "command": "fliwright.generateTestReport",
+          "when": "view == fliwright.tests && viewItem == testCase",
+          "group": "2_report@1"
         },
         {
           "command": "fliwright.viewScriptRun",

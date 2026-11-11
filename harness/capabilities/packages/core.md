@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "0bf9d2f7a248a45973124e2342890f66550f685bd6e2dca62f88cfa8a7e6e601"
+source_fingerprint: "7567904e8e4a9cdca0a71db4ebd75991c8fd4440a075eb8d38ed133edfc0f764"
 generated: true
 ---
 

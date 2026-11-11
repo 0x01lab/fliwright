@@ -50,11 +50,13 @@ import { FlowsTreeProvider } from './views/FlowsTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
 import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
 import { WebSocketMockTreeProvider } from './views/WebSocketMockTreeProvider.js';
+import { MockApiSearchController } from './views/MockApiSearchController.js';
 import { ScriptsTreeProvider } from './views/ScriptsTreeProvider.js';
 import { StateTreeProvider } from './views/StateTreeProvider.js';
 import { TestsTreeProvider } from './views/TestsTreeProvider.js';
 import { watchTestCollection } from './testing/TestCollectionWatcher.js';
 import { TestStatusStore } from './testing/TestStatusStore.js';
+import { TestReportService } from './testing/TestReportService.js';
 import type { TestTreeNode } from './testing/types.js';
 import { relPathOf } from './testing/relPath.js';
 import { RunArtifactStore } from './testing/RunArtifactStore.js';
@@ -100,6 +102,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const stateProviderDocuments = new StateProviderDocumentProvider();
   const devicesTree = new DevicesTreeProvider();
   const mockTree = new MockApiTreeProvider(mockService);
+  await vscode.commands.executeCommand('setContext', 'fliwright.mockApis.activeOnly', mockTree.activeOnly);
+  const mockApiSearch = new MockApiSearchController(mockTree);
+  context.subscriptions.push(
+    mockApiSearch,
+    vscode.commands.registerCommand('fliwright.searchMockApis', () => mockApiSearch.show()),
+    vscode.commands.registerCommand('fliwright.clearMockApiSearch', () => mockApiSearch.clear()),
+    vscode.commands.registerCommand('fliwright.toggleActiveMockRules', async () => {
+      mockTree.setActiveOnly(!mockTree.activeOnly);
+      await vscode.commands.executeCommand('setContext', 'fliwright.mockApis.activeOnly', mockTree.activeOnly);
+    }),
+  );
   const websocketMockTree = new WebSocketMockTreeProvider(websocketMockConfigService);
   const formTree = new FormDataTreeProvider(formService);
   const runArtifactStore = new RunArtifactStore();
@@ -948,6 +961,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const loaded = await runViewerService.findLatestRunForTestIndexed(runsDir, node.id, index);
       if (!loaded) { vscode.window.showInformationMessage('No run recorded for this test yet.'); return; }
       await viewerPanel.openRun(loaded.runDir);
+    }),
+    vscode.commands.registerCommand('fliwright.generateTestReport', async (node?: TestTreeNode) => {
+      if (node?.kind !== 'testCase') {
+        await vscode.window.showInformationMessage('Right-click a test case in Fliwright Tests to generate its report.');
+        return;
+      }
+      const root = vscode.workspace.getWorkspaceFolder(node.fileUri)?.uri ?? requireWorkspaceRoot();
+      await new TestReportService().generateForTest(root, node);
     }),
     vscode.commands.registerCommand('fliwright.viewScriptRun', async (node?: any) => {
       const root = requireWorkspaceRoot();

@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { RunViewerService, type LoadedRun, type RunSelection } from '../runviewer/RunViewerService.js';
 import type { SerializableRun, ViewerInbound, ViewerOutbound } from '../webview/viewer/types.js';
 import { TIMELINE_TRACE_DIR } from './timelineConstants.js';
+import { TestReportService } from '../testing/TestReportService.js';
 
 /** Maximum log events posted to the webview in one shot (keeps postMessage snappy). */
 const LOG_CAP = 2000;
@@ -22,6 +23,8 @@ export class ViewerPanel {
   private runDir: vscode.Uri | undefined;
   private lastRun: SerializableRun | undefined;
   private readonly service: RunViewerService;
+  private readonly reports = new TestReportService();
+  private generatingReport = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -153,6 +156,7 @@ export class ViewerPanel {
     if (!this.panel || !this.lastRun) return;
     const message: ViewerInbound = { type: 'run', run: this.lastRun };
     void this.panel.webview.postMessage?.(message);
+    if (this.generatingReport) this.postReportState();
   }
 
   private async handleMessage(msg: ViewerOutbound): Promise<void> {
@@ -174,7 +178,25 @@ export class ViewerPanel {
     }
     if (msg.type === 'requestSnapshot') {
       await this.handleRequestSnapshot(msg.path);
+      return;
     }
+    if (msg.type === 'generateReport') {
+      if (!this.runDir || this.generatingReport || this.lastRun?.timeline.status === 'running') return;
+      const directory = this.runDir;
+      this.generatingReport = true;
+      this.postReportState();
+      try {
+        await this.reports.generateForRun(this.service.getWorkspaceRoot(), directory);
+      } finally {
+        this.generatingReport = false;
+        this.postReportState();
+      }
+    }
+  }
+
+  private postReportState(): void {
+    const message: ViewerInbound = { type: 'reportState', generating: this.generatingReport };
+    void this.panel?.webview.postMessage(message);
   }
 
   /** Read a snapshot artifact (relative to the run dir) and post its parsed JSON back. */

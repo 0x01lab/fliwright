@@ -14,7 +14,7 @@ purpose: Progressive CLI command routing for Skills
 | Run CI and collect evidence | [run](./command-run.md) | [failures](./command-artifacts.failures.md), [export](./command-artifacts.export.md) |
 | Inspect and operate the app | [session open](./command-session.open.md), [snapshot](./command-app.snapshot.md) | [find](./command-app.find.md), [interact](./command-app.interact.md) |
 | Prepare repeatable state | [scenario list](./command-scenario.list.md) | [resolve](./command-scenario.resolve.md), [apply](./command-scenario.apply.md) |
-| Reproduce HTTP outcomes | [mock list](./command-mock.list.md) | [apply](./command-mock.apply.md), [calls](./command-mock.calls.md) |
+| Set Mock state from natural language | [mock list](./command-mock.list.md) | [apply](./command-mock.apply.md), [status](./command-mock.status.md), [calls](./command-mock.calls.md) |
 | Investigate failed attempts | [artifacts show](./command-artifacts.show.md) | [timeline](./command-artifacts.timeline.md), [diagnose](./command-artifacts.diagnose.md) |
 | Capture a human demonstration | [record](./command-record.md) | [flow get](./command-flow.get.md), [run](./command-run.md) |
 | Compare UI to Figma | [review bundle](./command-flow.review-bundle.md) | [runtime capture](./command-flow.review-capture-runtime.md), [Figma capture](./command-flow.review-capture-figma.md), [report](./command-flow.review-report.md) |

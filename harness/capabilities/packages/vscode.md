@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "67ac9241ce31094b2cd845c3c7e4a2aab616401161218df19a88621cbbd7fd7b"
+source_fingerprint: "86a0dab2211bc464d8b9a7a787cbb25a3fe0aa25b397542b73400f42b52884e7"
 generated: true
 ---
 
@@ -45,6 +45,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.applyMockRule`
 - `fliwright.applyWebSocketMockProfile`
 - `fliwright.cleanFlowFile`
+- `fliwright.clearMockApiSearch`
 - `fliwright.clearWebSocketMockCalls`
 - `fliwright.clearWebSocketMockRules`
 - `fliwright.confirmRecordingCheckpoints`
@@ -65,6 +66,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.fillForm`
 - `fliwright.fillFormWithRules`
 - `fliwright.generateFlowTest`
+- `fliwright.generateTestReport`
 - `fliwright.importDartVerification`
 - `fliwright.insertFormFieldSelector`
 - `fliwright.insertRecordedTest`
@@ -100,6 +102,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.runCurrentTest`
 - `fliwright.runScript`
 - `fliwright.runWorkspaceTests`
+- `fliwright.searchMockApis`
 - `fliwright.sendWebSocketMockPush`
 - `fliwright.showLastRun`
 - `fliwright.showLastTrace`
@@ -111,6 +114,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.takeLongScreenshot`
 - `fliwright.takeScreenshot`
 - `fliwright.tddTakeOver`
+- `fliwright.toggleActiveMockRules`
 - `fliwright.unwatchStateProvider`
 - `fliwright.verifyRecording`
 - `fliwright.viewScriptRun`
@@ -175,6 +179,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/testing/TestCatalogCollector.ts`
 - `packages/fliwright-vscode/src/testing/TestCatalogTree.ts`
 - `packages/fliwright-vscode/src/testing/TestCollectionWatcher.ts`
+- `packages/fliwright-vscode/src/testing/TestReportService.ts`
 - `packages/fliwright-vscode/src/testing/TestStatusStore.ts`
 - `packages/fliwright-vscode/src/testing/catalog-worker.ts`
 - `packages/fliwright-vscode/src/testing/relPath.ts`
@@ -185,6 +190,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/views/DevicesTreeProvider.ts`
 - `packages/fliwright-vscode/src/views/FlowsTreeProvider.ts`
 - `packages/fliwright-vscode/src/views/FormDataTreeProvider.ts`
+- `packages/fliwright-vscode/src/views/MockApiSearchController.ts`
 - `packages/fliwright-vscode/src/views/MockApiTreeProvider.ts`
 - `packages/fliwright-vscode/src/views/ScriptsTreeProvider.ts`
 - `packages/fliwright-vscode/src/views/StateTreeProvider.ts`

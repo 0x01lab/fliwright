@@ -5,9 +5,28 @@ import {
   MemoryLogSink,
   PrettyLogFormatter,
   StructuredLogger,
+  normalizeLogError,
 } from '../src/index.js';
 
 describe('StructuredLogger', () => {
+  it('preserves serialized error fields in JSON logs', () => {
+    const sink = new MemoryLogSink();
+    const logger = new StructuredLogger({ runId: 'run-1', sinks: [sink] });
+    const error = {
+      name: 'LocatorError',
+      message: 'No widget found matching selector',
+      stack: 'LocatorError: No widget found\n    at scrollIntoView',
+      code: 'WIDGET_NOT_FOUND',
+      actionContext: { action: 'scrollIntoView', target: { key: 'assets.home.token' } },
+    };
+
+    logger.log({ kind: 'action', level: 'error', message: error.message, error });
+
+    const event = JSON.parse(new JsonLogFormatter().format(sink.events[0]));
+    expect(event.error).toEqual(error);
+    expect(new PrettyLogFormatter().format(sink.events[0])).not.toContain('[object Object]');
+  });
+
   it('filters events below the configured level', () => {
     const sink = new MemoryLogSink();
     const logger = new StructuredLogger({
@@ -47,6 +66,20 @@ describe('StructuredLogger', () => {
       timelineNodeId: 'step-1',
       message: 'Preparing data',
     });
+  });
+});
+
+describe('normalizeLogError', () => {
+  it('keeps object errors without a message inspectable', () => {
+    const error = { code: 'WIDGET_NOT_FOUND', target: { key: 'assets.home.token' } };
+    expect(normalizeLogError(error)).toEqual({ ...error, message: JSON.stringify(error) });
+  });
+
+  it('keeps native errors and primitive failures readable', () => {
+    const error = new TypeError('Invalid selector');
+    expect(normalizeLogError(error)).toEqual({ name: error.name, message: error.message, stack: error.stack });
+    expect(normalizeLogError('Scroll failed')).toEqual({ message: 'Scroll failed' });
+    expect(normalizeLogError(null)).toEqual({ message: 'null' });
   });
 });
 

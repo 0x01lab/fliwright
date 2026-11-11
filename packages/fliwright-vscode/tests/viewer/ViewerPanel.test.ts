@@ -6,6 +6,7 @@ import { env, Uri, window } from 'vscode';
 import type { LoadedRun } from '../../src/runviewer/RunViewerService.js';
 import { RunViewerService } from '../../src/runviewer/RunViewerService.js';
 import { ViewerPanel } from '../../src/viewer/ViewerPanel.js';
+import { TestReportService } from '../../src/testing/TestReportService.js';
 
 function makeLoadedRun(overrides: Partial<LoadedRun> = {}): LoadedRun {
   return {
@@ -29,7 +30,7 @@ function makeLoadedRun(overrides: Partial<LoadedRun> = {}): LoadedRun {
 
 /** Minimal RunViewerService fake — only loadRun is exercised by openForRun. */
 function fakeService(loaded: LoadedRun | undefined): RunViewerService {
-  return { loadRun: async () => loaded } as unknown as RunViewerService;
+  return { loadRun: async () => loaded, getWorkspaceRoot: () => Uri.file('/workspace') } as unknown as RunViewerService;
 }
 
 describe('ViewerPanel', () => {
@@ -208,6 +209,37 @@ describe('ViewerPanel', () => {
     expect((getPostedMessages()[1] as any).type).toBe('run');
 
     restore();
+  });
+
+  it('generates a report for the displayed attempt and ignores duplicate requests while saving', async () => {
+    const loaded = makeLoadedRun({ runDir: Uri.file('/runs/current/tests/task/attempts/retry-1') });
+    const { panel, getPostedMessages, sendMessage, restore } = createPanel(loaded);
+    let finish!: () => void;
+    const generate = vi.spyOn(TestReportService.prototype, 'generateForRun')
+      .mockImplementation(() => new Promise(resolve => { finish = () => resolve(undefined); }));
+    try {
+      await panel.openForRun(loaded.runDir);
+      sendMessage({ type: 'generateReport', runId: 'untrusted-other-run' });
+      sendMessage({ type: 'generateReport' });
+      expect(generate).toHaveBeenCalledExactlyOnceWith(Uri.file('/workspace'), loaded.runDir);
+      expect(getPostedMessages()).toContainEqual({ type: 'reportState', generating: true });
+      sendMessage({ type: 'ready' });
+      expect(getPostedMessages().at(-1)).toEqual({ type: 'reportState', generating: true });
+      finish();
+      await vi.waitFor(() => expect(getPostedMessages()).toContainEqual({ type: 'reportState', generating: false }));
+    } finally { generate.mockRestore(); restore(); }
+  });
+
+  it('does not generate a report for a running viewer', async () => {
+    const loaded = makeLoadedRun();
+    loaded.timeline.status = 'running';
+    const { panel, sendMessage, restore } = createPanel(loaded);
+    const generate = vi.spyOn(TestReportService.prototype, 'generateForRun').mockResolvedValue(undefined);
+    try {
+      await panel.openForRun(loaded.runDir);
+      sendMessage({ type: 'generateReport' });
+      expect(generate).not.toHaveBeenCalled();
+    } finally { generate.mockRestore(); restore(); }
   });
 
   it('writes Copy-prompt text to the clipboard', async () => {

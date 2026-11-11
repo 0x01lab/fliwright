@@ -14,6 +14,16 @@ inspection into one native VS Code sidebar.
 - Discover and run Fliwright TypeScript scripts and Vitest E2E tests.
 - Record device interactions into editable TypeScript test code.
 - Apply and clear local API mock rules from `.fliwright/mocks`.
+- Search **Mock APIs** using the toolbar magnifier or **Fliwright: Search Mock APIs**.
+  Filter by method, path, API name or rule name, ignoring case; combine keywords
+  such as `POST accounts`. Results update while typing. Press Enter to keep the
+  filter or Escape to cancel. Use **Clear Mock API Search** or click the search
+  summary row to clear the search. Reloading configs preserves the filter;
+  applying default mocks still uses the complete config set.
+- Toggle the **Show Only Active Mock Rules** filter button in the **Mock APIs**
+  toolbar to show active rules and hide API groups without active rules. The button
+  stays selected while enabled, combines with search, and follows runtime rule
+  changes. Toggle it off to show all rules again.
 - Generate and fill form data from `.fliwright/forms` rules.
 - Inspect screenshots, run history, failure context, and traces.
 - Use **Take Long App Screenshot** (expand icon beside the camera in the Devices toolbar) to preview vertical scroll content as one PNG. The preview scrolls vertically and the app's original scroll position is restored. Capture requires one visible, non-reversed vertical scroll view; nested scrolling and sticky headers are unsupported.
@@ -67,6 +77,19 @@ catalog scanning. Build output, coverage and Fliwright run/cache artifacts do
 not invalidate the cache, and completed runs refresh statuses without collecting
 again. Refresh cancels pending work, and each batch has a 30-second deadline. Failures appear below the file and in the
 **Fliwright** output channel. Use the file's Refresh action to retry.
+
+Right-click a test case and select **Fliwright: Generate Test Report** to create
+an offline HTML report from saved results. Select the run and output file; the
+report includes all tests in that run and opens in your browser. This does not
+rerun tests or require a connected app or AI provider. Failed and incomplete
+runs retain their errors and evidence gaps. A saved `test-plan.json` or
+`release-review.review.json` in the selected run is reused for release review;
+missing plans or build details remain release blockers.
+
+The Run Viewer toolbar also has a **Generate Report** button. It uses the
+displayed run (including when viewing a retry), so only the save location is
+requested. The report covers the entire run, and generation is disabled while
+the run is still running or a report is being generated.
 
 ## Recording Tests
 

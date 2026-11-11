@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- Search Mock APIs and filter the tree to active mock rules.
+- Generate offline HTML reports from saved test runs in the Tests panel and Run Viewer.
+- Preserve structured runtime error fields and expand error details in Run Viewer logs.
+
 ## 0.2.2
 
 - Open test source files directly from file and test case rows in the Tests panel,

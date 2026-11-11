@@ -6,6 +6,41 @@ import { describe, expect, it } from 'vitest';
 const manifest = JSON.parse(readFileSync(join(fileURLToPath(new URL('..', import.meta.url)), 'package.json'), 'utf8'));
 
 describe('VS Code manifest', () => {
+  it('offers a toggle button for active rules in the Mock APIs toolbar', () => {
+    expect(manifest.contributes.commands).toContainEqual(expect.objectContaining({
+      command: 'fliwright.toggleActiveMockRules', icon: '$(filter)',
+      toggled: 'fliwright.mockApis.activeOnly',
+    }));
+    expect(manifest.contributes.menus['view/title']).toContainEqual(expect.objectContaining({
+      command: 'fliwright.toggleActiveMockRules', when: 'view == fliwright.mockApis',
+      group: expect.stringMatching(/^navigation@/),
+    }));
+  });
+  it('offers search and contextual clear actions in the Mock APIs toolbar', () => {
+    expect(manifest.contributes.commands).toContainEqual(expect.objectContaining({
+      command: 'fliwright.searchMockApis', icon: '$(search)',
+    }));
+    expect(manifest.contributes.commands).toContainEqual(expect.objectContaining({
+      command: 'fliwright.clearMockApiSearch', icon: '$(clear-all)',
+    }));
+    expect(manifest.contributes.menus['view/title']).toContainEqual(expect.objectContaining({
+      command: 'fliwright.searchMockApis', when: 'view == fliwright.mockApis',
+      group: expect.stringMatching(/^navigation@/),
+    }));
+    expect(manifest.contributes.menus['view/title']).toContainEqual(expect.objectContaining({
+      command: 'fliwright.clearMockApiSearch', when: 'view == fliwright.mockApis && fliwright.mockApis.hasFilter',
+      group: expect.stringMatching(/^navigation@/),
+    }));
+  });
+  it('offers report generation in the test case context menu', () => {
+    expect(manifest.contributes.commands).toContainEqual(expect.objectContaining({
+      command: 'fliwright.generateTestReport', title: 'Fliwright: Generate Test Report',
+    }));
+    expect(manifest.contributes.menus['view/item/context']).toContainEqual({
+      command: 'fliwright.generateTestReport',
+      when: 'view == fliwright.tests && viewItem == testCase', group: '2_report@1',
+    });
+  });
   it('uses the shared recording configuration without an independent Trace mode setting', () => {
     expect(manifest.contributes.configuration.properties).not.toHaveProperty('fliwright.traceMode');
   });
