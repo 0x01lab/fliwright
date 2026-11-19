@@ -71,6 +71,8 @@ describe('RunSession', () => {
     const root = await mkdtemp(join(tmpdir(), 'fliwright-session-lease-'));
     try {
       const manager = new EndpointLeaseManager({ rootDir: root, retryDelayMs: 2 });
+      let enterEvidence!: () => void;
+      const evidenceEntered = new Promise<void>((resolve) => { enterEvidence = resolve; });
       let releaseEvidence!: () => void;
       const evidenceStarted = new Promise<void>((resolve) => {
         releaseEvidence = resolve;
@@ -79,6 +81,7 @@ describe('RunSession', () => {
         runId: 'run-lease-1', testId: 'test-1', testName: 'lease', recordingMode: 'standard',
         captureEvidence: async () => {
           events.push('first-evidence');
+          enterEvidence();
           await evidenceStarted;
           return { status: 'captured' };
         },
@@ -90,7 +93,7 @@ describe('RunSession', () => {
       const firstRun = first.perform({ kind: 'action', title: 'first' }, async () => {
         events.push('first-action');
       });
-      await new Promise((resolve) => setTimeout(resolve, 15));
+      await evidenceEntered;
       const secondRun = second.perform({ kind: 'action', title: 'second' }, async () => events.push('second-action'));
       await new Promise((resolve) => setTimeout(resolve, 15));
       expect(events).toEqual(['first-action', 'first-evidence']);
