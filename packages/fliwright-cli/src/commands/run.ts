@@ -298,6 +298,7 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
     args,
     {
       ...environment,
+      FLIWRIGHT_TEST_PROGRESS_PATH: progress?.eventsPath ?? '',
       [NATIVE_DEVICE_LEASE_ENV]: options.nativeDelegation ? JSON.stringify(options.nativeDelegation) : '',
       [MANAGED_APP_CONTROL_ENV]: options.managedAppControl ? JSON.stringify(options.managedAppControl) : '',
       FLIWRIGHT_PROJECT_ROOT: options.cwd,

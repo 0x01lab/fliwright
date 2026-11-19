@@ -1,5 +1,5 @@
-import { expect, it } from 'vitest';
-import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { expect, it, vi } from 'vitest';
+import { access, appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
@@ -51,3 +51,17 @@ it('reports CLI case progress before the next case finishes, without requiring t
     ]);
   } finally { await rm(root, { recursive: true, force: true }); }
 }, 30000);
+
+it('delivers split worker progress without waiting for reporter stdout', async () => {
+  const updates: unknown[] = [];
+  const reporter = await createVitestProgressReporter(event => updates.push(event));
+  const event = { filePath: '/tests/live.ts', titlePath: ['first'], status: 'passed' };
+  try {
+    const encoded = JSON.stringify(event);
+    await appendFile(reporter.eventsPath, encoded.slice(0, 20));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(updates).toEqual([]);
+    await appendFile(reporter.eventsPath, encoded.slice(20) + '\n');
+    await vi.waitFor(() => expect(updates).toEqual([event]));
+  } finally { await reporter.dispose(); }
+});

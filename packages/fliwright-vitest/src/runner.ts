@@ -71,6 +71,10 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
 
     async onBeforeRunTask(task: Task): Promise<void> {
       this.tasks.add(task);
+      if (process.env.FLIWRIGHT_TEST_PROGRESS_PATH) {
+        (task.meta as Record<string, unknown>).fliwrightProgressDirect = true;
+        if (task.mode === 'run' || task.mode === 'queued') await emitLiveProgress(task, 'running');
+      }
       const configuredRunId = process.env.FLIWRIGHT_RUN_ID;
       if (configuredRunId && configuredRunId !== this.runId) this.runId = configuredRunId;
       else if (process.env.FLIWRIGHT_TDD_MODE === '1') this.runId = `run-${randomUUID()}`;
@@ -106,6 +110,7 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
           } finally {
             await releaseTaskEndpointLease(task);
             this.tasks.delete(task);
+            await emitLiveProgress(task, canceled ? 'skipped' : 'failed');
           }
           return;
         }
@@ -114,6 +119,7 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
       if (task.mode !== 'run' && task.mode !== 'queued') {
         await this.finishAttempt(task, 'skipped');
         await this.finalizeTask(task, 'skipped');
+        await emitLiveProgress(task, 'skipped');
       }
     }
 
@@ -169,6 +175,7 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
       if (record.observedStatus === 'skipped') {
         await this.finishAttempt(task, 'skipped');
         await finishTaskEndpointLeasePhase(task, 'skipFinalized', () => this.finalizeTask(task, outcomeForTask(task)));
+        await emitLiveProgress(task, outcomeForTask(task));
       }
     }
 
@@ -189,6 +196,7 @@ export function createFliwrightRunner(BaseRunner: typeof VitestTestRunner): Fliw
       } finally {
         await releaseTaskEndpointLease(task);
         this.tasks.delete(task);
+        await emitLiveProgress(task, outcomeForTask(task));
       }
     }
 
@@ -363,10 +371,21 @@ function isExpectedFailure(task: Task): boolean {
   return task.type === 'test' && task.fails === true;
 }
 
-function outcomeForTask(task: Task): RunnerOutcome['status'] {
+function outcomeForTask(task: Task): 'passed' | 'skipped' | 'failed' {
   if (task.result?.state === 'pass') return 'passed';
   if (task.result?.state === 'skip') return 'skipped';
   return 'failed';
 }
 
 export default FliwrightRunner;
+
+/** Live progress must not wait for Vitest's throttled reporter task queue. */
+async function emitLiveProgress(task: Task, status: 'running' | 'passed' | 'failed' | 'skipped'): Promise<void> {
+  const target = process.env.FLIWRIGHT_TEST_PROGRESS_PATH;
+  if (!target) return;
+  const event = { filePath: task.file.filepath, titlePath: sourceTestPath(task), status,
+    durationMs: task.result?.duration,
+    error: status === 'failed' ? task.result?.errors?.map(error => error.stack || error.message).join('\n') : undefined };
+  // Progress transport failure cannot change the test's business outcome.
+  await appendFile(target, JSON.stringify(event) + '\n').catch(() => {});
+}
