@@ -79,20 +79,20 @@ export function StepsPane(props: StepsPaneProps): JSX.Element {
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
-      <div className="flex shrink-0 flex-col gap-1.5 border-b border-border p-2">
+      <div className="flex shrink-0 flex-col gap-1 border-b border-border p-1.5">
         <div className="flex overflow-hidden rounded-md border border-border">
           <button
-            className={cn('flex-1 px-2 py-1 text-[11px]', mode === 'timeline' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent')}
+            className={cn('h-6 flex-1 px-2 py-0 text-[11px]', mode === 'timeline' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent')}
             onClick={() => props.onModeChange('timeline')}
           >Timeline</button>
           <button
-            className={cn('flex-1 px-2 py-1 text-[11px] disabled:opacity-40', mode === 'actions' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent')}
+            className={cn('h-6 flex-1 px-2 py-0 text-[11px] disabled:opacity-40', mode === 'actions' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent')}
             disabled={!hasTrace}
             title={hasTrace ? 'Action trace' : 'No action trace available'}
             onClick={() => props.onModeChange('actions')}
           >Actions</button>
         </div>
-        <Input type="search" placeholder="Filter…" value={filter} onChange={e => props.onFilter(e.target.value)} />
+        <Input className="h-6" type="search" placeholder="Filter…" value={filter} onChange={e => props.onFilter(e.target.value)} />
       </div>
 
       <ScrollArea className="flex-1">
@@ -138,6 +138,7 @@ export function StepsPane(props: StepsPaneProps): JSX.Element {
                 return (
                   <div
                     key={key}
+                    data-action-key={key}
                     ref={isSelected ? selectedRef : undefined}
                     onClick={() => props.onSelect(key)}
                     className={cn(

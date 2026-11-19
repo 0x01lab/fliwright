@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "86a0dab2211bc464d8b9a7a787cbb25a3fe0aa25b397542b73400f42b52884e7"
+source_fingerprint: "67a1062cd0840dc7b7e0798f4498fda56bab3cdb260e403a446f2eb92ddb05e9"
 generated: true
 ---
 
@@ -134,6 +134,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 
 ## Source Anchors
 
+- `packages/fliwright-vscode/src/WorkspaceProjectConfig.ts`
 - `packages/fliwright-vscode/src/config.ts`
 - `packages/fliwright-vscode/src/editor/AnnotationParser.ts`
 - `packages/fliwright-vscode/src/editor/AnnotationWriter.ts`
@@ -220,6 +221,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/webview/viewer/components/DetailTabs.tsx`
 - `packages/fliwright-vscode/src/webview/viewer/components/DetailsTab.tsx`
 - `packages/fliwright-vscode/src/webview/viewer/components/ErrorTab.tsx`
+- `packages/fliwright-vscode/src/webview/viewer/components/ExecutionTimeline.tsx`
 - `packages/fliwright-vscode/src/webview/viewer/components/JsonTree.tsx`
 - `packages/fliwright-vscode/src/webview/viewer/components/LogsTab.tsx`
 - `packages/fliwright-vscode/src/webview/viewer/components/RunStatusBar.tsx`
@@ -229,5 +231,6 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/webview/viewer/fitScale.ts`
 - `packages/fliwright-vscode/src/webview/viewer/format.ts`
 - `packages/fliwright-vscode/src/webview/viewer/host.ts`
+- `packages/fliwright-vscode/src/webview/viewer/timeScale.ts`
 - `packages/fliwright-vscode/src/webview/viewer/treeFlatten.ts`
 - `packages/fliwright-vscode/src/webview/viewer/types.ts`

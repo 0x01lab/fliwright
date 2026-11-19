@@ -2,12 +2,56 @@ import { describe, expect, it } from 'vitest';
 import * as path from 'node:path';
 import { mkdtemp, readFile, writeFile, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { realpathSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import type { Socket } from 'node:net';
 import { parseVitestJson, buildVitestArgs, buildRunEnv, resolveVitestCli, VitestRunner } from '../src/runner/VitestRunner.js';
 import type { RunParams } from '../src/runner/TestRunner.js';
 
 describe('VitestRunner', () => {
+  it('streams exact case results before later tests finish, including skips and failures', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'fliwright-editor-progress-'));
+    try {
+      await symlink(path.resolve('../../e2e/node_modules'), path.join(root, 'node_modules'), 'dir');
+      await writeFile(path.join(root, 'package.json'), '{"type":"module"}');
+      await writeFile(path.join(root, 'fliwright.config.ts'), "export default { recording: { mode: 'off' } };");
+      await writeFile(path.join(root, 'vitest.config.mjs'), "export default { test: { include: ['progress.test.mjs'], maxWorkers: 1 } };");
+      await writeFile(path.join(root, 'progress.test.mjs'), `import { test, describe } from 'vitest';
+        import { existsSync } from 'node:fs';
+        describe('suite > 含分隔符', () => {
+          test('first / case', async () => {
+            const deadline = Date.now() + 4000;
+            while (!existsSync(${JSON.stringify(path.join(root, 'running-received'))}) && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
+            if (!existsSync(${JSON.stringify(path.join(root, 'running-received'))})) throw new Error('missing initial running progress');
+          });
+          test('failure', async () => {
+            const deadline = Date.now() + 8000;
+            while (!existsSync(${JSON.stringify(path.join(root, 'progress-received'))}) && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
+            if (!existsSync(${JSON.stringify(path.join(root, 'progress-received'))})) throw new Error('missing live progress');
+            throw new Error('expected failure');
+          });
+          test.skip('later', () => {});
+        });`);
+      const updates: any[] = [];
+      const result = await new VitestRunner().run({ workspaceRoot: { fsPath: root } as any,
+        failureContextDir: { fsPath: path.join(root, 'failures') } as any,
+        runsRoot: path.join(root, 'runs'), runId: 'progress',
+        onTestProgress: update => {
+          updates.push(update);
+          if (update.status === 'running') writeFileSync(path.join(root, 'running-received'), 'ready');
+          if (update.status === 'passed') writeFileSync(path.join(root, 'progress-received'), 'ready');
+        },
+      });
+      expect(updates).toEqual(expect.arrayContaining([
+        expect.objectContaining({ filePath: path.join(realpathSync(root), 'progress.test.mjs'), titlePath: ['suite > 含分隔符', 'first / case'], status: 'running' }),
+        expect.objectContaining({ titlePath: ['suite > 含分隔符', 'first / case'], status: 'passed', durationMs: expect.any(Number) }),
+        expect.objectContaining({ titlePath: ['suite > 含分隔符', 'failure'], status: 'failed', error: expect.stringContaining('expected failure') }),
+        expect.objectContaining({ titlePath: ['suite > 含分隔符', 'later'], status: 'skipped' }),
+      ]));
+      expect(result).toMatchObject({ passed: false, passedTests: 1, failedTests: 1 });
+    } finally { await rm(root, { force: true, recursive: true }); }
+  }, 30000);
+
   it('runs fork workers with multi-megabyte scenarios through a config path instead of environment payloads', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'fliwright-editor-large-config-'));
     try {

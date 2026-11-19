@@ -1,28 +1,18 @@
+import { buildTimelineTimeAxis } from '@fliwright/core/timeline';
+export { timelineNodeAtTime as stepAtTime, timelineDurationMs as durationMs, orderedTimelineNodes as orderedSteps } from '@fliwright/core/timeline';
+import { timelineDurationMs as durationMs } from '@fliwright/core/timeline';
+export type { TimelineTimeEntry as TimeEntry } from '@fliwright/core/timeline';
+import type { TimelineTimeAxis } from '@fliwright/core/timeline';
 import type { TimelineNode } from '@fliwright/core';
 import { scaleLinear } from 'd3-scale';
 
 export type ReplayNode = TimelineNode & { durationMs?: number };
+export type TimeAxis = TimelineTimeAxis & { ticks: number[] };
 export function evidenceLabel(artifact: { kind: string; metadata?: Record<string, unknown> }): string {
   const surface = artifact.metadata?.surface;
   return `${surface === 'native' ? '原生 ' : surface === 'flutter' ? 'Flutter ' : ''}${artifact.kind}`;
 }
 export type StepFilter = 'all' | 'failed' | 'screenshots' | 'slow';
-
-export interface TimeEntry {
-  node: ReplayNode;
-  depth: number;
-  startMs: number;
-  endMs: number;
-  complete: boolean;
-  lane: number;
-}
-export interface TimeAxis {
-  durationMs: number;
-  entries: TimeEntry[];
-  missing: ReplayNode[];
-  ticks: number[];
-  lanes: number;
-}
 
 /** Map elapsed milliseconds without rounding or extending the recorded domain. */
 export function createTimeScale(duration: number) {
@@ -32,83 +22,10 @@ export function createTimeScale(duration: number) {
     .clamp(true);
 }
 
-/** All actions share a clock; nested durations must never be added together. */
-export function buildTimeAxis(
-  nodes: ReplayNode[],
-  bounds: { startedAt?: unknown; endedAt?: unknown } = {},
-): TimeAxis {
-  const timestamp = (value: unknown) =>
-    typeof value === 'string' ? Date.parse(value) : NaN;
-  const rows = orderedSteps(nodes);
-  const missing: ReplayNode[] = [];
-  const timed = rows.flatMap(({ node, depth }) => {
-    const start = timestamp(node.startedAt);
-    if (!Number.isFinite(start)) {
-      missing.push(node);
-      return [];
-    }
-    const duration = durationMs(node);
-    return [
-      {
-        node,
-        depth,
-        start,
-        end: start + (duration ?? 0),
-        complete: duration !== undefined,
-      },
-    ];
-  });
-  const startBound = timestamp(bounds.startedAt),
-    endBound = timestamp(bounds.endedAt);
-  let origin = Number.isFinite(startBound) ? startBound : Infinity;
-  for (const entry of timed) origin = Math.min(origin, entry.start);
-  if (!Number.isFinite(origin)) origin = 0;
-  let end = Number.isFinite(endBound) ? Math.max(origin, endBound) : origin;
-  for (const entry of timed) end = Math.max(end, entry.end);
-  const duration = end - origin;
-  const laneEnds: number[] = [];
-  const entries = timed
-    .sort((a, b) => a.start - b.start || a.depth - b.depth || b.end - a.end)
-    .map((entry) => {
-      const startMs = entry.start - origin,
-        endMs = entry.end - origin;
-      let lane = laneEnds.findIndex((value) => value <= startMs);
-      if (lane < 0) lane = laneEnds.length;
-      // Reserve visual room for markers without changing the recorded interval.
-      laneEnds[lane] = Math.max(endMs, startMs + Math.max(1, duration / 60));
-      return {
-        node: entry.node,
-        depth: entry.depth,
-        startMs,
-        endMs,
-        complete: entry.complete,
-        lane,
-      };
-    });
-  const ticks = duration ? createTimeScale(duration).ticks(6) : [0];
-  return {
-    durationMs: duration,
-    entries,
-    missing,
-    ticks,
-    lanes: laneEnds.length,
-  };
-}
-
-/** At overlapping actions, inspect the deepest, most specific recorded operation. */
-export function stepAtTime(
-  axis: TimeAxis,
-  timeMs: number,
-): ReplayNode | undefined {
-  const distance = (entry: TimeEntry) =>
-    Math.max(entry.startMs - timeMs, timeMs - entry.endMs, 0);
-  return [...axis.entries].sort(
-    (a, b) =>
-      distance(a) - distance(b) ||
-      b.depth - a.depth ||
-      a.endMs - a.startMs - (b.endMs - b.startMs) ||
-      b.startMs - a.startMs,
-  )[0]?.node;
+/** Shared recorded-time projection with Cloud's existing tick presentation. */
+export function buildTimeAxis(nodes: ReplayNode[], bounds: { startedAt?: unknown; endedAt?: unknown } = {}): TimeAxis {
+  const axis = buildTimelineTimeAxis(nodes, bounds);
+  return { ...axis, ticks: axis.durationMs ? createTimeScale(axis.durationMs).ticks(6) : [0] };
 }
 
 export function artifactPath(
@@ -145,18 +62,6 @@ export function screenshotPaths(node: ReplayNode | undefined, base: string, file
     .filter((path): path is string => !!path && /\.(png|jpe?g|webp)$/i.test(path)))];
 }
 
-export function durationMs(node: ReplayNode): number | undefined {
-  const value = Date.parse(node.endedAt ?? '') - Date.parse(node.startedAt);
-  if (Number.isFinite(value) && value >= 0) return value;
-  if (
-    typeof node.durationMs === 'number' &&
-    Number.isFinite(node.durationMs) &&
-    node.durationMs >= 0
-  )
-    return node.durationMs;
-  return undefined;
-}
-
 export function durationLabel(value?: number): string {
   return value === undefined
     ? '—'
@@ -174,28 +79,6 @@ export function matchesStep(node: ReplayNode, filter: StepFilter): boolean {
     );
   if (filter === 'slow') return (durationMs(node) ?? 0) >= 10000;
   return true;
-}
-
-/** Preserve hierarchy order, including orphaned nodes, without looping on corrupt parents. */
-export function orderedSteps(
-  nodes: ReplayNode[],
-): Array<{ node: ReplayNode; depth: number }> {
-  const result: Array<{ node: ReplayNode; depth: number }> = [];
-  const seen = new Set<string>();
-  const ids = new Set(nodes.map((n) => n.id));
-  const visit = (node: ReplayNode, depth: number) => {
-    if (seen.has(node.id)) return;
-    seen.add(node.id);
-    result.push({ node, depth });
-    nodes
-      .filter((n) => n.parentId === node.id)
-      .forEach((n) => visit(n, depth + 1));
-  };
-  nodes
-    .filter((n) => !n.parentId || !ids.has(n.parentId))
-    .forEach((n) => visit(n, 0));
-  nodes.forEach((n) => visit(n, 0));
-  return result;
 }
 
 export function parseLog(content: string): Array<Record<string, unknown>> {

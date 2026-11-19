@@ -41,6 +41,8 @@
         "packages/fliwright-cli/src/RecordingReplay.ts",
         "packages/fliwright-cli/src/ReleaseReview.ts",
         "packages/fliwright-cli/src/ReportProjectIcon.ts",
+        "packages/fliwright-cli/src/VitestProgress.ts",
+        "packages/fliwright-cli/src/artifacts.ts",
         "packages/fliwright-cli/src/capabilities/form.ts",
         "packages/fliwright-cli/src/capabilities/interaction.ts",
         "packages/fliwright-cli/src/capabilities/session.ts",
@@ -81,16 +83,20 @@
       "publicExports": [
         "createProgram",
         "createRegistry",
+        "createVitestProgressReporter",
         "FlutterAndroidApk",
         "FlutterAndroidBuildOptions",
         "ManagedNativeGrant",
         "ManagedNativeLaunch",
         "ManagedNativeRun",
         "prepareNativeRun",
+        "resolveLoadedProjectConfig",
+        "TestProgress",
         "withFlutterAndroidApk"
       ],
       "packageEntrypoints": [
         ".",
+        "./artifacts",
         "./capabilities/form",
         "./capabilities/interaction",
         "./run"
@@ -121,7 +127,7 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "a16ca1f59f66878fccc3492dcc8a1a451db6382220f613d976eb28a7c4d236ad"
+      "sourceFingerprint": "2f4a6540a1134a4f2c152f6562f4092f7c121ba046a500cff426a7987435bbfc"
     },
     {
       "name": "@fliwright/cloud",
@@ -207,7 +213,7 @@
       "binaryEntrypoints": [
         "fliwright-cloud"
       ],
-      "sourceFingerprint": "c9f9e2824648a149f31eb0397c9a5bc0e58ff2190bc5f8093bd35a0368e8dba6"
+      "sourceFingerprint": "f226474b136038afade2cdfc7c3a7c8c28a5e733cefbd3bd3ab218f45016dcb8"
     },
     {
       "name": "@fliwright/cloud-protocol",
@@ -477,6 +483,7 @@
         "packages/fliwright-core/src/timeline/TimelineNodeLifecycle.ts",
         "packages/fliwright-core/src/timeline/TimelineReader.ts",
         "packages/fliwright-core/src/timeline/TimelineRecorder.ts",
+        "packages/fliwright-core/src/timeline/TimelineTimeAxis.ts",
         "packages/fliwright-core/src/timeline/constants.ts",
         "packages/fliwright-core/src/timeline/types.ts",
         "packages/fliwright-core/src/types.ts",
@@ -568,6 +575,7 @@
         "buildFlowReviewPlan",
         "buildFlowReviewReport",
         "buildFlowVisualComparisons",
+        "buildTimelineTimeAxis",
         "builtInFormActionScripts",
         "builtInSelectRecipes",
         "CameraTestApp",
@@ -824,6 +832,7 @@
         "OperationDescriptor",
         "OperationKind",
         "OperationOutcome",
+        "orderedTimelineNodes",
         "Page",
         "PageNavigationOptions",
         "PageViewport",
@@ -991,6 +1000,7 @@
         "summarizeTimeline",
         "TestResult",
         "TestScenario",
+        "TimedTimelineNode",
         "TIMELINE_ARTIFACT_KIND_AI",
         "TIMELINE_ARTIFACT_KIND_DIAGNOSTICS",
         "TIMELINE_ARTIFACT_KIND_LOG",
@@ -1010,8 +1020,10 @@
         "TimelineArtifactStore",
         "TimelineArtifactStoreOptions",
         "TimelineData",
+        "timelineDurationMs",
         "TimelineMockResponse",
         "TimelineNode",
+        "timelineNodeAtTime",
         "TimelineNodeKind",
         "TimelineNodeStartOptions",
         "TimelineNodeStatus",
@@ -1020,6 +1032,8 @@
         "TimelineRunMode",
         "TimelineRunStatus",
         "TimelineSummary",
+        "TimelineTimeAxis",
+        "TimelineTimeEntry",
         "TimelineToFlowInput",
         "TimelineToFlowOptions",
         "ToolMockRequest",
@@ -1074,10 +1088,11 @@
         "writeWorkspaceVmServiceUrl"
       ],
       "packageEntrypoints": [
-        "."
+        ".",
+        "./timeline"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "7567904e8e4a9cdca0a71db4ebd75991c8fd4440a075eb8d38ed133edfc0f764"
+      "sourceFingerprint": "270d7ec6d5c6a42b814dca3e1ebe59a1b2faa14b13f75793b56dc6974d9e7ca8"
     },
     {
       "name": "@fliwright/devices",
@@ -1858,6 +1873,7 @@
         "editor and webview UX"
       ],
       "sourceFiles": [
+        "packages/fliwright-vscode/src/WorkspaceProjectConfig.ts",
         "packages/fliwright-vscode/src/config.ts",
         "packages/fliwright-vscode/src/editor/AnnotationParser.ts",
         "packages/fliwright-vscode/src/editor/AnnotationWriter.ts",
@@ -1944,6 +1960,7 @@
         "packages/fliwright-vscode/src/webview/viewer/components/DetailTabs.tsx",
         "packages/fliwright-vscode/src/webview/viewer/components/DetailsTab.tsx",
         "packages/fliwright-vscode/src/webview/viewer/components/ErrorTab.tsx",
+        "packages/fliwright-vscode/src/webview/viewer/components/ExecutionTimeline.tsx",
         "packages/fliwright-vscode/src/webview/viewer/components/JsonTree.tsx",
         "packages/fliwright-vscode/src/webview/viewer/components/LogsTab.tsx",
         "packages/fliwright-vscode/src/webview/viewer/components/RunStatusBar.tsx",
@@ -1953,6 +1970,7 @@
         "packages/fliwright-vscode/src/webview/viewer/fitScale.ts",
         "packages/fliwright-vscode/src/webview/viewer/format.ts",
         "packages/fliwright-vscode/src/webview/viewer/host.ts",
+        "packages/fliwright-vscode/src/webview/viewer/timeScale.ts",
         "packages/fliwright-vscode/src/webview/viewer/treeFlatten.ts",
         "packages/fliwright-vscode/src/webview/viewer/types.ts"
       ],
@@ -2056,7 +2074,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "86a0dab2211bc464d8b9a7a787cbb25a3fe0aa25b397542b73400f42b52884e7"
+      "sourceFingerprint": "67a1062cd0840dc7b7e0798f4498fda56bab3cdb260e403a446f2eb92ddb05e9"
     }
   ]
 }

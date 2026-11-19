@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { resolveProjectConfig } from '@fliwright/cli';
+import { loadWorkspaceProjectConfig } from './WorkspaceProjectConfig.js';
 import { mergeFliwrightConfig, resolveFliwrightPath, resolveFliwrightRuntimeRoot, type ResolvedFliwrightConfig } from '@fliwright/core';
 import type { ExtensionConfig } from './types.js';
 
@@ -33,7 +33,7 @@ export function loadConfig(): ExtensionConfig {
 
 /** Resolve shared project settings at each discovery/save boundary, preserving explicit editor globs. */
 export async function loadWorkspaceConfig(root: vscode.Uri): Promise<ExtensionConfig & ResolvedFliwrightConfig> {
-  const project = await resolveProjectConfig(root.fsPath);
+  const project = await loadWorkspaceProjectConfig(root);
   const shared = mergeFliwrightConfig({ project });
   const editor = loadConfig();
   const settings = vscode.workspace.getConfiguration('fliwright', root);

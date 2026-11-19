@@ -582,3 +582,6 @@ export type {
 
 export { projectRunTrace } from './RunTraceProjection.js';
 export * from './native/index.js';
+
+export { buildTimelineTimeAxis, timelineNodeAtTime, timelineDurationMs, orderedTimelineNodes } from './timeline/TimelineTimeAxis.js';
+export type { TimelineTimeAxis, TimelineTimeEntry, TimedTimelineNode } from './timeline/TimelineTimeAxis.js';

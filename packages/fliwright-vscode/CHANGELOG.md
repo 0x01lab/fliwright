@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.4
+
+- Add recorded-time Trace Viewer playback, seeking, zoom, screenshot thumbnails, and failure navigation.
+- Show live test case progress and distinguish queued, running, completed, and interrupted attempts.
+- Share cached project configuration across views and ignore run artifacts during test discovery refreshes.
+- Synchronize active mock rules before applying the active-only filter.
+- Refresh the extension and Marketplace brand icons.
+
 ## 0.2.3
 
 - Search Mock APIs and filter the tree to active mock rules.

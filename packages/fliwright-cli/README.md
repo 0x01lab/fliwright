@@ -163,6 +163,11 @@ expands to the current user's home. Authored tests, scripts, rules and Flow
 files stay in the project. Existing data is preserved without automatic migration.
 
 
+Report readers import `artifactReferences` and its `ArtifactReference` type from
+`@fliwright/cli/artifacts`. This entry enumerates and rewrites schema-owned evidence
+paths without loading test execution or device runtimes. Source locations and
+arbitrary metadata are excluded. Execution helpers use `@fliwright/cli/run`.
+
 The `@fliwright/cli/run` export also provides `withFlutterAndroidApk` for owned
 Android Debug builds. It validates the app entry and build arguments, reads
 Flutter's build directory, bounds tool output and process-group lifetime, and

@@ -2,6 +2,7 @@
 import type { TimelineNode, FliwrightLogEvent, AgentVisibleFailure, TraceStep } from '@fliwright/core';
 import type { SerializableRun } from './types.js';
 import type { FlatNode } from './treeFlatten.js';
+import { buildTimelineTimeAxis } from '@fliwright/core/timeline';
 import {
   TIMELINE_ARTIFACT_KIND_SCREENSHOT,
   TIMELINE_ARTIFACT_KIND_SNAPSHOT,
@@ -11,8 +12,50 @@ export type ListMode = 'timeline' | 'actions';
 
 /** Resolve a node's screenshot artifact to a webview <img src>. */
 export function screenshotOfNode(node: TimelineNode, base: string, failure?: AgentVisibleFailure): string | undefined {
-  const path = screenshotPathOfNode(node, failure ?? node.error);
-  return path ? joinBasePath(base, path) : undefined;
+  return screenshotsOfNode(node, base, failure)[0];
+}
+
+/** All captured images, including failure evidence, in stable artifact order. */
+export function screenshotsOfNode(node: TimelineNode, base: string, failure?: AgentVisibleFailure): string[] {
+  const paths = [...(node.artifacts ?? []).filter(a => a.kind === TIMELINE_ARTIFACT_KIND_SCREENSHOT).map(a => a.path),
+    (failure ?? node.error)?.appState?.screenshotPath];
+  return [...new Set(paths.filter((path): path is string => !!path))].map(path => joinBasePath(base, path));
+}
+
+export function screenshotsForNode(run: SerializableRun, node: TimelineNode): string[] {
+  const failure = node.error ?? run.timeline.agentVisibleFailures?.find(f => f.timelineNodeId === node.id);
+  const images = screenshotsOfNode(node, run.screenshotBaseUrl, failure);
+  if (images.length) return images;
+  const operationId = node.metadata?.operationId;
+  const action = operationId ? run.trace?.steps.find(step => step.operationId === operationId) : undefined;
+  const uri = screenshotOfStep(action?.screenshotFile, run.traceBaseUrl);
+  return uri ? [uri] : [];
+}
+
+/** Trace timestamps have two historical meanings; only explicit operation identity links clocks. */
+export function timelineNodeForKey(run: SerializableRun, key: string | null, mode: ListMode): TimelineNode | undefined {
+  if (!key) return;
+  if (mode === 'timeline') return run.timeline.nodes.find(node => node.id === key);
+  const index = /^trace:(\d+)$/.exec(key)?.[1];
+  const operationId = index === undefined ? undefined : run.trace?.steps[Number(index)]?.operationId;
+  return operationId ? run.timeline.nodes.find(node => node.metadata?.operationId === operationId) : undefined;
+}
+
+/** Resolve a previous captured frame from the full recorded clock, independent of list filtering. */
+export function precedingScreenshot(run: SerializableRun, node: TimelineNode): { uri: string; sourceTitle: string; time?: string; anchor: 'start' | 'end' } | undefined {
+  const axis = buildTimelineTimeAxis(run.timeline.nodes, run.timeline);
+  const current = axis.entries.find(entry => entry.node.id === node.id);
+  if (!current) return;
+  const previous = axis.entries.filter(entry => entry.node.id !== node.id && entry.endMs <= current.startMs)
+    .sort((a, b) => b.endMs - a.endMs || b.depth - a.depth);
+  for (const entry of previous) {
+    const uri = screenshotsForNode(run, entry.node).at(-1);
+    if (uri) return {
+      uri, sourceTitle: entry.node.title,
+      time: entry.complete ? entry.node.endedAt : entry.node.startedAt,
+      anchor: entry.complete ? 'end' : 'start',
+    };
+  }
 }
 
 /** Resolve a trace step's screenshot file to a webview <img src>. */
@@ -30,6 +73,7 @@ export interface Selection {
   failure?: AgentVisibleFailure;
   logs: FliwrightLogEvent[];
   screenshotUri?: string;
+  screenshotUris?: string[];
   /** Snapshot artifact path (relative to run dir) — content is fetched lazily in Phase C. */
   snapshotPath?: string;
   /** Inline widget tree for action steps (trace steps carry this in trace.json). */
@@ -44,6 +88,7 @@ export function deriveSelection(
   run: SerializableRun,
   key: string | null,
   mode: ListMode,
+  screenshotIndex = 0,
 ): Selection | undefined {
   if (!key) return undefined;
 
@@ -54,13 +99,18 @@ export function deriveSelection(
     const steps = run.trace?.steps ?? [];
     const step = steps[idx];
     if (!step) return undefined;
+    const node = timelineNodeForKey(run, key, mode);
+    const linked = node ? deriveSelection(run, node.id, 'timeline', screenshotIndex) : undefined;
+    const screenshotUri = screenshotOfStep(step.screenshotFile, run.traceBaseUrl);
     return {
+      ...linked,
       key,
       mode,
       step,
       stepIndex: idx,
-      logs: [],
-      screenshotUri: screenshotOfStep(step.screenshotFile, run.traceBaseUrl),
+      logs: linked?.logs ?? [],
+      screenshotUris: linked?.screenshotUris?.length ? linked.screenshotUris : screenshotUri ? [screenshotUri] : [],
+      screenshotUri: linked?.screenshotUri ?? screenshotUri,
       widgetTree: step.widgetTree,
     };
   }
@@ -69,6 +119,7 @@ export function deriveSelection(
   if (!node) return undefined;
   const failure = node.error ?? run.timeline.agentVisibleFailures?.find(f => f.timelineNodeId === node.id);
   const logs = run.logs.filter(l => l.timelineNodeId === node.id);
+  const images = screenshotsForNode(run, node);
   return {
     key,
     mode,
@@ -76,7 +127,8 @@ export function deriveSelection(
     node,
     failure,
     logs,
-    screenshotUri: screenshotOfNode(node, run.screenshotBaseUrl, failure),
+    screenshotUris: images,
+    screenshotUri: images[Math.max(0, Math.min(screenshotIndex, images.length - 1))],
     snapshotPath: snapshotPathOfNode(node, failure),
   };
 }
@@ -126,10 +178,6 @@ export function neighborKeys(
     prev: idx > 0 ? keys[idx - 1] : null,
     next: idx < keys.length - 1 ? keys[idx + 1] : null,
   };
-}
-
-function screenshotPathOfNode(node: TimelineNode, failure?: AgentVisibleFailure): string | undefined {
-  return artifactPathOfNode(node, TIMELINE_ARTIFACT_KIND_SCREENSHOT) ?? failure?.appState?.screenshotPath;
 }
 
 function snapshotPathOfNode(node: TimelineNode, failure?: AgentVisibleFailure): string | undefined {

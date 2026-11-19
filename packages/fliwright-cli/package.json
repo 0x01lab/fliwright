@@ -38,6 +38,10 @@
       "import": "./dist/run.js",
       "types": "./dist/run.d.ts"
     },
+    "./artifacts": {
+      "import": "./dist/artifacts.js",
+      "types": "./dist/artifacts.d.ts"
+    },
     "./capabilities/interaction": {
       "import": "./dist/capabilities/interaction.js",
       "types": "./dist/capabilities/interaction.d.ts"

@@ -39,7 +39,7 @@ it('runs the Cloud CLI without loading the host Worker runtime', () => {
       join(root, 'isolate.mjs'),
       `import { registerHooks } from 'node:module';
       registerHooks({ resolve(specifier, context, next) {
-        if (specifier === '@fliwright/devices' || specifier === '@fliwright/cloud-worker' || ['worker.js', 'WorkerAgent.js', 'executor.js', 'device-reporting.js'].includes(specifier.split('/').at(-1)))
+        if (['@fliwright/devices', '@fliwright/native', '@fliwright/tdd', '@fliwright/cloud-worker', '@fliwright/cli/run'].includes(specifier) || ['worker.js', 'WorkerAgent.js', 'executor.js', 'device-reporting.js'].includes(specifier.split('/').at(-1)))
           throw new Error('Cloud cannot load host runtime: ' + specifier);
         return next(specifier, context);
       }});`,

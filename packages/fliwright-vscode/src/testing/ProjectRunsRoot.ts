@@ -8,7 +8,7 @@ import {
 } from '@fliwright/core';
 import type { ProjectRunsRootResult } from '@fliwright/core';
 import { dirname } from 'node:path';
-import { resolveProjectConfig } from '@fliwright/cli';
+import { loadWorkspaceProjectConfig } from '../WorkspaceProjectConfig.js';
 import type * as vscode from 'vscode';
 
 export type { ProjectRunsRootResult };
@@ -45,7 +45,7 @@ export async function ensureProjectRunsRoot(
   workspaceRoot: vscode.Uri,
   options: ProjectRunsRootOptions = {},
 ): Promise<string> {
-  const config = await resolveProjectConfig(workspaceRoot.fsPath, { runsRoot: options.runsRoot });
+  const config = await loadWorkspaceProjectConfig(workspaceRoot, { runsRoot: options.runsRoot });
   return ensureFliwrightRunsRoot({
     projectRoot: workspaceRoot.fsPath,
     runsRoot: config.runsRoot,

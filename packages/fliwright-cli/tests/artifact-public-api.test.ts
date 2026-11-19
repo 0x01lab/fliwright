@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { artifactReferences } from '../src/run.js';
+import { artifactReferences } from '../src/artifacts.js';
 
 it('exposes schema-owned references for portable report consumers without treating source and metadata as evidence', () => {
   const document = { nodes: [{ artifacts: [{ path: 'artifacts/screenshot.png' }], codeRef: { file: '/source/test.ts' }, metadata: { path: '/business/api' } }] };

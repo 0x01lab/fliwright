@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Uri } from 'vscode';
+import { commands, Uri } from 'vscode';
 import { SandboxService } from '../src/sandbox/SandboxService.js';
-import { MockApiTreeProvider } from '../src/views/MockApiTreeProvider.js';
+import { MockApiTreeProvider, toggleActiveMockRules } from '../src/views/MockApiTreeProvider.js';
 import type { MockConfigService } from '../src/sandbox/MockConfigService.js';
 import type { MockEndpointEntry } from '../src/types.js';
 import { createWorkspace } from './helpers/workspace.js';
@@ -105,6 +105,41 @@ describe('Mock API search', () => {
 });
 
 describe('Mock API active-only filter', () => {
+  it('queries runtime rules when enabled so rules applied outside the extension are visible', async () => {
+    const { provider, endpoint } = await createProvider();
+    // The extension connected before another client applied this route, so its cache is empty.
+    const listFlutterRoutes = vi.fn().mockResolvedValue([{
+      id: 'test-script-route', method: 'POST', path: endpoint.endpointFile.endpoint,
+    }]);
+    const refresh = vi.fn(async () => {
+      provider.setAppliedRules(await new SandboxService().getActiveRules({ mock: { listFlutterRoutes } } as any));
+    });
+    const context = vi.spyOn(commands, 'executeCommand');
+    try {
+      await toggleActiveMockRules(provider, refresh);
+      expect(refresh).toHaveBeenCalledOnce();
+      expect(await provider.getChildren()).toEqual([endpoint]);
+      expect(await provider.getChildren(endpoint)).toMatchObject([{ kind: 'runtimeRule' }]);
+      expect(context).toHaveBeenLastCalledWith('setContext', 'fliwright.mockApis.activeOnly', true);
+
+      // Disabling the display filter needs no VM query, including after disconnection.
+      await toggleActiveMockRules(provider, refresh);
+      expect(provider.activeOnly).toBe(false);
+      expect(await provider.getChildren(endpoint)).toHaveLength(3);
+      expect(refresh).toHaveBeenCalledOnce();
+      expect(context).toHaveBeenLastCalledWith('setContext', 'fliwright.mockApis.activeOnly', false);
+    } finally {
+      context.mockRestore();
+    }
+  });
+
+  it('does not enable the filter with stale data when runtime refresh fails', async () => {
+    const { provider } = await createProvider();
+    await expect(toggleActiveMockRules(provider, async () => { throw new Error('Connection lost'); }))
+      .rejects.toThrow('Connection lost');
+    expect(provider.activeOnly).toBe(false);
+  });
+
   it('hides inactive rules and endpoints, then restores all configs when switched off', async () => {
     const { provider, endpoint } = await createProvider();
     const inactive: MockEndpointEntry = {

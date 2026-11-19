@@ -12,6 +12,8 @@ import {
   deriveSelection,
   fallbackScreenshot,
   neighborKeys,
+  screenshotsOfNode,
+  precedingScreenshot,
 } from '../../src/webview/viewer/artifacts.js';
 import { flattenTimeline } from '../../src/webview/viewer/treeFlatten.js';
 
@@ -117,6 +119,15 @@ describe('defaultSelectionKey', () => {
 });
 
 describe('deriveSelection', () => {
+  it('keeps all screenshots in evidence order and selects the requested image', () => {
+    const node = { ...NODES[1], artifacts: [
+      { kind: 'screenshot', path: 'first.png' }, { kind: 'snapshot', path: 'tree.json' },
+      { kind: 'screenshot', path: 'second.png' }, { kind: 'screenshot', path: 'first.png' },
+    ] };
+    expect(screenshotsOfNode(node, 'B')).toEqual(['B/first.png', 'B/second.png']);
+    const run = { ...RUN, timeline: { ...RUN.timeline, nodes: [node] } };
+    expect(deriveSelection(run, node.id, 'timeline', 1)?.screenshotUri).toBe('vscode-webview://base/second.png');
+  });
   it('derives a timeline node selection with scoped logs and failure', () => {
     const sel = deriveSelection(RUN, 'assert', 'timeline');
     expect(sel?.node?.id).toBe('assert');
@@ -142,6 +153,16 @@ describe('deriveSelection', () => {
 });
 
 describe('fallbackScreenshot', () => {
+  it('uses the full recorded clock and labels unfinished evidence with its start anchor', () => {
+    const start = '2026-11-19T00:00:00.000Z';
+    const selected: TimelineNode = { id: 'selected', title: 'Selected', kind: 'action', status: 'passed', startedAt: '2026-11-19T00:00:01.000Z' };
+    const run: SerializableRun = { ...RUN, timeline: { ...RUN.timeline, startedAt: start, nodes: [
+      { id: 'previous', title: 'Previous', kind: 'action', status: 'interrupted', startedAt: start, artifacts: [{ kind: 'screenshot', path: 'previous.png' }] },
+      { id: 'overlap', title: 'Still running at selection', kind: 'action', status: 'passed', startedAt: start, endedAt: '2026-11-19T00:00:03.000Z', artifacts: [{ kind: 'screenshot', path: 'future.png' }] },
+      selected,
+    ] } };
+    expect(precedingScreenshot(run, selected)).toEqual({ uri: 'vscode-webview://base/previous.png', sourceTitle: 'Previous', time: start, anchor: 'start' });
+  });
   it('walks backward to the nearest node with a screenshot', () => {
     const flat = flattenTimeline(NODES, new Set()); // page, click, assert
     const idx = flat.findIndex(f => f.id === 'assert'); // assert has no screenshot

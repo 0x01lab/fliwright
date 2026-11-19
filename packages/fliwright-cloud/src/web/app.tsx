@@ -381,8 +381,8 @@ function Layout({
               <NavigationMenu aria-label="创建与提交" value={submissionMenu} onValueChange={setSubmissionMenu} className="shrink-0 flex-none max-sm:hidden">
                 <NavigationMenuList>
                   <NavigationMenuItem value="submit">
-                    <NavigationMenuTrigger className="max-sm:size-9 max-sm:p-0 max-sm:[&>span]:sr-only gap-1 bg-primary text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground focus-visible:bg-primary-hover focus-visible:text-primary-foreground data-[state=open]:bg-primary-hover data-[state=open]:text-primary-foreground data-[state=open]:hover:bg-primary-hover data-[state=open]:focus:bg-primary-hover" data-ui="submit-test">
-                      <Icon name="plus" /><span>提交测试</span>
+                    <NavigationMenuTrigger showChevron={false} aria-label="新建" title="新建" className="size-7 p-0 max-[640px]:p-0 bg-primary text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground focus-visible:bg-primary-hover focus-visible:text-primary-foreground data-[state=open]:bg-primary-hover data-[state=open]:text-primary-foreground data-[state=open]:hover:bg-primary-hover data-[state=open]:focus:bg-primary-hover" data-ui="submit-test">
+                      <Icon name="plus" />
                     </NavigationMenuTrigger>
                     <NavigationMenuContent className="w-[220px] md:w-[220px]">
                       <ul className="grid gap-1 p-2">
