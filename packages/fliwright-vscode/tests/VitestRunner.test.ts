@@ -42,7 +42,7 @@ describe('VitestRunner', () => {
           if (update.status === 'passed') writeFileSync(path.join(root, 'progress-received'), 'ready');
         },
       });
-      expect(updates).toEqual(expect.arrayContaining([
+      expect(updates, JSON.stringify(result)).toEqual(expect.arrayContaining([
         expect.objectContaining({ filePath: path.join(realpathSync(root), 'progress.test.mjs'), titlePath: ['suite > 含分隔符', 'first / case'], status: 'running' }),
         expect.objectContaining({ titlePath: ['suite > 含分隔符', 'first / case'], status: 'passed', durationMs: expect.any(Number) }),
         expect.objectContaining({ titlePath: ['suite > 含分隔符', 'failure'], status: 'failed', error: expect.stringContaining('expected failure') }),

@@ -21,8 +21,7 @@ test collection. Share project config imports across editor views, invalidate on
 source changes, and reapply environment and explicit overrides at each boundary.
 
 Vitest 5 task updates are throttled; Linux timer boundary behavior can postpone
-reporter callbacks until a later task finishes. For Fliwright runners, send live
+reporter callbacks until a later task finishes. Wrap the configured runner while preserving its lifecycle hooks, and send live
 case events through a temporary per-run append-only channel and drain it before
-cleanup. Mark directly reported tasks so the normal reporter does not duplicate
-their status. The CLI live-progress integration test blocks a second case until
+cleanup. Use one event producer per configured runner so status is not duplicated. The CLI live-progress integration test blocks a second case until
 the first result arrives, so final-only reporting cannot pass it.

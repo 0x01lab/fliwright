@@ -31,10 +31,7 @@ export class VitestRunner implements TestRunner {
 
     await rm(vitestReportPath, { force: true });
     const progress = params.onTestProgress ? await createVitestProgressReporter(params.onTestProgress) : undefined;
-    if (progress) {
-      args.push('--reporter', progress.path);
-      env.FLIWRIGHT_TEST_PROGRESS_PATH = progress.eventsPath;
-    } else delete env.FLIWRIGHT_TEST_PROGRESS_PATH;
+    if (progress) args.push('--reporter', progress.path);
     const execution = await runCommand(process.execPath, args, params.workspaceRoot.fsPath, env, params.signal, (chunk, stream) => {
       if (stream === 'stdout') progress?.onOutput(chunk);
       params.onOutput?.(chunk, stream);

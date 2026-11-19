@@ -127,7 +127,7 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "887a8323caa85f49ec7ab8cb254df55ae6421536b5005488eaf771cfbb24688e"
+      "sourceFingerprint": "d07d31dbe2392ed24dd3b43066dbfd59ed1676663549e9eddcb5f716f4aaa536"
     },
     {
       "name": "@fliwright/cloud",
@@ -1540,7 +1540,7 @@
         "./runner"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "aae9747452f9e654a103ce54d89b3f701f7f07e958c7887611a063b213dc9cf7"
+      "sourceFingerprint": "f62efbbe452c16da3256e8f42d4c2374a3cccb2daf398aaa73bb6e52063df00e"
     },
     {
       "name": "fliwright_bridge",
@@ -2074,7 +2074,7 @@
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "976dad3fe95467a207719fc9eaf724a3d263727b7466aa8deac666b88ada2cff"
+      "sourceFingerprint": "67a1062cd0840dc7b7e0798f4498fda56bab3cdb260e403a446f2eb92ddb05e9"
     }
   ]
 }

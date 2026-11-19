@@ -27,23 +27,29 @@ export async function createVitestProgressReporter(onProgress: (progress: TestPr
   const eventsPath = join(directory, 'events.jsonl');
   try {
     await writeFile(eventsPath, '');
-    await writeFile(reporterPath, `export default class {
-      emit(test, status) {
-        if (test.meta().fliwrightProgressDirect) return;
-        const titlePath = [test.name];
-        for (let parent = test.parent; parent.type === 'suite'; parent = parent.parent) titlePath.unshift(parent.name);
-        const result = test.result();
-        const event = { filePath: test.module.moduleId, titlePath, status,
-          durationMs: test.diagnostic()?.duration,
-          error: status === 'failed' ? result.errors?.map(error => error.stack || error.message).join('\\n') : undefined };
-        process.stdout.write('\\n${marker}' + JSON.stringify(event) + '\\n');
-      }
-      onTestCaseReady(test) { if (test.result().state !== 'skipped') this.emit(test, 'running'); }
-      onTestCaseResult(test) {
-        const status = test.result().state;
-        if (status !== 'pending') this.emit(test, status);
-      }
-    }`);
+    await writeFile(reporterPath, `import { writeFile } from 'node:fs/promises';
+      import { createRequire } from 'node:module';
+      import { isAbsolute, resolve, join, dirname } from 'node:path';
+      import { pathToFileURL } from 'node:url';
+      export default class {
+        async onInit(context) {
+          for (const [index, project] of context.projects.entries()) {
+            const require = createRequire(join(project.config.root, 'package.json'));
+            const original = project.config.runner;
+            const modulePath = original
+              ? isAbsolute(original) ? original : original.startsWith('.') ? resolve(project.config.root, original) : require.resolve(original)
+              : join(dirname(require.resolve('vitest/package.json')), 'dist/index.js');
+            const source = (original ? 'import Base from ' : 'import { TestRunner as Base } from ')
+              + JSON.stringify(pathToFileURL(modulePath).href) + ';\\n'
+              + "import { appendFile } from 'node:fs/promises';\\n"
+              + 'const target = ' + ${JSON.stringify(JSON.stringify(eventsPath))} + ';\\n'
+              + ${JSON.stringify(progressRunnerBody)};
+            const runner = join(${JSON.stringify(directory)}, 'runner-' + index + '.mjs');
+            await writeFile(runner, source);
+            project.config.runner = runner;
+          }
+        }
+      }`);
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
     throw error;
@@ -55,16 +61,16 @@ export async function createVitestProgressReporter(onProgress: (progress: TestPr
   };
   let pending = '';
   const onOutput = (chunk: string): void => {
-      pending += chunk;
-      let end: number;
-      while ((end = pending.indexOf('\n')) >= 0) {
-        const line = pending.slice(0, end);
-        pending = pending.slice(end + 1);
-        if (!line.startsWith(marker)) continue;
-        deliver(line.slice(marker.length));
-      }
-      // Unrelated user output can be arbitrarily long without a newline.
-      if (pending.length > 1024 * 1024) pending = '';
+    pending += chunk;
+    let end: number;
+    while ((end = pending.indexOf('\n')) >= 0) {
+      const line = pending.slice(0, end);
+      pending = pending.slice(end + 1);
+      if (!line.startsWith(marker)) continue;
+      deliver(line.slice(marker.length));
+    }
+    // Unrelated user output can be arbitrarily long without a newline.
+    if (pending.length > 1024 * 1024) pending = '';
   };
   let offset = 0;
   let filePending = '';
@@ -109,3 +115,30 @@ function isTestProgress(value: unknown): value is TestProgress {
     && (event.durationMs === undefined || (typeof event.durationMs === 'number' && Number.isFinite(event.durationMs)))
     && (event.error === undefined || typeof event.error === 'string');
 }
+
+const progressRunnerBody = String.raw`async function emit(task, status) {
+  const titlePath = [task.name];
+  for (let suite = task.suite; suite && suite !== task.file; suite = suite.suite) titlePath.unshift(suite.name);
+  const event = { filePath: task.file.filepath, titlePath, status, durationMs: task.result?.duration,
+    error: status === 'failed' ? task.result?.errors?.map(error => error.stack || error.message).join('\n') : undefined };
+  await appendFile(target, JSON.stringify(event) + '\n').catch(() => {});
+}
+function outcome(task) {
+  return task.result?.state === 'pass' ? 'passed' : task.result?.state === 'skip' || task.mode === 'skip' || task.mode === 'todo' ? 'skipped' : 'failed';
+}
+export default class extends Base {
+  async onBeforeRunTask(task) {
+    if (task.mode === 'run' || task.mode === 'queued') await emit(task, 'running');
+    await Base.prototype.onBeforeRunTask?.call(this, task);
+    if (task.mode !== 'run' && task.mode !== 'queued' || task.result?.state === 'fail') await emit(task, outcome(task));
+  }
+  async onAfterRetryTask(task, options) {
+    await Base.prototype.onAfterRetryTask?.call(this, task, options);
+    if (task.result?.state === 'skip') await emit(task, 'skipped');
+  }
+  async onAfterRunTask(task) {
+    await Base.prototype.onAfterRunTask?.call(this, task);
+    await emit(task, outcome(task));
+  }
+}
+`;

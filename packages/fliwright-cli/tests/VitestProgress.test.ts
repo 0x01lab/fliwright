@@ -20,7 +20,7 @@ it('parses split and batched events without treating ordinary stdout as progress
   await expect(access(reporter.path)).rejects.toThrow();
 });
 
-it('reports CLI case progress before the next case finishes, without requiring timeline recording', async () => {
+it.each([false, true])('reports live CLI progress and preserves custom runner hooks (custom=%s)', async (customRunner) => {
   const root = await mkdtemp(join(tmpdir(), 'fliwright-cli-live-progress-'));
   try {
     await writeFile(join(root, 'fliwright.config.ts'), "export default { recording: { mode: 'off' } };");
@@ -34,6 +34,14 @@ it('reports CLI case progress before the next case finishes, without requiring t
           if (!existsSync(${JSON.stringify(join(root, 'received'))})) throw new Error('live result was not delivered');
         });
       });`);
+    if (customRunner) {
+      await writeFile(join(root, 'vitest.config.mjs'), "export default { test: { runner: './custom-runner.mjs' } };");
+      await writeFile(join(root, 'custom-runner.mjs'), `import { TestRunner } from ${JSON.stringify(import.meta.resolve('vitest'))};
+        import { writeFile } from 'node:fs/promises';
+        export default class extends TestRunner {
+          async onBeforeRunTask(task) { await super.onBeforeRunTask?.(task); await writeFile(${JSON.stringify(join(root, 'custom-hook'))}, 'ran'); }
+        }`);
+    }
     const updates: unknown[] = [];
     const result = await runCommand({ cwd: root, testPattern: 'progress.test.mjs', runsRoot: join(root, 'runs'), print: false }, {
       resolveVmUrl: async () => 'ws://unused',
@@ -43,6 +51,7 @@ it('reports CLI case progress before the next case finishes, without requiring t
       },
     });
     expect(result, JSON.stringify({ updates, result })).toMatchObject({ passed: true, passedTests: 2 });
+    if (customRunner) await expect(access(join(root, 'custom-hook'))).resolves.toBeUndefined();
     expect(updates).toEqual([
       expect.objectContaining({ titlePath: ['suite', 'first'], status: 'running' }),
       expect.objectContaining({ titlePath: ['suite', 'first'], status: 'passed' }),
