@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "7567904e8e4a9cdca0a71db4ebd75991c8fd4440a075eb8d38ed133edfc0f764"
+source_fingerprint: "359d274df5e870bb9d09b574ff8d68c5081619e6c5372e2e8bf3c20f47f9ebaf"
 generated: true
 ---
 
@@ -33,6 +33,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 ## Package Entrypoints
 
 - `.`
+- `./timeline`
 
 ## Public Exports
 
@@ -121,6 +122,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `buildFlowReviewPlan`
 - `buildFlowReviewReport`
 - `buildFlowVisualComparisons`
+- `buildTimelineTimeAxis`
 - `builtInFormActionScripts`
 - `builtInSelectRecipes`
 - `CameraTestApp`
@@ -377,6 +379,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `OperationDescriptor`
 - `OperationKind`
 - `OperationOutcome`
+- `orderedTimelineNodes`
 - `Page`
 - `PageNavigationOptions`
 - `PageViewport`
@@ -544,6 +547,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `summarizeTimeline`
 - `TestResult`
 - `TestScenario`
+- `TimedTimelineNode`
 - `TIMELINE_ARTIFACT_KIND_AI`
 - `TIMELINE_ARTIFACT_KIND_DIAGNOSTICS`
 - `TIMELINE_ARTIFACT_KIND_LOG`
@@ -563,8 +567,10 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `TimelineArtifactStore`
 - `TimelineArtifactStoreOptions`
 - `TimelineData`
+- `timelineDurationMs`
 - `TimelineMockResponse`
 - `TimelineNode`
+- `timelineNodeAtTime`
 - `TimelineNodeKind`
 - `TimelineNodeStartOptions`
 - `TimelineNodeStatus`
@@ -573,6 +579,8 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `TimelineRunMode`
 - `TimelineRunStatus`
 - `TimelineSummary`
+- `TimelineTimeAxis`
+- `TimelineTimeEntry`
 - `TimelineToFlowInput`
 - `TimelineToFlowOptions`
 - `ToolMockRequest`
@@ -752,6 +760,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/timeline/TimelineNodeLifecycle.ts`
 - `packages/fliwright-core/src/timeline/TimelineReader.ts`
 - `packages/fliwright-core/src/timeline/TimelineRecorder.ts`
+- `packages/fliwright-core/src/timeline/TimelineTimeAxis.ts`
 - `packages/fliwright-core/src/timeline/constants.ts`
 - `packages/fliwright-core/src/timeline/types.ts`
 - `packages/fliwright-core/src/types.ts`

@@ -1,4 +1,4 @@
-import { artifactReferences } from '@fliwright/cli/run';
+import { artifactReferences } from '@fliwright/cli/artifacts';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import {
   mkdirSync,

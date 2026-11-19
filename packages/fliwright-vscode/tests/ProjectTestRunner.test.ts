@@ -12,19 +12,21 @@ it('honors changes to the runner setting and keeps CLI run identity and cancella
   let selected: 'vitest' | 'cli' = 'vitest';
   const runner = new ProjectTestRunner(() => selected);
   const signal = new AbortController().signal;
+  const onTestProgress = vi.fn();
   const params = { workspaceRoot: Uri.file('/project'), testFile: Uri.file('/project/.fliwright/tests/form.test.ts'),
     failureContextDir: Uri.file('/project/.fliwright/failures'), runsRoot: '/runs', vmServiceUrl: 'ws://unused',
-    testNamePattern: 'save form', signal };
+    testNamePattern: 'save form', signal, onTestProgress };
   mocks.vitest.mockResolvedValue({ passed: true });
   await runner.run(params);
   expect(mocks.vitest).toHaveBeenCalledWith(params);
   expect(mocks.cli).not.toHaveBeenCalled();
   selected = 'cli';
   mocks.cli.mockResolvedValue({ passed: true, totalTests: 1, passedTests: 1, failedTests: 0, duration: 2,
-    results: [{ name: 'save form', passed: true, duration: 2 }], artifacts: { runId: 'canonical-run' } });
-  expect(await runner.run(params)).toMatchObject({ passed: true, runId: 'canonical-run', passedTests: 1 });
+    results: [{ name: 'save form', file: '/project/.fliwright/tests/form.test.ts', passed: true, duration: 2 }], artifacts: { runId: 'canonical-run' } });
+  expect(await runner.run(params)).toMatchObject({ passed: true, runId: 'canonical-run', passedTests: 1,
+    results: [expect.objectContaining({ filePath: '/project/.fliwright/tests/form.test.ts' })] });
   expect(mocks.cli).toHaveBeenCalledWith(expect.objectContaining({ cwd: '/project',
-    testPattern: '/project/.fliwright/tests/form.test.ts', testName: 'save form', signal, runsRoot: '/runs', print: false }));
+    testPattern: '/project/.fliwright/tests/form.test.ts', testName: 'save form', signal, runsRoot: '/runs', print: false }), { onTestProgress });
 });
 
 it('makes a CLI collection error visible when zero test bodies ran', async () => {

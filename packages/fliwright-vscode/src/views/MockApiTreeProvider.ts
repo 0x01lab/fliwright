@@ -241,6 +241,16 @@ export class MockApiTreeProvider implements vscode.TreeDataProvider<MockTreeNode
   }
 }
 
+export async function toggleActiveMockRules(
+  provider: MockApiTreeProvider,
+  refreshState: () => Promise<void>,
+): Promise<void> {
+  const activeOnly = !provider.activeOnly;
+  if (activeOnly) await refreshState();
+  provider.setActiveOnly(activeOnly);
+  await vscode.commands.executeCommand('setContext', 'fliwright.mockApis.activeOnly', provider.activeOnly);
+}
+
 function sameAppliedRule(entry: AppliedMockRule, rule: Pick<MockRuleEntry, 'endpoint' | 'method' | 'rule'>): boolean {
   return entry.endpoint === rule.endpoint
     && sameMethod(entry.method, rule.method)

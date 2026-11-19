@@ -32,18 +32,18 @@ export function DetailTabs(props: DetailTabsProps): JSX.Element {
   const hasSnapshot = !!selection?.snapshotPath || selection?.step?.widgetTree !== undefined;
 
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden border-l border-border bg-background">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
       <Tabs
         value={activeTab}
         onValueChange={v => onTabChange(v as TabId)}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <TabsList>
+        <TabsList className="shrink-0">
           {TABS.map(tab => {
             const disabled = tab.id === 'widgetTree' && !hasSnapshot;
             const badge = tab.id === 'error' ? errorCount : tab.id === 'logs' ? logCount : 0;
             return (
-              <TabsTrigger key={tab.id} value={tab.id} disabled={disabled} title={disabled ? 'No UI snapshot for this step' : undefined}>
+              <TabsTrigger className="h-6 px-2 py-0" key={tab.id} value={tab.id} disabled={disabled} title={disabled ? 'No UI snapshot for this step' : undefined}>
                 {tab.id === 'widgetTree' && selection?.surface === 'native' ? 'Native Tree' : tab.label}
                 {badge ? <Badge variant={tab.id === 'error' ? 'destructive' : 'muted'} className="ml-1 px-1.5 py-0 normal-case">{badge}</Badge> : null}
               </TabsTrigger>
@@ -54,13 +54,13 @@ export function DetailTabs(props: DetailTabsProps): JSX.Element {
           <div className="px-3 py-2 text-muted-foreground">Select a step to view details.</div>
         ) : (
           <>
-            <TabsContent value="details" className="px-3 py-2.5">
+            <TabsContent value="details" className="px-2 py-2">
               <DetailsTab selection={selection} onOpenSource={props.onOpenSource} />
             </TabsContent>
-            <TabsContent value="error" className="px-3 py-2.5">
+            <TabsContent value="error" className="px-2 py-2">
               <ErrorTab selection={selection} onCopy={props.onCopy} onOpenSource={props.onOpenSource} />
             </TabsContent>
-            <TabsContent value="logs" className="px-3 py-2.5">
+            <TabsContent value="logs" className="px-2 py-2">
               <LogsTab run={props.run} selection={selection} />
             </TabsContent>
             <TabsContent value="widgetTree" className="p-0">

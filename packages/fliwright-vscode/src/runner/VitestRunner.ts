@@ -5,7 +5,7 @@ import { readFile, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import { FLIWRIGHT_RUNS_ROOT_ENV, ensureFliwrightRunsRoot, mergeFliwrightConfig, writeFliwrightConfigSnapshot } from '@fliwright/core';
 import { resolveProjectConfig } from '@fliwright/cli';
-import { finalizeRunArtifacts } from '@fliwright/cli/run';
+import { createVitestProgressReporter, finalizeRunArtifacts } from '@fliwright/cli/run';
 import type { RunResult, TestCaseResult } from '../types.js';
 import type { RunParams, TestRunner } from './TestRunner.js';
 
@@ -30,7 +30,12 @@ export class VitestRunner implements TestRunner {
     delete env.FLIWRIGHT_SCENARIOS;
 
     await rm(vitestReportPath, { force: true });
-    const execution = await runCommand(process.execPath, args, params.workspaceRoot.fsPath, env, params.signal, params.onOutput);
+    const progress = params.onTestProgress ? await createVitestProgressReporter(params.onTestProgress) : undefined;
+    if (progress) args.push('--reporter', progress.path);
+    const execution = await runCommand(process.execPath, args, params.workspaceRoot.fsPath, env, params.signal, (chunk, stream) => {
+      if (stream === 'stdout') progress?.onOutput(chunk);
+      params.onOutput?.(chunk, stream);
+    }).finally(() => progress?.dispose());
     // Vitest 5 writes JSON to disk; stdout contains only the report location.
     const report = await readFile(vitestReportPath, 'utf8').catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return '';
@@ -131,6 +136,8 @@ function runCommand(
     };
     signal?.addEventListener('abort', abortListener, { once: true });
 
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { stdout += String(chunk); onOutput?.(String(chunk), 'stdout'); });
     child.stderr.on('data', (chunk) => { stderr += String(chunk); onOutput?.(String(chunk), 'stderr'); });
     child.on('error', (error) => {

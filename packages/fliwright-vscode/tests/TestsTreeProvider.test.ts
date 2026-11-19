@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { TestsTreeProvider } from '../src/views/TestsTreeProvider.js';
 import type { TestStatusStore } from '../src/testing/TestStatusStore.js';
+import type { TestNodeStatus, TestTreeNode } from '../src/testing/types.js';
 import { createWorkspace, writeText } from './helpers/workspace.js';
 
 
@@ -29,6 +30,33 @@ beforeEach(() => {
 });
 
 describe('TestsTreeProvider', () => {
+  it.each([
+    ['passed', 'pass', 'testing.iconPassed'],
+    ['failed', 'error', 'testing.iconFailed'],
+  ] as const)('colors %s icons across files, groups, cases and assertions', async (status, icon, color) => {
+    const ws = await createWorkspace();
+    const fileUri = vscode.Uri.file(path.join(ws, 'a.test.ts'));
+    const store = { loadAssertions: vi.fn().mockResolvedValue([]) } as unknown as TestStatusStore;
+    const provider = new TestsTreeProvider({} as any, store);
+    const nodes: TestTreeNode[] = [
+      { kind: 'testFile', label: 'a.test.ts', uri: fileUri, relPath: 'a.test.ts', status },
+      { kind: 'testGroup', label: 'suite', id: 'suite', status },
+      { kind: 'testCase', label: 'case', id: 'case', testNamePattern: '^case$', fileUri, status },
+      { kind: 'testAssertion', label: 'assertion', id: 'assertion', assertionIndex: 0, fileUri, status },
+    ];
+    for (const node of nodes) {
+      expect((await provider.getTreeItem(node)).iconPath).toMatchObject({ id: icon, color: { id: color } });
+    }
+  });
+
+  it.each<TestNodeStatus>(['unknown', 'queued', 'running', 'skipped', 'interrupted'])(
+    'keeps %s icons in the default foreground', async (status) => {
+      const provider = new TestsTreeProvider({} as any, {} as TestStatusStore);
+      const item = await provider.getTreeItem({ kind: 'testGroup', label: 'suite', id: 'suite', status });
+      expect((item.iconPath as vscode.ThemeIcon).color).toBeUndefined();
+    },
+  );
+
   it('renders file -> describe -> test tree and applies statuses from the store', async () => {
     const ws = await createWorkspace();
     const relPath = 'tests/a.test.ts';
@@ -93,7 +121,7 @@ describe('TestsTreeProvider', () => {
     expect(roots[0]!.kind).toBe('empty');
   });
 
-  it('marks a running test file and its cases with spinning status', async () => {
+  it('keeps unstarted cases queued while their test file is running', async () => {
     const ws = await createWorkspace();
     const relPath = 'tests/running.test.ts';
     await writeText(ws, relPath, `
@@ -118,12 +146,12 @@ describe('TestsTreeProvider', () => {
 
     const cases = await provider.getChildren(files[0]!);
     const caseItem = await provider.getTreeItem(cases[0]!);
-    expect((caseItem.iconPath as any).id).toBe('loading~spin');
-    expect(caseItem.description).toBe('running');
-    expect(caseItem.contextValue).toBe('testCaseRunning');
+    expect((caseItem.iconPath as any).id).toBe('clock');
+    expect(caseItem.description).toBe('queued');
+    expect(caseItem.contextValue).toBe('testCase');
   });
 
-  it('marks only the selected test case as running when a case is launched', async () => {
+  it('queues only the selected test case when a case is launched', async () => {
     const ws = await createWorkspace();
     const relPath = 'tests/single.test.ts';
     await writeText(ws, relPath, `
@@ -148,7 +176,7 @@ describe('TestsTreeProvider', () => {
     provider.setRunning({ relPath, testId: 'tests/single.test.ts::case A' });
 
     const cases = await provider.getChildren(files[0]!);
-    expect((cases[0] as any).status).toBe('running');
+    expect((cases[0] as any).status).toBe('queued');
     expect((cases[1] as any).status).toBe('passed');
   });
 
@@ -295,6 +323,49 @@ describe('TestsTreeProvider', () => {
   });
 });
 
+it('updates existing expanded nodes as cases start and finish, retaining results on cancellation', async () => {
+  const ws = await createWorkspace();
+  await writeText(ws, 'tests/a.test.ts', '');
+  const uri = vscode.Uri.file(path.join(ws, 'tests/a.test.ts'));
+  const store = { loadIndex: vi.fn().mockResolvedValue(new Map()), loadAssertions: vi.fn().mockResolvedValue([]) };
+  const provider = new TestsTreeProvider({ discover: vi.fn().mockResolvedValue([{ uri, label: 'a.test.ts' }]) } as any, store as any);
+  const [file] = await provider.getChildren();
+  const [group] = await provider.getChildren(file);
+  const cases = await provider.getChildren(group);
+  provider.setRunning({ relPath: 'tests/a.test.ts' });
+  expect(cases.map(c => 'status' in c && c.status)).toEqual(['queued', 'queued']);
+  provider.updateTestProgress({ filePath: uri.fsPath, titlePath: ['suite', 'case A'], status: 'running' });
+  expect(cases.map(c => 'status' in c && c.status)).toEqual(['running', 'queued']);
+  provider.updateTestProgress({ filePath: uri.fsPath, titlePath: ['suite', 'case A'], status: 'passed', durationMs: 12 });
+  expect((await provider.getTreeItem(cases[0])).iconPath).toMatchObject({ id: 'pass' });
+  expect(await provider.getTreeItem(file)).toMatchObject({ description: '1/2 completed · 1 passed · 0 failed' });
+  provider.updateTestProgress({ filePath: uri.fsPath, titlePath: ['suite', 'case B'], status: 'running' });
+  provider.setRunning(undefined);
+  expect(cases.map(c => 'status' in c && c.status)).toEqual(['passed', 'interrupted']);
+  expect((await provider.getTreeItem(group)).iconPath).toMatchObject({ id: 'debug-stop' });
+  expect(collect).toHaveBeenCalledTimes(1);
+});
+
+it('refreshes collapsed file results and already expanded groups after loading the status index', async () => {
+  const ws = await createWorkspace();
+  await writeText(ws, 'tests/a.test.ts', '');
+  const uri = vscode.Uri.file(path.join(ws, 'tests/a.test.ts'));
+  const store = { loadIndex: vi.fn().mockResolvedValue(new Map()), loadAssertions: vi.fn().mockResolvedValue([]) };
+  const provider = new TestsTreeProvider({ discover: vi.fn().mockResolvedValue([{ uri, label: 'a.test.ts' }]) } as any, store as any);
+  const [file] = await provider.getChildren();
+  const [group] = await provider.getChildren(file);
+  const cases = await provider.getChildren(group);
+  store.loadIndex.mockResolvedValue(new Map([
+    ['tests/a.test.ts::suite/case A', { status: 'passed', durationMs: 2 }],
+    ['tests/a.test.ts::suite/case B', { status: 'failed', durationMs: 3 }],
+  ]));
+  await provider.refreshStatuses();
+  expect((await provider.getTreeItem(file)).iconPath).toMatchObject({ id: 'error' });
+  expect((await provider.getTreeItem(group)).iconPath).toMatchObject({ id: 'error' });
+  expect(cases.map(c => 'status' in c && c.status)).toEqual(['passed', 'failed']);
+  expect(collect).toHaveBeenCalledTimes(1);
+});
+
 it('keeps parameterized scenario titles intact when selecting one case to run', async () => {
   const ws = await createWorkspace();
   const relPath = '.fliwright/tests/refresh.test.ts';
@@ -385,7 +456,7 @@ it.each(['passed', 'failed', 'skipped', 'running'] as const)('hides the expand a
   expect((await provider.getTreeItem(testCase)).collapsibleState).toBe(vscode.TreeItemCollapsibleState.None);
   expect(await provider.getChildren(testCase)).toEqual([]);
   // Rendering and expansion must use the same assertion snapshot.
-  expect(store.loadAssertions).toHaveBeenCalledTimes(1);
+  expect(store.loadAssertions).toHaveBeenCalledTimes(status === 'running' ? 0 : 1);
 });
 
 it('refreshes assertion availability when a new run produces children', async () => {
@@ -426,4 +497,55 @@ it('updates run statuses without reimporting test files or rediscovering the tre
   expect(test).toMatchObject({kind:'testCase',status:'passed',durationMs:7});
   expect(collect).toHaveBeenCalledTimes(1);
   expect(discovery.discover).toHaveBeenCalledTimes(1);
+});
+
+it('shares root initialization across simultaneous tree requests', async () => {
+  const root = await createWorkspace();
+  const uri = vscode.Uri.file(path.join(root, 'concurrent.test.ts'));
+  const discover = vi.fn().mockResolvedValue([{ kind: 'testFile', uri, label: 'concurrent.test.ts' }]);
+  const loadIndex = vi.fn().mockResolvedValue(new Map());
+  const provider = new TestsTreeProvider({ discover } as any, { loadIndex } as any);
+  try {
+    const results = await Promise.all([provider.getChildren(), provider.getChildren(), provider.getChildren()]);
+    expect(results[0][0]).toMatchObject({ label: 'concurrent.test.ts' });
+    expect(results[1]).toBe(results[0]);
+    expect(results[2]).toBe(results[0]);
+    expect(discover).toHaveBeenCalledTimes(1);
+    expect(loadIndex).toHaveBeenCalledTimes(1);
+    expect(collect).not.toHaveBeenCalled();
+  } finally { provider.dispose(); }
+});
+
+it('does not publish stale root initialization after a refresh', async () => {
+  const root = await createWorkspace();
+  const file = (name: string) => ({ kind: 'testFile', uri: vscode.Uri.file(path.join(root, name)), label: name });
+  let completeOld!: (entries: ReturnType<typeof file>[]) => void;
+  const old = new Promise<ReturnType<typeof file>[]>(resolve => { completeOld = resolve; });
+  const discover = vi.fn().mockReturnValueOnce(old).mockResolvedValue([file('new.test.ts')]);
+  const provider = new TestsTreeProvider({ discover } as any, { loadIndex: async () => new Map() } as any);
+  try {
+    const pending = provider.getChildren();
+    await vi.waitFor(() => expect(discover).toHaveBeenCalledTimes(1));
+    provider.refresh();
+    const updated = await provider.getChildren();
+    completeOld([file('old.test.ts')]);
+    expect(await pending).toBe(updated);
+    expect(await provider.getChildren()).toBe(updated);
+    expect(updated[0]).toMatchObject({ label: 'new.test.ts' });
+  } finally { provider.dispose(); }
+});
+
+it('retries failed root discovery and ignores initialization completed after disposal', async () => {
+  const root = await createWorkspace();
+  const entry = { kind: 'testFile', uri: vscode.Uri.file(path.join(root, 'retry.test.ts')), label: 'retry.test.ts' };
+  let complete!: (entries: typeof entry[]) => void;
+  const discover = vi.fn().mockRejectedValueOnce(new Error('search failed'))
+    .mockImplementationOnce(() => new Promise<typeof entry[]>(resolve => { complete = resolve; }));
+  const provider = new TestsTreeProvider({ discover } as any, { loadIndex: async () => new Map() } as any);
+  await expect(provider.getChildren()).rejects.toThrow('search failed');
+  const pending = provider.getChildren();
+  provider.dispose();
+  complete([entry]);
+  expect(await pending).toEqual([]);
+  expect(discover).toHaveBeenCalledTimes(2);
 });

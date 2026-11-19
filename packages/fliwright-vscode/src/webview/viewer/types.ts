@@ -41,8 +41,15 @@ export type ViewerOutbound =
 
 /** Persisted viewer layout/selection state (vscode.getState/setState). */
 export interface ViewerState {
+  runId?: string;
+  screenshotIndex?: number;
+  screenshotMode?: ScreenshotMode;
+  zoom?: number;
+  speed?: number;
   selectedKey: string | null;
   listMode: 'timeline' | 'actions';
   activeTab: 'details' | 'error' | 'logs' | 'widgetTree';
   filter: string;
 }
+
+export type ScreenshotMode = 'failed' | 'all' | 'none';

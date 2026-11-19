@@ -17,6 +17,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./timeline": {
+      "types": "./dist/timeline/TimelineTimeAxis.d.ts",
+      "import": "./dist/timeline/TimelineTimeAxis.js"
     }
   },
   "files": ["dist", "README.md", "LICENSE"],

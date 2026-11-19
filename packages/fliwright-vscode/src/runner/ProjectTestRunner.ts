@@ -1,5 +1,5 @@
 import { runCommand } from '@fliwright/cli/run';
-import type { RunResult } from '../types.js';
+import type { RunResult, TestCaseResult } from '../types.js';
 import type { RunParams, TestRunner } from './TestRunner.js';
 import { VitestRunner } from './VitestRunner.js';
 
@@ -19,8 +19,8 @@ export class ProjectTestRunner implements TestRunner {
       runsRoot: params.runsRoot,
       signal: params.signal,
       print: false,
-    });
-    const results = [...result.results];
+    }, { onTestProgress: params.onTestProgress });
+    const results: TestCaseResult[] = result.results.map(test => ({ ...test, filePath: test.file }));
     if (!result.passed && !results.some(test => !test.passed && test.status !== 'skipped')) {
       results.push({ name: 'Fliwright run', passed: false, duration: 0,
         error: result.runnerErrors?.map(error => error.message).join('\n') || 'Fliwright run failed before tests completed.' });

@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cli"
 path: "packages/fliwright-cli"
-source_fingerprint: "a16ca1f59f66878fccc3492dcc8a1a451db6382220f613d976eb28a7c4d236ad"
+source_fingerprint: "d07d31dbe2392ed24dd3b43066dbfd59ed1676663549e9eddcb5f716f4aaa536"
 generated: true
 ---
 
@@ -36,6 +36,7 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 ## Package Entrypoints
 
 - `.`
+- `./artifacts`
 - `./capabilities/form`
 - `./capabilities/interaction`
 - `./run`
@@ -48,12 +49,15 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 
 - `createProgram`
 - `createRegistry`
+- `createVitestProgressReporter`
 - `FlutterAndroidApk`
 - `FlutterAndroidBuildOptions`
 - `ManagedNativeGrant`
 - `ManagedNativeLaunch`
 - `ManagedNativeRun`
 - `prepareNativeRun`
+- `resolveLoadedProjectConfig`
+- `TestProgress`
 - `withFlutterAndroidApk`
 
 ## CLI Commands
@@ -99,6 +103,8 @@ Expose developer, coding-agent and CI command workflows, explicit local connecti
 - `packages/fliwright-cli/src/RecordingReplay.ts`
 - `packages/fliwright-cli/src/ReleaseReview.ts`
 - `packages/fliwright-cli/src/ReportProjectIcon.ts`
+- `packages/fliwright-cli/src/VitestProgress.ts`
+- `packages/fliwright-cli/src/artifacts.ts`
 - `packages/fliwright-cli/src/capabilities/form.ts`
 - `packages/fliwright-cli/src/capabilities/interaction.ts`
 - `packages/fliwright-cli/src/capabilities/session.ts`

@@ -49,8 +49,8 @@ export function RunStatusBar({ run, onGenerateReport, generatingReport }: {
   const dur = durationOf(tl.startedAt, tl.endedAt);
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b border-border bg-card px-3 py-1.5">
-      <BrandMark className="size-6" />
+    <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-card px-2 py-1">
+      <BrandMark className="size-5" />
       <Badge variant={STATUS_VARIANT[tl.status] ?? 'secondary'} className="normal-case">
         {statusGlyph(tl.status)} {tl.status}
       </Badge>

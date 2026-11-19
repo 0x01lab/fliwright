@@ -28,7 +28,8 @@ import { DeviceLeaseManager, NATIVE_DEVICE_LEASE_ENV, type DeviceLeaseDelegation
 import { tmpdir } from 'node:os';
 import { createJiti } from 'jiti';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createVitestProgressReporter, type TestProgress } from '../VitestProgress.js';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 
 export interface RunOptions {
@@ -67,6 +68,8 @@ export interface RunOptions {
 export interface RunDeps {
   resolveVmUrl?: (options: { cliFlag?: string; configUrl?: string; cwd?: string; verify?: boolean }) => Promise<string | null>;
   onVmResolved?: (url: string) => void;
+  /** Observe real case starts/results while the subprocess is still running. */
+  onTestProgress?: (progress: TestProgress) => void;
 }
 
 /** Artifact persistence failed after the runner produced its business outcome. */
@@ -141,6 +144,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
   const reportPath = options.output ? resolve(cwd, options.output) : join(outputDir, 'report.json');
 
   const vitestResult = await runVitest({
+    onTestProgress: deps.onTestProgress,
     testPattern,
     testName: options.testName,
     caseSelection: options.caseSelection,
@@ -187,6 +191,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps = {}): Promi
 }
 
 interface RunVitestOptions {
+  onTestProgress?: (progress: TestProgress) => void;
   managedAppControl?: import('@fliwright/core').ManagedAppControl;
   nativeDelegation?: DeviceLeaseDelegation;
   disableDefaultScenario?: boolean;
@@ -225,6 +230,7 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
   const filters = isGlob ? [] : [options.testPattern];
   const reportDirectory = await mkdtemp(join(tmpdir(), 'fliwright-vitest-report-'));
   const rawReportPath = join(reportDirectory, 'report.json');
+  const progress = options.onTestProgress ? await createVitestProgressReporter(options.onTestProgress) : undefined;
   const bootstrap = `
     const { readFile, writeFile, realpath } = await import('node:fs/promises');
     const { startVitest, createVitest, JsonReporter } = await import(${JSON.stringify(vitestUrl)});
@@ -256,7 +262,7 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
 
     const settings = {
       ${isGlob || isFile ? `include: ${JSON.stringify([options.testPattern])},` : ''}
-      run: true, reporters: [new RunReporter({ outputFile: ${JSON.stringify(rawReportPath)} })], testTimeout: ${JSON.stringify(options.timeout)},
+      run: true, reporters: [new RunReporter({ outputFile: ${JSON.stringify(rawReportPath)} })${progress ? `, new (await import(${JSON.stringify(pathToFileURL(progress.path).href)})).default()` : ''}], testTimeout: ${JSON.stringify(options.timeout)},
       ${options.testName ? `testNamePattern: ${JSON.stringify(options.testName)},` : ''}
     };
     const viteOptions = { plugins: [{ name: 'fliwright-runner', config(config) {
@@ -311,7 +317,8 @@ export async function runVitest(options: RunVitestOptions): Promise<CliRunResult
     options.cwd,
     options.signal,
     options.processGroup,
-  );
+    progress?.onOutput,
+  ).finally(() => progress?.dispose());
 
   const reportJson = await readFile(rawReportPath, 'utf8').catch(() => '');
   await rm(reportDirectory, { recursive: true, force: true });
@@ -353,6 +360,7 @@ function execNode(
   cwd: string,
   signal?: AbortSignal,
   processGroup: 'isolated' | 'inherit' = 'isolated',
+  onOutput?: (chunk: string) => void,
 ): Promise<{ stdout: string; stderr: string; interrupted: boolean; exitCode: number | null; exitSignal: NodeJS.Signals | null }> {
   return new Promise((resolve, reject) => {
     const ownsProcessGroup = process.platform !== 'win32' && processGroup === 'isolated';
@@ -381,7 +389,7 @@ function execNode(
     else signal?.addEventListener('abort', onAbort, { once: true });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => { stdout += chunk; });
+    child.stdout.on('data', (chunk: string) => { stdout += chunk; onOutput?.(chunk); });
     child.stderr.on('data', (chunk: string) => { stderr += chunk; });
     const cleanup = () => {
       process.removeListener('SIGINT', onSigint);

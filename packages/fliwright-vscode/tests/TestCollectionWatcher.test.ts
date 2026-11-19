@@ -49,3 +49,21 @@ it('does not invalidate collected tests when Flutter build output or run artifac
   subscription.dispose();
   watch.mockRestore();
 });
+
+it('ignores artifacts in the configured runs directory', async () => {
+  const root = await createWorkspace();
+  vi.useFakeTimers();
+  let changed!: (uri: vscode.Uri) => void;
+  const watcher = { dispose() {}, onDidChange: (fn: any) => { changed = fn; }, onDidCreate() {}, onDidDelete() {} };
+  const watch = vi.spyOn(vscode.workspace, 'createFileSystemWatcher').mockReturnValue(watcher as any);
+  const refresh = vi.fn();
+  const subscription = watchTestCollection({ refresh }, () => `${root}/custom/runs`);
+  changed(vscode.Uri.file(`${root}/custom/runs/attempt/report.json`));
+  await vi.advanceTimersByTimeAsync(350);
+  expect(refresh).not.toHaveBeenCalled();
+  changed(vscode.Uri.file(`${root}/custom/runs-helper.ts`));
+  await vi.advanceTimersByTimeAsync(350);
+  expect(refresh).toHaveBeenCalledOnce();
+  subscription.dispose();
+  watch.mockRestore();
+});

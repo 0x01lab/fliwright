@@ -61,6 +61,16 @@ export async function resolveProjectConfig(
   environment: Record<string, string | undefined> = process.env,
 ): Promise<FliwrightCliConfig & ResolvedFliwrightConfig> {
   const project = await loadConfig(projectDir);
+  return resolveLoadedProjectConfig(projectDir, project, explicit, environment);
+}
+
+/** Apply current overrides to an already imported project, without evaluating its modules again. */
+export function resolveLoadedProjectConfig(
+  projectDir: string,
+  project: FliwrightCliConfig,
+  explicit: Partial<FliwrightProjectConfig> = {},
+  environment: Record<string, string | undefined> = process.env,
+): FliwrightCliConfig & ResolvedFliwrightConfig {
   const projectRoot = resolveFliwrightProjectRoot(projectDir);
   const shared = mergeFliwrightConfig({ project, environment: readFliwrightEnvironment(environment), explicit, projectRoot, environmentSource: environment });
   shared.paths.recordings = resolveFliwrightPath(shared.paths.recordings, projectRoot);

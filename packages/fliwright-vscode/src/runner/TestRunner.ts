@@ -1,5 +1,6 @@
 import type * as vscode from 'vscode';
 import type { RunResult } from '../types.js';
+import type { TestProgress } from '@fliwright/cli/run';
 
 export interface RunParams {
   workspaceRoot: vscode.Uri;
@@ -12,6 +13,7 @@ export interface RunParams {
   signal?: AbortSignal;
   configPath?: string;
   onOutput?: (chunk: string, stream: 'stdout' | 'stderr') => void;
+  onTestProgress?: (progress: TestProgress) => void;
 }
 
 export interface TestRunner {

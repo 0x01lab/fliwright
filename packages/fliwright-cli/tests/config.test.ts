@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, writeFile, rm, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
-import { loadConfig, defineConfig, resolveProjectConfig, resolveProjectImport, type FliwrightCliConfig } from '../src/config.js';
+import { loadConfig, defineConfig, resolveProjectConfig, resolveLoadedProjectConfig, resolveProjectImport, type FliwrightCliConfig } from '../src/config.js';
 
 describe('defineConfig', () => {
   it('fills defaults for omitted optional fields', () => {
@@ -77,6 +77,19 @@ describe('loadConfig', () => {
       cacheRoot: join(homedir(), '.fliwright', tmpDir.replace(/[/\\]/g, '-'), 'cache'),
       paths: { recordings: join(homedir(), '.fliwright', tmpDir.replace(/[/\\]/g, '-'), 'recordings') },
     });
+  });
+
+  it('resolves fresh environment and explicit overrides from a previously loaded project', async () => {
+    const project = defineConfig({ runsRoot: 'project-runs', cacheRoot: 'project-cache', paths: { recordings: 'captures' } });
+    const environment = { FLIWRIGHT_RUNS_ROOT: 'environment-runs', FLIWRIGHT_RECORDING_MODE: 'off' };
+    expect(resolveLoadedProjectConfig(tmpDir, project, {}, environment)).toMatchObject({
+      runsRoot: join(tmpDir, 'environment-runs'), cacheRoot: join(tmpDir, 'project-cache'),
+      paths: { recordings: join(tmpDir, 'captures') }, recording: { mode: 'off' },
+    });
+    expect(resolveLoadedProjectConfig(tmpDir, project, { runsRoot: 'explicit-runs' }, environment).runsRoot)
+      .toBe(join(tmpDir, 'explicit-runs'));
+    expect(project.runsRoot).toBe('project-runs');
+    expect(project.recording?.mode).toBe('standard');
   });
 
   it('resolves import-only project dependencies for configs outside the project', async () => {

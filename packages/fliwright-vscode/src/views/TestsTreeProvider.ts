@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { TestProgress } from '@fliwright/cli/run';
 import type { TestDiscoveryService } from '../runner/TestDiscoveryService.js';
 import type { AssertionStatusEntry, TestStatusStore } from '../testing/TestStatusStore.js';
 import { relPathOf } from '../testing/relPath.js';
@@ -19,6 +20,7 @@ interface StatusEntry {
   status: TestNodeStatus;
   ranAt?: number;
   durationMs?: number;
+  error?: string;
 }
 
 /** Tests panel with lazy, cancellable Vitest collection and per-file caching. */
@@ -27,7 +29,10 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   readonly onDidChangeTreeData = this.emitter.event;
 
   private roots: TestFileNode[] | undefined;
+  private rootsLoading: Promise<[Map<string, StatusEntry>, TestFileNode[]]> | undefined;
   private statusMap: Map<string, StatusEntry> = new Map();
+  private readonly liveStatuses = new Map<string, StatusEntry>();
+  private readonly fileChildren = new Map<string, TestTreeNode[]>();
   private runningWorkspace = false;
   private runningFile: string | undefined;
   private runningTestId: string | undefined;
@@ -45,6 +50,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   /** Full refresh — drop roots, status map, and all collection caches. */
   refresh(): void {
     this.roots = undefined;
+    this.rootsLoading = undefined;
     this.statusMap = new Map();
     this.assertionCache.clear();
     this.clearCollections();
@@ -53,8 +59,18 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
 
   /** Reload execution results without invalidating expensive test collection. */
   async refreshStatuses(): Promise<void> {
-    this.statusMap = await this.loadStatusMap();
+    const stored = await this.loadStatusMap();
+    if (!this.runningWorkspace && !this.runningFile) {
+      // A killed worker may never write a final report. Retain its last live
+      // result, but let a newly persisted result replace the transient snapshot.
+      for (const [id, entry] of this.liveStatuses) {
+        if (stored.get(id)?.ranAt === this.statusMap.get(id)?.ranAt) stored.set(id, entry);
+      }
+      this.liveStatuses.clear();
+    }
+    this.statusMap = stored;
     this.assertionCache.clear();
+    this.updateRootStatuses();
     this.emitter.fire(undefined);
   }
 
@@ -64,6 +80,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
     this.collectionCache.get(key)?.controller.abort();
     this.collectionCache.delete(key);
     const file = this.roots?.find(node => node.uri.toString() === key);
+    if (file) this.fileChildren.delete(file.relPath);
     if (file) for (const testId of this.assertionCache.keys()) {
       if (testId.startsWith(`${file.relPath}::`)) this.assertionCache.delete(testId);
     }
@@ -80,6 +97,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
 
   dispose(): void {
     this.disposed = true;
+    this.rootsLoading = undefined;
     this.assertionCache.clear();
     this.clearCollections();
     this.emitter.dispose();
@@ -88,12 +106,30 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   private clearCollections(): void {
     for (const entry of this.collectionCache.values()) entry.controller.abort();
     this.collectionCache.clear();
+    this.fileChildren.clear();
   }
 
-  setRunning(target?: { workspace?: boolean; relPath?: string; testId?: string }): void {
+  setRunning(target?: { workspace?: boolean; relPath?: string; testId?: string }, unfinished: 'interrupted' | 'failed' = 'interrupted'): void {
+    if (target) this.liveStatuses.clear();
+    else for (const [id, entry] of this.liveStatuses) {
+      if (entry.status === 'running') this.liveStatuses.set(id, { status: unfinished });
+    }
     this.runningWorkspace = target?.workspace ?? false;
     this.runningFile = target?.relPath;
     this.runningTestId = target?.testId;
+    this.updateRootStatuses();
+    this.emitter.fire(undefined);
+  }
+
+  /** Apply a real runner event without re-collecting or replacing expanded nodes. */
+  updateTestProgress(progress: TestProgress): void {
+    if (!this.runningWorkspace && !this.runningFile) return;
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) return;
+    const relPath = relPathOf(root, { fsPath: progress.filePath });
+    const id = testNodeId(relPath, progress.titlePath.slice(0, -1), progress.titlePath.at(-1)!);
+    this.liveStatuses.set(id, { status: progress.status, durationMs: progress.durationMs, error: progress.error });
+    this.assertionCache.delete(id);
     this.updateRootStatuses();
     this.emitter.fire(undefined);
   }
@@ -104,13 +140,11 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
       return [{ kind: 'empty', label: 'Trust this workspace to discover Fliwright tests' }];
     }
     // Root expansion lists files; Vitest starts only when a file is expanded.
-    if (!this.roots) {
-      this.statusMap = await this.loadStatusMap();
-      this.roots = await this.discoverRoots();
-    }
+    await this.ensureRoots();
+    if (this.disposed) return [];
 
     if (!element) {
-      return this.roots.length > 0
+      return this.roots?.length
         ? this.roots
         : [{ kind: 'empty', label: 'No Fliwright tests' }];
     }
@@ -124,11 +158,11 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
           this.onCollectionError(`${element.relPath}: ${message}`);
           return [{ kind: 'empty', label: message }];
         }
-        const children = collected.nodes.map((n) =>
+        const children = this.fileChildren.get(element.relPath) ?? collected.nodes.map((n) =>
           this.toNode(element.relPath, [], n, element.uri),
         );
-        // Aggregate file status from top-level children now that they exist.
-        element.status = aggregateStatus(children.map((c) => c.status));
+        this.fileChildren.set(element.relPath, children);
+        this.updateRootStatuses();
         return children;
       }
       case 'testGroup':
@@ -159,7 +193,8 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
           element.status === 'running' ? 'testFileRunning' : 'testFile',
         );
         item.resourceUri = element.uri;
-        item.description = element.status === 'unknown' ? undefined : element.status;
+        item.description = this.progressDescription(element.relPath)
+          ?? (element.status === 'unknown' ? undefined : element.status);
         item.command = {
           command: 'fliwright.runCurrentTest',
           title: 'Run',
@@ -184,10 +219,10 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
             : vscode.TreeItemCollapsibleState.None,
           element.status === 'running' ? 'testCaseRunning' : 'testCase',
         );
-        item.description =
-          element.status === 'running'
-            ? 'running'
-            : element.durationMs != null ? `${element.durationMs}ms` : undefined;
+        item.description = ['running', 'queued', 'skipped', 'interrupted'].includes(element.status)
+          ? element.status
+          : element.durationMs != null ? `${element.durationMs}ms` : undefined;
+        item.tooltip = element.error ?? element.label;
         item.command = {
           command: 'vscode.open',
           title: 'Open Test File',
@@ -256,6 +291,24 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
     }));
   }
 
+  private async ensureRoots(): Promise<void> {
+    while (!this.disposed && !this.roots) {
+      const pending = this.rootsLoading ??= Promise.all([this.loadStatusMap(), this.discoverRoots()]);
+      try {
+        const [statuses, roots] = await pending;
+        if (this.rootsLoading !== pending) continue;
+        this.statusMap = statuses;
+        this.roots = roots;
+        this.rootsLoading = undefined;
+        this.updateRootStatuses();
+      } catch (error) {
+        if (this.rootsLoading !== pending) continue;
+        this.rootsLoading = undefined;
+        throw error;
+      }
+    }
+  }
+
   private async loadStatusMap(): Promise<Map<string, StatusEntry>> {
     const raw = await this.statusStore.loadIndex();
     const out = new Map<string, StatusEntry>();
@@ -294,7 +347,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
       };
     }
 
-    const entry = this.statusMap.get(id);
+    const entry = this.liveStatuses.get(id) ?? this.statusMap.get(id);
     return {
       kind: 'testCase',
       id,
@@ -302,6 +355,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
       testNamePattern: `^${[...ancestors, collected.title].join(' ').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
       status: this.statusForCase(relPath, id, entry?.status ?? 'unknown'),
       durationMs: entry?.durationMs,
+      error: entry?.error,
       fileUri,
     };
   }
@@ -309,24 +363,66 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
   private updateRootStatuses(): void {
     if (!this.roots) return;
     for (const root of this.roots) {
-      root.status = this.statusForFile(root.relPath, root.status === 'running' ? 'unknown' : root.status);
+      const children = this.fileChildren.get(root.relPath);
+      if (children) this.updateChildren(root.relPath, children);
+      root.status = this.statusForFile(root.relPath, 'unknown');
+    }
+  }
+
+  private updateChildren(relPath: string, nodes: TestTreeNode[]): void {
+    for (const node of nodes) {
+      if (node.kind === 'testCase') {
+        const entry = this.liveStatuses.get(node.id) ?? this.statusMap.get(node.id);
+        node.status = this.statusForCase(relPath, node.id, entry?.status ?? 'unknown');
+        node.durationMs = node.status === 'queued' || node.status === 'running' ? undefined : entry?.durationMs;
+        node.error = entry?.error;
+      } else if (node.kind === 'testGroup') {
+        this.updateChildren(relPath, node.children ?? []);
+        node.status = aggregateStatus((node.children ?? []).flatMap(child => 'status' in child ? [child.status] : []));
+      }
     }
   }
 
   private statusForFile(relPath: string, fallback: TestNodeStatus): TestNodeStatus {
     if (this.runningWorkspace) return 'running';
     if (this.runningFile === relPath) return 'running';
-    return fallback;
+    const children = this.fileChildren.get(relPath);
+    if (children) return aggregateStatus(children.flatMap(child => 'status' in child ? [child.status] : []));
+    const entries = new Map([...this.statusMap, ...this.liveStatuses]);
+    const statuses = [...entries].filter(([id]) => id.startsWith(`${relPath}::`)).map(([, entry]) => entry.status);
+    return statuses.length ? aggregateStatus(statuses) : fallback;
   }
 
   private statusForCase(relPath: string, id: string, fallback: TestNodeStatus): TestNodeStatus {
-    if (this.runningWorkspace) return 'running';
-    if (this.runningTestId) return this.runningTestId === id ? 'running' : fallback;
-    if (this.runningFile === relPath) return 'running';
+    const live = this.liveStatuses.get(id);
+    if (live) return live.status;
+    if (this.runningTestId) return this.runningTestId === id ? 'queued' : fallback;
+    if (this.runningWorkspace || this.runningFile === relPath) return 'queued';
     return fallback;
   }
 
+  private progressDescription(relPath: string): string | undefined {
+    if (!this.runningWorkspace && this.runningFile !== relPath) return undefined;
+    const ids: string[] = [];
+    const visit = (nodes: TestTreeNode[]): void => {
+      for (const node of nodes) {
+        if (node.kind === 'testCase' && (!this.runningTestId || this.runningTestId === node.id)) ids.push(node.id);
+        if (node.kind === 'testGroup') visit(node.children ?? []);
+      }
+    };
+    visit(this.fileChildren.get(relPath) ?? []);
+    if (!ids.length) return undefined;
+    const statuses = ids.map(id => this.liveStatuses.get(id)?.status);
+    const completed = statuses.filter(status => status === 'passed' || status === 'failed' || status === 'skipped').length;
+    return `${completed}/${ids.length} completed · ${statuses.filter(status => status === 'passed').length} passed · ${statuses.filter(status => status === 'failed').length} failed`;
+  }
+
   private async assertionsForCase(testCase: TestCaseNode): Promise<TestAssertionNode[]> {
+    // Stored assertions belong to the previous attempt until this run is saved.
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const inActiveRun = this.runningWorkspace || (root && this.runningFile === relPathOf(root, testCase.fileUri)
+      && (!this.runningTestId || this.runningTestId === testCase.id));
+    if (testCase.status === 'queued' || testCase.status === 'running' || testCase.status === 'interrupted' || inActiveRun) return [];
     let pending = this.assertionCache.get(testCase.id);
     if (!pending) {
       pending = this.statusStore.loadAssertions(testCase.id);
@@ -337,7 +433,7 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
       kind: 'testAssertion' as const,
       id: `${testCase.id}::assertion/${entry.id}`,
       label: entry.label,
-      status: testCase.status === 'running' ? 'running' : entry.status,
+      status: entry.status,
       assertionIndex: entry.assertionIndex,
       durationMs: entry.durationMs,
       error: entry.error,
@@ -349,20 +445,22 @@ export class TestsTreeProvider implements vscode.TreeDataProvider<TestTreeNode> 
 // ── helpers ────────────────────────────────────────────────────────────
 function iconItem(
   label: string,
-  icon: string,
+  icon: string | vscode.ThemeIcon,
   collapsible: vscode.TreeItemCollapsibleState,
   contextValue: string,
 ): vscode.TreeItem {
   const item = new vscode.TreeItem(label, collapsible);
-  item.iconPath = new vscode.ThemeIcon(icon);
+  item.iconPath = typeof icon === 'string' ? new vscode.ThemeIcon(icon) : icon;
   item.contextValue = contextValue;
   return item;
 }
 
-function statusIcon(s: TestNodeStatus): string {
-  if (s === 'passed') return 'pass';
-  if (s === 'failed') return 'error';
+function statusIcon(s: TestNodeStatus): string | vscode.ThemeIcon {
+  if (s === 'passed') return new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed'));
+  if (s === 'failed') return new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed'));
   if (s === 'running') return 'loading~spin';
+  if (s === 'queued') return 'clock';
+  if (s === 'interrupted') return 'debug-stop';
   if (s === 'skipped') return 'debug-step-over';
   return 'circle-outline';
 }

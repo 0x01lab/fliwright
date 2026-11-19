@@ -22,8 +22,9 @@ inspection into one native VS Code sidebar.
   applying default mocks still uses the complete config set.
 - Toggle the **Show Only Active Mock Rules** filter button in the **Mock APIs**
   toolbar to show active rules and hide API groups without active rules. The button
-  stays selected while enabled, combines with search, and follows runtime rule
-  changes. Toggle it off to show all rules again.
+  stays selected while enabled and combines with search. Enabling it refreshes
+  active routes from the connected app, including routes applied by CLI or scripts.
+  Toggle it off to show all rules again. Local rule definitions alone are not active routes.
 - Generate and fill form data from `.fliwright/forms` rules.
 - Inspect screenshots, run history, failure context, and traces.
 - Use **Take Long App Screenshot** (expand icon beside the camera in the Devices toolbar) to preview vertical scroll content as one PNG. The preview scrolls vertically and the app's original scroll position is restored. Capture requires one visible, non-reversed vertical scroll view; nested scrolling and sticky headers are unsupported.
@@ -62,6 +63,11 @@ to the `Fliwright` output channel, and the final pass/fail result is added to
 the `Runs` view.
 
 ## Discovering Tests
+
+The **Tests** file list reuses the project's imported configuration across
+activation and editor views, and combines concurrent list requests into one
+initialization. Source changes invalidate that configuration before the
+debounced refresh; environment and editor overrides are read on every request.
 
 Expand a file in the **Tests** view to collect its cases through Vitest in a
 separate process. Discovery shares the CLI/Cloud catalog implementation and

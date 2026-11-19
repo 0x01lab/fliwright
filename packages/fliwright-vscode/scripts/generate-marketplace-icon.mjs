@@ -34,9 +34,16 @@ files.set('brand/logo-white.svg', svg(mark({ tone: '#FFFFFF' })));
 
 // Purpose-drawn small-size silhouette: no gradients or fine eye highlights.
 files.set('fliwright-activitybar.svg', `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M7.2 6.2C7.8 2.1 11.2 1.1 14 2.1C16 2.8 17.4 4.2 18.4 5.5C21.5 6.6 23 8.7 23 10.7C23 13.5 19.4 15 16.5 14.4C13.7 13.8 12 12 9.5 12.7C6.5 13.5 5.7 16.9 7.4 19.2C9 21.4 12.9 21 13.5 18.8C13.9 17.3 12.5 16.5 11.6 17.1C11 17.5 11 18.2 11.8 18.6C9.3 19 8.9 16.1 10.8 15.1C13.5 13.5 16.4 15.6 16.4 18.1C16.4 21.1 13.8 23 10.2 23C4.9 23 1.5 19.2 1.5 13.5C1.5 9.8 3.7 7.1 7.2 6.2ZM20.3 9.1A2.3 2.3 0 1 0 15.7 9.1A2.3 2.3 0 0 0 20.3 9.1Z"/></svg>\n`);
+// The transparent tile sits in the Extensions list beside icons that fill their
+// square, so the mark bleeds to ~93% of the canvas instead of using the generous
+// padding a standalone lockup gets. Center the artwork on its measured bounds.
+const tile = { scale: 1.04, x: 128 - 130 * 1.04, y: 128 - 127 * 1.04 };
 for (const [name, background] of [['dark', null], ['light', '#FFFFFF']]) {
   const backdrop = background ? `<rect width="256" height="256" rx="56" fill="${background}"/>` : '';
-  files.set(`brand/icon-${name}.svg`, svg(`${backdrop}<g transform="translate(24 24) scale(.8125)">${mark({ id: name })}</g>`));
+  const fit = background
+    ? 'translate(24 24) scale(.8125)'
+    : `translate(${tile.x.toFixed(2)} ${tile.y.toFixed(2)}) scale(${tile.scale})`;
+  files.set(`brand/icon-${name}.svg`, svg(`${backdrop}<g transform="${fit}">${mark({ id: name })}</g>`));
 }
 
 for (const state of ['idle', 'running', 'success', 'error', 'thinking']) {

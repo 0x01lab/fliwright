@@ -23,8 +23,8 @@ export type {
 export { verifyRecordingReplay, type RecordingReplayOptions, type RecordingReplayResult } from './RecordingReplay.js';
 
 export { artifactsExportCommand, artifactsShowCommand, type ArtifactOptions } from './commands/artifacts.js';
-export { artifactReferences, type ArtifactReference } from './ArtifactReferences.js';
 export { artifactsReportCommand } from './commands/artifact-report.js';
 export { releaseMetadataSchema, releaseReviewSchema, type ReleaseMetadata, type ReleaseReview } from './ReleaseReview.js';
+export { createVitestProgressReporter, type TestProgress } from './VitestProgress.js';
 
 export { collectCatalog, collectTestCases, type CollectedCatalogFile, collectedCases, catalogCaseId, type CatalogCase, type CatalogSelection } from './catalog.js';

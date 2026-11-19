@@ -1,6 +1,6 @@
 import type * as vscode from 'vscode';
 
-export type TestNodeStatus = 'passed' | 'failed' | 'running' | 'skipped' | 'unknown';
+export type TestNodeStatus = 'passed' | 'failed' | 'running' | 'queued' | 'skipped' | 'interrupted' | 'unknown';
 
 export interface TestFileNode {
   kind: 'testFile';
@@ -29,6 +29,7 @@ export interface TestCaseNode {
   testNamePattern: string;
   status: TestNodeStatus;
   durationMs?: number;
+  error?: string;
   fileUri: vscode.Uri;
 }
 
@@ -36,7 +37,7 @@ export interface TestAssertionNode {
   kind: 'testAssertion';
   id: string;
   label: string;
-  status: Exclude<TestNodeStatus, 'unknown'>;
+  status: 'passed' | 'failed' | 'running' | 'skipped';
   fileUri: vscode.Uri;
   assertionIndex: number;
   durationMs?: number;
@@ -61,6 +62,8 @@ export function testNodeId(relPath: string, ancestorTitles: string[], title: str
 export function aggregateStatus(statuses: TestNodeStatus[]): TestNodeStatus {
   if (statuses.includes('running')) return 'running';
   if (statuses.includes('failed')) return 'failed';
+  if (statuses.includes('interrupted')) return 'interrupted';
+  if (statuses.includes('queued')) return 'queued';
   if (statuses.includes('passed')) return 'passed';
   if (statuses.includes('skipped')) return 'skipped';
   return 'unknown';

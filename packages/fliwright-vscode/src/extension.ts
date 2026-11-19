@@ -21,6 +21,7 @@ import {
   writeWorkspaceVmServiceUrl,
 } from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, loadWorkspaceConfig, resolveWorkspacePath } from './config.js';
+import { invalidateWorkspaceProjectConfig } from './WorkspaceProjectConfig.js';
 import { FlowFileService } from './flows/FlowFileService.js';
 import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug, dataSetLabels } from './form/FormHelperService.js';
 import { FormRuleService } from './form/FormRuleService.js';
@@ -48,7 +49,7 @@ import type { FailureTreeEntry, FlowFileEntry, FormAnalyzeFieldEntry, FormRulesE
 import { DevicesTreeProvider } from './views/DevicesTreeProvider.js';
 import { FlowsTreeProvider } from './views/FlowsTreeProvider.js';
 import { FormDataTreeProvider } from './views/FormDataTreeProvider.js';
-import { MockApiTreeProvider, mockFileNameFromInput } from './views/MockApiTreeProvider.js';
+import { MockApiTreeProvider, mockFileNameFromInput, toggleActiveMockRules } from './views/MockApiTreeProvider.js';
 import { WebSocketMockTreeProvider } from './views/WebSocketMockTreeProvider.js';
 import { MockApiSearchController } from './views/MockApiSearchController.js';
 import { ScriptsTreeProvider } from './views/ScriptsTreeProvider.js';
@@ -109,8 +110,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('fliwright.searchMockApis', () => mockApiSearch.show()),
     vscode.commands.registerCommand('fliwright.clearMockApiSearch', () => mockApiSearch.clear()),
     vscode.commands.registerCommand('fliwright.toggleActiveMockRules', async () => {
-      mockTree.setActiveOnly(!mockTree.activeOnly);
-      await vscode.commands.executeCommand('setContext', 'fliwright.mockApis.activeOnly', mockTree.activeOnly);
+      await runCommand('Filter Active Mock Rules', () => toggleActiveMockRules(
+        mockTree,
+        () => requestMockStateSync('active-only filter enabled'),
+      ));
     }),
   );
   const websocketMockTree = new WebSocketMockTreeProvider(websocketMockConfigService);
@@ -122,6 +125,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // empty in-memory store). The store is always constructed so TestsTreeProvider
   // gets its second arg (loadIndex tolerates a missing index.json).
   let runsRoot: string | undefined;
+  const statusStore = new TestStatusStore(() => runsRoot ?? '');
+  const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore, undefined,
+    message => output.appendLine(`[Fliwright] ${message}`));
+  context.subscriptions.push(testsTree, watchTestCollection(testsTree, () => runsRoot));
   const wsRootForRuns = getWorkspaceRoot();
   if (wsRootForRuns) {
     try {
@@ -131,10 +138,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       runsRoot = undefined;
     }
   }
-  const statusStore = new TestStatusStore(() => runsRoot ?? '');
-  const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore, undefined,
-    message => output.appendLine(`[Fliwright] ${message}`));
-  context.subscriptions.push(testsTree, watchTestCollection(testsTree));
   const scriptsTree = new ScriptsTreeProvider(scriptDiscoveryService);
   const flowsTree = new FlowsTreeProvider();
   const stateTree = new StateTreeProvider();
@@ -979,6 +982,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await viewerPanel.openRun(loaded.runDir);
     }),
     vscode.commands.registerCommand('fliwright.refreshTests', () => {
+      const root = getWorkspaceRoot();
+      if (root) invalidateWorkspaceProjectConfig(root);
       // Cancel outstanding collections and rediscover on the next expansion.
       testsTree.refresh();
     }),
@@ -1692,13 +1697,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
               vmServiceUrl: session.currentUrl,
               failureContextDir,
               signal: abortController.signal,
+              onTestProgress: progress => testsTree.updateTestProgress(progress),
             })
           ));
         } finally {
           if (runningAbortController === abortController) {
             runningAbortController = undefined;
           }
-          testsTree.setRunning(undefined);
+          testsTree.setRunning(undefined, abortController.signal.aborted ? 'interrupted' : 'failed');
           session.finishRunning(previousSessionState);
         }
 

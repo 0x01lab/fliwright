@@ -1,12 +1,9 @@
 // packages/fliwright-vscode/src/webview/viewer/components/Viewport.tsx
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import type { SerializableRun } from '../types.js';
 import type { Selection } from '../artifacts.js';
-import { fallbackScreenshot, neighborKeys } from '../artifacts.js';
+import { precedingScreenshot } from '../artifacts.js';
 import { computeFitScale } from '../fitScale.js';
-import type { FlatNode } from '../treeFlatten.js';
-import { Button } from '../../components/ui/button.js';
 
 const CHECKERBOARD: CSSProperties = {
   backgroundColor: 'var(--color-background)',
@@ -22,37 +19,17 @@ const CHECKERBOARD: CSSProperties = {
 interface ViewportProps {
   run: SerializableRun;
   selection: Selection | undefined;
-  orderedKeys: string[];
-  flatNodes: FlatNode[];
-  onSelect: (key: string) => void;
 }
 
 export function Viewport(props: ViewportProps): JSX.Element {
-  const { run, selection, orderedKeys, flatNodes } = props;
+  const { run, selection } = props;
   const stageRef = useRef<HTMLDivElement>(null);
   const [container, setContainer] = useState({ w: 0, h: 0 });
   const [natural, setNatural] = useState({ w: 0, h: 0 });
-  const [imgSrc, setImgSrc] = useState<string | undefined>(undefined);
-  const [fallbackTitle, setFallbackTitle] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (selection?.screenshotUri) {
-      setImgSrc(selection.screenshotUri);
-      setFallbackTitle(undefined);
-      return;
-    }
-    if (selection?.mode === 'timeline') {
-      const idx = orderedKeys.indexOf(selection.key);
-      const fb = fallbackScreenshot(flatNodes, idx, run.screenshotBaseUrl);
-      if (fb) {
-        setImgSrc(fb.uri);
-        setFallbackTitle(fb.sourceTitle);
-        return;
-      }
-    }
-    setImgSrc(undefined);
-    setFallbackTitle(undefined);
-  }, [selection, orderedKeys, flatNodes, run.screenshotBaseUrl]);
+  const fallback = !selection?.screenshotUri && selection?.node ? precedingScreenshot(run, selection.node) : undefined;
+  const imgSrc = selection?.screenshotUri ?? fallback?.uri;
+  const evidenceTime = fallback?.time ?? selection?.node?.endedAt ?? selection?.node?.startedAt;
+  const [imageError, setImageError] = useState<string>();
 
   useLayoutEffect(() => {
     const el = stageRef.current;
@@ -67,27 +44,26 @@ export function Viewport(props: ViewportProps): JSX.Element {
   }, []);
 
   const scale = computeFitScale(container.w, container.h, natural.w, natural.h);
-  const neighbors = neighborKeys(orderedKeys, selection?.key ?? null);
-  const idx = selection?.key ? orderedKeys.indexOf(selection.key) : -1;
-  const position = idx >= 0 ? `${idx + 1} / ${orderedKeys.length}` : '';
-
-  const route = selection?.mode === 'timeline' ? selection.node?.route : undefined;
+  const route = selection?.node?.route;
   const emptyHint = viewportEmptyHint(selection?.mode);
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
       {route ? <div className="shrink-0 border-b border-border bg-card px-3 py-1 font-mono text-[11px] text-muted-foreground">{route}</div> : null}
       <div className="relative flex flex-1 items-center justify-center overflow-hidden p-4" ref={stageRef} style={CHECKERBOARD}>
-        {imgSrc ? (
+        {imgSrc && imageError !== imgSrc ? (
           <div
             className="overflow-hidden rounded-[10px] border border-border bg-background shadow-xl"
             style={{ width: natural.w * scale || 'auto', height: natural.h * scale || 'auto' }}
           >
             <img
+              key={imgSrc}
               src={imgSrc}
+              onError={() => { setImageError(imgSrc); }}
               alt="screenshot"
               onLoad={e => {
                 const t = e.currentTarget;
+                setImageError(undefined);
                 setNatural({ w: t.naturalWidth, h: t.naturalHeight });
               }}
               draggable={false}
@@ -97,21 +73,16 @@ export function Viewport(props: ViewportProps): JSX.Element {
         ) : (
           <div className="flex flex-col items-center gap-1.5 text-center text-muted-foreground">
             <div className="text-4xl">📱</div>
-            <div>No screenshot captured for this step</div>
+            <div>{imageError === imgSrc && imgSrc ? 'Screenshot unavailable' : 'No screenshot captured for this step'}</div>
             <div className="text-[11px]">{emptyHint}</div>
           </div>
         )}
       </div>
-      {fallbackTitle ? <div className="shrink-0 border-t border-border bg-warn/10 px-3 py-1 text-[11px] text-muted-foreground">Showing screenshot from “{fallbackTitle}”</div> : null}
-      <div className="flex shrink-0 items-center justify-center gap-3 border-t border-border bg-card px-3 py-1.5">
-        <Button variant="ghost" size="sm" disabled={!neighbors.prev} onClick={() => neighbors.prev && props.onSelect(neighbors.prev)}>
-          <ChevronLeft /> prev
-        </Button>
-        <span className="min-w-[60px] text-center text-[11px] text-muted-foreground">{position}</span>
-        <Button variant="ghost" size="sm" disabled={!neighbors.next} onClick={() => neighbors.next && props.onSelect(neighbors.next)}>
-          next <ChevronRight />
-        </Button>
-      </div>
+      {imgSrc && <div className="shrink-0 border-t border-border bg-card px-3 py-1 text-[11px] text-muted-foreground">
+        {fallback ? `Showing screenshot from “${fallback.sourceTitle}”` : 'Selected step screenshot'}
+        {evidenceTime ? ` · ${evidenceTime} (${(fallback ? fallback.anchor === 'end' : !!selection?.node?.endedAt) ? 'step end anchor' : 'step start anchor'})` : ''}
+        {selection?.screenshotUris && selection.screenshotUris.length > 1 ? ` · ${selection.screenshotUris.indexOf(imgSrc) + 1} / ${selection.screenshotUris.length}` : ''}
+      </div>}
     </div>
   );
 }

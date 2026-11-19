@@ -9,6 +9,8 @@ import { sessionRequest } from './session/client.js';
 import { registerTdd } from './registry/tdd.js';
 import { registerFlow } from './registry/flow.js';
 import { registerFinite } from './registry/finite.js';
+export { resolveLoadedProjectConfig } from './config.js';
+export { createVitestProgressReporter, type TestProgress } from './VitestProgress.js';
 import { registerDevices } from './registry/devices.js';
 import { registerNative } from './registry/native.js';
 export { prepareNativeRun, type ManagedNativeRun, type ManagedNativeGrant, type ManagedNativeLaunch } from './ManagedNativeRun.js';

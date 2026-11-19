@@ -45,6 +45,7 @@ it.each(['pending', 'skipped', 'todo'].flatMap(status =>
     const [file] = await provider.getChildren();
     await provider.getChildren(file);
     provider.setRunning({ relPath, testId: `${relPath}::locale en` });
+    provider.updateTestProgress({ filePath: fileUri.fsPath, titlePath: ['locale en'], status: 'running' });
     expect(await provider.getChildren(file)).toEqual([
       expect.objectContaining({ status: 'running' }),
       expect.objectContaining({ status: 'passed' }),
