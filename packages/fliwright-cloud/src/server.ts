@@ -5,7 +5,8 @@ import { join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
 import { z, ZodError } from 'zod';
-import { projectRepositoryDetails, projectSetupDefaults } from './project-setup.js';
+import { projectRepositoryDetails, projectSetupDefaults, displayRepositoryPath } from './project-setup.js';
+import { boardBatch } from './request-board.js';
 import { CloudStore, digest } from './CloudStore.js';
 import { ReportStore } from './ReportStore.js';
 import { attachWorkerControl } from './worker-control.js';
@@ -232,6 +233,7 @@ export function createCloudServer(options: CloudServerOptions) {
     return store.targets().map((t) => ({
       id: t.id,
       name: t.name,
+      repositoryPath: displayRepositoryPath(t.repository),
       suites: Object.keys(t.suites),
       scenarios: t.scenarios,
     }));
@@ -295,6 +297,10 @@ export function createCloudServer(options: CloudServerOptions) {
   app.get('/api/projects/:id/scans/:scanId', (req) => { team(req); return store.catalogScan(param(req, 'id'), idSchema.parse((req.params as Record<string, string>).scanId)); });
   app.get('/api/projects/:id/catalogs', (req) => { team(req); return store.catalogs(param(req, 'id')); });
   app.get('/api/projects/:id/catalogs/:catalogId', (req) => { team(req); return store.catalog(param(req, 'id'), idSchema.parse((req.params as Record<string, string>).catalogId)); });
+  app.get('/api/projects/:id/catalogs/:catalogId/case-runs', (req) => {
+    if (team(req).kind === 'ci') throw new CloudError(403, 'Team access required');
+    return store.latestCaseRuns(param(req, 'id'), param(req, 'catalogId'));
+  });
   app.post('/api/projects/:id/requests', (req, reply) => {
     const who = team(req), id = param(req, 'id'), body = req.body as Record<string, unknown>;
     if (!body || body.projectId !== id) throw new CloudError(400, 'Project identity mismatch');
@@ -356,6 +362,18 @@ export function createCloudServer(options: CloudServerOptions) {
   app.get('/api/admin/targets', (req) => {
     team(req, 'admin');
     return store.targets();
+  });
+  app.get('/api/reports', (req) => {
+    if (team(req).kind === 'ci') throw new CloudError(403, 'Team access required');
+    const { offset } = z.object({ offset: z.coerce.number().int().min(0).default(0) }).parse(query(req));
+    return reports.listPublished(offset);
+  });
+  app.get('/api/board', (req) => {
+    if (team(req).kind === 'ci') throw new CloudError(403, 'Use the submitted request URL');
+    const size = z.coerce.number().int().positive().default(boardBatch);
+    const options = z.object({ pending: size, running: size, passed: size, failed: size, other: size,
+      search: z.string().max(200).default(''), targetId: idSchema.optional() }).parse(query(req));
+    return store.requestBoard(options, options.search.trim(), options.targetId ?? '');
   });
   app.get('/api/requests', (req) => {
     const who = team(req),
@@ -766,17 +784,12 @@ export function createCloudServer(options: CloudServerOptions) {
     if (req.url.startsWith('/api/'))
       throw new CloudError(404, 'API route not found');
     const path = req.url.split('?')[0];
-    const asset = /^\/assets\/[a-zA-Z0-9_.-]+\.(js|css)$/.test(path);
+    const asset = /^\/assets\/[a-zA-Z0-9_.-]+\.(js|css|svg|webp)$/.test(path);
     const file = asset ? join(webRoot, path) : join(webRoot, 'index.html');
     if (!existsSync(file))
       throw new CloudError(503, 'Web UI has not been built');
-    reply.type(
-      asset
-        ? path.endsWith('.js')
-          ? 'application/javascript'
-          : 'text/css'
-        : 'text/html',
-    );
+    const assetTypes: Record<string, string> = { '.js':'application/javascript', '.css':'text/css', '.svg':'image/svg+xml', '.webp':'image/webp' };
+    reply.type(asset ? assetTypes[extname(path)] : 'text/html');
     return readFileSync(file);
   });
   const closeControl = attachWorkerControl(app.server, {

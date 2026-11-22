@@ -3,7 +3,8 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from '../src/web/app.js';
-import type { BoardRequest } from '../src/web/TestBoard.js';
+import { testColumn, type BoardRequest } from '../src/web/TestBoard.js';
+import { boardColumns, boardBatch } from '../src/request-board.js';
 import { projectSchema, type Project } from '@fliwright/cloud-protocol';
 
 let root: Root;
@@ -47,7 +48,13 @@ beforeEach(() => {
       if (path === '/api/me') data = { name: 'Alice', role };
       else if (path === '/api/projects') data = projects;
       else if (/^\/api\/projects\/[^/]+\/status$/.test(path)) data = { ready: false, blockers: [], latestScan: null };
-      else if (path === '/api/targets') data = [target];
+      else if (path === '/api/targets') data = projects.length ? projects.map(p => ({ ...p, suites: Object.keys(p.suites) })) : [target];
+      else if (path === '/api/reports') data = { items:[],hasMore:false };
+      else if (path === '/api/board') {
+        const matching = boardItems.filter(r => (!url.searchParams.get('targetId') || r.input.targetId===url.searchParams.get('targetId')) && (!url.searchParams.get('search') || r.id.includes(url.searchParams.get('search')!)));
+        const lanes = boardColumns.map(lane => matching.filter(r => testColumn(r)===lane));
+        data = {items: lanes.flatMap((items,i) => items.slice(0,Number(url.searchParams.get(boardColumns[i]) ?? boardBatch))),totals:Object.fromEntries(boardColumns.map((id,i) => [id,lanes[i].length])),queue:boardItems.filter(r=>r.state==='queued').map(r=>r.id).reverse()};
+      }
       else if (path === '/api/operations')
         data = { storage: { freeBytes: 0, reservedBytes: 0 } };
       else if (path === '/api/share/exchange') {
@@ -130,8 +137,7 @@ async function mount(path = '/') {
 }
 
 async function openConfiguration() {
-  const trigger = Array.from(document.body.querySelectorAll<HTMLButtonElement>('nav button'))
-    .find((button) => button.textContent?.trim() === '配置')!;
+  const trigger = document.body.querySelector<HTMLButtonElement>('nav button[aria-label="更多"]')!;
   expect(trigger).toBeDefined();
   if (trigger.getAttribute('aria-expanded') !== 'true') {
     await act(async () => trigger.click());
@@ -140,7 +146,7 @@ async function openConfiguration() {
 }
 
 async function click(selector: string, modifiers: MouseEventInit = {}) {
-  if (/^nav a\[href="\/(workers|devices|targets|reports)"\]/.test(selector)) {
+  if (/^nav a\[href="\/(workers|devices|overview)"\]/.test(selector)) {
     await openConfiguration();
   }
   const link = document.body.querySelector<HTMLAnchorElement>(selector)!;
@@ -177,6 +183,11 @@ async function submitSearch(value: string) {
   expect(event.defaultPrevented).toBe(true);
 }
 
+function boardHeaderFacts() {
+  const labels = document.querySelectorAll('header dl[aria-label="看板概况"] dt');
+  return Object.fromEntries(Array.from(labels, label => [label.textContent, label.nextElementSibling?.textContent]));
+}
+
 it('handles top navigation in the current document and preserves the shell', async () => {
   await mount();
   const shell = document.body.querySelector("header[data-ui~=app-header]");
@@ -194,15 +205,15 @@ it('handles top navigation in the current document and preserves the shell', asy
   expect(document.body.querySelector('h1')?.textContent).toBe('Worker 主机');
   expect(window.location.pathname).toBe('/workers');
   expect(document.body.querySelector("header[data-ui~=app-header]")).toBe(shell);
-  expect(document.body.querySelector("nav [data-ui~=configuration-active]")?.textContent).toContain('配置');
+  expect(document.body.querySelector("nav [data-ui~=configuration-active]")?.getAttribute('aria-label')).toBe('更多');
   expect(document.body.querySelector('nav a[href="/workers"]')).toBeNull();
   expect(
     vi.mocked(fetch).mock.calls.filter(([url]) => url === '/api/me'),
   ).toHaveLength(initialMeCalls);
   expect(await click('nav a[href="/queue"]')).toBe(true);
   expect(document.body.querySelector('main h1')?.textContent).toBe('执行看板');
-  expect(document.body.querySelector('main h2')?.textContent).toBe('测试看板');
-  expect(document.body.querySelector('main a[href="/new"]')).not.toBeNull();
+  expect(document.body.querySelectorAll('a[aria-label="提交测试"]')).toHaveLength(1);
+  expect(shell?.querySelector('a[href="/new"]')).not.toBeNull();
 });
 
 it('keeps board and cases in the single top navigation and opens configuration with keyboard dismissal', async () => {
@@ -211,9 +222,9 @@ it('keeps board and cases in the single top navigation and opens configuration w
   const nav = header.querySelector('nav')!;
   expect(header.querySelector("[data-ui~=topbar]")?.contains(nav)).toBe(true);
   expect(Array.from(nav.querySelectorAll('a')).map((link) => link.getAttribute('href')))
-    .toEqual(['/queue', '/projects']);
+    .toEqual(['/queue', '/projects', '/reports']);
   expect(nav.querySelector('a[href="/queue"]')?.getAttribute('aria-label')).toBe('执行看板');
-  expect(nav.querySelector('a[href="/projects"]')?.getAttribute('aria-label')).toBe('测试用例');
+  expect(nav.querySelector('a[href="/projects"]')?.getAttribute('aria-label')).toBe('项目管理');
   expect(nav.querySelector('a[href="/queue"]')?.getAttribute('aria-current')).toBe('page');
   expect(nav.textContent).not.toMatch(/运行记录|测试队列/);
   expect(nav.textContent).not.toContain('概览');
@@ -221,7 +232,7 @@ it('keeps board and cases in the single top navigation and opens configuration w
   const trigger = await openConfiguration();
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
   for (const url of ['/overview', '/devices', '/workers', '/projects', '/reports']) {
-    expect(nav.querySelector(`a[href="${url}"]`)).not.toBeNull();
+    expect(header.querySelector(`a[href="${url}"]`)).not.toBeNull();
   }
   await act(async () => {
     trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -275,31 +286,23 @@ it('updates searches on the current route and restores them through browser hist
 });
 
 it.each([
-  ['/', '执行看板', null],
-  ['/overview', '概览', null],
-  ['/queue', '执行看板', null],
-  ['/reports', '测试报告', 'completed'],
-  ['/runs', undefined, null],
-])('opens %s directly with its own filters', async (path, title, state) => {
+  ['/', '执行看板', '/api/board?'],
+  ['/overview', '运行概览', '/api/requests?'],
+  ['/queue', '执行看板', '/api/board?'],
+  ['/reports', '测试报告', '/api/reports?'],
+  ['/runs', '执行看板', '/api/board?'],
+])('opens %s directly with its own collection', async (path, title, endpoint) => {
   await mount(path);
   expect(document.body.querySelector('h1')?.textContent).toBe(title);
-  const call = vi
-    .mocked(fetch)
-    .mock.calls.find(([url]) => String(url).startsWith('/api/requests?'))!;
-  expect(
-    new URL(String(call[0]), window.location.origin).searchParams.get('state'),
-  ).toBe(state);
+  expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).startsWith(endpoint))).toBe(true);
 });
 
-it('keeps all lifecycle columns on tasks and only completed requests on reports', async () => {
+it('keeps lifecycle columns on the board and published reports in their own directory', async () => {
   await mount('/queue');
   for (const path of ['/reports', '/queue']) {
     await click(`nav a[href="${path}"]`);
     expect(Array.from(document.body.querySelectorAll("[data-ui~=test-column] h3")).map((heading) => heading.textContent))
-      .toEqual(['待测试', '测试中', '已成功', '已失败']);
-    const call = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith('/api/requests?')).at(-1)!;
-    expect(new URL(String(call[0]), window.location.origin).searchParams.get('state'))
-      .toBe(path === '/reports' ? 'completed' : null);
+      .toEqual(path==='/reports'?[]:['待测试', '测试中', '已成功', '已失败']);
   }
 });
 
@@ -361,6 +364,7 @@ it('moves cards to their new column when the queue refreshes', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   boardItems = [boardRequest('moving', 'queued')];
   await mount('/queue');
+  expect(boardHeaderFacts()['通过率']).toBe('—');
   expect(document.body.querySelector("[data-ui~=test-column-pending] a")).not.toBeNull();
   boardItems = [boardRequest('moving', 'preparing')];
   await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
@@ -370,25 +374,35 @@ it('moves cards to their new column when the queue refreshes', async () => {
   await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
   expect(document.body.querySelector("[data-ui~=test-column-running] a")).toBeNull();
   expect(document.body.querySelector("[data-ui~=test-column-passed] a")).not.toBeNull();
+  expect(boardHeaderFacts()['通过率']).toBe('100%');
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith('/api/board?'))).toHaveLength(3);
 });
 
-it('paginates the board and returns to the first page when searching', async () => {
-  boardItems = Array.from({ length: 26 }, (_, index) => boardRequest(`run-${index}`, 'completed', index % 2 ? 'failed' : 'passed'));
+it('loads more in a single column and searches the full collection', async () => {
+  let intersect: ((node:Element)=>void) | undefined;
+  vi.stubGlobal('IntersectionObserver', class {
+    constructor(callback: IntersectionObserverCallback) { intersect = node => callback([{target:node,isIntersecting:true} as IntersectionObserverEntry],this as unknown as IntersectionObserver); }
+    observe() {} unobserve() {} disconnect() {}
+  });
+  boardItems = Array.from({ length: 40 }, (_, index) => boardRequest(`run-${index}`, 'completed', index % 2 ? 'failed' : 'passed'));
   await mount('/queue');
-  expect(document.body.querySelectorAll("[data-ui~=test-card]")).toHaveLength(25);
-  expect(document.body.querySelector("[data-ui~=board-caption]")?.textContent).toContain('本页 25 条 · 共 26 条');
-  const next = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === '下一页')!;
-  await act(async () => next.click());
-  expect(document.body.querySelectorAll("[data-ui~=test-card]")).toHaveLength(1);
-  expect(document.body.querySelector("[data-ui~=test-card]")?.getAttribute('href')).toBe('/requests/run-25');
+  expect(document.body.querySelectorAll('[data-lane=passed] a')).toHaveLength(boardBatch);
+  expect(document.body.querySelector('[data-ui~=test-column-passed] [data-ui=test-column-count]')?.textContent).toBe('20');
+  expect(boardHeaderFacts()).toMatchObject({ '任务总数': '40', '通过率': '50%' });
+  await act(async()=>intersect!(document.querySelector('[data-lane=passed] li:last-child')!));
+  expect(document.body.querySelectorAll('[data-lane=passed] a')).toHaveLength(20);
+  expect(document.body.querySelectorAll('[data-lane=failed] a')).toHaveLength(boardBatch);
   const search = document.body.querySelector<HTMLInputElement>('[aria-label="搜索任务"]')!;
   await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'scenario-run-0');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'run-39');
     search.dispatchEvent(new Event('input', { bubbles: true }));
   });
   expect(document.body.querySelectorAll("[data-ui~=test-card]")).toHaveLength(1);
-  expect(document.body.querySelector("[data-ui~=test-card]")?.getAttribute('href')).toBe('/requests/run-0');
-  expect(document.body.querySelector("[data-ui~=pagination]")?.textContent).toContain('第 1 / 1 页');
+  expect(document.body.querySelector("[data-ui~=test-card]")?.getAttribute('href')).toBe('/requests/run-39');
+  expect(document.body.querySelector("[data-ui~=pagination]")).toBeNull();
+  expect(boardHeaderFacts()).toMatchObject({ '匹配任务': '1', '通过率': '0%' });
+  await submitSearch('missing-task');
+  expect(boardHeaderFacts()).toMatchObject({ '匹配任务': '0', '通过率': '—' });
 });
 
 it('navigates to the new task after submission without replacing the shell', async () => {
@@ -594,20 +608,20 @@ it('returns from a not-found page through the router', async () => {
 });
 
 
-async function openSubmissionMenu() {
-  const trigger = document.body.querySelector<HTMLButtonElement>('nav[aria-label="创建与提交"] button')!;
+async function openProjectMenu() {
+  const trigger = document.body.querySelector<HTMLButtonElement>('[data-ui="project-switcher"] button')!;
   await act(async () => trigger.click());
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
   return trigger;
 }
 
-it('opens project creation from the submission menu and project header', async () => {
+it('opens project creation from the project switcher and directory', async () => {
   role = 'admin';
   await mount('/queue');
   const shell = document.body.querySelector("header[data-ui~=app-header]");
-  await openSubmissionMenu();
-  expect(document.body.querySelector('nav[aria-label="创建与提交"] a[href="/new"]')).not.toBeNull();
-  const create = document.body.querySelector<HTMLAnchorElement>('nav[aria-label="创建与提交"] a[href^="/projects"]')!;
+  await openProjectMenu();
+  expect(document.body.querySelector('header a[aria-label="提交测试"]')).not.toBeNull();
+  const create = document.body.querySelector<HTMLAnchorElement>('[data-ui="project-switcher-menu"] a[href*="createProject"]')!;
   expect(create.textContent).toContain('创建项目');
   await act(async () => create.click());
   expect(window.location.pathname).toBe('/projects');
@@ -629,25 +643,24 @@ it('opens project creation from the submission menu and project header', async (
   expect(document.body.querySelector('[role=dialog][data-state=open] h2')?.textContent).toBe('创建项目');
 });
 
-it('keeps submit-test navigation available in the dropdown and hides creation for members', async () => {
+it('keeps submission one click away and hides project creation for members', async () => {
   await mount('/projects');
   expect(document.body.querySelector('[data-ui~=project-page-heading] [aria-label="创建项目"]')).toBeNull();
-  const trigger = await openSubmissionMenu();
-  expect(document.body.querySelector('nav[aria-label="创建与提交"] a[href^="/projects"]')).toBeNull();
+  const trigger = await openProjectMenu();
+  expect(document.body.querySelector('[data-ui="project-switcher-menu"] a[href*="createProject"]')).toBeNull();
   await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   expect(trigger.getAttribute('aria-expanded')).toBe('false');
-  await openSubmissionMenu();
-  expect(await click('nav[aria-label="创建与提交"] a[href="/new"]')).toBe(true);
+  expect(await click('header a[aria-label="提交测试"]')).toBe(true);
   expect(window.location.pathname).toBe('/new');
-  expect(document.body.querySelector('nav[aria-label="创建与提交"] button')?.getAttribute('aria-expanded')).toBe('false');
+  expect(document.body.querySelector('[data-ui="project-switcher"] button')?.getAttribute('aria-expanded')).toBe('false');
 });
 
 it('reopens creation from the dropdown while already browsing projects', async () => {
   role = 'admin';
   await mount('/projects');
   for (let index = 0; index < 2; index++) {
-    await openSubmissionMenu();
-    await act(async () => document.body.querySelector<HTMLAnchorElement>('nav[aria-label="创建与提交"] a[href^="/projects"]')!.click());
+    await openProjectMenu();
+    await act(async () => document.body.querySelector<HTMLAnchorElement>('[data-ui="project-switcher-menu"] a[href*="createProject"]')!.click());
     expect(document.body.querySelector('[role=dialog][data-state=open] h2')?.textContent).toBe('创建项目');
     expect(window.location.search).not.toContain('createProject');
     await act(async () => document.body.querySelector<HTMLButtonElement>('[role=dialog] [aria-label="关闭对话框"]')!.click());
@@ -657,6 +670,45 @@ it('reopens creation from the dropdown while already browsing projects', async (
 function seedProjects() {
   projects = ['first', 'second'].map(id => projectSchema.parse({ id, name: `${id} app`, repository: `https://git.example.com/${id}.git`, suites: { smoke: '*.test.ts' }, scenarios: ['clean'] }));
 }
+
+it('scopes the board, totals, management and submission to the project picked in the header', async () => {
+  seedProjects();
+  boardItems = [boardRequest('run-1', 'queued'), boardRequest('run-2', 'completed', 'passed')];
+  boardItems.forEach((request, index) => { request.input.targetId = projects[index].id; });
+  await mount('/queue?search=run');
+  expect(boardHeaderFacts()).toEqual({ '项目': '2', '测试套件': '2', '匹配任务': '2', '通过率': '100%' });
+  await openProjectMenu();
+  await click('[data-ui="project-list-item"][href*="second"]');
+  expect(new URLSearchParams(window.location.search).get('search')).toBe('run');
+  expect(new URLSearchParams(window.location.search).get('targetId')).toBe('second');
+  expect(Array.from(document.querySelectorAll('.execution-card'), card => card.getAttribute('href'))).toEqual(['/requests/run-2']);
+  expect(boardHeaderFacts()).toEqual({ '默认分支': 'main', '测试套件': '1', '匹配任务': '1', '通过率': '100%' });
+  expect(document.querySelector('footer[aria-label="看板状态"]')?.textContent).not.toMatch(/匹配任务|通过率/);
+  expect(document.querySelector('.workspace-nav a[aria-label="项目管理"]')?.getAttribute('href')).toBe('/projects/second');
+  await click('header a[aria-label="提交测试"]');
+  expect(boardHeaderFacts()).toEqual({});
+  expect(document.querySelector<HTMLSelectElement>('main form select')?.value).toBe('second');
+  await openProjectMenu();
+  await click('[data-ui="project-list-item"][href*="first"]');
+  expect(window.location.pathname).toBe('/new');
+  expect(document.querySelector<HTMLSelectElement>('main form select')?.value).toBe('first');
+});
+
+it('preserves the section when switching projects by keyboard and clears project-specific filters', async () => {
+  seedProjects();
+  await mount('/projects/first?view=scans&v=first-version&q=old');
+  const trigger = await openProjectMenu();
+  const input = document.querySelector<HTMLInputElement>('[role="combobox"][aria-label="搜索项目"]')!;
+  await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+  await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+  expect(window.location.pathname).toBe('/projects/second');
+  expect(window.location.search).toBe('?view=scans');
+  expect(document.activeElement).toBe(trigger);
+  expect(document.querySelector('[aria-label="项目分区"] [data-selected="true"]')?.textContent).toBe('扫描记录');
+  await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(window.location.pathname).toBe('/projects/first');
+  expect(new URLSearchParams(window.location.search).get('v')).toBe('first-version');
+});
 
 it('filters the header project switcher and closes it with Escape', async () => {
   seedProjects();
@@ -683,13 +735,12 @@ it('opens the project specified in a direct URL and keeps project navigation act
   seedProjects();
   await mount('/projects/second');
   expect(window.location.pathname).toBe('/projects/second');
-  expect(document.body.querySelector('[data-ui~=project-switcher] button')?.textContent).toBe('second app');
-  expect(document.body.querySelector('[data-ui~=project-sidebar]')).toBeNull();
+  expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
   expect(document.body.querySelector('header[data-ui~=app-header] [data-ui~=project-switcher]')).not.toBeNull();
   await act(async () => document.body.querySelector<HTMLButtonElement>('[data-ui~=project-switcher] button')!.click());
   expect(document.body.querySelector('[data-ui~=project-list-item][aria-current="page"]')?.getAttribute('href')).toBe('/projects/second');
-  expect(document.body.querySelector('nav[aria-label="主导航"] a[href="/projects"]')?.getAttribute('aria-current')).toBe('page');
-  expect(document.body.querySelector('[data-ui~=project-page-heading] h1')?.textContent).toBe('测试用例');
+  expect(document.body.querySelector('nav[aria-label="主导航"] a[href="/projects/second"]')?.getAttribute('aria-current')).toBe('page');
+  expect(document.body.querySelector('[data-ui~=project-page-heading] h1')?.textContent).toBe('second app · 测试用例');
   expect(document.body.querySelector('[role=tablist]')).toBeNull();
   expect(fetch).toHaveBeenCalledWith('/api/projects/second/status', expect.anything());
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith('/api/projects/first/'))).toBe(false);
@@ -699,29 +750,29 @@ it('opens the project specified in a direct URL and keeps project navigation act
   root = createRoot(container);
   await act(async () => root.render(React.createElement(App)));
   expect(window.location.pathname).toBe('/projects/second');
-  expect(document.body.querySelector('[data-ui~=project-switcher] button')?.textContent).toBe('second app');
+  expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
 });
 
-it('selects the first project with a replace and restores selections through browser history', async () => {
+it('opens the directory and restores project selections through browser history', async () => {
   seedProjects();
   await mount('/queue');
-  await openConfiguration();
   await click('nav a[href="/projects"]');
+  expect(window.location.pathname).toBe('/projects');
+  await click('.project-listing a[href="/projects/first"]');
   expect(window.location.pathname).toBe('/projects/first');
   await act(async () => document.body.querySelector<HTMLButtonElement>('[data-ui~=project-switcher] button')!.click());
   await click('[data-ui~=project-list] a[href="/projects/second"]');
   expect(window.location.pathname).toBe('/projects/second');
-  expect(document.body.querySelector('[data-ui~=project-switcher] button')?.textContent).toBe('second app');
-  expect(document.body.querySelector('[data-ui~=project-switcher] button')?.textContent).toBe('second app');
+  expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
   await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
   expect(window.location.pathname).toBe('/projects/first');
-  expect(document.body.querySelector('[data-ui~=project-switcher] button')?.textContent).toBe('first app');
+  expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('first app');
   await act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 20)); });
   expect(window.location.pathname).toBe('/projects/second');
-  expect(document.body.querySelector('[data-ui~=project-switcher] button')?.textContent).toBe('second app');
+  expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
   await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
   await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
-  expect(window.location.pathname).toBe('/queue');
+  expect(window.location.pathname).toBe('/projects');
 });
 
 it('shows a missing project without silently selecting another and allows recovery', async () => {
@@ -730,11 +781,10 @@ it('shows a missing project without silently selecting another and allows recove
   expect(window.location.pathname).toBe('/projects/missing');
   expect(document.body.textContent).toContain('项目不存在');
   expect(document.body.querySelector('[data-ui~=project-detail]')).toBeNull();
-  await act(async () => document.body.querySelector<HTMLButtonElement>('[data-ui~=project-switcher] button')!.click());
-  expect(document.body.querySelector('[data-ui~=project-list-item][aria-current]')).toBeNull();
-  await click('[data-ui~=project-list] a[href="/projects/second"]');
+  await click('main a[href="/projects"]');
+  await click('.project-listing a[href="/projects/second"]');
   expect(window.location.pathname).toBe('/projects/second');
-  expect(document.body.querySelector('[data-ui~=project-switcher] button')?.textContent).toBe('second app');
+  expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
 });
 
 it('consumes the creation flag on a selected project without losing its URL or draft', async () => {
@@ -744,15 +794,15 @@ it('consumes the creation flag on a selected project without losing its URL or d
   expect(window.location.pathname).toBe('/projects/second');
   expect(window.location.search).toBe('');
   expect(document.body.querySelector('[role=dialog][data-state=open] h2')?.textContent).toBe('创建项目');
-  expect(document.body.querySelector('[data-ui~=project-switcher] button')?.textContent).toBe('second app');
+  expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
 });
 
-it('keeps the creation dialog open when the project index resolves to a project URL', async () => {
+it('keeps the creation dialog on the project directory', async () => {
   seedProjects();
   role = 'admin';
   await mount('/projects?createProject=true');
-  expect(window.location.pathname).toBe('/projects/first');
+  expect(window.location.pathname).toBe('/projects');
   expect(window.location.search).toBe('');
   expect(document.body.querySelector('[role=dialog][data-state=open] h2')?.textContent).toBe('创建项目');
-  expect(document.body.querySelector('[data-ui~=project-switcher] button')?.textContent).toBe('first app');
+  expect(document.body.querySelectorAll('.project-row')).toHaveLength(2);
 });

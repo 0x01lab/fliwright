@@ -1,3 +1,4 @@
 @import "tailwindcss" source(none);
 @import "./theme.css";
+@import "./workspace.css";
 @source "./**/*.{ts,tsx,html}";

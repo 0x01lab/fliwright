@@ -14,6 +14,11 @@ export function projectRepositoryDetails(value: string): { repository: string; n
   } catch { return null; }
 }
 
+export function displayRepositoryPath(value: string): string | undefined {
+  const parsed = projectRepositoryDetails(value);
+  return parsed ? new URL(parsed.repository).pathname.replace(/^\/|\.git$/g, '') : undefined;
+}
+
 export const projectSetupDefaults = {
   defaultBranch: 'main',
   projectPath: '.',

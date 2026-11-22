@@ -142,6 +142,10 @@
     --done: var(--muted-foreground);
     --done-bg: var(--secondary);
     --done-ink: var(--secondary-foreground);
+    --workspace-running: oklch(0.52 0.16 254);
+    --workspace-project: oklch(0.46 0.10 300);
+    --workspace-action: var(--primary);
+    --workspace-action-ink: var(--primary-foreground);
   }
   .dark {
     color-scheme: dark;
@@ -177,6 +181,22 @@
     --warn-bg: color-mix(in oklch, var(--warn) 14%, var(--card));
     --warn-ink: oklch(0.9348 0.0990 94.04);
     --idle: var(--muted-foreground);
+    --workspace-running: oklch(0.73 0.13 252);
+    --workspace-project: oklch(0.81 0.09 300);
+  }
+  .dark:has(.cloud-workspace) {
+    --background: oklch(0.178 0.002 144);
+    --card: oklch(0.218 0.002 144);
+    --popover: oklch(0.241 0.003 144);
+    --foreground: oklch(0.953 0.003 144);
+    --secondary: oklch(0.274 0.004 144);
+    --muted: oklch(0.232 0.003 144);
+    --muted-foreground: oklch(0.728 0.006 144);
+    --accent: oklch(0.296 0.004 144);
+    --border: oklch(0.302 0.003 144);
+    --input: oklch(0.38 0.004 144);
+    --workspace-action: var(--brand-lime);
+    --workspace-action-ink: oklch(0.25 0.045 132);
   }
   * {
     @apply border-border outline-ring/50;

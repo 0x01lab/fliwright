@@ -27,7 +27,7 @@ it('two OS processes racing to claim the same SQLite slot cannot both execute', 
     fileURLToPath(new URL('../node_modules', import.meta.url)),
     join(root, 'node_modules'),
   );
-  for (const name of ['CloudStore', 'WorkerTimelineStore', 'WorkerDiagnosticsStore'])
+  for (const name of ['CloudStore', 'WorkerTimelineStore', 'WorkerDiagnosticsStore', 'project-setup', 'request-board'])
     writeFileSync(
       join(root, `${name}.js`),
       ts.transpileModule(

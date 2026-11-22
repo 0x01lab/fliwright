@@ -2,16 +2,12 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { Projects } from '../src/web/Projects.js';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { createCloudRouter } from '../src/web/app.js';
+import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { projectSchema } from '@fliwright/cloud-protocol';
 
 function RoutedProjects() {
-  const [router] = React.useState(() => {
-    const rootRoute = createRootRoute();
-    const projectRoute = createRoute({ getParentRoute: () => rootRoute, path: '/projects/$projectId', component: Projects });
-    return createRouter({ routeTree: rootRoute.addChildren([projectRoute]), history: createMemoryHistory({ initialEntries: ['/projects/app'] }) });
-  });
+  const [router] = React.useState(() => createCloudRouter(createMemoryHistory({ initialEntries: ['/projects/app'] })));
   return React.createElement(RouterProvider, { router });
 }
 
@@ -48,7 +44,7 @@ async function fill(label: string, value: string) {
 }
 
 it('creates a project from a URL with inferred name and collapsed optional defaults', async () => {
-  const form = document.body.querySelector('form')!;
+  const form = document.body.querySelector('[role=dialog] form')!;
   expect(form.querySelector('input')?.getAttribute('aria-label')).toBe('GitLab 仓库 URL');
   expect(form.querySelector('input[aria-label="项目 ID"]')).toBeNull();
   expect(form.querySelector('details')?.open).toBe(false);
@@ -65,7 +61,7 @@ it('creates a project from a URL with inferred name and collapsed optional defau
   for (const field of ['id', 'configRevision', 'webhookSecretDigest', 'webhookStatus', 'autoRun']) {
     expect(submitted).not.toHaveProperty(field);
   }
-  expect(document.body.querySelector('form')).toBeNull();
+  expect(document.body.querySelector('[role=dialog] form')).toBeNull();
   expect(document.body.querySelector('[role="status"]')?.textContent).toContain('已保存');
 });
 
@@ -93,17 +89,19 @@ it('runs cases directly by default and offers repository scenarios as optional p
     if (path === '/api/me') return { role: 'member' };
     if (String(path).endsWith('/status')) return { ready: true, blockers: [], latestScan: null };
     if (String(path).endsWith('/catalogs')) return [catalog];
+    if (String(path).endsWith('/case-runs')) return { catalogId: catalog.catalogId, items: [{ suite: 'smoke', caseId: 'case', id: 'previous-case-run', status: 'failed' }] };
     if (String(path).startsWith('/api/requests')) return { items: [] };
     return [];
   } }) as Response);
   const showCases = async (key: string) => {
     await act(async () => root.render(React.createElement(RoutedProjects, { key })));
-    await selectOption('项目视图', 'tests');
   };
   await showCases('empty');
   expect(document.body.textContent).toContain('discovered case');
-  expect(document.body.querySelector<HTMLButtonElement>('[aria-label="运行此用例：discovered case"]')?.disabled).toBe(false);
-  await act(async () => document.body.querySelector<HTMLButtonElement>('[aria-label="运行此用例：discovered case"]')!.click());
+  expect(document.body.querySelector<HTMLButtonElement>('.case-ticket')?.disabled).toBe(false);
+  await act(async () => document.body.querySelector<HTMLButtonElement>('.case-ticket')!.click());
+  expect(document.querySelector('[role=dialog] a[href="/requests/previous-case-run"]')).not.toBeNull();
+  await clickText('运行用例');
   expect(document.body.querySelector<HTMLSelectElement>('select[aria-label="运行场景"]')?.value).toBe('');
   expect(document.body.querySelector<HTMLButtonElement>('[role=dialog] button[type="submit"]')?.disabled).toBe(false);
   await act(async () => document.body.querySelector('[role=dialog] form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
@@ -112,9 +110,10 @@ it('runs cases directly by default and offers repository scenarios as optional p
   vi.mocked(fetch).mockClear();
   catalog.scenarios = [{ name: 'guest' }];
   await showCases('guest');
-  const run = document.body.querySelector<HTMLButtonElement>('[aria-label="运行此用例：discovered case"]')!;
+  const run = document.body.querySelector<HTMLButtonElement>('.case-ticket')!;
   expect(run.disabled).toBe(false);
   await act(async () => run.click());
+  await clickText('运行用例');
   expect(document.body.querySelector('[role=dialog][data-state=open]')).not.toBeNull();
   const select = document.body.querySelector<HTMLSelectElement>('select[aria-label="运行场景"]')!;
   expect([...select.options].map(option => option.value)).toEqual(['', 'guest']);
@@ -166,32 +165,33 @@ it('browses only usable catalog versions and searches cases and projects without
   await showProject();
   expect(document.body.querySelector('[data-ui~=project-summaries]')).toBeNull();
   expect(document.body.querySelector('[aria-label="项目状态"]')).toBeNull();
-  expect(document.body.querySelector('table[aria-label="测试用例列表"]')).not.toBeNull();
+  expect(document.body.querySelector('.case-deck')).not.toBeNull();
   const options = [...document.body.querySelector<HTMLSelectElement>('[aria-label="已扫描版本"]')!.options].filter(option => !option.disabled);
   expect(options.map(option => option.value)).toEqual(['ready']);
   await fill('筛选文件或用例名称', 'no match');
   expect(document.body.textContent).toContain('没有匹配的测试用例');
   await clickText('清除搜索');
   expect(document.body.textContent).toContain('A real case');
-  expect(document.body.querySelector('[data-ui~=project-sidebar]')).toBeNull();
+  expect(document.body.querySelector('header [aria-label="项目分区"]')).not.toBeNull();
   await act(async () => document.body.querySelector<HTMLButtonElement>('[data-ui~=project-switcher] button')!.click());
   await fill('搜索项目', 'no match');
   expect(document.body.textContent).toContain('没有匹配的项目');
-  expect(document.body.querySelector('[data-ui~=project-switcher-menu]')?.textContent).toContain('所有项目');
+  expect(document.body.querySelector('[data-ui~=project-switcher-menu]')?.textContent).toContain('没有匹配的项目');
   expect(document.body.textContent).toContain('A real case');
 });
 
 it('scans the default branch or a validated explicit SHA and opens a filterable scan history', async () => {
   await showProject();
-  await clickText('扫描仓库');
+  await act(async()=>document.querySelector<HTMLAnchorElement>('.project-sections a[href*=scans]')!.click());
+  await clickText('新建扫描');
   expect(document.body.querySelector('[role=dialog][data-state=open]')?.textContent).toContain('默认分支');
   await act(async () => document.body.querySelector('[role=dialog] form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect(submitted).toEqual({});
-  expect(document.body.querySelector('[role=dialog] h2')?.textContent).toBe('扫描记录');
+  expect(document.body.querySelector('.project-page-heading h1')?.textContent).toContain('扫描记录');
   await selectOption('筛选扫描状态', 'failed');
-  expect(document.body.querySelector('[role=dialog] table')?.textContent).toContain('失败');
-  expect(document.body.querySelector('[role=dialog] table')?.textContent).not.toContain('运行中');
-  expect(document.body.querySelector('[role=dialog] details')?.textContent).toContain('Dependency installation failed');
+  expect(document.body.querySelector('.project-workbody table')?.textContent).toContain('失败');
+  expect(document.body.querySelector('.project-workbody table')?.textContent).not.toContain('运行中');
+  expect(document.body.querySelector('.project-workbody details')?.textContent).toContain('Dependency installation failed');
   await clickText('新建扫描');
   await act(async () => document.body.querySelector<HTMLInputElement>('input[value="commit"]')!.click());
   await fill('完整 Commit SHA', 'short');
@@ -212,7 +212,7 @@ it('preserves dialog input and reports a failed request inside the dialog', asyn
 
 it('requires name confirmation before deleting and makes settings read-only for members', async () => {
   await showProject();
-  await selectOption('项目视图', 'settings');
+  await act(async () => document.querySelector<HTMLAnchorElement>('.project-sections a[href*=settings]')!.click());
   expect(document.body.querySelectorAll('[aria-label="项目状态"] [data-ui~=project-summary]')).toHaveLength(4);
   await clickText('删除项目');
   expect(document.body.querySelector<HTMLButtonElement>('[role=dialog] button[type="submit"]')?.disabled).toBe(true);
@@ -224,7 +224,7 @@ it('requires name confirmation before deleting and makes settings read-only for 
   await showProject('member');
   expect(document.body.querySelector('button[aria-label="创建项目"]')).toBeNull();
   expect([...document.body.querySelectorAll('button')].some(button => button.textContent === '扫描仓库')).toBe(false);
-  await selectOption('项目视图', 'settings');
+  await act(async () => document.querySelector<HTMLAnchorElement>('.project-sections a[href*=settings]')!.click());
   expect(document.body.textContent).toContain('仓库与运行配置');
   expect(document.body.textContent).not.toContain('编辑配置');
   expect(document.body.textContent).not.toContain('删除项目');
@@ -232,7 +232,7 @@ it('requires name confirmation before deleting and makes settings read-only for 
 
 it('configures automatic direct runs without selecting a named scenario', async () => {
   await showProject();
-  await selectOption('项目视图', 'settings');
+  await act(async () => document.querySelector<HTMLAnchorElement>('.project-sections a[href*=settings]')!.click());
   await clickText('配置自动运行');
   const choice = [...document.body.querySelectorAll('label')].find(label => label.textContent?.includes('smoke / 直接运行（无场景）'))!;
   expect(choice).toBeDefined();
@@ -244,7 +244,7 @@ it('configures automatic direct runs without selecting a named scenario', async 
 
 it('keeps the one-time webhook token visible across project refreshes', async () => {
   await showProject();
-  await selectOption('项目视图', 'settings');
+  await act(async () => document.querySelector<HTMLAnchorElement>('.project-sections a[href*=settings]')!.click());
   await clickText('配置自动运行');
   await clickText('生成 / 轮换 Secret Token');
   expect(document.body.querySelector<HTMLInputElement>('[aria-label="一次性 Webhook Secret Token"]')?.value).toBe('one-time-test-token');

@@ -1,4 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
+import { displayRepositoryPath } from './project-setup.js';
+import { boardColumns, type BoardDepth, type BoardSnapshot, type TestColumn } from './request-board.js';
 import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -693,6 +695,59 @@ export class CloudStore {
       items: rows.map((r) => JSON.parse(String(r.data)) as TestRequest),
       total,
     };
+  }
+  latestCaseRuns(projectId: string, catalogId: string) {
+    const rows = this.db.prepare(`
+      WITH ranked AS (
+        SELECT id, state, json_extract(data,'$.verdict') AS verdict,
+          json_extract(data,'$.selection.suite') AS suite, json_extract(data,'$.selection.caseId') AS caseId,
+          row_number() OVER (PARTITION BY json_extract(data,'$.selection.suite'),json_extract(data,'$.selection.caseId')
+            ORDER BY created_at DESC,rowid DESC) AS position
+        FROM requests WHERE json_extract(data,'$.projectId')=? AND json_extract(data,'$.catalogId')=?
+          AND json_extract(data,'$.selection.mode')='case'
+      ) SELECT id,state,verdict,suite,caseId FROM ranked WHERE position=1`).all(projectId, catalogId);
+    return {
+      catalogId,
+      items: rows.map(row => ({ id: String(row.id), suite: String(row.suite), caseId: String(row.caseId),
+        status: String(row.state === 'completed' ? row.verdict : row.state) })),
+    };
+  }
+  requestBoard(depth: BoardDepth, search: string, targetId: string): BoardSnapshot {
+    // Rank before limiting. Queue ranks are global even when a filter hides earlier requests.
+    const rows = this.db.prepare(`
+      WITH filters(target_id, term) AS (VALUES (?, lower(?))), classified AS (
+        SELECT rowid AS rid, id, state, created_at, queued_at,
+          CASE WHEN state='queued' THEN 'pending'
+            WHEN state IN ('assigned','preparing','running','finalizing','cancel_requested') THEN 'running'
+            WHEN state='infrastructure_failed' OR (state='completed' AND json_extract(data,'$.verdict')='failed') THEN 'failed'
+            WHEN state='completed' AND json_extract(data,'$.verdict')='passed' THEN 'passed'
+            ELSE 'other' END AS lane,
+          json_extract(data,'$.input.targetId') AS target,
+          json_extract(data,'$.input.suite') AS suite,
+          json_extract(data,'$.selection.titlePath') AS title_path,
+          json_extract(data,'$.input.commit') AS sha,
+          coalesce(json_extract(data,'$.input.source.branch'),json_extract(data,'$.source.branch'),'') AS branch
+        FROM requests
+      ), ranked AS (
+        SELECT rid,lane,count(*) OVER (PARTITION BY lane) AS total,
+          row_number() OVER (PARTITION BY lane ORDER BY
+            CASE WHEN lane='pending' THEN queued_at END,
+            CASE WHEN lane='pending' THEN created_at END,
+            CASE WHEN lane='pending' THEN rid END, created_at DESC,rid DESC) AS pos
+        FROM classified, filters WHERE (target_id='' OR target=target_id) AND
+          (term='' OR instr(lower(id),term) OR instr(lower(sha),term) OR instr(lower(branch),term)
+           OR instr(lower(suite),term) OR instr(lower((SELECT group_concat(value,' › ') FROM json_each(title_path))),term))
+      ) SELECT lane,total,r.data FROM ranked JOIN requests r ON r.rowid=ranked.rid
+        WHERE pos <= CASE lane ${boardColumns.map(id => `WHEN '${id}' THEN ?`).join(' ')} END ORDER BY lane,pos
+    `).all(targetId, search, ...boardColumns.map(id => depth[id]));
+    const totals: BoardDepth = { pending: 0, running: 0, passed: 0, failed: 0, other: 0 };
+    const items = rows.map(row => {
+      totals[row.lane as TestColumn] = Number(row.total);
+      const { target, ...request } = JSON.parse(String(row.data)) as TestRequest;
+      return { ...request, repository: displayRepositoryPath(target.repository), projectName: target.name };
+    });
+    const queue = this.db.prepare("SELECT id FROM requests WHERE state='queued' ORDER BY queued_at,created_at,rowid").all().map(row => String(row.id));
+    return { items, totals, queue };
   }
   queue(): TestRequest[] {
     return (
