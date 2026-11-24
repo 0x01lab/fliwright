@@ -8,8 +8,9 @@ Flutter/Dart packages, VS Code extension, and Codex plugin.
 All four tag workflows call `release-gate.yml`, which requires the tagged commit
 in `main` history and reruns the complete CI on that exact commit before allowing
 publication. CI includes Harness checks, Node 26 public-package and extension build/lint/tests,
-public-package compatibility on Node 22/24, Flutter tests, Android and unsigned iOS
-compilation and generated Flutter E2E.
+public-package compatibility on Node 22/24, Flutter tests and Android compilation.
+Run the separate `Apple platform validation` workflow manually for unsigned iOS
+compilation, XCTest and generated Flutter E2E.
 Cloud server, worker and protocol delivery are outside this public release gate.
 Package suites run sequentially with at most two Vitest workers to avoid CPU/filesystem contention in timing tests.
 
