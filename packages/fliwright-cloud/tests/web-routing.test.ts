@@ -569,7 +569,7 @@ it('keeps the filtered board open after submission and links to the queued task'
     suite: 'smoke',
     commit: 'a'.repeat(40),
   });
-  const toast = document.querySelector('[data-sonner-toast]')!;
+  const toast = await vi.waitUntil(() => document.querySelector('[data-sonner-toast]'));
   expect(toast.textContent).toContain('已加入队列');
   expect(toast.querySelector('button')?.textContent).toBe('查看任务');
   await act(async () => toast.querySelector('button')!.click());
