@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/tdd"
 path: "packages/fliwright-tdd"
-source_fingerprint: "43c106c7310284e8dcd0ca729bfbc3bf8172cb1fc1eff311e3359be745a826b4"
+source_fingerprint: "88697a8fa268830ad5b6b37d89614f8278718542aeb6551f6146c2a136fea998"
 generated: true
 ---
 
@@ -78,6 +78,7 @@ Own persistent focused test execution, Flutter synchronization, baseline reset a
 - `SubprocessDaemonTransport`
 - `SubprocessDaemonTransportOptions`
 - `SyncDecision`
+- `TddCycleAttempt`
 - `TddCycleResult`
 - `TddFailureArtifacts`
 - `TddFailureAssertion`

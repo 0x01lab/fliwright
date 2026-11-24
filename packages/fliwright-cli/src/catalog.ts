@@ -114,5 +114,5 @@ export async function collectCatalog(options: { cwd: string; suites: Record<stri
     const cases = files.flatMap(file => file.cases);
     suites.push({ id, pattern, files: [...new Set(cases.map(item => item.file))], cases });
   }
-  return { suites, scenarios, mocks, scannerVersion: 'vitest-collection-v1', fliwrightVersion: '0.1.0' };
+  return { suites, scenarios, mocks, scannerVersion: 'vitest-collection-v1', fliwrightVersion: '0.1.1' };
 }

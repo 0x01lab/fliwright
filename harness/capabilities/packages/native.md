@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/native"
 path: "packages/fliwright-native"
-source_fingerprint: "8ed1e4d694a3919d4a307a055590d649508fd936195a6d0fa6ed3178c02dcc5a"
+source_fingerprint: "46209e5ba438be02c42f731b31e57aa19fda5df9c70a59105fef115541c75ceb"
 generated: true
 ---
 

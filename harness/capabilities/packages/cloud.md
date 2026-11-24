@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cloud"
 path: "packages/fliwright-cloud"
-source_fingerprint: "3403f0712c5fd6a1f932bf3430905518b65311434a9117440e6716d41a146034"
+source_fingerprint: "8e48834b18f0c962c3f9158fd830a4a502973c571171bdb39162aa6ccbdf0811"
 generated: true
 ---
 
@@ -55,6 +55,7 @@ Own centralized scheduling, device policy management, report storage and browser
 ## Source Anchors
 
 - `packages/fliwright-cloud/src/CloudStore.ts`
+- `packages/fliwright-cloud/src/ProjectSecureFiles.ts`
 - `packages/fliwright-cloud/src/ReportStore.ts`
 - `packages/fliwright-cloud/src/WorkerDiagnosticsStore.ts`
 - `packages/fliwright-cloud/src/WorkerTimelineStore.ts`
@@ -69,10 +70,12 @@ Own centralized scheduling, device policy management, report storage and browser
 - `packages/fliwright-cloud/src/server.ts`
 - `packages/fliwright-cloud/src/web/Devices.tsx`
 - `packages/fliwright-cloud/src/web/ProjectNavigation.tsx`
+- `packages/fliwright-cloud/src/web/ProjectSecureFiles.tsx`
 - `packages/fliwright-cloud/src/web/ProjectWorkers.tsx`
 - `packages/fliwright-cloud/src/web/Projects.tsx`
 - `packages/fliwright-cloud/src/web/QueueBoard.tsx`
 - `packages/fliwright-cloud/src/web/Replay.tsx`
+- `packages/fliwright-cloud/src/web/RequestSubmission.tsx`
 - `packages/fliwright-cloud/src/web/ScenarioBuilder.tsx`
 - `packages/fliwright-cloud/src/web/TestBoard.tsx`
 - `packages/fliwright-cloud/src/web/TimeTimeline.tsx`
