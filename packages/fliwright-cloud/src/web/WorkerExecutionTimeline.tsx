@@ -7,7 +7,7 @@ import { Button } from './components/ui/button.js';
 import { NativeSelect } from './components/ui/native-select.js';
 
 const phases: Record<WorkerTimelineSpan['phase'], string> = {
-  'execution.prepare': '准备执行进程', 'repository.checkout': '获取测试代码', 'dependencies.install': '安装项目依赖',
+  'execution.prepare': '准备执行进程', 'project.local': '校验本地项目', 'repository.checkout': '获取测试代码', 'dependencies.install': '安装项目依赖',
   'device.reset.before': '准备测试设备', 'app.launch': '启动 Flutter App', 'app.verify': '验证测试连接',
   'tests.run': '运行测试', 'artifacts.export': '导出测试报告', 'processes.stop': '停止执行进程',
   'report.publish': '发布测试报告', 'device.reset.after': '清理测试设备',

@@ -31,7 +31,11 @@ it('persists service diagnostics without an execution lease, deduplicates replay
   expect(response.json().logs).toHaveLength(1);
   expect(response.body).not.toContain('worker-private-token'); expect(response.body).not.toContain('/secret');
   expect((await server.inject({ url: '/api/workers/other/diagnostics', headers })).json().logs).toEqual([]);
-  expect((await server.inject({ url: '/api/workers/mac/diagnostics', headers: { ...headers, 'x-cloud-user': 'member' } })).statusCode).toBe(403);
+  const member = { ...headers, 'x-cloud-user': 'member' };
+  expect((await server.inject({ url: '/api/workers/mac/diagnostics', headers: member })).statusCode).toBe(403);
+  const workerList = await server.inject({ url: '/api/workers', headers: member });
+  expect(workerList.json()[0].service.process).toMatchObject({ pid: 123, nodeVersion: 'v26.3.0', uptimeMs: 1000, rssBytes: 100 });
+  expect(workerList.body).not.toContain('executor.failed');
   await expect(client.request('/api/worker/diagnostics', { body: { ...report, workerId: 'other' } })).rejects.toThrow();
   const now = store.now; store.now = () => now.call(store) + 40000;
   expect((await server.inject({ url: '/api/workers/mac/diagnostics', headers })).json().sessions[0].status).toBe('unreachable');
@@ -42,6 +46,21 @@ it('retains fatal status across restart and filters logs by level, session and s
   const response = await server.inject({ url: `/api/workers/mac/diagnostics?level=error&search=executor&sessionId=${sessionId}`, headers: { 'x-cloud-user': 'ops', 'x-cloud-proxy-secret': 'private-proxy' } });
   expect(response.json()).toMatchObject({ sessions: [{ status: 'failed' }], logs: [{ event: 'executor.failed' }] });
 });
+it('exposes the latest workspace check in the host list and clears the count after cleanup', async () => {
+  const { server, client } = await setup();
+  const headers = { 'x-cloud-user': 'member', 'x-cloud-proxy-secret': 'private-proxy' };
+  const workers = async () => (await server.inject({ url: '/api/workers', headers })).json();
+  await client.request('/api/worker/diagnostics', { body: report });
+  expect((await workers()).find((worker: { id: string }) => worker.id === 'mac').service).not.toHaveProperty('catalogWorkspace');
+  const leftover = { checkedAt: '2026-11-23T01:00:00.000Z', directoryCount: 2 };
+  await client.request('/api/worker/diagnostics', { body: { ...report, catalogWorkspace: leftover } });
+  expect(await workers()).toContainEqual(expect.objectContaining({ id: 'mac', service: expect.objectContaining({ catalogWorkspace: leftover }) }));
+  const cleaned = { checkedAt: '2026-11-23T01:00:30.000Z', directoryCount: 0 };
+  await client.request('/api/worker/diagnostics', { body: { ...report, sessionId: '22222222-2222-4222-8222-222222222222', catalogWorkspace: cleaned } });
+  expect(await workers()).toContainEqual(expect.objectContaining({ id: 'mac', service: expect.objectContaining({ catalogWorkspace: cleaned }) }));
+  await expect(client.request('/api/worker/diagnostics', { body: { ...report, catalogWorkspace: { ...cleaned, path: '/private/catalogs' } } })).rejects.toThrow();
+});
+
 it('bounds persisted history, supports stable cursor paging and expires logs for offline hosts', async () => {
   const { store } = await setup();
   for (let batch = 0; batch < 21; batch++) store.workerDiagnostics.record('mac', { ...report,

@@ -107,6 +107,8 @@ export interface TddCycleResult {
   lastSync: 'reload' | 'restart' | 'none';
   /** True only when an automatic reload failure retry escalated this cycle to one restart. */
   syncEscalated?: boolean;
+  /** Ordered results for the completed attempts in this cycle, including failed restart retries. */
+  attempts?: TddCycleAttempt[];
   baselineVersion: number;
   failure?: { message?: string };
   failureContext?: TddFailureContext;
@@ -114,6 +116,11 @@ export interface TddCycleResult {
   timelinePath?: string;
   timelineNodeId?: string;
   unsupportedState?: ResetCategory[];
+}
+
+export interface TddCycleAttempt extends Omit<TddCycleResult, 'attempts' | 'syncEscalated'> {
+  /** Resolved sync mode requested for this attempt. `lastSync` records the confirmed mode. */
+  requestedSync: TddCycleResult['lastSync'];
 }
 
 export interface TddSyncResult {
@@ -134,6 +141,7 @@ export interface TddRuntimeDeps {
   driverFactory?: () => ResetContext['driver'] & {
     connect(vmServiceUrl: string): Promise<void>;
     dispose(options?: { signal?: AbortSignal }): Promise<void>;
+    /** Resolves on confirmed VM reload, rejects if reload fails. */
     reloadSources?(): Promise<unknown>;
   };
   baseline?: {

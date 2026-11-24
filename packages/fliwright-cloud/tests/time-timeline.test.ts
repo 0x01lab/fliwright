@@ -95,7 +95,6 @@ it('places screenshots at step completion, separates nearby frames and selects t
     expect(frames[0].querySelector('img')!.getAttribute('alt')).toContain('时间轴截图');
     expect(frames[0].querySelector('small')).toBeNull();
     expect(frames[0].className).toContain('w-28');
-    expect(frames[0].className).toContain('h-40');
     expect(frames[1].getAttribute('aria-pressed')).toBe('false');
     expect(frames[2].getAttribute('aria-pressed')).toBe('true');
     await act(async () => frames[2].click());
@@ -201,15 +200,19 @@ it('keeps playback controls in the timeline and updates the preview when steppin
     await act(async () => root.render(React.createElement(Replay, { report })));
     const timeline = container.querySelector<HTMLElement>("[data-ui~=trace-timeline]")!;
     expect(timeline.querySelector('[aria-label="时间轴回放控制"]')).not.toBeNull();
+    expect(timeline.querySelector('[data-ui~=trace-heading] [data-ui~=replay-toolbar]')).not.toBeNull();
+    const stage = container.querySelector('[data-ui~=rp-stage]')!;
+    expect(stage.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stage.querySelector('[data-ui~=replay-current]')?.textContent).toBe('');
     expect(container.querySelector("[data-ui~=rp-stage] [data-ui~=replay-toolbar]")).toBeNull();
     const next = timeline.querySelector<HTMLButtonElement>('[aria-label="下一步"]')!;
     await act(async () => next.click());
-    expect(container.querySelector("[data-ui~=replay-current] b")!.textContent).toBe('2. Last');
+    expect(container.querySelector("[data-ui~=step-select][aria-current=step] [data-ui~=step-name]")!.textContent).toBe('Last');
     expect(timeline.querySelector('[role="slider"]')!.getAttribute('aria-valuenow')).toBe('5000');
     await act(async () => timeline.querySelector<HTMLButtonElement>('[role="slider"]')!.dispatchEvent(
       new KeyboardEvent('keydown', { bubbles: true, key: 'Home' }),
     ));
-    expect(container.querySelector("[data-ui~=replay-current] b")!.textContent).toBe('1. First');
+    expect(container.querySelector("[data-ui~=step-select][aria-current=step] [data-ui~=step-name]")!.textContent).toBe('First');
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -262,7 +265,7 @@ it('plays recorded time linearly per frame, resumes and changes speed without ju
       expect(parseFloat(container.querySelector<HTMLElement>("[data-ui~=trace-cursor]")!.style.left)).toBeCloseTo(time() / 100);
       expect(handle.style.left).toBe(container.querySelector<HTMLElement>("[data-ui~=trace-cursor]")!.style.left);
     }
-    expect(container.querySelector("[data-ui~=replay-current] b")!.textContent).toBe('1. First');
+    expect(container.querySelector("[data-ui~=step-select][aria-current=step] [data-ui~=step-name]")!.textContent).toBe('First');
     await act(async () => play().click());
     expect(callbacks.size).toBe(0);
     await advance(1000);
@@ -281,7 +284,7 @@ it('plays recorded time linearly per frame, resumes and changes speed without ju
     // A slow frame catches up using elapsed wall time, including across steps.
     await advance(2000);
     expect(time()).toBe(4465);
-    expect(container.querySelector("[data-ui~=replay-current] b")!.textContent).toBe('2. Last');
+    expect(container.querySelector("[data-ui~=step-select][aria-current=step] [data-ui~=step-name]")!.textContent).toBe('Last');
     await advance(5000);
     expect(time()).toBe(10000);
     expect(play().textContent).toContain('播放');

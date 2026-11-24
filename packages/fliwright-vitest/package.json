@@ -1,6 +1,6 @@
 {
   "name": "@fliwright/vitest",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vitest fixtures and lifecycle integration for Fliwright Flutter E2E tests.",
   "license": "MIT",
   "repository": {

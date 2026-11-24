@@ -165,12 +165,12 @@ it('saves enrollment and application settings, showing deployment readiness', as
   expect(container.textContent).toContain('配置已保存');
   expect(container.textContent).toContain('等待执行进程');
 });
-it('enrolls and enables a device when an application is selected, leaving slot allocation automatic', async () => {
+it('stores an optional project limit independently of device enrollment', async () => {
   await mount('/devices/phone');
   await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="允许应用 App"]')!.click());
   await act(async () => container.querySelector('form[data-device-settings]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   const saved = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === 'PUT')!;
-  expect(JSON.parse(String(saved[1]?.body))).toMatchObject({ managed: true, enabled: true, targets: ['app'], slotId: null });
+  expect(JSON.parse(String(saved[1]?.body))).toMatchObject({ managed: false, enabled: false, targets: ['app'], slotId: null });
   expect(container.textContent).toContain('留空自动分配');
 });
 it('keeps edits after a save error and renders management controls read-only for members', async () => {

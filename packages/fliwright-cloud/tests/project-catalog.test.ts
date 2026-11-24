@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CloudStore, digest } from '../src/CloudStore.js';
-import { projectSchema, type CatalogScanLease, type TestCatalog } from '@fliwright/cloud-protocol';
+import { projectSchema, unresolvedCatalogCommit, type CatalogScanLease, type TestCatalog } from '@fliwright/cloud-protocol';
 const clean: Array<() => void> = [];
 afterEach(() => { for (const dispose of clean.splice(0).reverse()) dispose(); });
 function setup() {
@@ -15,6 +15,7 @@ function setup() {
   store.configure([], [{ id: 'worker', slots: [] }, { id: 'other', slots: [] }]);
   store.createProject(projectSchema.parse({ id: 'app', name: 'App', repository: 'https://git.example.com/app.git', suites: { smoke: '*.test.ts' }, scenarios: ['clean'] }));
   store.db.prepare("INSERT INTO slots(worker_id,id,device_id,targets) VALUES('worker','slot','phone','[\"app\"]')").run();
+  store.setProjectWorkers('app', ['worker'], [], 'admin');
   return { store, advance: (ms: number) => { now += ms; } };
 }
 const sha = (letter: string) => letter.repeat(40);
@@ -22,6 +23,41 @@ function catalog(lease: CatalogScanLease): TestCatalog {
   const file = 'example.test.ts', titlePath = ['nested', 'same'];
   return { catalogId: lease.scan.scanId, projectId: lease.scan.projectId, commit: lease.scan.commit, configRevision: lease.scan.configRevision, createdAt: 100000, status: 'ready', scenarios: [{ name: 'clean', fingerprint: digest('scenario') }], suites: [{ id: 'smoke', pattern: '*.test.ts', files: [file], cases: [0, 1].map(duplicateIndex => ({ caseId: digest(JSON.stringify([file, titlePath, duplicateIndex])), file, titlePath, duplicateIndex })) }], scannerVersion: 'test', fliwrightVersion: 'test' };
 }
+it('pins each selected branch under its scan lease and keeps the original version on rerun', () => {
+  const { store } = setup();
+  const oldBranch = 'releases/v1.5.0', newBranch = 'releases/v1.6.0';
+  const first = store.createCatalogScan('app', undefined, undefined, oldBranch);
+  const second = store.createCatalogScan('app', undefined, undefined, newBranch);
+  expect(second.scanId).not.toBe(first.scanId);
+  expect(store.createCatalogScan('app', undefined, undefined, oldBranch).scanId).toBe(first.scanId);
+  expect(first).toMatchObject({ branch: oldBranch, commit: unresolvedCatalogCommit });
+  const oldLease = store.claimCatalogScan('worker')!;
+  const oldCatalog = { ...catalog(oldLease), commit: sha('a') };
+  expect(() => store.finishCatalogScan('worker', first.scanId, oldLease.token, oldCatalog)).toThrow(/does not match scan/);
+  expect(() => store.pinCatalogScanCommit('other', first.scanId, oldLease.token, sha('a'))).toThrow(/lease lost/);
+  expect(store.pinCatalogScanCommit('worker', first.scanId, oldLease.token, sha('a'))).toMatchObject({ branch: oldBranch, commit: sha('a') });
+  expect(store.pinCatalogScanCommit('worker', first.scanId, oldLease.token, sha('a')).commit).toBe(sha('a'));
+  expect(() => store.pinCatalogScanCommit('worker', first.scanId, oldLease.token, sha('b'))).toThrow(/already fixed/);
+  expect(store.finishCatalogScan('worker', first.scanId, oldLease.token, { ...oldCatalog, branch: newBranch }).branch).toBe(oldBranch);
+  const request = store.submitProject({ projectId: 'app', commit: sha('a'), catalogId: first.scanId, mode: 'suite', suite: 'smoke' }, 'member', 'original');
+  expect(request.input).toMatchObject({ commit: sha('a'), source: { branch: oldBranch } });
+
+  const newLease = store.claimCatalogScan('worker')!;
+  expect(newLease.scan.scanId).toBe(second.scanId);
+  store.pinCatalogScanCommit('worker', second.scanId, newLease.token, sha('b'));
+  store.finishCatalogScan('worker', second.scanId, newLease.token, { ...catalog(newLease), commit: sha('b') });
+  const advanced = store.createCatalogScan('app', undefined, undefined, oldBranch);
+  const advancedLease = store.claimCatalogScan('worker')!;
+  store.pinCatalogScanCommit('worker', advanced.scanId, advancedLease.token, sha('c'));
+  store.finishCatalogScan('worker', advanced.scanId, advancedLease.token, { ...catalog(advancedLease), commit: sha('c') });
+  expect(store.rerun(request.id, 'member', 'rerun')).toMatchObject({ catalogId: first.scanId, input: request.input, source: { kind: 'manual', branch: oldBranch } });
+
+  store.db.prepare("INSERT INTO slots(worker_id,id,device_id,targets) VALUES('worker','second','phone2','[\"app\"]')").run();
+  store.recordDeviceInventory('worker', { scannedAt: new Date().toISOString(), devices: ['phone', 'phone2'].map(id => ({ id, name: id, platform: 'ios', kind: 'physical', state: 'online' })), diagnostics: [] });
+  store.submitProject({ projectId: 'app', commit: sha('b'), catalogId: second.scanId, mode: 'suite', suite: 'smoke' }, 'member', 'new-version');
+  expect(store.claim('worker', 'slot', 'phone')?.request).toMatchObject({ catalogId: first.scanId, input: { commit: sha('a') } });
+  expect(store.claim('worker', 'second', 'phone2')?.request).toMatchObject({ catalogId: second.scanId, input: { commit: sha('b') } });
+});
 it('retains catalogs without scenarios and runs only scenarios discovered in the selected catalog', () => {
   const { store } = setup();
   store.createCatalogScan('app', sha('a'));
@@ -93,6 +129,28 @@ it('fences scan leases independently of device slots, freezes config and retains
   expect(() => store.heartbeatCatalogScan('worker', expiring.scanId, expired.token)).toThrow(/lease lost/);
   store.claimCatalogScan('worker');
   expect(store.catalogScan('app', expiring.scanId).status).toBe('failed');
+});
+it('assigns the local checkout only to its scan Worker and holds it until cleanup or recovery', () => {
+  const { store } = setup();
+  store.db.prepare("INSERT INTO slots(worker_id,id,device_id,targets) VALUES('worker','second','phone2','[\"app\"]'),('other','slot','phone3','[\"app\"]')").run();
+  for (const [worker, phones] of [['worker', ['phone', 'phone2']], ['other', ['phone3']]] as const) {
+    store.recordDeviceInventory(worker, { scannedAt: new Date().toISOString(), devices: phones.map(id => ({ id, name: id, platform: 'ios', kind: 'physical', state: 'online' })), diagnostics: [] });
+  }
+  store.createCatalogScan('app', sha('a'));
+  const scan = store.claimCatalogScan('worker')!, value = catalog(scan);
+  store.finishCatalogScan('worker', scan.scan.scanId, scan.token, value);
+  const input = { projectId: 'app', commit: value.commit, catalogId: value.catalogId, mode: 'suite', suite: 'smoke' };
+  const first = store.submitProject(input, 'member', 'first');
+  const second = store.submit({ targetId: 'app', commit: value.commit, suite: 'smoke' }, 'member', 'second');
+  expect(second.catalogId).toBe(value.catalogId);
+  expect(store.claim('other', 'slot', 'phone3')).toBeNull();
+  const active = store.claim('worker', 'slot', 'phone')!;
+  expect(active.request.id).toBe(first.id);
+  expect(store.claim('worker', 'second', 'phone2')).toBeNull();
+  store.finish(active, { verdict: 'unknown', infrastructure: 'permanent', cleanup: 'failed', publication: 'unavailable' });
+  expect(store.claim('worker', 'second', 'phone2')).toBeNull();
+  store.recoverSlot('worker', 'slot', 'processes and device reset verified');
+  expect(store.claim('worker', 'second', 'phone2')?.request.id).toBe(second.id);
 });
 it('freezes exact duplicate selection and makes retries independent of subsequent config edits', () => {
   const { store } = setup();

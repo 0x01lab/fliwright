@@ -11,7 +11,8 @@ export function attachWorkerControl(server: Server, options: {
   handle(request: IncomingMessage, operation: string, body: unknown): unknown;
 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 + 65536, perMessageDeflate: false });
-  const peers = new Map<WebSocket, { workerId: string; alive: boolean; slot?: { id: string; deviceId: string } }>();
+  type Peer = { workerId: string; alive: boolean; catalogScanner: boolean; slot?: { id: string; deviceId: string } };
+  const peers = new Map<WebSocket, Peer>();
   const send = (socket: WebSocket, message: WorkerControlMessage) => {
     if (socket.readyState !== WebSocket.OPEN) return;
     if (socket.bufferedAmount > 8 * 1024 * 1024) { socket.terminate(); return; }
@@ -26,7 +27,7 @@ export function attachWorkerControl(server: Server, options: {
       return;
     }
     wss.handleUpgrade(request, socket, head, ws => {
-      const peer = { workerId, alive: true } as { workerId: string; alive: boolean; slot?: { id: string; deviceId: string } };
+      const peer: Peer = { workerId, alive: true, catalogScanner: false };
       peers.set(ws, peer);
       ws.on('error', () => {});
       ws.on('close', () => peers.delete(ws));
@@ -43,6 +44,7 @@ export function attachWorkerControl(server: Server, options: {
           const message = workerControlRequestSchema.parse(JSON.parse(bytes.toString()));
           id = message.id;
           const body = options.handle(request, message.operation, message.body);
+          if (message.operation === '/api/worker/scans/claim') peer.catalogScanner = true;
           if (message.operation === '/api/worker/claim') {
             const input = message.body as { slotId: string; deviceId: string };
             peer.slot = { id: input.slotId, deviceId: input.deviceId };
@@ -84,11 +86,19 @@ export function attachWorkerControl(server: Server, options: {
     }
   }, 10000);
   timer.unref();
-  return () => {
-    unsubscribe();
-    clearInterval(timer);
-    server.removeListener('upgrade', upgrade);
-    for (const socket of peers.keys()) socket.terminate();
-    wss.close();
+  return {
+    connectedCatalogWorkers() {
+      const workerIds = new Set<string>();
+      for (const [socket, peer] of peers)
+        if (socket.readyState === WebSocket.OPEN && peer.catalogScanner) workerIds.add(peer.workerId);
+      return workerIds;
+    },
+    close() {
+      unsubscribe();
+      clearInterval(timer);
+      server.removeListener('upgrade', upgrade);
+      for (const socket of peers.keys()) socket.terminate();
+      wss.close();
+    },
   };
 }

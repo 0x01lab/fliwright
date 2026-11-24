@@ -25,10 +25,10 @@ export function executorSettings(config: HostConfig, device: ManagedDevice, root
     root: join(root, 'slots', slotId), resetCommands });
 }
 
-async function runExecutor(config: z.infer<typeof workerConfigSchema>, device: ManagedDevice, signal: AbortSignal, diagnostics?: WorkerDiagnostics) {
+async function runExecutor(config: z.infer<typeof workerConfigSchema>, device: ManagedDevice, signal: AbortSignal, catalogRoot: string, diagnostics?: WorkerDiagnostics) {
   const control = new WorkerControlClient(config.serverUrl, credential(config));
   try {
-    const worker = createWorker(config, control, diagnostics);
+    const worker = createWorker(config, control, diagnostics, catalogRoot);
     await control.ready(signal);
     // Enrollment may target a stopped simulator. Boot it without erasing user data.
     if (device.observation.platform === 'ios' && device.observation.kind === 'simulator' && device.observation.state === 'shutdown') {
@@ -53,6 +53,7 @@ async function runExecutor(config: z.infer<typeof workerConfigSchema>, device: M
 /** One paired host follows device policy changes and owns isolated per-slot executors. */
 export async function runHostWorker(config: HostConfig, configPath: string, signal: AbortSignal, diagnostics?: WorkerDiagnostics) {
   const root = resolve(config.root ?? join(dirname(configPath), 'runtime'));
+  const catalogRoot = join(root, 'catalogs');
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const stop = new AbortController();
   const runningSignal = AbortSignal.any([signal, stop.signal]);
@@ -80,7 +81,7 @@ export async function runHostWorker(config: HostConfig, configPath: string, sign
     inventory = supervise('inventory', reportWorkerDevices(control, { signal: runningSignal, tools: config.deviceTools,
       onError: error => { diagnostics?.component('inventory', 'failed'); diagnostics?.record('warn', 'inventory.report_failed', error); },
       onHealthy: () => diagnostics?.component('inventory', 'running') }));
-    scans = supervise('catalog', runCatalogScanner(control, { root: join(root, 'catalogs'), signal: runningSignal, credentialHomes: config.repositoryCredentialHomes }));
+    scans = supervise('catalog', runCatalogScanner(control, { root: catalogRoot, signal: runningSignal, credentialHomes: config.repositoryCredentialHomes, checkout: config.catalogCheckout, diagnostics }));
     while (!runningSignal.aborted) {
       const revision = control.revision;
       let assignments: { workerId: string; devices: ManagedDevice[] };
@@ -109,7 +110,7 @@ export async function runHostWorker(config: HostConfig, configPath: string, sign
           const executorStop = new AbortController();
           const executorSignal = AbortSignal.any([runningSignal, executorStop.signal]);
           diagnostics?.component(`executor.${slot}`, 'running');
-          const done = runExecutor(settings, device, executorSignal, diagnostics).then(() => {
+          const done = runExecutor(settings, device, executorSignal, catalogRoot, diagnostics).then(() => {
             if (!executorSignal.aborted) throw new Error('Executor exited unexpectedly');
             diagnostics?.component(`executor.${slot}`, 'stopped');
           }).catch(error => {

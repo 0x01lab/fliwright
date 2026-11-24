@@ -7,7 +7,8 @@ export const workerOperationSchema = z.enum([
   '/api/worker/timeline',
   '/api/worker/assignments',
   '/api/worker/diagnostics',
-  '/api/worker/scans/claim', '/api/worker/scans/heartbeat',
+  '/api/worker/secure-files/read',
+  '/api/worker/scans/claim', '/api/worker/scans/heartbeat', '/api/worker/scans/pin',
   '/api/worker/scans/result', '/api/worker/scans/failure',
 ]);
 export const workerControlRequestSchema = z.object({

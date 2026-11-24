@@ -50,18 +50,19 @@ const DialogDescription = React.forwardRef<
 DialogDescription.displayName = DialogPrimitive.Description.displayName;
 
 /** Controlled Cloud workflow composed from the shared shadcn dialog primitives. */
-function CloudDialog({ title, description, children, onClose, busy = false, wide = false }: {
+function CloudDialog({ title, description, children, onClose, busy = false, wide = false, className }: {
   title: string;
   description?: string;
   children: React.ReactNode;
   onClose: () => void;
   busy?: boolean;
   wide?: boolean;
+  className?: string;
 }) {
   const trigger = React.useRef(document.activeElement as HTMLElement | null);
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}>
     <DialogContent
-      className={cn('gap-0 bg-card p-0', wide && 'max-w-3xl')}
+      className={cn('gap-0 bg-card p-0', wide && 'max-w-3xl', className)}
       {...(!description ? { 'aria-describedby': undefined } : {})}
       onEscapeKeyDown={event => { if (busy) event.preventDefault(); }}
       onInteractOutside={event => { if (busy) event.preventDefault(); }}

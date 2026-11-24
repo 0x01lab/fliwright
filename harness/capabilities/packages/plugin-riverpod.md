@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/plugin-riverpod"
 path: "packages/fliwright-plugin-riverpod"
-source_fingerprint: "953c8f5fa969ca0915b5b580c39777d4dc4234aee1dcd3e37a6baa457defa82c"
+source_fingerprint: "ce475d7272900fe50bf9dabe7e86db8bcf9530c4479c82e23e76727302f685b4"
 generated: true
 ---
 

@@ -1,6 +1,6 @@
 # Fliwright
 
-![Fliwright — See. Adapt. Test. Repeat.](media/brand/banner.png)
+![Fliwright — See. Adapt. Test. Repeat.](https://raw.githubusercontent.com/0x01lab/fliwright/main/packages/fliwright-vscode/media/brand/banner.png)
 
 Flutter automation inside VS Code.
 
@@ -198,6 +198,39 @@ Release checklist:
   `vscode-v<version>` tag to trigger the GitHub Marketplace release workflow.
 - Start `examples/riverpod_demo` through a Fliwright bridge entrypoint, connect from VS Code, refresh State, read `counterProvider`, watch it, tap Increment, verify the value updates, then override `counterProvider` with `2`.
 - Publish only after Marketplace metadata, the Trusted Publishing policy, and manual smoke testing are complete.
+
+## Support Settings
+
+Declare project-specific support parameters in `.fliwright/support/` with `defineSupportSettings` from `@fliwright/core`. Register the declaration in `fliwright.config.ts`.
+
+```ts
+// .fliwright/support/navigation-settings.ts
+import { defineSupportSettings } from '@fliwright/core';
+
+export const navigationSettings = defineSupportSettings({
+  id: 'navigation',
+  title: 'Navigation',
+  fields: {
+    homeRoute: { type: 'string', label: 'Home route', default: '/home', env: 'APP_HOME_ROUTE' },
+  },
+});
+```
+
+```ts
+// fliwright.config.ts
+import { defineConfig } from '@fliwright/cli';
+import { navigationSettings } from './.fliwright/support/navigation-settings.js';
+
+export default defineConfig({ supportSettings: [navigationSettings] });
+```
+
+Open **Fliwright → Support Settings**, select a project and support, and save the form. The panel renders `string`, `number`, `boolean`, and `select` fields. Use **Reset** and **Save** to clear a local value. The support reads the typed values when it runs.
+
+```ts
+const { homeRoute } = await readSupportSettings(navigationSettings);
+```
+
+Import `readSupportSettings` from `@fliwright/core`. Resolution uses explicit `overrides`, the declared environment variable, the saved local value, then the declaration default. Values live under the current user's Fliwright runtime root, partitioned by project and support. Use environment variables for credentials.
 
 ## Shared project assets and local runtime data
 

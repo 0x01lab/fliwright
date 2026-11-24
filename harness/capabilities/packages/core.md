@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "359d274df5e870bb9d09b574ff8d68c5081619e6c5372e2e8bf3c20f47f9ebaf"
+source_fingerprint: "31c76c82896d4b0afeb61e574c98137241a5f4e7d820215ca7b27801422d0123"
 generated: true
 ---
 
@@ -162,6 +162,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `DartVerificationEvidence`
 - `DecodedPng`
 - `DEFAULT_FLIWRIGHT_CONFIG`
+- `defineSupportSettings`
 - `DesignQaCaptureCommandResult`
 - `DesignQaCaptureResult`
 - `DesignQaClient`
@@ -318,6 +319,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `JsonSchemaType`
 - `KeyedAncestor`
 - `legacyProjectRunsRoot`
+- `loadSupportSettings`
 - `Locator`
 - `LogFormatter`
 - `LogSink`
@@ -335,6 +337,8 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `matchesCall`
 - `MemoryLogSink`
 - `mergeFliwrightConfig`
+- `MissingSupportSettingError`
+- `missingSupportSettingMessage`
 - `mock`
 - `MockAdapter`
 - `MockAiAdapter`
@@ -417,6 +421,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ReadEventsResult`
 - `readFliwrightEnvironment`
 - `readManagedAppControl`
+- `readSupportSettings`
 - `readWorkspaceConfig`
 - `readWorkspaceConfigSync`
 - `RecordedOperation`
@@ -497,6 +502,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `SafeRepairAction`
 - `sanitizeFlowFileId`
 - `sanitizeProjectPathName`
+- `saveSupportSettings`
 - `ScenarioAppLayer`
 - `ScenarioApplicationReport`
 - `ScenarioAuthLayer`
@@ -545,6 +551,13 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `StateAdapter`
 - `StructuredLogger`
 - `summarizeTimeline`
+- `SupportSettingField`
+- `SupportSettingsDefinition`
+- `SupportSettingsError`
+- `SupportSettingsProjectOptions`
+- `SupportSettingsSnapshot`
+- `SupportSettingsValues`
+- `SupportSettingValue`
 - `TestResult`
 - `TestScenario`
 - `TimedTimelineNode`
@@ -690,6 +703,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/SkillRegistry.ts`
 - `packages/fliwright-core/src/SnapshotStore.ts`
 - `packages/fliwright-core/src/StorageManager.ts`
+- `packages/fliwright-core/src/SupportSettings.ts`
 - `packages/fliwright-core/src/ToolMockServer.ts`
 - `packages/fliwright-core/src/TraceCollector.ts`
 - `packages/fliwright-core/src/VMServiceConnector.ts`

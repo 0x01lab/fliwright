@@ -19,6 +19,7 @@ async function run() {
       'dist/webview/recordingCanvas.css',
       'dist/webview/tailwind.css',
       'dist/webview/viewerApp.js',
+      'dist/support/app.js',
       'media/fliwright-activitybar.svg',
       'media/fliwright-marketplace.png',
     ]) {
@@ -74,6 +75,7 @@ async function run() {
   }
   await vscode.commands.executeCommand('fliwright.toggleActiveMockRules');
   await vscode.commands.executeCommand('fliwright.toggleActiveMockRules');
+  await vscode.commands.executeCommand('fliwright.supportSettings.focus');
 
   const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fw-open-test-source-'));
   try {

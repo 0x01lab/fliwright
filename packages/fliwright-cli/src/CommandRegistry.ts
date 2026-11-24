@@ -49,7 +49,7 @@ export class CommandRegistry {
       common: { cwd: 'Project root', json: 'One versioned result on stdout', input: 'JSON file or stdin; duplicate fields are rejected', deadline: 'Milliseconds; cancellation waits for owned work to settle', session: 'Explicit CLI connection session' } };
   }
   program(onExecute: (definition: CommandDefinition, input: any, options: Record<string, unknown>) => Promise<void>): Command {
-    const root = new Command().name('fliwright').description('Flutter automation for terminals, coding agents and CI').version('0.1.0');
+    const root = new Command().name('fliwright').description('Flutter automation for terminals, coding agents and CI').version('0.1.1');
     const groups = new Map<string, Command>([['', root]]);
     for (const definition of this.definitions.values()) {
       const parts = definition.path.split('.');

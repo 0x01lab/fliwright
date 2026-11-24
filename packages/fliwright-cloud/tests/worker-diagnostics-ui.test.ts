@@ -2,9 +2,27 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { WorkerDiagnosticsPanel } from '../src/web/WorkerDiagnostics.js';
+import { WorkerCatalogWorkspaceNotice, WorkerDiagnosticsPanel } from '../src/web/WorkerDiagnostics.js';
 const cleanup: Array<() => unknown> = [];
 afterEach(async () => { for (const fn of cleanup.splice(0).reverse()) await fn(); vi.unstubAllGlobals(); });
+it('shows cleanup instructions for suspected leftovers and clears the alert after a clean check', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const node = document.createElement('div'); document.body.append(node); const root = createRoot(node);
+  cleanup.push(() => node.remove()); cleanup.push(() => act(async () => root.unmount()));
+  const checkedAt = '2026-11-23T01:00:00.000Z';
+  await act(async () => root.render(React.createElement(WorkerCatalogWorkspaceNotice, {})));
+  expect(node.textContent).toContain('尚未收到扫描目录检查结果');
+  await act(async () => root.render(React.createElement(WorkerCatalogWorkspaceNotice, { workspace: { checkedAt, directoryCount: 2 } })));
+  const alert = node.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain('发现 2 个疑似残留的扫描目录');
+  expect(alert?.textContent).toContain('确认相关扫描进程已退出后再清理');
+  await act(async () => root.render(React.createElement(WorkerCatalogWorkspaceNotice, { workspace: { checkedAt, directoryCount: 0 } })));
+  expect(node.querySelector('[role="alert"]')).toBeNull();
+  expect(node.textContent).toContain('未发现疑似残留的扫描目录');
+  await act(async () => root.render(React.createElement(WorkerCatalogWorkspaceNotice, { workspace: { checkedAt, directoryCount: null } })));
+  expect(node.textContent).toContain('无法检查扫描目录');
+});
+
 it('exposes service health and searchable errors independently of test reports', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const calls: string[] = [];

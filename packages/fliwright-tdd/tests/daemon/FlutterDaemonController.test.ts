@@ -76,7 +76,7 @@ describe('FlutterDaemonController reload/restart/stop', () => {
         deviceId: params.deviceId,
         supportsRestart,
       }))
-      .on('app.restart', async () => ({}))
+      .on('app.restart', async () => ({ code: 0, message: '' }))
       .on('app.stop', async () => ({}));
     const controller = new FlutterDaemonController(transport);
     const started = controller.startApp({ deviceId: 'd' });
@@ -113,6 +113,20 @@ describe('FlutterDaemonController reload/restart/stop', () => {
     const { controller } = await boot(false);
 
     await expect(controller.restart('app-1')).rejects.toThrow(/restart not supported/i);
+  });
+
+  it.each(['reload', 'restart'] as const)('rejects a Flutter operation failure during %s', async (operation) => {
+    const { transport, controller } = await boot();
+    transport.on('app.restart', async () => ({ code: 1, message: 'Compilation failed' }));
+
+    await expect(controller[operation]('app-1')).rejects.toThrow(/code 1.*Compilation failed/);
+  });
+
+  it('rejects a response that does not confirm synchronization', async () => {
+    const { transport, controller } = await boot();
+    transport.on('app.restart', async () => ({}));
+
+    await expect(controller.reload('app-1')).rejects.toThrow(/did not confirm/);
   });
 
   it('stop sends app.stop', async () => {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5
+
+- Configure project support modules and custom fields in the new Support Settings view.
+
 ## 0.2.4
 
 - Add recorded-time Trace Viewer playback, seeking, zoom, screenshot thumbnails, and failure navigation.

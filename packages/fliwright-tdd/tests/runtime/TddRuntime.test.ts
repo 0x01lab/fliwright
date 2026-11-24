@@ -86,8 +86,8 @@ describe('TddRuntime', () => {
     const executor = {
       boot: vi.fn(async () => {}),
       rerun: vi.fn()
-        .mockResolvedValueOnce({ status: 'red', failure: { message: 'No widget found matching selector' } })
-        .mockResolvedValueOnce({ status: 'green' }),
+        .mockResolvedValueOnce({ status: 'red', failure: { message: 'No widget found matching selector' }, timelinePath: '/tmp/reload/timeline.json' })
+        .mockResolvedValueOnce({ status: 'green', timelinePath: '/tmp/restart/timeline.json' }),
       dispose: vi.fn(async () => {}),
     };
     const runtime = new TddRuntime({ daemon, driverFactory: () => driver, executor });
@@ -96,7 +96,13 @@ describe('TddRuntime', () => {
 
     const result = await runtime.cycle(undefined, { sync: 'auto', changes: ['lib/home.dart'] });
 
-    expect(result).toMatchObject({ status: 'green', lastSync: 'restart', syncEscalated: true });
+    expect(result).toMatchObject({
+      status: 'green', lastSync: 'restart', syncEscalated: true,
+      attempts: [
+        { requestedSync: 'reload', status: 'red', lastSync: 'reload', timelinePath: '/tmp/reload/timeline.json' },
+        { requestedSync: 'restart', status: 'green', lastSync: 'restart', timelinePath: '/tmp/restart/timeline.json' },
+      ],
+    });
     expect(daemon.reload).toHaveBeenCalledTimes(1);
     expect(daemon.restart).toHaveBeenCalledTimes(1);
   });
@@ -185,6 +191,30 @@ describe('TddRuntime', () => {
 
     expect(snapshot.supportsRestart).toBe(false);
     expect(snapshot.restartCapable).toBe(false);
+  });
+
+  it('requires a reload capability in attach mode before preparing state or rerunning', async () => {
+    const driver = {
+      connect: vi.fn(async () => {}),
+      dispose: vi.fn(async () => {}),
+      page: { resetToHome: vi.fn(async () => {}) },
+    };
+    const executor = {
+      boot: vi.fn(async () => {}),
+      rerun: vi.fn(async () => ({ status: 'green' as const })),
+      dispose: vi.fn(async () => {}),
+    };
+    const runtime = new TddRuntime({ driverFactory: () => driver, executor });
+    await runtime.start({ configRoot: '/tmp/vitest.config.ts', vmServiceUrl: 'ws://vm/ws' });
+    await runtime.focus('/tmp/sample.test.ts');
+
+    const result = await runtime.cycle(undefined, { sync: 'reload' });
+
+    expect(result).toMatchObject({ status: 'red', lastSync: 'none', failure: { message: expect.stringMatching(/does not support hot reload/) } });
+    expect(driver.page.resetToHome).not.toHaveBeenCalled();
+    expect(executor.rerun).not.toHaveBeenCalled();
+    await expect(runtime.syncApp('reload')).rejects.toThrow(/does not support hot reload/);
+    await expect(runtime.cycle(undefined, { sync: 'none' })).resolves.toMatchObject({ status: 'green' });
   });
 
   it('adds structured failure context when the focused test is red', async () => {
@@ -682,7 +712,7 @@ describe('TddRuntime', () => {
   });
 
   it('does not escalate in attach mode (no daemon restart available)', async () => {
-    const driver = daemonDriver();
+    const driver = { ...daemonDriver(), reloadSources: vi.fn(async () => ({ type: 'ReloadReport', success: true })) };
     const executor = {
       boot: vi.fn(async () => {}),
       rerun: vi.fn(async () => ({
@@ -698,6 +728,8 @@ describe('TddRuntime', () => {
 
     const result = await runtime.cycle(undefined, { sync: 'reload' });
 
+    expect(driver.reloadSources).toHaveBeenCalledTimes(1);
+    expect(executor.rerun).toHaveBeenCalledTimes(1);
     expect(result.lastSync).toBe('reload');
     expect(result.status).toBe('red');
   });
@@ -852,17 +884,17 @@ describe('TddRuntime', () => {
     expect(driver.connect).toHaveBeenLastCalledWith('ws://new/ws');
   });
 
-  it('returns a red timeout result without wedging the mutex', async () => {
+  it('keeps the timed-out cycle red after its in-flight rerun completes', async () => {
     const driver = {
       connect: vi.fn(async () => {}),
       dispose: vi.fn(async () => {}),
       page: { resetToHome: vi.fn(async () => {}) },
       mock: { clear: vi.fn(async () => {}), clearCalls: vi.fn(async () => {}) },
     };
-    // rerun never resolves → forces the timeout path.
+    const { promise: slowRun, resolve: finishRun } = Promise.withResolvers<{ status: 'green' }>();
     const executor = {
       boot: vi.fn(async () => {}),
-      rerun: vi.fn(async () => new Promise(() => {})),
+      rerun: vi.fn(async () => ({ status: 'green' as const })).mockReturnValueOnce(slowRun),
       dispose: vi.fn(async () => {}),
     };
     const runtime = new TddRuntime({ driverFactory: () => driver, executor });
@@ -876,8 +908,10 @@ describe('TddRuntime', () => {
     expect(result.failure?.message).toContain('20ms');
     expect(result.failureContext?.kind).toBe('timeout');
     expect(result.failureContext?.message).toContain('20ms');
-    // The runtime is still usable afterwards (snapshot reports lastResult, not wedged).
-    expect(runtime.snapshot().lastResult?.status).toBe('red');
+    finishRun({ status: 'green' });
+    await runtime.whenIdle();
+    expect(runtime.snapshot().lastResult?.failureContext?.kind).toBe('timeout');
+    await expect(runtime.cycle()).resolves.toMatchObject({ status: 'green' });
   });
 
   it('cleans up partial resources when start fails', async () => {

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { leaseKeySchema, outcomeSchema, type Outcome } from './contracts.js';
 
 export const workerPhaseSchema = z.enum([
-  'execution.prepare', 'repository.checkout', 'dependencies.install',
+  'execution.prepare', 'project.local', 'repository.checkout', 'dependencies.install',
   'device.reset.before', 'app.launch', 'app.verify', 'tests.run',
   'artifacts.export', 'processes.stop', 'report.publish', 'device.reset.after',
   'native.acquire', 'native.build', 'native.install', 'native.stop', 'native.prepare', 'native.launch', 'native.verify', 'native.cleanup', 'native.release',
@@ -91,6 +91,6 @@ export function workerPhaseStage(phase: WorkerPhase): string {
   if (['processes.stop', 'report.publish', 'device.reset.after'].includes(phase)) return 'finalizing';
   if (phase === 'native.cleanup' || phase === 'native.release') return 'finalizing';
   if (phase.startsWith('native.')) return 'launch';
-  return ({ 'execution.prepare': 'assigned', 'repository.checkout': 'checkout', 'dependencies.install': 'install',
+  return ({ 'execution.prepare': 'assigned', 'project.local': 'checkout', 'repository.checkout': 'checkout', 'dependencies.install': 'install',
     'device.reset.before': 'reset_before', 'app.launch': 'launch', 'app.verify': 'launch', 'artifacts.export': 'export' } as Partial<Record<WorkerPhase, string>>)[phase]!;
 }

@@ -127,7 +127,7 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "d07d31dbe2392ed24dd3b43066dbfd59ed1676663549e9eddcb5f716f4aaa536"
+      "sourceFingerprint": "f1a92a6312e9ccfc4c328de05a26e1db4e4f8ea73bd6daa602a5516f532f8142"
     },
     {
       "name": "@fliwright/cloud",
@@ -151,25 +151,35 @@
       ],
       "sourceFiles": [
         "packages/fliwright-cloud/src/CloudStore.ts",
+        "packages/fliwright-cloud/src/ProjectSecureFiles.ts",
         "packages/fliwright-cloud/src/ReportStore.ts",
         "packages/fliwright-cloud/src/WorkerDiagnosticsStore.ts",
         "packages/fliwright-cloud/src/WorkerTimelineStore.ts",
+        "packages/fliwright-cloud/src/catalog-scan-status.ts",
         "packages/fliwright-cloud/src/config.ts",
         "packages/fliwright-cloud/src/deployment.ts",
         "packages/fliwright-cloud/src/device-events.ts",
         "packages/fliwright-cloud/src/index.ts",
         "packages/fliwright-cloud/src/main.ts",
         "packages/fliwright-cloud/src/project-setup.ts",
+        "packages/fliwright-cloud/src/request-board.ts",
         "packages/fliwright-cloud/src/server.ts",
         "packages/fliwright-cloud/src/web/Devices.tsx",
+        "packages/fliwright-cloud/src/web/ProjectNavigation.tsx",
+        "packages/fliwright-cloud/src/web/ProjectSecureFiles.tsx",
+        "packages/fliwright-cloud/src/web/ProjectWorkers.tsx",
         "packages/fliwright-cloud/src/web/Projects.tsx",
+        "packages/fliwright-cloud/src/web/QueueBoard.tsx",
         "packages/fliwright-cloud/src/web/Replay.tsx",
+        "packages/fliwright-cloud/src/web/RequestSubmission.tsx",
         "packages/fliwright-cloud/src/web/ScenarioBuilder.tsx",
         "packages/fliwright-cloud/src/web/TestBoard.tsx",
         "packages/fliwright-cloud/src/web/TimeTimeline.tsx",
         "packages/fliwright-cloud/src/web/WorkerDiagnostics.tsx",
         "packages/fliwright-cloud/src/web/WorkerExecutionTimeline.tsx",
+        "packages/fliwright-cloud/src/web/WorkerHostDetails.tsx",
         "packages/fliwright-cloud/src/web/WorkerPairing.tsx",
+        "packages/fliwright-cloud/src/web/WorkspaceHeader.tsx",
         "packages/fliwright-cloud/src/web/app.tsx",
         "packages/fliwright-cloud/src/web/components/ui/alert.tsx",
         "packages/fliwright-cloud/src/web/components/ui/badge.tsx",
@@ -184,12 +194,14 @@
         "packages/fliwright-cloud/src/web/components/ui/navigation-menu.tsx",
         "packages/fliwright-cloud/src/web/components/ui/resizable.tsx",
         "packages/fliwright-cloud/src/web/components/ui/slider.tsx",
+        "packages/fliwright-cloud/src/web/components/ui/sonner.tsx",
         "packages/fliwright-cloud/src/web/components/ui/table.tsx",
         "packages/fliwright-cloud/src/web/components/ui/tabs.tsx",
         "packages/fliwright-cloud/src/web/components/ui/textarea.tsx",
         "packages/fliwright-cloud/src/web/data.ts",
         "packages/fliwright-cloud/src/web/lib/utils.ts",
         "packages/fliwright-cloud/src/web/main.tsx",
+        "packages/fliwright-cloud/src/web/project-identity.ts",
         "packages/fliwright-cloud/src/web/replay-model.ts",
         "packages/fliwright-cloud/src/web/scenario-builder.ts",
         "packages/fliwright-cloud/src/web/ui.tsx",
@@ -213,7 +225,7 @@
       "binaryEntrypoints": [
         "fliwright-cloud"
       ],
-      "sourceFingerprint": "f226474b136038afade2cdfc7c3a7c8c28a5e733cefbd3bd3ab218f45016dcb8"
+      "sourceFingerprint": "8e48834b18f0c962c3f9158fd830a4a502973c571171bdb39162aa6ccbdf0811"
     },
     {
       "name": "@fliwright/cloud-protocol",
@@ -237,6 +249,7 @@
         "packages/fliwright-cloud-protocol/src/artifacts.ts",
         "packages/fliwright-cloud-protocol/src/contracts.ts",
         "packages/fliwright-cloud-protocol/src/index.ts",
+        "packages/fliwright-cloud-protocol/src/secure-files.ts",
         "packages/fliwright-cloud-protocol/src/worker-control.ts",
         "packages/fliwright-cloud-protocol/src/worker-diagnostics.ts",
         "packages/fliwright-cloud-protocol/src/worker-pairing.ts",
@@ -250,10 +263,11 @@
         "WorkerControlClient"
       ],
       "packageEntrypoints": [
-        "."
+        ".",
+        "./secure-files"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "41c54df7e778bb42730fac22b4702b1926aef3b86b1b9a1e0eee185ae4b0f234"
+      "sourceFingerprint": "a8d8aa444a9349ee84757205f5f93066da0987051d1aac7284c3f4ddccc9a6ee"
     },
     {
       "name": "@fliwright/cloud-worker",
@@ -286,6 +300,7 @@
         "packages/fliwright-cloud-worker/src/WorkerTimelineChannel.ts",
         "packages/fliwright-cloud-worker/src/WorkerTimelineRecorder.ts",
         "packages/fliwright-cloud-worker/src/catalog-scanner.ts",
+        "packages/fliwright-cloud-worker/src/catalog-workspace.ts",
         "packages/fliwright-cloud-worker/src/config.ts",
         "packages/fliwright-cloud-worker/src/device-reporting.ts",
         "packages/fliwright-cloud-worker/src/diagnostics.ts",
@@ -297,6 +312,7 @@
         "packages/fliwright-cloud-worker/src/native-ownership-ipc.ts",
         "packages/fliwright-cloud-worker/src/pairing.ts",
         "packages/fliwright-cloud-worker/src/processes.ts",
+        "packages/fliwright-cloud-worker/src/secure-files.ts",
         "packages/fliwright-cloud-worker/src/spool.ts",
         "packages/fliwright-cloud-worker/src/worker-timeline-ipc.ts",
         "packages/fliwright-cloud-worker/src/worker.ts"
@@ -339,7 +355,7 @@
       "binaryEntrypoints": [
         "fliwright-worker"
       ],
-      "sourceFingerprint": "bdfb5c5839b9ab387437b518c6d5ef30fee49edb482cdeab1279ce5c27ebc665"
+      "sourceFingerprint": "44c029f5159aa83adfb4b14453e1a69c12bd9a6f7df0eacf01bc783b647aadef"
     },
     {
       "name": "@fliwright/core",
@@ -413,6 +429,7 @@
         "packages/fliwright-core/src/SkillRegistry.ts",
         "packages/fliwright-core/src/SnapshotStore.ts",
         "packages/fliwright-core/src/StorageManager.ts",
+        "packages/fliwright-core/src/SupportSettings.ts",
         "packages/fliwright-core/src/ToolMockServer.ts",
         "packages/fliwright-core/src/TraceCollector.ts",
         "packages/fliwright-core/src/VMServiceConnector.ts",
@@ -615,6 +632,7 @@
         "DartVerificationEvidence",
         "DecodedPng",
         "DEFAULT_FLIWRIGHT_CONFIG",
+        "defineSupportSettings",
         "DesignQaCaptureCommandResult",
         "DesignQaCaptureResult",
         "DesignQaClient",
@@ -771,6 +789,7 @@
         "JsonSchemaType",
         "KeyedAncestor",
         "legacyProjectRunsRoot",
+        "loadSupportSettings",
         "Locator",
         "LogFormatter",
         "LogSink",
@@ -788,6 +807,8 @@
         "matchesCall",
         "MemoryLogSink",
         "mergeFliwrightConfig",
+        "MissingSupportSettingError",
+        "missingSupportSettingMessage",
         "mock",
         "MockAdapter",
         "MockAiAdapter",
@@ -870,6 +891,7 @@
         "ReadEventsResult",
         "readFliwrightEnvironment",
         "readManagedAppControl",
+        "readSupportSettings",
         "readWorkspaceConfig",
         "readWorkspaceConfigSync",
         "RecordedOperation",
@@ -950,6 +972,7 @@
         "SafeRepairAction",
         "sanitizeFlowFileId",
         "sanitizeProjectPathName",
+        "saveSupportSettings",
         "ScenarioAppLayer",
         "ScenarioApplicationReport",
         "ScenarioAuthLayer",
@@ -998,6 +1021,13 @@
         "StateAdapter",
         "StructuredLogger",
         "summarizeTimeline",
+        "SupportSettingField",
+        "SupportSettingsDefinition",
+        "SupportSettingsError",
+        "SupportSettingsProjectOptions",
+        "SupportSettingsSnapshot",
+        "SupportSettingsValues",
+        "SupportSettingValue",
         "TestResult",
         "TestScenario",
         "TimedTimelineNode",
@@ -1092,7 +1122,7 @@
         "./timeline"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "359d274df5e870bb9d09b574ff8d68c5081619e6c5372e2e8bf3c20f47f9ebaf"
+      "sourceFingerprint": "31c76c82896d4b0afeb61e574c98137241a5f4e7d820215ca7b27801422d0123"
     },
     {
       "name": "@fliwright/devices",
@@ -1132,7 +1162,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "9bf44dd26608a3b5961079f635a39439e187e414aa7808b377e237dc488fad28"
+      "sourceFingerprint": "e77c697b4fad5296eb2f6a30dc6bd98faebfeb777e5c627603910ef600e8817b"
     },
     {
       "name": "@fliwright/e2e-tests",
@@ -1280,7 +1310,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "8ed1e4d694a3919d4a307a055590d649508fd936195a6d0fa6ed3178c02dcc5a"
+      "sourceFingerprint": "46209e5ba438be02c42f731b31e57aa19fda5df9c70a59105fef115541c75ceb"
     },
     {
       "name": "@fliwright/plugin-riverpod",
@@ -1311,7 +1341,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "953c8f5fa969ca0915b5b580c39777d4dc4234aee1dcd3e37a6baa457defa82c"
+      "sourceFingerprint": "ce475d7272900fe50bf9dabe7e86db8bcf9530c4479c82e23e76727302f685b4"
     },
     {
       "name": "@fliwright/tdd",
@@ -1392,6 +1422,7 @@
         "SubprocessDaemonTransport",
         "SubprocessDaemonTransportOptions",
         "SyncDecision",
+        "TddCycleAttempt",
         "TddCycleResult",
         "TddFailureArtifacts",
         "TddFailureAssertion",
@@ -1411,7 +1442,7 @@
         "."
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "43c106c7310284e8dcd0ca729bfbc3bf8172cb1fc1eff311e3359be745a826b4"
+      "sourceFingerprint": "88697a8fa268830ad5b6b37d89614f8278718542aeb6551f6146c2a136fea998"
     },
     {
       "name": "@fliwright/test-plan",
@@ -1540,7 +1571,7 @@
         "./runner"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "f62efbbe452c16da3256e8f42d4c2374a3cccb2daf398aaa73bb6e52063df00e"
+      "sourceFingerprint": "1b682bd64035766c48261728b48c749332dd5d5681d80415a54c82a49f42a148"
     },
     {
       "name": "fliwright_bridge",
@@ -1909,6 +1940,9 @@
         "packages/fliwright-vscode/src/state/StateInjectionService.ts",
         "packages/fliwright-vscode/src/state/StateProviderDocumentProvider.ts",
         "packages/fliwright-vscode/src/status/StatusBarService.ts",
+        "packages/fliwright-vscode/src/support/SupportSettingsView.ts",
+        "packages/fliwright-vscode/src/support/app.ts",
+        "packages/fliwright-vscode/src/support/messages.ts",
         "packages/fliwright-vscode/src/tddloop/TddLoopController.ts",
         "packages/fliwright-vscode/src/tddloop/TddLoopPanel.ts",
         "packages/fliwright-vscode/src/tddloop/TddLoopStatusSource.ts",
@@ -2071,10 +2105,11 @@
         "fliwright.mockApis",
         "fliwright.scripts",
         "fliwright.state",
+        "fliwright.supportSettings",
         "fliwright.tests",
         "fliwright.websocketMocks"
       ],
-      "sourceFingerprint": "67a1062cd0840dc7b7e0798f4498fda56bab3cdb260e403a446f2eb92ddb05e9"
+      "sourceFingerprint": "b95a91d5ec52120bbf0b737035399f666676423bc83212285062d02beec315f1"
     }
   ]
 }

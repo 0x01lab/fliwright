@@ -12,30 +12,36 @@ function setup() {
 }
 it('automatically allocates a stable slot when enrolling a device without an explicit slot ID', () => {
   const store = setup(), device = store.listDevices()[0]!;
-  const saved = store.updateDevice(device.id, { ...device.settings, managed: true, enabled: true, targets: ['app'] }, 'ops');
+  store.setProjectWorkers('app', ['mac'], [], 'admin');
+  const saved = store.updateDevice(device.id, { ...device.settings, managed: true, enabled: true }, 'ops');
   expect(saved.settings.slotId).toEqual(expect.any(String));
   expect(saved.slot).toMatchObject({ id: saved.settings.slotId, deviceId: 'native', targets: ['app'] });
   const again = store.updateDevice(device.id, { ...saved.settings, slotId: null }, 'ops');
   expect(again.settings.slotId).toBe(saved.settings.slotId);
   expect(store.listWorkers()[0]!.slots).toHaveLength(1);
 });
-it('derives scan authorization from managed device application bindings and revokes it on removal', () => {
+it('uses the project binding to authorize scanning independently of devices', () => {
   const store = setup(), device = store.listDevices()[0]!;
   store.createCatalogScan('app', 'a'.repeat(40));
   expect(store.claimCatalogScan('mac')).toBeNull();
   const saved = store.updateDevice(device.id, { ...device.settings, managed: true, enabled: true, targets: ['app'] }, 'ops');
+  expect(store.claimCatalogScan('mac')).toBeNull();
+  store.setProjectWorkers('app', ['mac'], [], 'admin');
   expect(store.claimCatalogScan('other')).toBeNull();
   const lease = store.claimCatalogScan('mac');
   expect(lease?.project.id).toBe('app');
   store.updateCatalogScan(lease!.scan.scanId, 'failed');
   store.updateDevice(device.id, { ...saved.settings, enabled: false }, 'ops');
-  store.createCatalogScan('app', 'b'.repeat(40));
-  expect(store.claimCatalogScan('mac')).toBeNull();
-  store.updateDevice(device.id, { ...saved.settings, targets: [] }, 'ops');
+  const second = store.createCatalogScan('app', 'b'.repeat(40));
+  expect(store.claimCatalogScan('mac')?.scan.scanId).toBe(second.scanId);
+  store.cancelCatalogScan('app', second.scanId);
+  store.createCatalogScan('app', 'c'.repeat(40));
+  store.setProjectWorkers('app', [], ['mac'], 'admin');
   expect(store.claimCatalogScan('mac')).toBeNull();
 });
 it('repairs an already enrolled device with no slot when the host synchronizes assignments', () => {
   const store = setup(), device = store.listDevices()[0]!;
+  store.setProjectWorkers('app', ['mac'], [], 'admin');
   store.db.prepare('UPDATE managed_devices SET settings=? WHERE id=?').run(JSON.stringify({ ...device.settings, managed: true, enabled: true, targets: ['app'] }), device.id);
   const assignments = store.workerAssignments('mac');
   expect(assignments.devices).toHaveLength(1);

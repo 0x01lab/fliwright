@@ -14,6 +14,10 @@ export const workerServiceReportSchema = z.object({
   uptimeMs: z.number().finite().nonnegative(), rssBytes: z.number().finite().nonnegative(),
   eventLoopLagMs: z.number().finite().nonnegative(),
   components: z.record(z.string().max(100), z.enum(['running', 'failed', 'stopped'])).refine(value => Object.keys(value).length <= 100),
+  catalogWorkspace: z.object({
+    checkedAt: z.string().datetime(),
+    directoryCount: z.number().int().nonnegative().safe().nullable(),
+  }).strict().optional(),
   logs: z.array(workerLogSchema).max(100),
 }).strict();
 export type WorkerLog = z.infer<typeof workerLogSchema>;

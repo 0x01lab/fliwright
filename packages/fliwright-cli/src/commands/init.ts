@@ -5,8 +5,8 @@ import { CliError } from '../CommandRegistry.js';
 import { prepareAgentSetup, type AgentSetupResult } from '../InitAgent.js';
 
 const NODE_DEV_DEPENDENCIES: Record<string, string> = {
-  '@fliwright/cli': '^0.1.0',
-  '@fliwright/vitest': '^0.1.0',
+  '@fliwright/cli': '^0.1.1',
+  '@fliwright/vitest': '^0.1.1',
   '@types/node': '^22.0.0',
   typescript: '^5.5.0',
   vitest: '5.0.5',

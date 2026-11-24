@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
+import { parseArgs } from 'node:util';
 import { pairWorker } from './pairing.js';
 import { dirname, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -20,7 +21,6 @@ import { executorTimeline } from './worker-timeline-ipc.js';
 import { runHostWorker } from './host.js';
 import { installLocalPackages } from './local-packages.js';
 import { WorkerDiagnostics, readWorkerLogs, reportWorkerDiagnostics } from './diagnostics.js';
-const [command, path] = process.argv.slice(2);
 const stop = new AbortController();
 let diagnostics: WorkerDiagnostics | undefined;
 let diagnosticControl: WorkerControlClient | undefined;
@@ -58,12 +58,13 @@ async function waitForGo() {
     );
   });
 }
-async function main() {
+async function main(command = process.argv[2], path = process.argv[3]): Promise<void> {
   if (!command || command === '--help' || command === '-h') {
     console.log(`Usage: fliwright-worker <command> <config.json>
 
 Commands:
-  pair <server-url> <new-directory>  Pair this host with Cloud (prompts for code)
+  pair <server-url> <new-directory> [--code <code>] [--start]
+                 Pair this host with Cloud and optionally start the service
   run            Automatically bind managed devices, scan repositories and execute tasks
   discover       Report host devices without an execution slot
   recover        Verify cleanup and recover an isolated slot
@@ -82,13 +83,21 @@ Credentials use credentialFile after pairing, or a configured tokenEnv.`);
     return;
   }
   if (command === 'pair') {
+    const usage = 'Usage: fliwright-worker pair <server-url> <new-directory> [--code <code>] [--start]';
+    let flags;
+    try {
+      flags = parseArgs({ args: process.argv.slice(5), options: { code: { type: 'string' }, start: { type: 'boolean' } } }).values;
+    } catch { throw new Error(usage); }
     const directory = process.argv[4];
-    if (!path || !directory) throw new Error('Usage: fliwright-worker pair <server-url> <new-directory>');
-    const input = createInterface({ input: process.stdin, output: process.stdout });
-    let code: string;
-    try { code = await input.question('Cloud 配对码：'); } finally { input.close(); }
+    if (!path || !directory || directory.startsWith('--')) throw new Error(usage);
+    let code = flags.code;
+    if (code === undefined) {
+      const input = createInterface({ input: process.stdin, output: process.stdout });
+      try { code = await input.question('Cloud 配对码：'); } finally { input.close(); }
+    }
     const configPath = await pairWorker(path, code, directory);
     console.log(`配对成功，配置已保存：${configPath}`);
+    if (flags.start) return main('run', configPath);
     console.log(`启动 Worker：fliwright-worker run ${JSON.stringify(configPath)}`);
     console.log('在 Cloud 选择纳管设备和允许的应用，执行槽位与本机配置将自动同步。');
     return;
@@ -228,7 +237,7 @@ Credentials use credentialFile after pairing, or a configured tokenEnv.`);
         });
       };
       const inventory = supervise('inventory', reportWorkerDevices(control, { signal: stop.signal, tools: config.deviceTools }));
-      const scans = supervise('catalog', runCatalogScanner(control, { root: join(config.root, 'catalogs'), signal: stop.signal, credentialHomes: config.repositoryCredentialHomes }));
+      const scans = supervise('catalog', runCatalogScanner(control, { root: join(config.root, 'catalogs'), signal: stop.signal, credentialHomes: config.repositoryCredentialHomes, checkout: config.catalogCheckout, diagnostics }));
       try {
         while (!stop.signal.aborted) {
           const revision = control.revision;

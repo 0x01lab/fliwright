@@ -28,6 +28,7 @@ import type { WorkerDiagnostics } from './diagnostics.js';
 import { WorkerNativeOwnership } from './WorkerNativeOwnership.js';
 import { ManagedNativeTimeline } from './ManagedNativeTimeline.js';
 import { compactSpoolAttempt, pruneSpool } from './spool.js';
+import { prepareSecureFiles } from './secure-files.js';
 import {
   runCommandProcess,
   spawnExecution,
@@ -40,7 +41,7 @@ const digest = (value: Buffer) =>
   createHash('sha256').update(value).digest('hex');
 
 type WorkerSettings = z.infer<typeof workerConfigSchema>;
-export function createWorker(config: WorkerSettings, control: WorkerControlClient, diagnostics?: WorkerDiagnostics) {
+export function createWorker(config: WorkerSettings, control: WorkerControlClient, diagnostics?: WorkerDiagnostics, catalogRoot = join(config.root, 'catalogs')) {
   if (process.platform === 'win32')
     throw new Error('Mac/Unix workers require owned process groups');
   const client = new CloudClient(config.serverUrl, credential(config));
@@ -51,7 +52,7 @@ export function createWorker(config: WorkerSettings, control: WorkerControlClien
     claim: (signal) =>
       control.request<ExecutionLease | null>('/api/worker/claim', {
         method: 'POST',
-        body: { slotId: config.slotId, deviceId: config.deviceId },
+        body: { slotId: config.slotId, deviceId: config.deviceId, supportsSecureFiles: true },
         signal,
       }),
     watchLease: (lease, listener) => control.watchLease(lease, listener),
@@ -76,8 +77,18 @@ export function createWorker(config: WorkerSettings, control: WorkerControlClien
       const nativeTimeline = new ManagedNativeTimeline(timeline?.channel);
       diagnostics?.record('info', 'execution.started', 'Execution child starting', context);
       try {
-      const result = await spawnExecution(lease, directory, signal, onStage, {
+      let executionLease: ExecutionLease;
+      try {
+        executionLease = await prepareSecureFiles(lease, directory, fileId => control.request('/api/worker/secure-files/read', {
+          body: { ...leaseKey(lease), fileId }, signal,
+        }), signal);
+      } catch (error) {
+        diagnostics?.record('error', 'execution.secure_files_failed', error, context);
+        return { verdict: signal.aborted ? 'interrupted' : 'unknown', infrastructure: 'permanent', error: 'Could not prepare project secure files' };
+      }
+      const result = await spawnExecution(executionLease, directory, signal, onStage, {
         mainFile: fileURLToPath(new URL('./main.js', import.meta.url)),
+        catalogRoot,
         flutterBin: config.flutterBin,
         resetCommands: config.resetCommands,
         allowedEnv: config.allowedEnv.filter((k) => k !== config.tokenEnv),
@@ -85,7 +96,7 @@ export function createWorker(config: WorkerSettings, control: WorkerControlClien
         prepareNative: async project => {
           const grant = await nativeOwnership.acquire(project, { deviceId: lease.deviceId, signal, scenario: lease.request.input.scenario ?? null,
           onPhase: event => nativeTimeline.observe(event),
-          launch: { target: lease.request.target.entry, flutterArgs: lease.request.target.flutterArgs, requiredCapabilities: lease.request.target.requiredCapabilities, flutterBin: config.flutterBin } });
+          launch: { target: lease.request.target.entry, flutterArgs: executionLease.request.target.flutterArgs, requiredCapabilities: lease.request.target.requiredCapabilities, flutterBin: config.flutterBin } });
           await nativeTimeline.flush();
           return grant;
         },

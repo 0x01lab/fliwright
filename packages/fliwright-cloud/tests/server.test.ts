@@ -75,6 +75,50 @@ function setup() {
   });
   return { server, store, browser };
 }
+it('serves independently sized board columns with full filtered counts and global queue ranks', async () => {
+  const { server, store, browser } = setup();
+  const ids = Array.from({length:8}, (_,i) => store.submit({targetId:'app', suite:'smoke',commit:String(i).repeat(40)},'alice',`board-${i}`).id);
+  for (const [i,id] of ids.entries()) {
+    const r = store.getRequest(id);
+    if (i === 5) r.selection = { mode: 'case', suite: 'smoke', caseId: 'case', titlePath: ['Checkout', '确认支付'] };
+    r.verdict = i===3?'failed':'passed';
+    r.state = i<3?'queued':i===3?'finalizing':'completed';
+    store.db.prepare('UPDATE requests SET state=?,queued_at=?,data=? WHERE id=?').run(r.state,8-i,JSON.stringify(r),id);
+  }
+  const read = async (query:string) => (await server.inject({url:`/api/board?${query}`,headers:browser()})).json();
+  const page = await read('pending=2&passed=1');
+  expect(page.totals).toEqual({pending:3,running:1,passed:4,failed:0,other:0});
+  expect(page.queue).toEqual(ids.slice(0,3).reverse());
+  expect(page.items.filter((r:{state:string})=>r.state==='queued').map((r:{id:string})=>r.id)).toEqual([ids[2],ids[1]]);
+  expect(page.items).toHaveLength(4);
+  expect(page.items[0]).not.toHaveProperty('target');
+  expect(page.items[0]).not.toHaveProperty('repository');
+  expect((await read('pending=2&passed=4')).items).toHaveLength(7);
+  expect((await read(`search=${ids[0]}`)).totals.pending).toBe(1);
+  expect((await read('search=SMOKE')).totals).toEqual(page.totals);
+  expect((await read(`search=${encodeURIComponent('checkout › 确认')}`)).items.map((r: { id: string }) => r.id)).toEqual([ids[5]]);
+  expect((await read('search=checkout&targetId=other')).items).toEqual([]);
+  expect((await server.inject({url:'/api/board',headers:{authorization:'Bearer ci-token'}})).statusCode).toBe(403);
+});
+
+it('lists each published, unexpired report for team members', async () => {
+  const { server, store, browser } = setup();
+  const sha = 'a'.repeat(40);
+  const request = store.submit({ targetId: 'app', suite: 'smoke', commit: sha }, 'alice', 'report-list');
+  const now = store.now();
+  const insert = store.db.prepare('INSERT INTO publications(id,attempt_id,request_id,state,created_at,expires_at,data) VALUES(?,?,?,?,?,?,?)');
+  for (const [i, state] of ['published', 'published', 'staging', 'published'].entries()) {
+    insert.run(`report-${i}`, `attempt-${i}`, request.id, state, now + i, now + (i === 3 ? -1 : 60000), '{}');
+  }
+  const result = await server.inject({ url: '/api/reports', headers: browser() });
+  expect(result.statusCode).toBe(200);
+  expect(result.json()).toEqual({ hasMore: false, items: [1, 0].map(i => ({
+    id: `report-${i}`, title: 'smoke', sha, projectName: 'App', createdAt: now + i,
+  })) });
+  expect((await server.inject({ url: '/api/reports', headers: { authorization: 'Bearer ci-token' } })).statusCode).toBe(403);
+  expect((await server.inject({ url: '/api/reports' })).statusCode).toBe(401);
+});
+
 it('accepts device inventories only from the owning worker and keeps discovery separate from slots', async () => {
   const { server, store, browser } = setup();
   const inventory = {
@@ -155,6 +199,10 @@ it('manages projects with admin writes, monotonic revisions, case catalog checks
   expect(update.json()).toMatchObject({ name: 'Web App', configRevision: 2, autoRun: { revision: 1 } });
   const scan = await server.inject({ method: 'POST', url: `/api/projects/${id}/scans`, headers: browser('ops'), payload: { commit: 'c'.repeat(40) } });
   expect(scan.json()).toMatchObject({ status: 'queued', configRevision: 2 });
+  const scanBranch = (payload: Record<string, string>) => server.inject({ method: 'POST', url: `/api/projects/${id}/scans`, headers: browser('ops'), payload });
+  expect((await scanBranch({ branch: 'releases/v1.6.0' })).json()).toMatchObject({ status: 'queued', branch: 'releases/v1.6.0' });
+  expect((await scanBranch({ branch: 'releases/*' })).statusCode).toBe(400);
+  expect((await scanBranch({ branch: 'main', commit: 'a'.repeat(40) })).statusCode).toBe(400);
   await server.inject({ method: 'PUT', url: `/api/projects/${id}/auto-run`, headers: browser('admin'), payload: { enabled: true, branch: 'main', selections: [{ suite: 'smoke', scenario: 'clean' }] } });
   const token = (await server.inject({ method: 'POST', url: `/api/projects/${id}/webhook-secret`, headers: browser('admin') })).json().token;
   const push = { object_kind: 'push', ref: 'refs/heads/main', checkout_sha: 'd'.repeat(40), before: 'e'.repeat(40), after: 'd'.repeat(40), project: { id: 1, web_url: 'https://git.example.com/team/web' } };
@@ -185,12 +233,21 @@ it('approves scenario-free catalogs and accepts direct case and suite runs', asy
   expect((await server.inject({ method: 'POST', url: '/api/projects/app/ready', headers: browser('admin'), payload: {} })).statusCode).toBe(200);
   expect((await server.inject({ url: '/api/projects/app/status', headers: browser() })).json().ready).toBe(true);
   const catalog = store.catalogs('app')[0]!;
+  let caseRequestId = '';
   for (const mode of ['suite', 'case']) {
     const response = await server.inject({ method: 'POST', url: '/api/projects/app/requests', headers: { ...browser(), 'idempotency-key': `direct-${mode}` }, payload: { projectId: 'app', commit: catalog.commit, catalogId: catalog.catalogId, mode, suite: 'smoke', ...(mode === 'case' ? { caseId: catalog.suites[0]!.cases[0]!.caseId } : {}) } });
     expect(response.statusCode).toBe(201);
     expect(store.getRequest(response.json().id).input).not.toHaveProperty('scenario');
+    if (mode === 'case') caseRequestId = response.json().id;
   }
+  for (let i = 0; i < 101; i++) {
+    store.submitProject({ projectId: 'app', catalogId: catalog.catalogId, commit: catalog.commit, mode: 'suite', suite: 'smoke', source: { kind: 'manual' } }, 'alice', `suite-${i}`);
+  }
+  const caseRuns = (await server.inject({ url: `/api/projects/app/catalogs/${catalog.catalogId}/case-runs`, headers: browser() })).json();
+  expect(caseRuns.items).toEqual([{ id: caseRequestId, suite: 'smoke', caseId: catalog.suites[0]!.cases[0]!.caseId, status: 'queued' }]);
   publish('b'.repeat(40), [{ name: 'guest', fingerprint: digest('guest') }]);
+  const newer = store.catalogs('app')[0]!;
+  expect((await server.inject({ url: `/api/projects/app/catalogs/${newer.catalogId}/case-runs`, headers: browser() })).json().items).toEqual([]);
   expect((await server.inject({ method: 'POST', url: '/api/projects/app/ready', headers: browser('admin'), payload: {} })).statusCode).toBe(200);
   expect((await server.inject({ url: '/api/projects/app/status', headers: browser() })).json().ready).toBe(true);
 });

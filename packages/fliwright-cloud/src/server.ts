@@ -5,10 +5,13 @@ import { join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
 import { z, ZodError } from 'zod';
-import { projectRepositoryDetails, projectSetupDefaults } from './project-setup.js';
+import { projectRepositoryDetails, projectSetupDefaults, displayRepositoryPath } from './project-setup.js';
+import { boardBatch } from './request-board.js';
 import { CloudStore, digest } from './CloudStore.js';
 import { ReportStore } from './ReportStore.js';
+import { ProjectSecureFiles } from './ProjectSecureFiles.js';
 import { attachWorkerControl } from './worker-control.js';
+import type { WorkerStatus } from './catalog-scan-status.js';
 import { registerDeviceEvents } from './device-events.js';
 import {
   CloudError,
@@ -24,7 +27,10 @@ import {
   projectSubmissionSchema,
   webhookPushSchema,
   scanLeaseKeySchema,
+  secureFileMaxBytes,
   catalogSchema,
+  catalogCommitSchema,
+  catalogScanInputSchema,
   workerTimelineClockSchema,
   workerTimelineFinishSchema,
   workerLogLevelSchema,
@@ -78,6 +84,11 @@ export function createCloudServer(options: CloudServerOptions) {
       !Object.hasOwn(options.users, options.localUser)))
     throw new Error('Local browser access requires a loopback publicUrl and registered user');
   const reports = new ReportStore(store, options.dataRoot, options);
+  const secureFiles = new ProjectSecureFiles(store, join(options.dataRoot, '.project-secure-files.key'));
+  const requireSecureFileTransport = () => {
+    if (publicUrl.protocol !== 'https:' && !['127.0.0.1', '[::1]', 'localhost'].includes(publicUrl.hostname))
+      throw new CloudError(403, 'Secure files require HTTPS or a loopback Cloud URL');
+  };
   reports.reconcile();
   const secrets = [options.proxySecret, options.publicationSecret];
   const redact = (message: string) =>
@@ -232,6 +243,7 @@ export function createCloudServer(options: CloudServerOptions) {
     return store.targets().map((t) => ({
       id: t.id,
       name: t.name,
+      repositoryPath: displayRepositoryPath(t.repository),
       suites: Object.keys(t.suites),
       scenarios: t.scenarios,
     }));
@@ -284,17 +296,47 @@ export function createCloudServer(options: CloudServerOptions) {
     store.event(null, 'project-removed', { projectId: id, actor: who.name });
     return { id };
   });
+  app.get('/api/projects/:id/workers', req => {
+    team(req);
+    return store.projectWorkers(param(req, 'id'));
+  });
+  app.get('/api/projects/:id/secure-files', req => {
+    team(req, 'admin');
+    return secureFiles.list(param(req, 'id'));
+  });
+  app.post('/api/projects/:id/secure-files', { bodyLimit: secureFileMaxBytes }, (req, reply) => {
+    const who = team(req, 'admin');
+    requireSecureFileTransport();
+    if (!Buffer.isBuffer(req.body)) throw new CloudError(415, 'Secure file upload requires binary content');
+    const file = secureFiles.upload(param(req, 'id'), query(req).path ?? '', req.body, who.name);
+    return reply.code(201).send(file);
+  });
+  app.delete('/api/projects/:id/secure-files/:fileId', (req, reply) => {
+    const who = team(req, 'admin');
+    secureFiles.remove(param(req, 'id'), param(req, 'fileId'), who.name);
+    return reply.code(204).send();
+  });
+  app.put('/api/projects/:id/workers', req => {
+    const who = team(req, 'admin');
+    const ids = z.array(idSchema);
+    const input = z.object({ workerIds: ids, expectedWorkerIds: ids }).strict().parse(req.body);
+    return store.setProjectWorkers(param(req, 'id'), input.workerIds, input.expectedWorkerIds, who.name);
+  });
   app.post('/api/projects/:id/scans', (req) => {
     const who = team(req, 'operator'), id = param(req, 'id');
-    const { commit } = z.object({ commit: z.string().regex(/^[0-9a-f]{40}$/).optional() }).strict().parse(req.body ?? {});
-    const scan = store.createCatalogScan(id, commit);
+    const { branch, commit } = catalogScanInputSchema.parse(req.body ?? {});
+    const scan = store.createCatalogScan(id, commit, undefined, branch);
     store.event(null, 'catalog-scan-requested', { projectId: id, scanId: scan.scanId, actor: who.name });
     return scan;
   });
-  app.get('/api/projects/:id/scans', (req) => { team(req); return store.listCatalogScans(param(req, 'id')); });
+  app.get('/api/projects/:id/scans', (req) => { team(req); return store.catalogScanRecords(param(req, 'id'), workerControlChannel.connectedCatalogWorkers()); });
   app.get('/api/projects/:id/scans/:scanId', (req) => { team(req); return store.catalogScan(param(req, 'id'), idSchema.parse((req.params as Record<string, string>).scanId)); });
   app.get('/api/projects/:id/catalogs', (req) => { team(req); return store.catalogs(param(req, 'id')); });
   app.get('/api/projects/:id/catalogs/:catalogId', (req) => { team(req); return store.catalog(param(req, 'id'), idSchema.parse((req.params as Record<string, string>).catalogId)); });
+  app.get('/api/projects/:id/catalogs/:catalogId/case-runs', (req) => {
+    if (team(req).kind === 'ci') throw new CloudError(403, 'Team access required');
+    return store.latestCaseRuns(param(req, 'id'), param(req, 'catalogId'));
+  });
   app.post('/api/projects/:id/requests', (req, reply) => {
     const who = team(req), id = param(req, 'id'), body = req.body as Record<string, unknown>;
     if (!body || body.projectId !== id) throw new CloudError(400, 'Project identity mismatch');
@@ -356,6 +398,18 @@ export function createCloudServer(options: CloudServerOptions) {
   app.get('/api/admin/targets', (req) => {
     team(req, 'admin');
     return store.targets();
+  });
+  app.get('/api/reports', (req) => {
+    if (team(req).kind === 'ci') throw new CloudError(403, 'Team access required');
+    const { offset } = z.object({ offset: z.coerce.number().int().min(0).default(0) }).parse(query(req));
+    return reports.listPublished(offset);
+  });
+  app.get('/api/board', (req) => {
+    if (team(req).kind === 'ci') throw new CloudError(403, 'Use the submitted request URL');
+    const size = z.coerce.number().int().positive().default(boardBatch);
+    const options = z.object({ pending: size, running: size, passed: size, failed: size, other: size,
+      search: z.string().max(200).default(''), targetId: idSchema.optional() }).parse(query(req));
+    return store.requestBoard(options, options.search.trim(), options.targetId ?? '');
   });
   app.get('/api/requests', (req) => {
     const who = team(req),
@@ -533,9 +587,9 @@ export function createCloudServer(options: CloudServerOptions) {
     if (!input.success) throw new CloudError(400, 'Pairing code unavailable');
     return store.redeemWorkerPairing(input.data.code);
   });
-  app.get('/api/workers', (req) => {
+  app.get('/api/workers', (req): WorkerStatus[] => {
     team(req);
-    return store.listWorkers();
+    return store.workerStatuses(workerControlChannel.connectedCatalogWorkers());
   });
   app.get('/api/workers/:id/diagnostics', (req) => {
     team(req, 'operator');
@@ -603,6 +657,10 @@ export function createCloudServer(options: CloudServerOptions) {
     const who = worker(req), key = scanLeaseKeySchema.parse(req.body);
     return store.heartbeatCatalogScan(who.name, key.scanId, key.token);
   });
+  workerControl('/api/worker/scans/pin', (req) => {
+    const who = worker(req), input = scanLeaseKeySchema.extend({ commit: catalogCommitSchema }).strict().parse(req.body);
+    return store.pinCatalogScanCommit(who.name, input.scanId, input.token, input.commit);
+  });
   workerControl('/api/worker/scans/result', (req) => {
     const who = worker(req), input = scanLeaseKeySchema.extend({ catalog: catalogSchema, head: z.string().regex(/^[a-f0-9]{40}$/).optional() }).strict().parse(req.body);
     return store.finishCatalogScan(who.name, input.scanId, input.token, input.catalog, input.head);
@@ -614,11 +672,21 @@ export function createCloudServer(options: CloudServerOptions) {
   });
   workerControl('/api/worker/claim', (req) => {
     const who = worker(req),
-      { slotId, deviceId } = z
-        .object({ slotId: idSchema, deviceId: z.string().min(1).max(300) })
+      { slotId, deviceId, supportsSecureFiles } = z
+        .object({ slotId: idSchema, deviceId: z.string().min(1).max(300), supportsSecureFiles: z.boolean().optional() })
         .strict()
         .parse(req.body);
-    return store.claim(who.name, slotId, deviceId);
+    return store.claim(who.name, slotId, deviceId, supportsSecureFiles);
+  });
+  workerControl('/api/worker/secure-files/read', req => {
+    const key = lease(req);
+    requireSecureFileTransport();
+    const { fileId } = leaseKeySchema.extend({ fileId: z.string().uuid() }).strict().parse(req.body);
+    const attempt = store.owned(key), request = store.getRequest(attempt.requestId);
+    const file = request.secureFiles?.find(item => item.id === fileId);
+    if (!file || !['assigned', 'preparing', 'running'].includes(request.state))
+      throw new CloudError(403, 'Secure file outside active execution scope');
+    return secureFiles.read(request.input.targetId, file.id, file.path);
   });
   workerControl('/api/worker/devices', (req) => {
     const who = worker(req);
@@ -766,20 +834,15 @@ export function createCloudServer(options: CloudServerOptions) {
     if (req.url.startsWith('/api/'))
       throw new CloudError(404, 'API route not found');
     const path = req.url.split('?')[0];
-    const asset = /^\/assets\/[a-zA-Z0-9_.-]+\.(js|css)$/.test(path);
+    const asset = /^\/assets\/[a-zA-Z0-9_.-]+\.(js|css|svg|webp)$/.test(path);
     const file = asset ? join(webRoot, path) : join(webRoot, 'index.html');
     if (!existsSync(file))
       throw new CloudError(503, 'Web UI has not been built');
-    reply.type(
-      asset
-        ? path.endsWith('.js')
-          ? 'application/javascript'
-          : 'text/css'
-        : 'text/html',
-    );
+    const assetTypes: Record<string, string> = { '.js':'application/javascript', '.css':'text/css', '.svg':'image/svg+xml', '.webp':'image/webp' };
+    reply.type(asset ? assetTypes[extname(path)] : 'text/html');
     return readFileSync(file);
   });
-  const closeControl = attachWorkerControl(app.server, {
+  const workerControlChannel = attachWorkerControl(app.server, {
     store,
     authenticate: request => worker({ headers: request.headers } as FastifyRequest).name,
     handle: (request, operation, body) => {
@@ -789,7 +852,7 @@ export function createCloudServer(options: CloudServerOptions) {
     },
   });
   // Terminate upgraded sockets before Fastify waits for the HTTP server to close.
-  app.addHook('preClose', async () => closeControl());
+  app.addHook('preClose', async () => workerControlChannel.close());
   const maintenance = setInterval(() => {
     try {
       store.expireLeases();

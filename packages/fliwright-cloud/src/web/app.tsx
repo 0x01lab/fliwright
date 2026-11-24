@@ -1,6 +1,9 @@
 import { Alert } from './components/ui/alert.js';
+import { ArrowLeft, ArrowUpRight, ChevronDown, Monitor, Pause, Play, Share2, TriangleAlert } from 'lucide-react';
 import { WorkerPairing } from './WorkerPairing.js';
-import { WorkerDiagnosticsPanel } from './WorkerDiagnostics.js';
+import type { WorkerStatusResponse } from '../catalog-scan-status.js';
+import { serviceStatusLabels } from './WorkerDiagnostics.js';
+import { WorkerHostDetails } from './WorkerHostDetails.js';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -20,23 +23,15 @@ import { Label } from './components/ui/label.js';
 import { Input } from './components/ui/input.js';
 import { Button } from './components/ui/button.js';
 import { NativeSelect } from './components/ui/native-select.js';
-import {
-  NavigationMenu,
-  NavigationMenuList,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuTrigger,
-  NavigationMenuContent,
-  navigationMenuTriggerStyle,
-} from './components/ui/navigation-menu.js';
 import { Checkbox } from './components/ui/checkbox.js';
 import { Textarea } from './components/ui/textarea.js';
 import React, {
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
   createContext,
   useContext,
-  type FormEvent,
   type ReactNode,
 } from 'react';
 import type { ReportView } from '../ReportStore.js';
@@ -44,7 +39,6 @@ import type {
   ExecutionAttempt,
   ExecutionWorker,
   Project,
-  TestCatalog,
   TestRequest,
 } from '@fliwright/cloud-protocol';
 import { Icon, stageLabel } from './ui.js';
@@ -52,19 +46,18 @@ import { Replay } from './Replay.js';
 import { api, useData } from './data.js';
 import { Devices, DeviceDetail, deviceFilters } from './Devices.js';
 import { Projects } from './Projects.js';
-import { TestBoard } from './TestBoard.js';
+import { TestBoard, type BoardRequest } from './TestBoard.js';
+import { QueueBoard } from './QueueBoard.js';
+import { BoardFactsContext, WorkspaceHeader, type CloudUser, type ProjectDirectory } from './WorkspaceHeader.js';
 import { WorkerExecutionTimeline } from './WorkerExecutionTimeline.js';
-import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs.js';
+import { CloudDialog } from './components/ui/dialog.js';
+import { Toaster } from './components/ui/sonner.js';
 
-const brandLogo = new URL('./assets/fliwright-logo.svg', import.meta.url).href;
-
-type Target = {
-  id: string;
-  name: string;
-  suites: string[];
-  scenarios: string[];
-};
-const RoleContext = createContext<string | undefined>(undefined);
+const TeamContext = createContext<{
+  user?: CloudUser;
+  directory: ProjectDirectory;
+  workers: ReturnType<typeof useData<WorkerStatusResponse[]>>;
+} | null>(null);
 type Detail = Omit<TestRequest, 'target' | 'attempts'> & {
   attempts: ExecutionAttempt[];
   reports: Array<{
@@ -175,8 +168,6 @@ function PageTitle({
     'TEAM OVERVIEW': '统一查看测试运行、任务队列与设备状态。',
     'TEST REPORTS': '按测试结果浏览已完成的运行，点击卡片查看步骤回放与归档证据。',
     'EXECUTION QUEUE': '从待测试到测试结果，状态自动更新。点击卡片查看详情。',
-    'NEW EXECUTION': '选择应用、固定的 Git 提交、测试套件与场景。',
-    'EXECUTION WORKERS': '查看执行主机心跳、检测工具诊断与槽位容量。',
     'APPLICATION TARGETS': '管理已注册应用及其测试套件与场景。',
   };
   return (
@@ -198,12 +189,15 @@ function Layout({
   children: ReactNode;
   shared?: boolean;
 }) {
-  const { data: me } = useData<{ name: string; role: string }>(
+  const { data: me } = useData<CloudUser>(
     '/api/me',
     0,
     !shared,
   );
-  const [theme, setTheme] = useState(() => {
+  const directory = useData<Project[]>('/api/projects', 10000, !shared);
+  const workers = useData<WorkerStatusResponse[]>('/api/workers', 3000, !shared);
+  const [factsHost, setFactsHost] = useState<HTMLDListElement | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       return localStorage.getItem('cloud-theme') === 'light' ? 'light' : 'dark';
     } catch {
@@ -211,37 +205,22 @@ function Layout({
     }
   });
   const path = useLocation({ select: (location) => location.pathname });
-  const navigate = useNavigate();
-  const [navigation, setNavigation] = useState('');
-  const [submissionMenu, setSubmissionMenu] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const mainLinks = [
-    ['/queue', '执行看板'],
-    ['/projects', '测试用例'],
-  ] as const;
-  const configurationLinks = [
-    ['/overview', '运行概览', 'box', '查看任务统计、主机和设备状态'],
-    ['/devices', '设备管理', 'device', '管理测试设备与调度策略'],
-    ['/workers', 'Worker 主机', 'cpu', '查看执行主机与槽位状态'],
-    ['/reports', '测试报告', 'doc', '查看已归档的测试结果与证据'],
-  ] as const;
-  const current = path === '/' || path.startsWith('/requests/') || path === '/runs'
-    ? '/queue'
-    : path.startsWith('/devices/')
-      ? '/devices'
-      : path.startsWith('/reports/')
-        ? '/reports'
-        : path.startsWith('/projects/')
-          ? '/projects'
-          : path;
-  const title = shared
-    ? '分享报告'
-    : ([...mainLinks, ...configurationLinks].find(([url]) => url === current)?.[1] ??
-      '运行详情');
-  const configurationActive = configurationLinks.some(([url]) => url === current);
-  const isBoardPage = ['/', '/runs', '/queue', '/reports'].includes(path);
-  const isProjectPage = path === '/projects' || path.startsWith('/projects/');
-  useEffect(() => { setNavigation(''); setSubmissionMenu(''); setSearchOpen(false); }, [path]);
+  const isBoardPage = ['/', '/runs', '/queue'].includes(path);
+  const isProjectPage = path === '/projects' || path.startsWith('/projects/') || path === '/targets';
+  const isReportPage = path.startsWith('/reports/') || path.startsWith('/shared/reports/');
+  const showWorkerAlert = !shared && path !== '/workers' && !workers.error &&
+    workers.data?.some(worker => worker.health === 'healthy') === false;
+  const workerAlertRef = useRef<HTMLDivElement>(null);
+  const [workerAlertHeight, setWorkerAlertHeight] = useState(0);
+  useLayoutEffect(() => {
+    const alert = workerAlertRef.current;
+    if (!showWorkerAlert || !alert) return;
+    const measure = () => setWorkerAlertHeight(alert.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(alert);
+    return () => observer.disconnect();
+  }, [showWorkerAlert]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -249,235 +228,48 @@ function Layout({
       localStorage.setItem('cloud-theme', theme);
     } catch {}
   }, [theme]);
-  useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if (
-        event.key === '/' &&
-        !/INPUT|TEXTAREA|SELECT/.test((event.target as HTMLElement).tagName)
-      ) {
-        event.preventDefault();
-        setSearchOpen(true);
-        document.getElementById('global-search')?.focus();
-      }
-    };
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, []);
-  useEffect(() => { if (searchOpen) document.getElementById('global-search')?.focus(); }, [searchOpen]);
   return (
-    <div className={`min-h-screen min-w-0${isBoardPage || isProjectPage ? ' grid h-dvh min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden [&_main]:flex [&_main]:min-h-0 [&_main]:flex-col [&_main]:overflow-y-auto' : ''}${isBoardPage ? ' [&_main]:overflow-hidden [&_main]:pb-4 [&_[data-ui~=test-board]]:h-full [&_[data-ui~=test-column]]:min-h-0' : ''}`} data-ui={`cloud-shell${isBoardPage ? ' cloud-shell-board' : ''}${isProjectPage ? ' cloud-shell-projects' : ''}`}>
+    <div className={isBoardPage || isProjectPage ? 'cloud-workspace' : 'min-h-screen min-w-0'} data-ui="cloud-shell">
       <a className="absolute -top-16 left-3 z-50 rounded-md bg-card px-4 py-2 shadow-lg transition-all focus:top-3" href="#content" data-ui="skip">
         跳至内容
       </a>
-      <header className="sticky top-0 z-20 min-w-0 border-b border-border bg-card" data-ui="app-header">
-        <div className="flex min-h-12 items-center gap-2 px-4 max-sm:gap-1 max-sm:px-3" data-ui="topbar">
-          <Link data-ui="brand" className="flex shrink-0 items-center gap-2 text-foreground hover:no-underline" to="/" aria-label="Fliwright Cloud 首页" disabled={shared}>
-            <img src={brandLogo} width={32} height={32} alt="" aria-hidden="true" className="size-8 flex-none" data-ui="brand-mark" />
-            <span className="whitespace-nowrap text-sm font-semibold tracking-tight max-[1280px]:hidden [&>span]:ml-1 [&>span]:text-xs [&>span]:font-medium [&>span]:tracking-normal [&>span]:text-muted-foreground" data-ui="brand-name">Fliwright <span>Cloud</span></span>
-          </Link>
-          {(path === '/projects' || path.startsWith('/projects/')) && <div className="min-w-0 max-w-48 max-[900px]:max-w-32 max-sm:max-w-20" data-ui="project-switcher-slot" />}
-          {shared ? (
-            <span className="mr-auto text-xs text-muted-foreground" data-ui="share-label">只读报告分享</span>
-          ) : (
-            <NavigationMenu
-              aria-label="主导航"
-              value={navigation}
-              onValueChange={setNavigation}
-              className="shrink-0 flex-none [&_a:hover]:no-underline max-sm:[&_ul]:space-x-0 max-sm:[&_button]:px-2 max-sm:[&_a]:px-2 max-sm:[&>div:last-child]:fixed max-sm:[&>div:last-child]:inset-x-3 max-sm:[&>div:last-child]:top-12 max-sm:[&>div:last-child]:justify-end" data-ui="main-navigation"
-            >
-              <NavigationMenuList>
-                {mainLinks.map(([url, label]) => (
-                  <NavigationMenuItem key={url}>
-                    <NavigationMenuLink
-                      asChild
-                      active={current === url}
-                      className={navigationMenuTriggerStyle()}
-                    >
-                      <Link to={url} aria-label={label}><span className="max-sm:hidden">{label}</span><span className="sm:hidden">{url === '/queue' ? '看板' : '用例'}</span></Link>
-                    </NavigationMenuLink>
-                  </NavigationMenuItem>
-                ))}
-                <NavigationMenuItem value="configuration">
-                  <NavigationMenuTrigger
-                    className={configurationActive ? " bg-primary/10 text-primary" : undefined} data-ui={configurationActive ? 'configuration-active' : undefined}
-                  >
-                    配置
-                  </NavigationMenuTrigger>
-                  <NavigationMenuContent className="w-[260px] md:w-[260px]">
-                    <ul className="grid gap-1 p-2">
-                      {configurationLinks.map(([url, label, icon, description]) => (
-                        <li key={url}>
-                          <NavigationMenuLink
-                            asChild
-                            active={current === url}
-                            onSelect={() => setNavigation('')}
-                          >
-                            <Link
-                              to={url}
-                              className="flex items-start gap-2 rounded-md p-2 text-foreground outline-none transition-colors hover:bg-accent focus:bg-accent aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary [&_svg]:mt-0.5 [&_svg]:text-muted-foreground [&_b]:text-xs [&_b]:font-medium [&_small]:mt-0.5 [&_small]:text-xs [&_small]:text-muted-foreground"
-                              onClick={() => setNavigation('')}
-                            >
-                              <Icon name={icon} />
-                              <span>
-                                <b>{label}</b>
-                                <small>{description}</small>
-                              </span>
-                            </Link>
-                          </NavigationMenuLink>
-                        </li>
-                      ))}
-                      <li className="sm:hidden"><NavigationMenuLink asChild><Link to="/new" className="block rounded-md p-2" onClick={() => setNavigation('')}>提交测试</Link></NavigationMenuLink></li>
-                      <li className="sm:hidden"><Button variant="ghost" className="w-full justify-start" onClick={() => { setTheme(theme === 'dark' ? 'light' : 'dark'); setNavigation(''); }}><Icon name={theme === 'dark' ? 'sun' : 'moon'} />{theme === 'dark' ? '切换浅色主题' : '切换深色主题'}</Button></li>
-                    </ul>
-                  </NavigationMenuContent>
-                </NavigationMenuItem>
-              </NavigationMenuList>
-            </NavigationMenu>
-          )}
-          {!shared && (
-            <form
-              className={`${searchOpen ? 'max-sm:flex' : 'max-sm:hidden'} relative ml-auto w-full min-w-0 max-w-[280px] max-[1100px]:max-w-48 max-sm:absolute max-sm:top-full max-sm:right-3 max-sm:left-3 max-sm:mt-2 max-sm:w-auto max-sm:max-w-none max-sm:rounded-md max-sm:bg-card max-sm:p-2 max-sm:shadow-lg [&>svg]:pointer-events-none [&>svg]:absolute [&>svg]:left-2 [&>svg]:top-1/2 [&>svg]:size-3.5 [&>svg]:-translate-y-1/2 [&>svg]:text-muted-foreground [&_input]:bg-secondary [&_input]:pl-7 [&_input]:pr-8 [&_input]:hover:bg-accent max-sm:[&_input]:h-9 [&_kbd]:pointer-events-none [&_kbd]:absolute [&_kbd]:right-2 [&_kbd]:top-1/2 [&_kbd]:-translate-y-1/2 [&:focus-within_kbd]:hidden`}
-              onSubmit={(event) => {
-                event.preventDefault();
-                setSearchOpen(false);
-                const search = String(
-                  new FormData(event.currentTarget).get('search') ?? '',
-                ).slice(0, 200);
-                void navigate({
-                  to: '/queue',
-                  search: { search: search || undefined },
-                });
-              }} data-ui="search"
-            >
-              <Icon name="search" />
-              <Label className="sr-only" htmlFor="global-search">
-                搜索任务或报告
-              </Label>
-              <Input
-                className="pl-9 pr-10"
-                id="global-search"
-                type="search"
-                name="search"
-                placeholder="搜索任务 / 报告"
-                maxLength={200}
-                onKeyDown={event => { if (event.key === 'Escape') { setSearchOpen(false); document.getElementById('mobile-search-trigger')?.focus(); } }}
-              />
-              <kbd>/</kbd>
-            </form>
-          )}
-          {!shared && <Button variant="ghost" size="icon" id="mobile-search-trigger" className="ml-auto shrink-0 sm:hidden" aria-label="打开任务搜索" aria-expanded={searchOpen} onClick={() => setSearchOpen(!searchOpen)}><Icon name="search" /></Button>}
-          <Button
-            className={shared ? "ml-auto shrink-0" : "shrink-0 max-sm:hidden"}
-            variant="ghost"
-            size="icon"
-            aria-label={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
-            title={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          >
-            <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-          </Button>
-          {!shared && (
-            <>
-              <NavigationMenu aria-label="创建与提交" value={submissionMenu} onValueChange={setSubmissionMenu} className="shrink-0 flex-none max-sm:hidden">
-                <NavigationMenuList>
-                  <NavigationMenuItem value="submit">
-                    <NavigationMenuTrigger showChevron={false} aria-label="新建" title="新建" className="size-7 p-0 max-[640px]:p-0 bg-primary text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground focus-visible:bg-primary-hover focus-visible:text-primary-foreground data-[state=open]:bg-primary-hover data-[state=open]:text-primary-foreground data-[state=open]:hover:bg-primary-hover data-[state=open]:focus:bg-primary-hover" data-ui="submit-test">
-                      <Icon name="plus" />
-                    </NavigationMenuTrigger>
-                    <NavigationMenuContent className="w-[220px] md:w-[220px]">
-                      <ul className="grid gap-1 p-2">
-                        <li><NavigationMenuLink asChild onSelect={() => setSubmissionMenu('')}><Link to="/new" className="flex items-start gap-2 rounded-md p-2 text-foreground outline-none transition-colors hover:bg-accent focus:bg-accent aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary [&_svg]:mt-0.5 [&_svg]:text-muted-foreground [&_b]:text-xs [&_b]:font-medium [&_small]:mt-0.5 [&_small]:text-xs [&_small]:text-muted-foreground" onClick={() => setSubmissionMenu('')}><Icon name="play" /><span><b className="block">提交测试</b><small className="block">选择项目与场景，运行测试</small></span></Link></NavigationMenuLink></li>
-                        {me?.role === 'admin' && <li><NavigationMenuLink asChild onSelect={() => setSubmissionMenu('')}><Link to="/projects" search={{ createProject: true }} className="flex items-start gap-2 rounded-md p-2 text-foreground outline-none transition-colors hover:bg-accent focus:bg-accent aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary [&_svg]:mt-0.5 [&_svg]:text-muted-foreground [&_b]:text-xs [&_b]:font-medium [&_small]:mt-0.5 [&_small]:text-xs [&_small]:text-muted-foreground" onClick={() => setSubmissionMenu('')}><Icon name="plus" /><span><b className="block">创建项目</b><small className="block">连接仓库，发现测试用例</small></span></Link></NavigationMenuLink></li>}
-                      </ul>
-                    </NavigationMenuContent>
-                  </NavigationMenuItem>
-                </NavigationMenuList>
-              </NavigationMenu>
-              <span
-                className="flex items-center gap-1.5 text-xs text-muted-foreground max-[1100px]:hidden"
-                title={me ? `${me.name} · ${me.role}` : '未登录'} data-ui="current-user"
-              >
-                <Icon name="user" />
-                <span>{me?.name}</span>
-              </span>
-            </>
-          )}
-        </div>
-      </header>
-      <main className="grid w-full min-w-0 content-start gap-3 p-4 pb-6 max-sm:p-3 max-sm:pb-4" id="content" tabIndex={-1} data-ui="cloud-content">
+      <WorkspaceHeader directory={directory} user={me} shared={shared} board={isBoardPage} factsRef={setFactsHost} projectPage={isProjectPage} theme={theme} toggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+      <main className={`grid w-full min-w-0 content-start px-4 pb-6 max-sm:px-3 max-sm:pb-4 ${isReportPage ? 'gap-2 pt-2' : 'gap-3 pt-4 max-sm:pt-3'}`} id="content" tabIndex={-1} data-ui="cloud-content">
         {path.startsWith('/requests/') && (
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground [&_b]:font-medium [&_code]:truncate" data-ui="crumb">
-            {shared ? (
-              <b>{title}</b>
-            ) : (
-              <Link to={current === '/reports' ? '/reports' : '/queue'}>
-                {title}
-              </Link>
-            )}
+            <Link to="/queue">执行看板</Link>
             <span className="mx-1.5 font-normal text-muted-foreground" data-ui="sep">/</span>
             <code title={path.split('/').pop()}>
               {path.split('/').pop()?.slice(0, 12)}
             </code>
           </div>
         )}
-        <RoleContext.Provider value={me?.role}>{children}</RoleContext.Provider>
+        <TeamContext.Provider value={{ user: me, directory, workers }}>
+          <BoardFactsContext.Provider value={factsHost}>{children}</BoardFactsContext.Provider>
+        </TeamContext.Provider>
       </main>
+      <Toaster theme={theme} bottomOffset={showWorkerAlert ? 24 + workerAlertHeight : 16} />
+      {showWorkerAlert && (
+        <Alert asChild className="fixed right-4 bottom-4 z-30 max-w-[calc(100%-2rem)] bg-warn-bg text-warn-ink shadow-md" data-ui="worker-connection-alert">
+          <div ref={workerAlertRef}>
+            <Icon name="alert" />
+            <span className="font-medium">暂无正常连接的 Worker</span>
+            <Button asChild size="sm" className="ml-auto pointer-coarse:min-h-9">
+              <Link to="/workers">{me?.role === 'admin' ? '设置 Worker' : '查看 Worker 主机'}</Link>
+            </Button>
+          </div>
+        </Alert>
+      )}
     </div>
   );
 }
 
-function Requests({
-  overview = false,
-  reportsOnly = false,
-  history = false,
-}: {
-  overview?: boolean;
-  reportsOnly?: boolean;
-  history?: boolean;
-}) {
-  const urlSearch = useSearch({
-    strict: false,
-    select: (search) => search.search ?? '',
-  });
-  const state = reportsOnly ? 'completed' : '';
-  const [search, setSearch] = useState(urlSearch),
-    [offset, setOffset] = useState(0),
-    [target, setTarget] = useState('');
-  useEffect(() => {
-    setSearch(urlSearch);
-    setOffset(0);
-  }, [urlSearch]);
-  const params = new URLSearchParams({
-    limit: overview ? '8' : '25',
-    offset: String(offset),
-    ...(state ? { state } : {}),
-    ...(search ? { search } : {}),
-    ...(target ? { targetId: target } : {}),
-  });
-  const { data, error } = useData<{
-    items: Array<Omit<TestRequest, 'target'>>;
-    total: number;
-    queue: string[];
-  }>(`/api/requests?${params}`, 3000);
-  const { data: targets } = useData<Target[]>('/api/targets');
-  const { data: workers } = useData<ExecutionWorker[]>('/api/workers', 5000);
-  return (
-    <>
-      {!history && (
-        <PageTitle
-          eyebrow={overview ? 'TEAM OVERVIEW' : reportsOnly ? 'TEST REPORTS' : 'EXECUTION QUEUE'}
-          title={overview ? '概览' : reportsOnly ? '测试报告' : '执行看板'}
-        >
-          <Button asChild variant="default">
-            <Link to="/new">
-              <Icon name="plus" />
-              提交测试
-            </Link>
-          </Button>
-        </PageTitle>
-      )}
-      {overview && (
-        <div className="grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-sm:gap-2.5 [&>div>span]:text-xs [&>div>span]:text-muted-foreground [&_strong]:text-2xl [&_strong]:font-semibold [&_strong]:tabular-nums" data-ui="stats">
+function Overview() {
+  const {data,error}=useData<{items: BoardRequest[];total:number;queue:string[]}>('/api/requests?limit=8',3000);
+  const {data:targets}=useData<Array<Pick<Project, 'id' | 'name'>>>('/api/targets');
+  const workers = useContext(TeamContext)!.workers.data;
+  return <><PageTitle title="运行概览" eyebrow="TEAM OVERVIEW"/>
+      <div className="grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-sm:gap-2.5 [&>div>span]:text-xs [&>div>span]:text-muted-foreground [&_strong]:text-2xl [&_strong]:font-semibold [&_strong]:tabular-nums" data-ui="stats">
           <Card className="grid gap-1 p-3">
             <span>等待执行</span>
             <strong>{data?.queue.length ?? '—'}</strong>
@@ -508,90 +300,14 @@ function Requests({
             <small>原始结果与证据留存</small>
           </Card>
         </div>
-      )}
-      {overview && <OverviewActivity />}
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden [&>[data-ui~=panel-heading]]:shrink-0 [&>[data-ui~=panel-heading]]:border-0 [&>[data-ui~=panel-heading]]:px-0 [&>[data-ui~=panel-heading]]:pt-0 [&>[data-ui~=board-caption]]:px-0 [&>[data-ui~=pagination]]:mt-3 [&>[data-ui~=pagination]]:px-0 [&>[data-ui~=pagination]]:pb-0 [&>[data-ui~=test-board-scroll]]:px-0 [&>[data-ui~=test-board-scroll]]:pb-0" data-ui="request-board">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs [&>span]:text-xs [&>span]:text-muted-foreground" data-ui="panel-heading">
-          <h2 className={overview || history ? undefined : 'sr-only'}>
-            {overview ? '最近运行' : '测试看板'}
-          </h2>
-          {!overview && (
-            <div className="flex w-full flex-wrap items-center gap-2 [&_input]:w-60 max-[1240px]:[&_input]:w-50 max-sm:w-full max-sm:[&_input]:w-full max-sm:[&>[data-slot=native-select-wrapper]]:flex-1" data-ui="filters">
-              <Input
-                className="w-full sm:w-[240px]"
-                aria-label="搜索任务"
-                placeholder="搜索提交、分支或任务 ID"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setOffset(0);
-                }}
-              />
-              <NativeSelect
-                aria-label="筛选应用"
-                value={target}
-                onChange={(e) => {
-                  setTarget(e.target.value);
-                  setOffset(0);
-                }}
-              >
-                <option value="">所有应用</option>
-                {targets?.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-          )}
-        </div>
-        <ErrorBox error={error} />
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-3 pb-2 text-xs text-muted-foreground" data-ui="board-caption">
-          <span>状态自动流转 · 点击卡片查看详情</span>
-          <span>{data ? `本页 ${data.items.length} 条 · 共 ${data.total} 条` : error ? '加载失败，稍后自动重试' : '正在加载…'}</span>
-        </div>
-        {(data || !error) && <TestBoard
-          items={data?.items ?? []}
-          queue={data?.queue ?? []}
-          targets={targets ?? []}
-          loading={!data && !error}
-          filtered={Boolean(search || target || offset)}
-        />}
-        {data?.total === 0 && !error && (
-          <Empty>{search || target ? '没有匹配的测试，请调整筛选条件。' : '暂无测试任务，提交一次测试开始记录。'}</Empty>
-        )}
-        {!overview && data && (
-          <div className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground [&>span]:mr-auto" data-ui="pagination">
-            <span>第 {Math.floor(offset / 25) + 1} / {Math.max(1, Math.ceil(data.total / 25))} 页 · 列内数量为本页统计</span>
-            <Button
-              variant="secondary"
-              size="default"
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - 25))}
-            >
-              上一页
-            </Button>
-            <Button
-              variant="secondary"
-              size="default"
-              disabled={offset + 25 >= data.total}
-              onClick={() => setOffset(offset + 25)}
-            >
-              下一页
-            </Button>
-          </div>
-        )}
-      </section>
-      {overview && (
-        <div className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground" data-ui="callout">
-          测试任务由平台统一排队。报告发布后可独立查看，不依赖 CI 工作目录。
-        </div>
-      )}
-    </>
-  );
+      <OverviewActivity workers={workers} /><h2>最近运行</h2><ErrorBox error={error}/><TestBoard items={data?.items ?? []} queue={data?.queue ?? []} targets={targets ?? []} loading={!data && !error}/></>;
 }
-function OverviewActivity() {
-  const { data: workers } = useData<ExecutionWorker[]>('/api/workers', 5000);
+function Reports() {
+  const [offset,setOffset] = useState(0);
+  const {data,error,reload} = useData<{items: Array<{id:string; title:string; sha:string; projectName:string; createdAt:number}>;hasMore:boolean}>(`/api/reports?offset=${offset}`,5000);
+  return <section className="project-directory"><h1>测试报告</h1>{error && <div role="alert">{error} <Button onClick={reload}>重试</Button></div>}{!data && !error && <p role="status">正在加载报告…</p>}{data && <>{!data.items.length && <Empty>暂无已发布的报告</Empty>}<div>{data.items.map(r=><Link className="report-entry" key={r.id} to="/reports/$id" params={{id:r.id}}><Icon name="doc"/><span><strong>{r.title}</strong><small>{r.projectName} · {r.sha.slice(0,8)}</small></span><time>{time(r.createdAt)}</time></Link>)}</div>{(offset>0 || data.hasMore) && <div className="flex gap-2"><Button variant="outline" disabled={!offset} onClick={()=>setOffset(offset-25)}>上一页</Button><Button variant="outline" disabled={!data.hasMore} onClick={()=>setOffset(offset+25)}>下一页</Button></div>}</>}</section>;
+}
+function OverviewActivity({ workers }: { workers?: ExecutionWorker[] }) {
   return (
     <>
       <Card asChild>
@@ -624,118 +340,6 @@ function OverviewActivity() {
             ))}
             {!workers?.length && <p className="text-xs leading-[1.45] text-muted-foreground">尚无设备信息。</p>}
           </div>
-        </section>
-      </Card>
-    </>
-  );
-}
-function NewRequest() {
-  const navigate = useNavigate();
-  const { data: targets, error: loadError } = useData<Target[]>('/api/targets');
-  const [targetId, setTarget] = useState(''),
-    [suite, setSuite] = useState(''),
-    [scenario, setScenario] = useState(''),
-    [commit, setCommit] = useState(''),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState('');
-  const target = targets?.find((t) => t.id === targetId) ?? targets?.[0];
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!target) return;
-    setBusy(true);
-    setError('');
-    try {
-      const r = await api<{ id: string }>(
-        '/api/requests',
-        'POST',
-        {
-          targetId: target.id,
-          commit,
-          suite: suite || target.suites[0],
-          ...(scenario ? { scenario } : {}),
-        },
-        crypto.randomUUID(),
-      );
-      await navigate({ to: '/requests/$id', params: { id: r.id } });
-    } catch (e) {
-      setError((e as Error).message);
-      setBusy(false);
-    }
-  }
-  return (
-    <>
-      <PageTitle eyebrow="NEW EXECUTION" title="提交测试任务" />
-      <Card asChild>
-        <section className="max-w-[820px] p-4 [&>p]:mt-1 [&>p]:mb-3 [&>p]:text-xs [&_form]:grid [&_form]:gap-3 [&_label]:grid [&_label]:gap-1.5 [&_label]:text-xs [&_label]:font-medium overflow-hidden" data-ui="form-panel">
-          <h2>选择测试配置</h2>
-          <p>提交后进入队列，等待专用设备执行。</p>
-          <ErrorBox error={loadError || error} />
-          <form onSubmit={submit}>
-            <Label>
-              应用
-              <NativeSelect
-                value={target?.id ?? ''}
-                onChange={(e) => {
-                  setTarget(e.target.value);
-                  setSuite('');
-                  setScenario('');
-                }}
-              >
-                {targets?.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Label>
-            <Label>
-              Git commit SHA
-              <Input
-                required
-                pattern="[0-9a-f]{40}"
-                placeholder="完整的 40 位提交 SHA"
-                value={commit}
-                onChange={(e) => setCommit(e.target.value.trim())}
-              />
-              <small>固定提交用于准确复现测试。</small>
-            </Label>
-            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1" data-ui="form-row">
-              <Label>
-                测试套件
-                <NativeSelect
-                  value={suite || target?.suites[0] || ''}
-                  onChange={(e) => setSuite(e.target.value)}
-                >
-                  {target?.suites.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </NativeSelect>
-              </Label>
-              <Label>
-                测试场景
-                <NativeSelect
-                  value={scenario}
-                  onChange={(e) => setScenario(e.target.value)}
-                >
-                  <option value="">直接运行（无场景）</option>
-                  {target?.scenarios.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </NativeSelect>
-              </Label>
-            </div>
-            <div className="flex items-center justify-between gap-3 border-t border-border pt-3" data-ui="form-actions">
-              <Link to="/queue">返回测试任务</Link>
-              <Button
-                variant="default"
-                size="default"
-                type="submit"
-                disabled={busy || !target}
-              >
-                {busy ? '正在提交…' : '提交并加入队列'}
-              </Button>
-            </div>
-          </form>
         </section>
       </Card>
     </>
@@ -775,7 +379,7 @@ function RequestAction({
   return (
     <>
       <Button
-        variant={finished ? 'default' : 'destructive'}
+        variant={finished ? 'secondary' : 'destructive'}
         size="default"
         disabled={busy || request.state === 'cancel_requested'}
         onClick={action}
@@ -1118,7 +722,7 @@ function ReportContent({
   id: string;
   shared?: boolean;
 }) {
-  const [reportView, setReportView] = useState('tests');
+  const [panel, setPanel] = useState<'run' | 'attempts' | 'events' | 'worker' | 'share'>();
   const prefix = shared ? '/api/shared/reports' : '/api/reports';
   const { data: r, error } = useData<ReportView>(`${prefix}/${id}`);
   const { data: request, error: requestError, reload } = useData<Detail>(
@@ -1126,50 +730,28 @@ function ReportContent({
     2000,
     !shared && !!r,
   );
+  const executionAttemptId = shared ? undefined : r?.executionAttemptId;
+  const titles = {
+    run: '运行信息',
+    attempts: '执行尝试',
+    events: '运行动态',
+    worker: 'Worker 执行',
+    share: '分享报告',
+  };
+  const metadata = r && (
+    <dl className="flex flex-wrap gap-x-4 gap-y-2 text-xs [&>div]:flex [&>div]:gap-1.5 [&_dt]:text-muted-foreground [&_dd]:m-0" data-ui="report-metadata">
+      <div><dt>运行 ID</dt><dd className="font-mono break-all">{r.manifest.runId}</dd></div>
+      <div><dt>测试结果</dt><dd><Badge value={r.manifest.status} /></dd></div>
+      <div><dt>证据完整性</dt><dd>{labels[r.manifest.evidenceStatus]}</dd></div>
+      <div>
+        <dt>保留至</dt>
+        <dd><time dateTime={new Date(r.expiresAt).toISOString()}>{time(r.expiresAt)}</time></dd>
+      </div>
+    </dl>
+  );
   return (
     <>
-      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 [&>a]:shrink-0" data-ui="report-header">
-        <div className="grid min-w-0 flex-[1_1_360px] gap-1.5" data-ui="report-heading">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 [&_h1]:min-w-0 [&_h1]:break-words [&_h1]:font-mono [&_h1]:text-lg [&_h1]:font-semibold" data-ui="report-identity">
-            <h1 title={r?.manifest.runId}>{r?.manifest.runId ?? id}</h1>
-            {r && (
-              <span className="inline-flex items-center">
-                <span className="sr-only">测试结果：</span>
-                <Badge value={r.manifest.status} />
-              </span>
-            )}
-          </div>
-          {r && (
-            <dl className="m-0 flex flex-wrap gap-x-5 gap-y-1 text-xs [&>div]:flex [&>div]:flex-wrap [&>div]:items-baseline [&>div]:gap-x-2 [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:tabular-nums" data-ui="report-metadata">
-              <div>
-                <dt>证据完整性</dt>
-                <dd>{labels[r.manifest.evidenceStatus]}</dd>
-              </div>
-              <div>
-                <dt>保留至</dt>
-                <dd>
-                  <time dateTime={new Date(r.expiresAt).toISOString()}>
-                    {time(r.expiresAt)}
-                  </time>
-                </dd>
-              </div>
-            </dl>
-          )}
-        </div>
-        {!shared && (
-          <div className="flex min-w-0 items-center gap-2.5" data-ui="rowline">
-            <Button asChild variant="secondary">
-              <Link to="/queue">
-                <Icon name="list" />
-                返回测试任务
-              </Link>
-            </Button>
-            {request && (
-              <RequestAction request={request} onChange={reload} />
-            )}
-          </div>
-        )}
-      </header>
+      <h1 className="sr-only">{r?.manifest.runId ?? id}</h1>
       <ErrorBox error={error} />
       {!r && !error && <Empty>正在加载报告…</Empty>}
       {r && (
@@ -1177,9 +759,7 @@ function ReportContent({
           {r.issues.length > 0 && (
             <details className="break-words rounded-lg bg-destructive/10 px-3 py-2.5 text-xs text-destructive" data-ui="evidence-issues">
               <summary>有 {r.issues.length} 项证据不可用</summary>
-              {r.issues.map((issue, i) => (
-                <p key={i}>{issue}</p>
-              ))}
+              {r.issues.map((issue, i) => <p key={i}>{issue}</p>)}
             </details>
           )}
           {r.manifest.runnerErrors?.map((e, i) => (
@@ -1187,49 +767,69 @@ function ReportContent({
               {e.phase}: {e.message}
             </div>
           ))}
-          {!shared && r.executionAttemptId && <Tabs value={reportView} onValueChange={setReportView} className="mb-2 shrink-0" data-ui="report-view-tabs">
-            <TabsList aria-label="报告视图"><TabsTrigger value="tests"><Icon name="play" />测试回放</TabsTrigger><TabsTrigger value="worker"><Icon name="cpu" />Worker 执行</TabsTrigger></TabsList>
-          </Tabs>}
-          <div className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden" hidden={!shared && reportView === 'worker' && !!r.executionAttemptId} data-ui="report-view-pane">
           <Replay
             key={id}
             report={r}
             shared={shared}
-            active={shared || reportView === 'tests'}
-            reportTabs={shared ? [] : [
-              ...([
-                ['run', '运行信息', 'doc'],
-                ['attempts', '执行尝试', 'refresh'],
-                ['events', '运行动态', 'clock'],
-              ] as const).map(([panel, label, icon]) => ({
-                id: `report-${panel}`,
-                label,
-                icon,
-                content: (
-                  <>
-                    <ErrorBox error={requestError} />
-                    {request ? (
-                      <RequestDiagnostics
-                        request={request}
-                        currentReportId={id}
-                        panel={panel}
-                      />
-                    ) : !requestError && <Empty>正在加载运行信息…</Empty>}
-                  </>
-                ),
-              })),
-              {
-                id: 'report-share',
-                label: '报告分享',
-                icon: 'link',
-                content: <Shares id={id} />,
-              },
-            ]}
+            active={!panel}
+            reportActions={shared ? (
+              <Button variant="secondary" size="sm" aria-haspopup="dialog" onClick={() => setPanel('run')}>
+                报告信息
+              </Button>
+            ) : (
+              <>
+                <Button variant="secondary" size="sm" aria-haspopup="dialog" onClick={() => setPanel('share')}>
+                  <Share2 aria-hidden="true" />分享报告
+                </Button>
+                <NativeSelect
+                  aria-label="运行"
+                  value=""
+                  className="border-transparent bg-transparent dark:bg-transparent"
+                  onChange={(e) => {
+                    switch (e.target.value) {
+                      case 'run': case 'attempts': case 'events': case 'worker':
+                        setPanel(e.target.value);
+                    }
+                  }}
+                >
+                  <option value="" disabled>运行</option>
+                  <option value="run">运行信息</option>
+                  <option value="attempts">执行尝试</option>
+                  <option value="events">运行动态</option>
+                  {executionAttemptId && <option value="worker">Worker 执行</option>}
+                </NativeSelect>
+                <Button asChild variant="ghost" size="icon-sm">
+                  <Link to="/queue" aria-label="返回测试任务" title="返回测试任务">
+                    <ArrowLeft aria-hidden="true" />
+                  </Link>
+                </Button>
+              </>
+            )}
           />
-          </div>
-          {!shared && r.executionAttemptId && <div className="min-h-0 flex-1 overflow-y-auto [&[hidden]]:hidden" hidden={reportView !== 'worker'} data-ui="report-worker-pane">
-            <WorkerExecutionTimeline requestId={r.requestId} executionAttemptId={r.executionAttemptId} />
-          </div>}
+          {panel && (
+            <CloudDialog title={shared ? '报告信息' : titles[panel]} onClose={() => setPanel(undefined)} wide>
+              <div className="grid min-w-0 gap-3 p-3">
+                {panel === 'share' ? <Shares id={id} /> : panel === 'worker' && executionAttemptId ? (
+                  <WorkerExecutionTimeline requestId={r.requestId} executionAttemptId={executionAttemptId} />
+                ) : panel === 'run' || panel === 'attempts' || panel === 'events' ? (
+                  <>
+                    {panel === 'run' && metadata}
+                    {!shared && (
+                      <>
+                        <ErrorBox error={requestError} />
+                        {request ? (
+                          <>
+                            {panel === 'run' && <RequestAction request={request} onChange={reload} />}
+                            <RequestDiagnostics request={request} currentReportId={id} panel={panel} />
+                          </>
+                        ) : !requestError && <Empty>正在加载运行信息…</Empty>}
+                      </>
+                    )}
+                  </>
+                ) : null}
+              </div>
+            </CloudDialog>
+          )}
         </>
       )}
     </>
@@ -1263,10 +863,7 @@ function Shares({ id }: { id: string }) {
   return (
     <Card asChild className="border-0 rounded-none bg-transparent">
       <section className=" overflow-hidden" data-ui="share-panel">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs [&>span]:text-xs [&>span]:text-muted-foreground" data-ui="panel-heading">
-          <h2>报告分享</h2>
-          <span>只读 · 可撤销 · 内网访问</span>
-        </div>
+        <p className="px-3 text-xs text-muted-foreground">只读 · 可撤销 · 内网访问</p>
         <ErrorBox error={error || loadError} />
         <div className="flex flex-wrap items-center gap-2 p-3 [&_label]:text-xs [&_label]:text-muted-foreground max-sm:items-stretch max-sm:[&_label]:w-full" data-ui="share-controls">
           <NativeSelect
@@ -1335,96 +932,63 @@ function Shares({ id }: { id: string }) {
     </Card>
   );
 }
-function Workers() {
-  const role = useContext(RoleContext);
-  const { data, error, reload } = useData<ExecutionWorker[]>(
-    '/api/workers',
-    3000,
-  );
-  const [actionError, setError] = useState('');
-  const { data: ops } = useData<{
-    events?: unknown[];
-    storage: { freeBytes: number; reservedBytes: number };
-  }>('/api/operations', 10000);
-  return (
-    <>
-      <PageTitle eyebrow="EXECUTION WORKERS" title="Worker 主机" />
-      <WorkerPairing role={role} />
-      <ErrorBox error={error || actionError} />
-      {ops && (
-        <div className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground" data-ui="callout">
-          报告磁盘可用 {(ops.storage.freeBytes / 1024 ** 3).toFixed(1)} GB ·
-          已登记产物 {(ops.storage.reservedBytes / 1024 ** 3).toFixed(2)} GB
+function WorkerRow({ worker, canOperate, onSchedulingChange, projects }: {
+  worker: WorkerStatusResponse;
+  canOperate: boolean;
+  onSchedulingChange: (paused: boolean) => void;
+  projects?: Project[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const { id, health, paused, inventory, slots, service, catalogScannerConnected } = worker;
+  const needsAttention = service && (service.status !== 'healthy' || service.activeSessions > 1 || (service.catalogWorkspace && service.catalogWorkspace.directoryCount !== 0));
+  async function toggleScheduling() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const result = await api<{ paused: boolean }>(`/api/workers/${encodeURIComponent(id)}/pause`, 'POST', { paused: !paused });
+      onSchedulingChange(result.paused);
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  return <li className="min-w-0">
+    <div className="grid items-center gap-x-4 gap-y-3 px-4 py-4 sm:grid-cols-[minmax(11rem,1fr)_auto] lg:grid-cols-[minmax(12rem,1fr)_minmax(8rem,.5fr)_auto]">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><Monitor className="size-5" /></span>
+        <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="break-all text-sm font-semibold">{id}</h3><Badge value={health} /></div>
+          {worker.seenAt > 0 && <p className="mt-1 text-xs text-muted-foreground">最近联系 {time(worker.seenAt)}</p>}
         </div>
-      )}
-      {data?.map((w) => (
-        <Card asChild>
-          <section className="overflow-hidden" key={w.id}>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs [&>span]:text-xs [&>span]:text-muted-foreground" data-ui="panel-heading">
-              <div>
-                <h2>{w.id}</h2>
-                <Badge value={w.health} />
-                {w.service && <p className="text-xs text-muted-foreground">服务：{({ healthy: '运行中', degraded: '需检查', failed: '异常退出', stopped: '已停止', unreachable: '无法联系' })[w.service.status]}{w.service.activeSessions > 1 && ` · 检测到 ${w.service.activeSessions} 个服务实例，请检查重复启动`}</p>}
-                <small>
-                  {w.seenAt ? `上次联系 ${time(w.seenAt)}` : '尚未连接'} ·{' '}
-                  {w.paused ? '已暂停调度' : '允许领取任务'}
-                </small>
-              </div>
-              {ops && (
-                <Button
-                  variant="secondary"
-                  size="default"
-                  onClick={async () => {
-                    try {
-                      await api(`/api/workers/${w.id}/pause`, 'POST', {
-                        paused: !w.paused,
-                      });
-                      reload();
-                    } catch (e) {
-                      setError((e as Error).message);
-                    }
-                  }}
-                >
-                  {w.paused ? '恢复调度' : '暂停调度'}
-                </Button>
-              )}
-            </div>
-            <div className="p-3 grid content-start gap-3" data-ui="panel-body stack">
-              <Link to="/devices" search={{ worker: w.id }} className="font-medium text-primary hover:underline">
-                查看此主机的设备 →
-              </Link>
-              {(role === 'operator' || role === 'admin') && <WorkerDiagnosticsPanel workerId={w.id} />}
-              <small>
-                {w.inventory
-                  ? `最近检测 ${time(w.inventory.receivedAt)} · ${w.inventory.devices.length} 台设备${w.inventory.stale ? ' · 检测已过期' : ''}`
-                  : '尚未收到设备检测结果'}
-              </small>
-              {w.inventory?.diagnostics.map((d, i) => (
-                <p className="text-xs leading-[1.45] text-muted-foreground" key={i}>
-                  {d.source}：{d.message}
-                </p>
-              ))}
-            </div>
-            {w.slots.map((s) => (
-              <div className="grid grid-cols-[1.2fr_1fr_1fr_1fr] items-center gap-3 border-t border-border px-3 py-2.5 text-xs max-[900px]:grid-cols-2 [&>div]:grid [&>div]:min-w-0 [&>div]:justify-items-start [&>div]:gap-1 [&_code]:text-[10px] [&_code]:text-muted-foreground" key={s.id} data-ui="attempt-row">
-                <div>
-                  <b>{s.id}</b>
-                  <small>{s.deviceId}</small>
-                </div>
-                <Badge value={s.state} />
-                <span>应用：{s.targets.join(', ')}</span>
-                <span>generation {s.generation}</span>
-              </div>
-            ))}
-          </section>
-        </Card>
-      ))}
-      <div className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground" data-ui="callout">
-        暂停只阻止领取新任务。隔离设备需要运维在 Mac mini
-        上确认进程终止并重置设备后恢复。
       </div>
-    </>
-  );
+      <div className="text-xs"><p className="font-medium">{paused ? '已暂停调度' : '允许领取任务'}</p><p className="mt-1 text-muted-foreground">{inventory ? `${inventory.devices.length} 台设备${inventory.stale ? '（检测已过期）' : ''}` : '等待设备上报'} · {slots.length} 个槽位</p><p className="mt-1 text-muted-foreground">{catalogScannerConnected === undefined ? '扫描服务状态未知' : catalogScannerConnected ? '扫描服务已连接' : '扫描服务未连接'}</p></div>
+      <div className="flex flex-wrap items-center gap-1 sm:col-span-2 lg:col-span-1">
+        <Button asChild variant="secondary"><Link to="/devices" search={{ worker: id }}>查看设备<ArrowUpRight /></Link></Button>
+        {canOperate && <Button variant="ghost" disabled={busy} title="暂停后，正在执行的任务会继续运行" onClick={() => void toggleScheduling()}>{paused ? <Play /> : <Pause />}{paused ? '恢复调度' : '暂停调度'}</Button>}
+        <Button variant="ghost" aria-expanded={expanded} aria-controls={`worker-detail-${id}`} onClick={() => setExpanded(!expanded)}>{expanded ? '收起详情' : '主机详情'}<ChevronDown className={expanded ? 'rotate-180' : ''} /></Button>
+      </div>
+    </div>
+    {needsAttention && <p className="mx-4 mb-3 flex items-center gap-2 text-xs text-warn-ink"><TriangleAlert className="size-4" />{service.status !== 'healthy' ? serviceStatusLabels[service.status] : service.activeSessions > 1 ? '检测到多个服务实例' : '扫描目录需要检查'}</p>}
+    {error && <div className="mx-4 mb-3"><ErrorBox error={error} /></div>}
+    <div id={`worker-detail-${id}`} hidden={!expanded}>{expanded && <WorkerHostDetails worker={worker} canOperate={canOperate} projects={projects} />}</div>
+  </li>;
+}
+function Workers() {
+  const { user, directory, workers } = useContext(TeamContext)!;
+  const role = user?.role;
+  const canOperate = role === 'operator' || role === 'admin';
+  const { data, error, update } = workers;
+  return <div className="mx-auto grid w-full max-w-6xl min-w-0 gap-5 py-2 sm:px-3">
+    <PageTitle eyebrow="EXECUTION WORKERS" title="Worker 主机"><WorkerPairing role={role} workers={data} /></PageTitle>
+    <ErrorBox error={error} />
+    <Card asChild><section aria-label="主机列表" className="overflow-hidden">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3"><h2 className="text-sm font-semibold">主机列表</h2>
+        {data && <span className="text-xs text-muted-foreground">{data.filter(w => w.health === 'healthy').length} 台在线 / 共 {data.length} 台</span>}
+      </header>
+      {!data && !error && <p role="status" className="p-4 text-muted-foreground">正在读取主机…</p>}
+      {data?.length === 0 && <Empty><Monitor /><h3>尚无 Worker 主机</h3>{role !== 'admin' && <p>请联系管理员添加主机。</p>}</Empty>}
+      <ul className="divide-y">{data?.map(worker => <WorkerRow key={worker.id} worker={worker} canOperate={canOperate} projects={directory.data} onSchedulingChange={paused => update(rows => rows?.map(row => row.id === worker.id ? { ...row, paused } : row))} />)}</ul>
+    </section></Card>
+  </div>;
 }
 function ShareExchange() {
   const [error, setError] = useState('');
@@ -1465,7 +1029,12 @@ function Shell() {
 
 const rootRoute = createRootRoute({
   component: Shell,
-  validateSearch: (search: Record<string, unknown>): { search?: string; createProject?: boolean } => ({
+  validateSearch: (search: Record<string, unknown>): { search?: string; createProject?: boolean; view?: string; v?: string; q?: string; state?: string; targetId?: string } => ({
+    view: typeof search.view === 'string' ? search.view : undefined,
+    v: typeof search.v === 'string' ? search.v : undefined,
+    q: typeof search.q === 'string' ? search.q.slice(0,200) : undefined,
+    state: typeof search.state === 'string' ? search.state : undefined,
+    targetId: typeof search.targetId === 'string' ? search.targetId : undefined,
     createProject: search.createProject === true ? true : undefined,
     search:
       typeof search.search === 'string'
@@ -1502,47 +1071,44 @@ const sharedReportRoute = createRoute({
     return <ReportContent key={id} id={id} shared />;
   },
 });
+function ProjectsPage() {
+    const team = useContext(TeamContext)!;
+    const search = useSearch({ strict: false });
+    const navigate = useNavigate();
+    return <Projects directory={team.directory} role={team.user?.role} createRequested={search.createProject === true} creationHandled={() => {
+      void navigate({ to: '.', search: (previous: { search?: string; createProject?: boolean }) => ({ ...previous, createProject: undefined }), replace: true });
+    }} />;
+}
 const projectsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/projects',
-  component: function ProjectsPage() {
-    const search = useSearch({ strict: false });
-    const navigate = useNavigate();
-    return <Projects createRequested={search.createProject === true} creationHandled={() => {
-      void navigate({ to: '.', search: (previous: { search?: string; createProject?: boolean }) => ({ ...previous, createProject: undefined }), replace: true });
-    }} />;
-  },
+  component: ProjectsPage,
 });
 const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/',
-    component: () => <Requests />,
+    component: QueueBoard,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/overview',
-    component: () => <Requests overview />,
+    component: Overview,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/runs',
-    component: () => <Requests history />,
+    component: QueueBoard,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/queue',
-    component: () => <Requests />,
+    component: QueueBoard,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/reports',
-    component: () => <Requests reportsOnly />,
-  }),
-  createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/new',
-    component: NewRequest,
+    component: Reports,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
@@ -1567,7 +1133,7 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/targets',
-    component: Projects,
+    component: ProjectsPage,
   }),
   createRoute({
     getParentRoute: () => rootRoute,

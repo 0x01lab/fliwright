@@ -3,15 +3,15 @@
 > Developer Preview — Playwright-style white-box E2E testing for Flutter.
 
 Fliwright runs TypeScript tests against a trusted Flutter debug or test build.
-An in-app Dart bridge exposes Widget semantics, actions, screenshots, network
-mocks, state reset, and diagnostics through the Dart VM Service. The CLI is the
-primary user and CI interface; Vitest and VS Code are adapters over the
-same runtime.
+An in-app Dart bridge exposes widget semantics, actions, screenshots, network
+mocks, state reset, and diagnostics through the Dart VM Service. Developers
+and CI use the CLI to drive the same runtime as the Vitest and VS Code adapters.
 
 ## Quick Start
 
-Requirements: Node.js 22.12+ (22.x), 24.x, or 26+, Flutter 3.x with Dart 3.5 or newer, and a
-Flutter project whose source you control.
+Start in a Flutter project whose source you control. You need Flutter 3.x with
+Dart 3.5 or later and a supported Node.js version (22.x starting at 22.12, 24.x,
+or 26 and later).
 
 For Codex, initialize the Flutter project and install its Agent Skills in one
 command (requires the corresponding CLI and bridge versions to be published):
@@ -20,14 +20,27 @@ command (requires the corresponding CLI and bridge versions to be published):
 npx --yes --package=@fliwright/cli@latest fliwright init --agent codex --yes
 ```
 
-Then open a new Codex chat in the project. Setup preserves existing project
-rules and reports remaining configuration work; live App verification is a
-separate step. See the [integration guide](docs/codex-integration.md).
+Open a new Codex chat in the project after initialization. Setup preserves
+existing project rules and reports any remaining configuration. The
+[Codex integration guide (in Chinese)](docs/codex-integration.md) covers plugin
+and skill installation, Flutter project setup, and a sample `AGENTS.md`.
+
+For manual setup, install the test dependencies and initialize the project.
 
 ```sh
 npm install --save-dev @fliwright/cli @fliwright/vitest vitest@5.0.5 typescript
 npx fliwright init
+```
+
+After either setup, launch the instrumented app.
+
+```sh
 flutter run -t test_driver/fliwright_app.dart
+```
+
+Leave the app running and run the tests from a second terminal in the project.
+
+```sh
 npx fliwright run
 ```
 
@@ -44,10 +57,6 @@ test('increments the counter', async ({ page }) => {
 
 Run `npx fliwright doctor` when the Flutter VM Service cannot be discovered or
 the bridge does not report its capabilities.
-
-For Codex setup, see the [Codex integration guide](docs/codex-integration.md)
-（中文）：plugin/Skill installation, Flutter project setup, and a copyable
-`AGENTS.md` contract for AI coding agents.
 
 ## Artifact Storage
 
@@ -101,8 +110,7 @@ should be considered verified.
 
 ## Packages
 
-- `@fliwright/devices`: shared discovery of local iOS/Android physical devices and simulators; use `fliwright devices list --json` from the CLI.
-
+- `@fliwright/devices` discovers local iOS and Android devices, simulators, and emulators. List them with `fliwright devices list --json`.
 - `fliwright_bridge`: minimal Flutter instrumentation.
 - `@fliwright/core`: shared automation runtime.
 - `@fliwright/vitest`: test fixtures and lifecycle.
@@ -132,8 +140,12 @@ node scripts/verify-harness.mjs
 
 Real E2E smoke tests additionally require a running Flutter VM Service.
 
-### 云测部署
+### Cloud Deployment
 
-[`@fliwright/cloud`](packages/fliwright-cloud/README.md) 集中运行队列、设备管理页面和报告服务。
-设备电脑使用独立 [`@fliwright/cloud-worker`](packages/fliwright-cloud-worker/README.md) CLI 常驻连接同一个 Server；
-Worker 调用 `@fliwright/devices` 检测本机 iOS/Android 真机与模拟器，双方通过 `@fliwright/cloud-protocol` 共享协议。
+The [`@fliwright/cloud` server](packages/fliwright-cloud/README.md) manages the
+run queue, hosts the device management page, and serves reports. On each
+machine that hosts devices, run the standalone
+[`@fliwright/cloud-worker` CLI](packages/fliwright-cloud-worker/README.md).
+Each worker stays connected to the same server and uses `@fliwright/devices`
+to discover physical iOS and Android devices, iOS simulators, and Android
+emulators. Workers and the server communicate using `@fliwright/cloud-protocol`.

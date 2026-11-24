@@ -1,6 +1,6 @@
 {
   "name": "@fliwright/plugin-riverpod",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Optional Riverpod state adapter for Fliwright Flutter automation.",
   "license": "MIT",
   "repository": {

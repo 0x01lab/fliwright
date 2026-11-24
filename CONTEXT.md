@@ -103,6 +103,10 @@ It is the first cloud-platform surface and exposes submission, status, and artif
 A team-operated machine that claims TeamTestQueue work and runs it against its registered Flutter build and simulator capabilities.
 The initial ExecutionWorker is the team's dedicated Mac mini.
 
+### Project Worker Binding (项目与 Worker 绑定)
+
+A project's assignment to an ExecutionWorker for test catalog scans and queued test execution. Test execution also requires an eligible execution device on that Worker.
+
 ### WorkerProvisionedEnvironment (Worker 预置环境)
 
 The operator-maintained repository access, Flutter build setup, simulator images, test accounts, and other execution configuration installed directly on an ExecutionWorker.

@@ -163,6 +163,23 @@ export class ReportStore {
       expiresAt: Number(row.expires_at),
     };
   }
+  listPublished(offset: number) {
+    const rows = this.store.db.prepare(`SELECT p.id,p.created_at AS createdAt,
+      json_extract(r.data,'$.selection.titlePath') AS titlePath,
+      json_extract(r.data,'$.input.suite') AS suite, json_extract(r.data,'$.input.commit') AS sha,
+      json_extract(r.data,'$.target.name') AS projectName FROM publications p JOIN requests r ON r.id=p.request_id
+      WHERE p.state='published' AND p.expires_at>? ORDER BY p.created_at DESC,p.rowid DESC LIMIT 26 OFFSET ?`).all(this.store.now(), offset);
+    return {
+      hasMore: rows.length > 25,
+      items: rows.slice(0, 25).map(row => ({
+        id: String(row.id),
+        createdAt: Number(row.createdAt),
+        title: row.titlePath ? (JSON.parse(String(row.titlePath)) as string[]).join(' › ') : String(row.suite),
+        sha: String(row.sha),
+        projectName: String(row.projectName),
+      })),
+    };
+  }
   list(requestId: string) {
     return (
       this.store.db

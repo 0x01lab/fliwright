@@ -2,10 +2,11 @@ import { join } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { createJiti } from 'jiti';
 import { mergeFliwrightConfig, readFliwrightEnvironment, resolveFliwrightProjectRoot, resolveFliwrightRunsRoot, resolveFliwrightCacheRoot, resolveFliwrightPath } from '@fliwright/core';
-import type { FliwrightPathsConfig, FliwrightProjectConfig, FliwrightRecordingConfig, ResolvedFliwrightConfig, ScenarioExecutionMode, TestScenario, NativeConfig } from '@fliwright/core';
+import type { FliwrightPathsConfig, FliwrightProjectConfig, FliwrightRecordingConfig, ResolvedFliwrightConfig, ScenarioExecutionMode, TestScenario, NativeConfig, SupportSettingsDefinition } from '@fliwright/core';
 
 export interface FliwrightCliConfig {
   native?: NativeConfig;
+  supportSettings?: readonly SupportSettingsDefinition[];
   suites?: Record<string, string>;
   vmServiceUrl?: string;
   timeout: number;

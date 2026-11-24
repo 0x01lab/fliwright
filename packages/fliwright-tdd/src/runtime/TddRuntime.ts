@@ -13,6 +13,7 @@ import type {
   RuntimeSnapshot,
   BaselineConfig,
   StartOpts,
+  TddCycleAttempt,
   TddCycleResult,
   TddSyncResult,
   TddRuntimeDeps,
@@ -250,29 +251,38 @@ export class TddRuntime {
     deferred: Deferred<TddCycleResult>,
   ): Promise<TddCycleResult> {
     const timeoutMs = opts.timeoutMs ?? DEFAULT_CYCLE_TIMEOUT_MS;
+    const deadline = new AbortController();
+    const attempts: TddCycleAttempt[] = [];
+    const requestedSync = opts.sync === 'auto' ? decideSync(opts.changes) : opts.sync ?? 'none';
     const runAll = async (): Promise<TddCycleResult> => {
-      const first = await this.performCycle(testName, opts);
+      const first = await this.performCycle(testName, requestedSync, opts.fullReset, deadline.signal);
+      attempts.push({ ...first, requestedSync });
+      deadline.signal.throwIfAborted();
       if ((opts.autoEscalate ?? true) && looksStructuralAfterReload(first) && this.canRestart()) {
+        const retryStartedAt = Date.now();
         try {
-          const escalated = await this.performCycle(testName, {
-            ...opts,
-            sync: 'restart',
-            fullReset: true,
-            changes: undefined,
-            autoEscalate: false,
+          const escalated = await this.performCycle(testName, 'restart', true, deadline.signal);
+          attempts.push({ ...escalated, requestedSync: 'restart' });
+          if (escalated.lastSync === 'restart') return { ...escalated, attempts, syncEscalated: true };
+        } catch (error) {
+          deadline.signal.throwIfAborted();
+          // Keep the first result as the primary failure if the retry cannot produce a test result.
+          const message = error instanceof Error ? error.message : String(error);
+          attempts.push({
+            status: 'red', file: first.file, testName: first.testName, durationMs: Date.now() - retryStartedAt,
+            requestedSync: 'restart', lastSync: 'restart', baselineVersion: this.baseline?.version ?? first.baselineVersion,
+            failure: { message },
           });
-          if (escalated.lastSync === 'restart') return { ...escalated, syncEscalated: true };
-        } catch {
-          // Escalation is best-effort: if the restart cycle itself fails, surface the reload result.
         }
       }
-      return first;
+      return { ...first, attempts };
     };
 
-    // Resolve the caller early on timeout, but keep awaiting `runAll` so the chain (and thus the
-    // next cycle) cannot advance past a still-running executor body.
+    // Resolve the caller early. Keep the queue occupied until the active stage finishes.
+    let timeoutResult: TddCycleResult | undefined;
     const timer = setTimeout(() => {
-      const timeoutResult = this.timeoutResult(testName, timeoutMs);
+      deadline.abort();
+      timeoutResult = { ...this.timeoutResult(testName, timeoutMs), attempts: attempts.slice() };
       this.lastResult = timeoutResult;
       this.markUpdated();
       this.persistStatus();
@@ -280,16 +290,26 @@ export class TddRuntime {
     }, timeoutMs);
     try {
       const result = await runAll();
-      clearTimeout(timer);
+      deadline.signal.throwIfAborted();
       this.lastResult = result;
       this.markUpdated();
       this.persistStatus();
       deferred.resolve(result);
       return result;
     } catch (error) {
-      clearTimeout(timer);
+      if (timeoutResult) {
+        if (timeoutResult.attempts?.length !== attempts.length) {
+          timeoutResult = { ...timeoutResult, attempts };
+          this.lastResult = timeoutResult;
+          this.markUpdated();
+          this.persistStatus();
+        }
+        return timeoutResult;
+      }
       deferred.reject(error);
       throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -318,19 +338,26 @@ export class TddRuntime {
     };
   }
 
-  private async performCycle(testName: string | undefined, opts: CycleOpts): Promise<TddCycleResult> {
+  private async performCycle(
+    testName: string | undefined,
+    requestedSync: TddCycleResult['lastSync'],
+    fullReset: boolean | undefined,
+    deadline: AbortSignal,
+  ): Promise<TddCycleResult> {
     if (!this.started) throw new Error('TddRuntime is not started.');
     const focused = this.focusedTest;
     if (!focused) throw new Error('No focused test. Call focus(file, testName) before cycle().');
     const actualTestName = testName ?? focused.testName;
     const startedAt = Date.now();
 
-    const requestedSync = opts.sync ?? 'none';
-    const resolvedSync = requestedSync === 'auto' ? decideSync(opts.changes) : requestedSync;
     let lastSync: TddCycleResult['lastSync'] = 'none';
     try {
-      lastSync = await this.controlPhase(() => this.sync(resolvedSync));
+      lastSync = await this.controlPhase(() => {
+        deadline.throwIfAborted();
+        return this.sync(requestedSync);
+      });
     } catch (error) {
+      deadline.throwIfAborted();
       const baselineVersion = this.baseline?.version ?? 0;
       const message = error instanceof Error ? error.message : String(error);
       return {
@@ -351,11 +378,14 @@ export class TddRuntime {
         }),
       };
     }
+    deadline.throwIfAborted();
     const resetReport = this.defaultScenarioName
       ? { version: this.requireBaseline().version, unsupported: [] }
-      : await this.controlPhase(() => this.requireBaseline().reset(this.baselineConfig, {
-        full: opts.fullReset ?? lastSync === 'restart',
-      }));
+      : await this.controlPhase(() => {
+        deadline.throwIfAborted();
+        return this.requireBaseline().reset(this.baselineConfig, { full: fullReset ?? lastSync === 'restart' });
+      });
+    deadline.throwIfAborted();
     const outcome = await this.executor.rerun(focused.file, actualTestName);
 
     const unsupportedState = resetReport.unsupported;
@@ -468,7 +498,9 @@ export class TddRuntime {
     if (sync === 'none') return 'none';
     if (!this.app) {
       if (sync === 'restart') throw new Error('Hot restart requires a daemon-started app.');
-      await this.requireDriver().reloadSources?.();
+      const driver = this.requireDriver();
+      if (!driver.reloadSources) throw new Error('Connected driver does not support hot reload.');
+      await driver.reloadSources();
       return 'reload';
     }
     if (sync === 'reload') {

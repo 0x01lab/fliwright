@@ -1,6 +1,6 @@
 {
   "name": "@fliwright/devices",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Host device discovery for iOS and Android physical devices and simulators.",
   "license": "MIT",
   "repository": {

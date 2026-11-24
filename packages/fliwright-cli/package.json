@@ -1,6 +1,6 @@
 {
   "name": "@fliwright/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Command-line runner, recorder, and diagnostics for Fliwright Flutter E2E tests.",
   "license": "MIT",
   "repository": {

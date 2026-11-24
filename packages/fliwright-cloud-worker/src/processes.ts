@@ -9,6 +9,7 @@ import {
   readSync,
 } from 'node:fs';
 import { join, resolve as resolvePath } from 'node:path';
+import { rm } from 'node:fs/promises';
 import type { ManagedNativeGrant } from '@fliwright/cli/run';
 import { setTimeout as delay } from 'node:timers/promises';
 import { writeJournal } from './WorkerAgent.js';
@@ -16,6 +17,7 @@ import type { ExecutionLease } from '@fliwright/cloud-protocol';
 import type { WorkerTimelineRecorder } from './WorkerTimelineRecorder.js';
 import { recordWorkerTimelineMessage } from './worker-timeline-ipc.js';
 import { NativePreparationIpc } from './NativePreparationIpc.js';
+import { openCatalogWorkspace } from './catalog-workspace.js';
 import type { ManagedAppAttemptRequest } from '@fliwright/core';
 
 /** Bounded, incremental diagnostics; never read an entire build log into memory. */
@@ -77,7 +79,7 @@ const stopping = new Map<string, Promise<void>>();
 export function stopOwnedProcesses(directory: string): Promise<void> {
   const current = stopping.get(directory);
   if (current) return current;
-  const pending = stopGroup(directory).finally(() =>
+  const pending = stopGroup(directory).then(() => rm(join(directory, 'secure-files'), { recursive: true, force: true })).finally(() =>
     stopping.delete(directory),
   );
   stopping.set(directory, pending);
@@ -191,6 +193,7 @@ export async function spawnExecution(
   onStage: (stage: string) => void,
   options: {
     mainFile: string;
+    catalogRoot: string;
     flutterBin: string;
     resetCommands: Array<{
       program: string;
@@ -209,6 +212,7 @@ export async function spawnExecution(
   writeJournal(jobPath, {
     lease,
     directory,
+    catalogRoot: options.catalogRoot,
     flutterBin: options.flutterBin,
     resetCommands: options.resetCommands,
     nativeSupervisor: true,
@@ -216,6 +220,9 @@ export async function spawnExecution(
   let child: ChildProcess | undefined;
   let ready = false;
   let nativeRequested = false;
+  let project: string | undefined;
+  try { project = openCatalogWorkspace(options.catalogRoot, lease.request).project; }
+  catch { /* The executor records unavailable workspaces in its timeline. */ }
   return new Promise<import('./WorkerAgent.js').ExecutionResult>(
     (resolve, reject) => {
       child = spawn(process.execPath, [options.mainFile, 'execute', jobPath], {
@@ -223,11 +230,11 @@ export async function spawnExecution(
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
         env: sanitizedEnvironment(options.allowedEnv),
       });
-      const nativePreparation = new NativePreparationIpc({ project: resolvePath(directory, 'checkout', lease.request.target.projectPath),
+      const nativePreparation = project === undefined ? undefined : new NativePreparationIpc({ project,
         signal, prepare: options.prepareNativeAttempt,
         send: message => { if (child?.connected) child.send(message, () => {}); },
       });
-      child.once('disconnect', () => nativePreparation.dispose());
+      child.once('disconnect', () => nativePreparation?.dispose());
       const abort = () => {
         void stopOwnedProcesses(directory).catch(() => {});
       };
@@ -239,14 +246,14 @@ export async function spawnExecution(
         appendFileSync(join(directory, 'executor.log'), chunk, { mode: 0o600 }),
       );
       child.on('message', (message) => {
-        if (nativePreparation.handle(message)) return;
+        if (nativePreparation?.handle(message)) return;
         recordWorkerTimelineMessage(child!, message, options.timeline);
         if (message && typeof message === 'object') {
           if ('nativeOwnership' in message) {
             const request = message.nativeOwnership as { id?: unknown; project?: unknown };
             if (request && typeof request.id === 'string' && request.id.length <= 100) {
               const valid = !nativeRequested && typeof request.project === 'string'
-                && resolvePath(request.project) === resolvePath(directory, 'checkout', lease.request.target.projectPath);
+                && project !== undefined && resolvePath(request.project) === project;
               nativeRequested = true;
               void (async () => {
                 try {
@@ -275,13 +282,13 @@ export async function spawnExecution(
         }
       });
       child.on('error', (e) => {
-        nativePreparation.dispose();
+        nativePreparation?.dispose();
         void options.timeline?.channel.finishSpan(prepareSpan, 'failed', { error: { code: 'preparation_failed', message: 'Execution preparation failed' } });
         signal.removeEventListener('abort', abort);
         reject(e);
       });
       child.on('close', () => {
-        nativePreparation.dispose();
+        nativePreparation?.dispose();
         if (!ready) void options.timeline?.channel.finishSpan(prepareSpan, signal.aborted ? 'interrupted' : 'failed', {
           reason: signal.aborted ? 'shutdown' : 'process_exit', error: { code: 'preparation_failed', message: 'Execution preparation failed' },
         });

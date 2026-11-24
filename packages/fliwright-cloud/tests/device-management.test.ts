@@ -231,7 +231,7 @@ it('persists unbinding across repeated startup seeds and blocks paused hosts and
   store.pauseWorker('mac', true, 'ops');
   expect(store.claim('mac', 'ios', 'device')).toBeNull();
   store.pauseWorker('mac', false, 'ops');
-  store.updateDevice(device.id, { ...device.settings, targets: [] }, 'ops');
+  store.setProjectWorkers('app', [], ['mac'], 'admin');
   expect(store.claim('mac', 'ios', 'device')).toBeNull();
   store.updateDevice(
     device.id,

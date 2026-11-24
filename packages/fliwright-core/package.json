@@ -1,6 +1,6 @@
 {
   "name": "@fliwright/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Playwright-style white-box automation runtime for Flutter applications.",
   "license": "MIT",
   "repository": {

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ExecutionLease, WorkerTimelinePayload } from '@fliwright/cloud-protocol';
 import { WorkerTimelineChannel } from '../src/WorkerTimelineChannel.js';
 import { fingerprintScenario, prepareManagedAppAttempt, ScenarioResolver, VmServiceEndpointResolver, type VmServiceEndpointLease } from '@fliwright/core';
+import { catalogId, createCatalogWorkspace, workspaceIdentity } from './fixtures/catalog-workspace.js';
 
 const mocks = vi.hoisted(() => ({ command: vi.fn(), run: vi.fn(), export: vi.fn(), health: vi.fn(), channel: undefined as WorkerTimelineChannel | undefined, acquire: vi.fn(), native: vi.fn(), nativeDispose: vi.fn(), prepareAttempt: vi.fn(), ipcAcquire: vi.fn(), ipcPrepare: vi.fn() }));
 vi.mock('../src/native-ownership-ipc.js', () => ({ requestNativeOwnership: mocks.ipcAcquire, requestNativePreparation: mocks.ipcPrepare }));
@@ -19,11 +20,11 @@ vi.mock('@fliwright/tdd', () => ({
 }));
 import { executeJob } from '../src/executor.js';
 
-let directory: string, events: WorkerTimelinePayload[], lease: ExecutionLease;
+let directory: string, project: string, events: WorkerTimelinePayload[], lease: ExecutionLease;
 beforeEach(() => {
   vi.clearAllMocks();
   directory = mkdtempSync(join(tmpdir(), 'executor-timeline-'));
-  mkdirSync(join(directory, 'checkout'));
+  project = createCatalogWorkspace(directory);
   events = [];
   mocks.channel = new WorkerTimelineChannel(async payload => { events.push(payload); return true; });
   mocks.command.mockResolvedValue('a'.repeat(40));
@@ -37,13 +38,13 @@ beforeEach(() => {
   mocks.run.mockResolvedValue({ status: 'failed', passed: false, artifacts: { runId: 'run' } });
   mocks.export.mockImplementation(async ({ output }) => { mkdirSync(output); writeFileSync(join(output, 'run.json'), JSON.stringify({ tests: [] })); });
   lease = { workerId: 'mac', slotId: 'ios', attemptId: 'execution', generation: 1, deviceId: 'phone', expiresAt: Date.now() + 30000,
-    request: { id: 'request', input: { commit: 'a'.repeat(40), suite: 'smoke', scenario: 'clean' },
+    request: { id: 'request', catalogId, configRevision: workspaceIdentity.configRevision, input: { targetId: 'app', commit: workspaceIdentity.commit, suite: 'smoke', scenario: 'clean' },
       target: { repository: '/registered/repository', projectPath: '.', entry: 'lib/main.dart', flutterArgs: [], install: [], requiredCapabilities: [], suites: { smoke: '*.test.ts' } } } } as unknown as ExecutionLease;
 });
 afterEach(() => { rmSync(directory, { recursive: true, force: true }); });
 async function execute(nativeSupervisor = false) {
   const path = join(directory, 'job.json');
-  writeFileSync(path, JSON.stringify({ lease, directory, flutterBin: 'flutter', resetCommands: [], nativeSupervisor }));
+  writeFileSync(path, JSON.stringify({ lease, directory, catalogRoot: directory, flutterBin: 'flutter', resetCommands: [], nativeSupervisor }));
   return executeJob(path, new AbortController().signal);
 }
 const phases = () => events.filter((p): p is Extract<WorkerTimelinePayload, { type: 'span.started' }> => p.type === 'span.started' && !p.parentSpanId);
@@ -51,11 +52,11 @@ function completion(phase: string) {
   const start = phases().find(p => p.phase === phase);
   return events.find(p => p.type === 'span.finished' && p.spanId === start?.spanId);
 }
-it('records checkout failure without starting Flutter or inventing later phases', async () => {
+it('records local verification failure without starting Flutter', async () => {
   mocks.command.mockRejectedValue(Object.assign(new Error('secret args'), { exitCode: 128 }));
   expect(await execute()).toMatchObject({ verdict: 'unknown', infrastructure: 'permanent' });
-  expect(phases().map(p => p.phase)).toEqual(['repository.checkout']);
-  expect(completion('repository.checkout')).toMatchObject({ status: 'failed', exitCode: 128 });
+  expect(phases().map(p => p.phase)).toEqual(['project.local']);
+  expect(completion('project.local')).toMatchObject({ status: 'failed', exitCode: 128 });
   expect(mocks.acquire).not.toHaveBeenCalled();
   expect(JSON.stringify(events)).not.toContain('secret args');
 });
@@ -78,19 +79,27 @@ it('records successful runner completion with a failed test verdict and the orig
   expect(phases().map(p => p.phase)).not.toContain('dependencies.install');
   expect(phases().map(p => p.phase)).not.toContain('device.reset.before');
 });
-it('prunes local-only checkout links before installation and continues executing source tests', async () => {
-  const external = join(directory, 'host-file'), link = join(directory, 'checkout', 'local-only');
-  writeFileSync(external, 'host content');
-  symlinkSync(external, link);
-  lease.request.target.install = [{ program: 'install', args: [] }];
-  mocks.command.mockImplementation(async (command: { program: string }) => {
-    if (command.program === 'install') expect(existsSync(link)).toBe(false);
-    return 'a'.repeat(40);
-  });
-  expect(await execute()).toMatchObject({ verdict: 'failed', bundleDir: join(directory, 'bundle') });
-  expect(existsSync(link)).toBe(false);
-  expect(readFileSync(external, 'utf8')).toBe('host content');
-  expect(mocks.run).toHaveBeenCalled();
+it('uses the same scanned project for a suite and a case without cloning or reinstalling', async () => {
+  lease.request.target.install = [{ program: 'install-once', args: [] }];
+  expect(await execute()).toMatchObject({ verdict: 'failed' });
+  rmSync(join(directory, 'bundle'), { recursive: true });
+  lease.request.selection = { mode: 'case', suite: 'smoke', file: 'example.test.ts', titlePath: ['case'], duplicateIndex: 0, caseId: 'example' };
+  expect(await execute()).toMatchObject({ verdict: 'failed' });
+  expect(mocks.command.mock.calls.map(([command]) => command)).toEqual([
+    { program: 'git', args: ['rev-parse', '--verify', 'HEAD'] },
+    { program: 'git', args: ['rev-parse', '--verify', 'HEAD'] },
+  ]);
+  expect(mocks.run.mock.calls.map(([options]) => options.cwd)).toEqual([project, project]);
+  expect(mocks.run.mock.lastCall?.[0]).toMatchObject({ caseSelection: { caseId: 'example' } });
+});
+it('asks for a fresh scan when the saved project or its SHA is unavailable', async () => {
+  mocks.command.mockResolvedValueOnce('b'.repeat(40));
+  const unavailable = { verdict: 'unknown', infrastructure: 'permanent', error: expect.stringContaining('Rescan this commit') };
+  expect(await execute()).toMatchObject(unavailable);
+  rmSync(project, { recursive: true });
+  expect(await execute()).toMatchObject(unavailable);
+  expect(mocks.command).toHaveBeenCalledOnce();
+  expect(mocks.run).not.toHaveBeenCalled();
 });
 it('preserves the test verdict when report export fails and records export failure separately', async () => {
   mocks.export.mockRejectedValue(new Error('export failed'));
@@ -110,7 +119,7 @@ it('owns native devices before reset and launch, delegates to tests and releases
   const delegation = { rootDir: '/private/lease', key: 'a'.repeat(64), token: 'b'.repeat(64) };
   mocks.native.mockResolvedValue({ delegation, dispose: mocks.nativeDispose });
   await execute();
-  expect(mocks.native).toHaveBeenCalledWith(join(directory, 'checkout'), expect.objectContaining({ deviceId: 'phone', scenario: 'clean' }));
+  expect(mocks.native).toHaveBeenCalledWith(project, expect.objectContaining({ deviceId: 'phone', scenario: 'clean' }));
   expect(mocks.acquire).not.toHaveBeenCalled();
   expect(mocks.health).not.toHaveBeenCalled();
   expect(phases().map(p => p.phase)).not.toContain('app.launch');
@@ -145,7 +154,7 @@ it.each([false, true])('uses the retained installed-app control without a Flutte
 
 it.each([false, true])('prepares every relaunch using the retained owner without journaling credentials (supervisor: %s)', async nativeSupervisor => {
   const scenario = { name: 'clean', layers: [{ kind: 'device' as const, requiredCapabilities: ['native.query'] }] };
-  writeFileSync(join(directory, 'checkout', 'fliwright.config.ts'), `export default {scenarios:{clean:${JSON.stringify(scenario)}}};`);
+  writeFileSync(join(project, 'fliwright.config.ts'), `export default {scenarios:{clean:${JSON.stringify(scenario)}}};`);
   mocks.native.mockResolvedValue({ delegation: {}, dispose: mocks.nativeDispose, prepareAttempt: mocks.prepareAttempt });
   let token: string | undefined;
   mocks.run.mockImplementation(async options => {

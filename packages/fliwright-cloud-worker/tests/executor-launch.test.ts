@@ -7,6 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { ExecutionLease } from '@fliwright/cloud-protocol';
 import { WorkerTimelineChannel } from '../src/WorkerTimelineChannel.js';
 import { fingerprintScenario, prepareManagedAppAttempt, ScenarioResolver } from '@fliwright/core';
+import { catalogId, createCatalogWorkspace, workspaceIdentity } from './fixtures/catalog-workspace.js';
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn(), command: vi.fn(), run: vi.fn(), health: vi.fn(), native: vi.fn() }));
 vi.mock('node:child_process', async original => ({ ...await original<object>(), spawn: mocks.spawn }));
@@ -20,8 +21,7 @@ let directory: string, checkout: string;
 beforeEach(() => {
   vi.clearAllMocks();
   directory = realpathSync(mkdtempSync(join(tmpdir(), 'executor-launch-')));
-  checkout = join(directory, 'checkout');
-  mkdirSync(checkout);
+  checkout = createCatalogWorkspace(directory);
   mkdirSync(join(directory, 'runs'));
   mocks.command.mockResolvedValue('a'.repeat(40));
   mocks.health.mockResolvedValue({ status: 'ok', checkedAt: new Date().toISOString(), bridgeCapabilities: {} });
@@ -60,11 +60,11 @@ function file(path: string, content = '') {
   writeFileSync(path, content);
 }
 async function execute(projectPath: string, entry: string) {
-  const lease = { deviceId: 'phone', request: { input: { commit: 'a'.repeat(40), suite: 'smoke' },
+  const lease = { deviceId: 'phone', request: { catalogId, configRevision: workspaceIdentity.configRevision, input: { targetId: 'app', commit: workspaceIdentity.commit, suite: 'smoke' },
     target: { repository: '/registered/repository', projectPath, entry, flutterArgs: [], install: [], requiredCapabilities: [], suites: { smoke: '.fliwright/tests/*.test.ts' } },
   } } as unknown as ExecutionLease;
   const path = join(directory, 'job.json');
-  writeFileSync(path, JSON.stringify({ lease, directory, flutterBin: 'flutter', resetCommands: [] }));
+  writeFileSync(path, JSON.stringify({ lease, directory, catalogRoot: directory, flutterBin: 'flutter', resetCommands: [] }));
   return executeJob(path, new AbortController().signal);
 }
 
@@ -89,7 +89,7 @@ it('launches an app whose configured project already is the Flutter package', as
 });
 
 it.each(['missing.dart', '.', '../outside.dart', 'lib/main.dart'])('rejects an invalid entry before launching Flutter: %s', async entry => {
-  file(join(directory, 'outside.dart'));
+  file(join(dirname(checkout), 'outside.dart'));
   file(join(checkout, 'lib/main.dart'));
   // The lib entry exists but has no owning pubspec in the configured project.
   expect(await execute('.', entry)).toMatchObject({ verdict: 'unknown', infrastructure: 'permanent' });

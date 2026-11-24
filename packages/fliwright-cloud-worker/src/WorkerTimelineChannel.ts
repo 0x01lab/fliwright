@@ -6,7 +6,7 @@ import {
 type Finished = Extract<WorkerTimelinePayload, { type: 'span.finished' }>;
 export type SpanOptions = { parentSpanId?: string; operation?: WorkerOperation; commandIndex?: number; attemptOrdinal?: number; signal?: AbortSignal };
 const phaseErrors: Record<WorkerPhase, keyof typeof workerErrorMessages> = {
-  'execution.prepare': 'preparation_failed', 'repository.checkout': 'command_failed', 'dependencies.install': 'command_failed',
+  'execution.prepare': 'preparation_failed', 'project.local': 'preparation_failed', 'repository.checkout': 'command_failed', 'dependencies.install': 'command_failed',
   'device.reset.before': 'reset_failed', 'app.launch': 'launch_failed', 'app.verify': 'verification_failed',
   'tests.run': 'runner_failed', 'artifacts.export': 'export_failed', 'processes.stop': 'stop_failed',
   'report.publish': 'publish_failed', 'device.reset.after': 'reset_failed',

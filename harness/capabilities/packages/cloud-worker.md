@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cloud-worker"
 path: "packages/fliwright-cloud-worker"
-source_fingerprint: "bdfb5c5839b9ab387437b518c6d5ef30fee49edb482cdeab1279ce5c27ebc665"
+source_fingerprint: "44c029f5159aa83adfb4b14453e1a69c12bd9a6f7df0eacf01bc783b647aadef"
 generated: true
 ---
 
@@ -84,6 +84,7 @@ Own host device discovery and reporting, supervised test execution, cleanup and 
 - `packages/fliwright-cloud-worker/src/WorkerTimelineChannel.ts`
 - `packages/fliwright-cloud-worker/src/WorkerTimelineRecorder.ts`
 - `packages/fliwright-cloud-worker/src/catalog-scanner.ts`
+- `packages/fliwright-cloud-worker/src/catalog-workspace.ts`
 - `packages/fliwright-cloud-worker/src/config.ts`
 - `packages/fliwright-cloud-worker/src/device-reporting.ts`
 - `packages/fliwright-cloud-worker/src/diagnostics.ts`
@@ -95,6 +96,7 @@ Own host device discovery and reporting, supervised test execution, cleanup and 
 - `packages/fliwright-cloud-worker/src/native-ownership-ipc.ts`
 - `packages/fliwright-cloud-worker/src/pairing.ts`
 - `packages/fliwright-cloud-worker/src/processes.ts`
+- `packages/fliwright-cloud-worker/src/secure-files.ts`
 - `packages/fliwright-cloud-worker/src/spool.ts`
 - `packages/fliwright-cloud-worker/src/worker-timeline-ipc.ts`
 - `packages/fliwright-cloud-worker/src/worker.ts`

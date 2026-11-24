@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { stopOwnedProcesses, createLogTail, spawnExecution } from '../src/processes.js';
 import type { ExecutionLease } from '@fliwright/cloud-protocol';
 import { ManagedAppLifecycle } from '@fliwright/core';
+import { catalogId, createCatalogWorkspace, workspaceIdentity } from './fixtures/catalog-workspace.js';
 const cleanup: Array<() => void> = [];
 it('streams bounded new diagnostics and redacts credentials and VM endpoints', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-log-'));
@@ -81,11 +82,12 @@ it('passes the private native grant to a real executor which requests fresh endp
   const root = mkdtempSync(join(tmpdir(), 'worker-native-ipc-'));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const entry = join(root, 'child.mjs'), resultPath = join(root, 'result.json');
+  const project = createCatalogWorkspace(root, 'app');
   writeFileSync(entry, `
     import {writeFileSync} from 'node:fs';
     import {prepareManagedAppAttempt} from ${JSON.stringify(import.meta.resolve('@fliwright/core'))};
     process.on('message', async message=>{
-      if(message.go)process.send({nativeOwnership:{id:'request',project:${JSON.stringify(join(root, 'checkout/app'))}}});
+      if(message.go)process.send({nativeOwnership:{id:'request',project:${JSON.stringify(project)}}});
       if(message.nativeOwnershipReply){
         const r=message.nativeOwnershipReply;
         const first=await prepareManagedAppAttempt(r.grant.managedAppControl,{attemptKey:'first'});
@@ -100,12 +102,12 @@ it('passes the private native grant to a real executor which requests fresh endp
     requests.push(request.attemptKey); return { url: `ws://127.0.0.1:${1234 + requests.length}/auth=/ws` };
   } });
   const managedAppControl = await lifecycle.start();
-  const lease = { request: { target: { projectPath: 'app' } } } as ExecutionLease;
+  const lease = { request: { catalogId, configRevision: workspaceIdentity.configRevision, input: { targetId: 'app', commit: workspaceIdentity.commit }, target: { projectPath: 'app' } } } as ExecutionLease;
   try {
   const result = await spawnExecution(lease, root, new AbortController().signal, () => {}, {
-    mainFile: entry, flutterBin: 'flutter', resetCommands: [],
-    prepareNative: async project => {
-      expect(project).toBe(join(root, 'checkout/app'));
+    mainFile: entry, catalogRoot: root, flutterBin: 'flutter', resetCommands: [],
+    prepareNative: async selected => {
+      expect(selected).toBe(project);
       return { delegation: { rootDir: '/lease', key: 'a'.repeat(64), token: 'b'.repeat(64) }, managedAppControl };
     },
   });
@@ -122,7 +124,7 @@ it('routes real executor attempt preparation through the retained supervisor and
   const root = mkdtempSync(join(tmpdir(), 'worker-native-preparation-'));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const entry = join(root, 'child.mjs'), resultPath = join(root, 'result.json');
-  const project = join(root, 'checkout/app');
+  const project = createCatalogWorkspace(root, 'app');
   writeFileSync(entry, `
     import {writeFileSync,watch} from 'node:fs';
     const project=${JSON.stringify(project)};
@@ -147,9 +149,9 @@ it('routes real executor attempt preparation through the retained supervisor and
   `);
   const calls: string[] = [];
   // The child cannot forge a successful preparation response; it only sends an identity.
-  const result = await spawnExecution({ request: { target: { projectPath: 'app' } } } as ExecutionLease, root,
+  const result = await spawnExecution({ request: { catalogId, configRevision: workspaceIdentity.configRevision, input: { targetId: 'app', commit: workspaceIdentity.commit }, target: { projectPath: 'app' } } } as ExecutionLease, root,
     new AbortController().signal, () => {}, {
-      mainFile: entry, flutterBin: 'flutter', resetCommands: [],
+      mainFile: entry, catalogRoot: root, flutterBin: 'flutter', resetCommands: [],
       prepareNativeAttempt: async (selected, request, signal) => {
         expect(selected).toBe(project); calls.push(request.attemptKey);
         if (request.attemptKey === 'cancelled') {
