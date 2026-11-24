@@ -712,7 +712,7 @@ describe('TddRuntime', () => {
   });
 
   it('does not escalate in attach mode (no daemon restart available)', async () => {
-    const driver = daemonDriver();
+    const driver = { ...daemonDriver(), reloadSources: vi.fn(async () => ({ type: 'ReloadReport', success: true })) };
     const executor = {
       boot: vi.fn(async () => {}),
       rerun: vi.fn(async () => ({
@@ -728,6 +728,8 @@ describe('TddRuntime', () => {
 
     const result = await runtime.cycle(undefined, { sync: 'reload' });
 
+    expect(driver.reloadSources).toHaveBeenCalledTimes(1);
+    expect(executor.rerun).toHaveBeenCalledTimes(1);
     expect(result.lastSync).toBe('reload');
     expect(result.status).toBe('red');
   });
