@@ -35,6 +35,7 @@ const workerConfigObject = z
       )
       .min(1),
     repositoryCredentialHomes: z.record(z.string().min(1)).default({}),
+    catalogCheckout: z.enum(['clone', 'worktree']).default('clone'),
     allowedEnv: z.array(z.string()).default([]),
     heartbeatMs: z.number().int().min(500).max(10000).default(5000),
     spoolRetention: spoolRetentionSchema,
@@ -58,7 +59,7 @@ export const discoveryConfigSchema = workerConfigObject.pick({
 /** A paired host follows Cloud device bindings without duplicating slot configuration. */
 export const hostConfigSchema = workerConfigObject.pick({
   serverUrl: true, tokenEnv: true, credentialFile: true, deviceTools: true,
-  flutterBin: true, repositoryCredentialHomes: true, allowedEnv: true, heartbeatMs: true,
+  flutterBin: true, repositoryCredentialHomes: true, catalogCheckout: true, allowedEnv: true, heartbeatMs: true,
   spoolRetention: true,
 }).extend({
   root: z.string().min(1).optional(),

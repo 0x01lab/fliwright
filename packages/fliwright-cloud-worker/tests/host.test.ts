@@ -12,6 +12,7 @@ it('a paired host starts and stops isolated executors when web device bindings c
   const root = mkdtempSync(join(tmpdir(), 'auto-worker-host-'));
   const store = new CloudStore(join(root, 'db'));
   store.configure([{ id: 'app', name: 'App', repository: '/app', suites: { smoke: '*.test.ts' }, scenarios: ['clean'] }], [{ id: 'mac', slots: [] }]);
+  store.setProjectWorkers('app', ['mac'], [], 'admin');
   const server = createCloudServer({ store, dataRoot: join(root, 'reports'), publicUrl: 'https://cloud.test', proxySecret: 'proxy', publicationSecret: 'publication', users: {}, ciTokens: [], workerTokens: [{ workerId: 'mac', hash: createHash('sha256').update('test-host-private-token').digest('hex') }], minFreeBytes: 0 });
   const stop = new AbortController();
   let running: Promise<void> | undefined;

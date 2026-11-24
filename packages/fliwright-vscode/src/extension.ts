@@ -22,6 +22,7 @@ import {
 } from '@fliwright/core';
 import { getWorkspaceRoot, loadConfig, loadWorkspaceConfig, resolveWorkspacePath } from './config.js';
 import { invalidateWorkspaceProjectConfig } from './WorkspaceProjectConfig.js';
+import { registerSupportSettingsView, showMissingSupportSetting } from './support/SupportSettingsView.js';
 import { FlowFileService } from './flows/FlowFileService.js';
 import { formRuleSnippetForField, formRulesFileName, FormHelperService, formatFormFillDebug, dataSetLabels } from './form/FormHelperService.js';
 import { FormRuleService } from './form/FormRuleService.js';
@@ -78,6 +79,7 @@ const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 5000;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel('Fliwright');
   context.subscriptions.push(output);
+  context.subscriptions.push(registerSupportSettingsView(context.extensionUri));
   setEditorOutput(output);
 
   // Route VM Service debug logs to the output channel
@@ -129,15 +131,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const testsTree = new TestsTreeProvider(testDiscoveryService, statusStore, undefined,
     message => output.appendLine(`[Fliwright] ${message}`));
   context.subscriptions.push(testsTree, watchTestCollection(testsTree, () => runsRoot));
-  const wsRootForRuns = getWorkspaceRoot();
-  if (wsRootForRuns) {
+  const initializeRunsRoot = async () => {
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) return;
     try {
-      runsRoot = await runArtifactStore.ensureRunsDir(wsRootForRuns);
+      runsRoot = await runArtifactStore.ensureRunsDir(workspaceRoot);
     } catch (err) {
       output.appendLine(`[Fliwright] Failed to ensure runs root: ${err instanceof Error ? err.message : String(err)}`);
       runsRoot = undefined;
     }
-  }
+  };
+  if (vscode.workspace.isTrusted) await initializeRunsRoot();
+  context.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => { void initializeRunsRoot(); }));
   const scriptsTree = new ScriptsTreeProvider(scriptDiscoveryService);
   const flowsTree = new FlowsTreeProvider();
   const stateTree = new StateTreeProvider();
@@ -1733,7 +1738,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         if (result.failedTests > 0) {
           const actions = recordingMode !== 'off' ? ['View Trace', 'Open Failure'] : ['Open Failure'];
-          vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, ...actions).then(async (selection) => {
+          const notification = showMissingSupportSetting(runErrors(result), ...actions)
+            ?? vscode.window.showErrorMessage(`Fliwright tests failed: ${result.failedTests}`, ...actions);
+          notification.then(async (selection) => {
             if (selection === 'View Trace') {
               await viewerPanel.openLatest();
             } else if (selection === 'Open Failure') {
@@ -1796,7 +1803,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (result.passed) {
         vscode.window.showInformationMessage(`Fliwright script passed: ${script.label}`);
       } else {
-        vscode.window.showErrorMessage(`Fliwright script failed: ${script.label}`);
+        void (showMissingSupportSetting(runErrors(result)) ?? vscode.window.showErrorMessage(`Fliwright script failed: ${script.label}`));
       }
     });
   }
@@ -2103,6 +2110,13 @@ async function openStateProviderDocument(
   });
 }
 
+function runErrors(result: RunResult): Array<string | undefined> {
+  return [
+    ...result.results.map(test => test.error),
+    ...(result.runnerErrors ?? []).map(error => error.message),
+  ];
+}
+
 async function runCommand(label: string, action: () => Promise<void>): Promise<void> {
   try {
     output.appendLine(`[${new Date().toISOString()}] ${label}`);
@@ -2110,7 +2124,8 @@ async function runCommand(label: string, action: () => Promise<void>): Promise<v
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     output.appendLine(message);
-    vscode.window.showErrorMessage(message, 'Open Output').then((selection) => {
+    const notification = showMissingSupportSetting([error], 'Open Output') ?? vscode.window.showErrorMessage(message, 'Open Output');
+    notification.then((selection) => {
       if (selection === 'Open Output') output.show();
     });
   }

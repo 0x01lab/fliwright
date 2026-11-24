@@ -39,7 +39,7 @@ import { runCommandProcess } from './processes.js';
 import { writeJournal, type ExecutionResult } from './WorkerAgent.js';
 import { workerPhaseStage, type ExecutionLease, type WorkerPhase } from '@fliwright/cloud-protocol';
 import { executorTimeline } from './worker-timeline-ipc.js';
-import { secureCatalogCheckout } from './catalog-scanner.js';
+import { CatalogWorkspaceUnavailable, openCatalogWorkspace } from './catalog-workspace.js';
 import { redactDiagnostic } from '@fliwright/cloud-protocol';
 import { requestNativeOwnership, requestNativePreparation } from './native-ownership-ipc.js';
 
@@ -200,6 +200,7 @@ interface Job {
   nativeSupervisor?: boolean;
   lease: ExecutionLease;
   directory: string;
+  catalogRoot: string;
   flutterBin: string;
   resetCommands: Array<{
     program: string;
@@ -215,7 +216,6 @@ export async function executeJob(
     { lease, directory } = job,
     target = lease.request.target;
   const log = join(directory, 'commands.log'),
-    checkout = join(directory, 'checkout'),
     runsRoot = join(directory, 'runs');
   const stage = (value: string) => process.send?.({ stage: value });
   const telemetry = executorTimeline(), timeline = telemetry.channel;
@@ -223,8 +223,6 @@ export async function executeJob(
     stage(workerPhaseStage(name));
     return timeline.run(name, action, { signal });
   };
-  const command = (program: string, args: string[], cwd = directory) =>
-    runCommandProcess({ program, args }, cwd, log, signal);
   let daemon: FlutterDaemonController | undefined;
   let nativeRun: ManagedNativeRun | undefined;
   let nativeDelegation: ManagedNativeRun['delegation'] | undefined;
@@ -239,54 +237,11 @@ export async function executeJob(
   let finalizationFailed = false;
   let outcome: ExecutionResult = { verdict: 'unknown' };
   try {
-    const project = await phase('repository.checkout', async parentSpanId => {
-    await timeline.run('repository.checkout', () => command('git', [
-      'clone',
-      '--no-checkout',
-      '--no-hardlinks',
-      '--',
-      target.repository,
-      checkout,
-    ]), { parentSpanId, operation: 'clone', signal });
-    await timeline.run('repository.checkout', () => command(
-      'git',
-      [
-        '-c',
-        'core.hooksPath=/dev/null',
-        'fetch',
-        '--no-tags',
-        'origin',
-        lease.request.input.commit,
-      ],
-      checkout,
-    ), { parentSpanId, operation: 'fetch', signal });
-    await timeline.run('repository.checkout', () => command(
-      'git',
-      [
-        '-c',
-        'core.hooksPath=/dev/null',
-        'checkout',
-        '--detach',
-        lease.request.input.commit,
-      ],
-      checkout,
-    ), { parentSpanId, operation: 'checkout', signal });
-    await timeline.run('repository.checkout', async () => {
-    if ((await command('git', ['rev-parse', 'HEAD'], checkout)) !==
-      lease.request.input.commit
-    ) throw new Error('Checkout identity mismatch');
-    }, { parentSpanId, operation: 'verify_sha', signal });
-    await secureCatalogCheckout(checkout);
-    const project = resolve(checkout, target.projectPath),
-      actual = realpathSync(project),
-      rel = relative(realpathSync(checkout), actual);
-    if (isAbsolute(rel) || rel === '..' || rel.startsWith('../'))
-      throw new Error('Project escapes registered checkout');
-    return project;
-    });
-    if (target.install.length) await phase('dependencies.install', async parentSpanId => {
-      for (const [commandIndex, cmd] of target.install.entries())
-        await timeline.run('dependencies.install', () => runCommandProcess(cmd, project, log, signal), { parentSpanId, operation: 'command', commandIndex, signal });
+    const project = await phase('project.local', async () => {
+      const workspace = openCatalogWorkspace(job.catalogRoot, lease.request);
+      const head = await runCommandProcess({ program: 'git', args: ['rev-parse', '--verify', 'HEAD'] }, workspace.checkout, log, signal);
+      if (head !== lease.request.input.commit) throw new CatalogWorkspaceUnavailable();
+      return workspace.project;
     });
     if (job.nativeSupervisor) {
       const grant = await requestNativeOwnership(project, signal);
@@ -468,7 +423,7 @@ export async function executeJob(
     outcome = {
       verdict: signal.aborted ? 'interrupted' : 'unknown',
       infrastructure: 'permanent',
-      error:
+      error: error instanceof CatalogWorkspaceUnavailable ? error.message :
         'Preparation, launch or execution failed; inspect Worker diagnostics',
     };
   } finally {

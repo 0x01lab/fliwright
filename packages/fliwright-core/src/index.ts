@@ -585,3 +585,7 @@ export * from './native/index.js';
 
 export { buildTimelineTimeAxis, timelineNodeAtTime, timelineDurationMs, orderedTimelineNodes } from './timeline/TimelineTimeAxis.js';
 export type { TimelineTimeAxis, TimelineTimeEntry, TimedTimelineNode } from './timeline/TimelineTimeAxis.js';
+export { defineSupportSettings, loadSupportSettings, readSupportSettings, saveSupportSettings,
+  SupportSettingsError, MissingSupportSettingError, missingSupportSettingMessage } from './SupportSettings.js';
+export type { SupportSettingField, SupportSettingsDefinition, SupportSettingValue, SupportSettingsValues,
+  SupportSettingsProjectOptions, SupportSettingsSnapshot } from './SupportSettings.js';

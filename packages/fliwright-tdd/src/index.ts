@@ -56,6 +56,7 @@ export type {
   RuntimeSnapshot,
   BaselineConfig,
   StartOpts,
+  TddCycleAttempt,
   TddCycleResult,
   TddSyncResult,
   TddRuntimeDeps,

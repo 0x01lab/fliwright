@@ -77,8 +77,22 @@ describe('VMServiceConnector', () => {
     expect(sent.method).toBe('reloadSources');
     expect(sent.params).toEqual({ isolateId: 'isolates/main' });
 
-    mockWS.emit('message', JSON.stringify({ jsonrpc: '2.0', id: sent.id, result: { type: 'Success' } }));
-    await expect(responsePromise).resolves.toEqual({ type: 'Success' });
+    const report = { type: 'ReloadReport', success: true };
+    mockWS.emit('message', JSON.stringify({ jsonrpc: '2.0', id: sent.id, result: report }));
+    await expect(responsePromise).resolves.toEqual(report);
+  });
+
+  it.each([
+    [{ type: 'ReloadReport', success: false, notices: [{ message: 'Unsupported class change' }] }, /Unsupported class change/],
+    [{ type: 'Success' }, /did not confirm/],
+  ])('rejects a VM response without a successful reload report', async (result, error) => {
+    const responsePromise = connector.reloadSources();
+    await resolveMainIsolate(mockWS);
+
+    const sent = JSON.parse(mockWS.sent[1]);
+    const rejection = expect(responsePromise).rejects.toThrow(error);
+    mockWS.emit('message', JSON.stringify({ jsonrpc: '2.0', id: sent.id, result }));
+    await rejection;
   });
 
   it('refreshes the cached isolate after its exit event', async () => {

@@ -37,20 +37,20 @@ Worker 根据 `serverUrl` 主动建立 `/api/worker/connect` WebSocket 连接（
 
 Server 每 10 秒发送 WebSocket ping 保活，执行租约仍以默认 5 秒的执行心跳续租；设备在启动、WS 重连及本机状态变化时立即扫描上报，每 30 秒校准和续期。Android 使用 `adb track-devices`，iOS 真机使用 `xcdevice observe --both`，iOS 模拟器监听状态文件变化；事件合并 150ms，扫描和上报串行进行。原生监听失败会重试，周期扫描保留工具诊断；退出时停止监听进程。空闲连接断开后指数退避重连（上限约 30 秒并带抖动），不重放结果未知的请求；鉴权拒绝停止重连。执行中断线会终止所拥有的进程并保留槽位锁，需要显式 `recover`，重连不代表恢复设备租约。扫描断线也会中止，未完成扫描由原有租约过期处理。
 
-管理员可以在 Cloud 的 Worker 主机页面生成十分钟有效的一次性配对码，然后在打包机上运行：
+管理员在 Cloud 的「添加 Worker 主机」向导生成一次性配对码后，复制「配对并启动命令」到目标主机终端运行，即可完成配对并启动服务。配对码十分钟内有效。向导通过 `npx --yes @fliwright/cloud-worker` 运行 npm 发布版本，目标主机需要 Node.js 26+ 和 npm。命令使用 `--code` 传入一次性配对码，`--start` 在配对成功后启动服务。如需手动配对，可运行：
 
 ```sh
 fliwright-worker pair https://cloud.example.com /PRIVATE/PATH/cloud-worker
 ```
 
-CLI 会在终端安全地提示输入配对码，并在新建的私有目录中保存 `credentials.json` 和 `worker.json`（目录权限 `0700`，文件权限 `0600`）。配对后运行 `fliwright-worker run /PRIVATE/PATH/cloud-worker/worker.json`，再在网页为设备选择允许的应用并保存。Cloud 自动纳管、启用设备并分配槽位；本机常驻 Worker 自动同步绑定、收集测试目录和启动独立执行器，无需重复填写身份、设备 ID 或运行目录。Cloud 数据库只保留凭据摘要。管理员可撤销已配对主机，撤销会关闭其 WSS 连接。
+CLI 会在终端安全地提示输入配对码，并在新建的私有目录中保存 `credentials.json` 和 `worker.json`（目录权限 `0700`，文件权限 `0600`）。配对后运行 `fliwright-worker run /PRIVATE/PATH/cloud-worker/worker.json`，然后在 Cloud 项目设置中选择 Worker。测试执行还需要在设备页纳管和启用设备，Cloud 自动分配槽位，主机自动启动对应的执行器。Cloud 数据库只保留凭据摘要。管理员可撤销已配对主机，撤销会关闭其 WSS 连接。
 
 已有静态部署仍可复制 `deploy/worker.example.json` 到仓库外私有目录。`tokenEnv` 指定环境变量认证；配对 Worker 使用绝对路径 `credentialFile`。两种来源必须恰好配置一种。服务端登记 SHA-256 token 摘要与 Worker ID。不同电脑使用不同 Worker ID 和凭据。Server 配置示例见 [Cloud README](../fliwright-cloud/README.md)。
 
 | 命令 | 行为 |
 | --- | --- |
 | `fliwright-worker run worker.json` | 发现设备、扫描仓库，自动跟随网页绑定管理执行器并上传结果 |
-| `fliwright-worker pair <server-url> <new-directory>` | 交互输入一次性配对码，保存私有凭据和 discovery 配置 |
+| `fliwright-worker pair <server-url> <new-directory> [--code <code>] [--start]` | 配对并保存私有凭据及配置。省略 `--code` 时从终端读取 |
 | `fliwright-worker discover discovery.json` | 只检测上报，不需要执行目录、槽位或 reset 配置 |
 | `fliwright-worker recover worker.json` | 核查原进程已停止、终止其拥有的进程组、重置设备并请求恢复隔离槽位 |
 | `fliwright-worker retry-uploads worker.json` | 重传保留的报告，不重新执行测试或更改结论 |
@@ -59,7 +59,7 @@ CLI 会在终端安全地提示输入配对码，并在新建的私有目录中�
 
 最小配对配置可直接用于 `run`。工作目录默认是配置文件旁的 `runtime/`，每个槽位的生成配置、锁和 spool 位于 `runtime/slots/<slotId>/`。网页修改应用范围无需重启 Worker；取消纳管或禁用设备会停止对应执行器。已有纳管设备缺少槽位时，同步会自动补齐。iOS 模拟器自动启动，默认在任务前后 shutdown → boot → bootstatus，保留数据，不执行 erase；真机及其他平台需在主机配置 `resetCommands`。显式设备配置仍用于自定义执行及 `recover` / `retry-uploads`；恢复自动槽位时将其生成的 `worker.json` 传给 `recover`。隔离槽位和保留的锁不会被自动清除或重放。原生设备不得被多个槽位占用。
 
-`run` 启动独立的仓库目录扫描控制循环。扫描不占用设备槽位；网页已纳管、启用设备的应用关联自动授权该主机扫描对应项目。Server 的 `catalogProjects` 可额外授权纯扫描主机。只有该 Worker 的只读凭据映射可用时，才在 `repositoryCredentialHomes` 中加入引用，例如 `{ "gitlab-readonly": "/private/worker/git-home" }`。目录收集器使用临时最小环境、独立进程组、固定 SHA、无 hook 的 checkout、5 分钟超时和 4 MiB 输出上限；测试模块顶层代码仍属于可信仓库代码，会在此隔离进程内导入。扫描器不接收 Cloud bearer token 或设备地址。`discover` 是明确的仅设备发现模式，不扫描或执行任务。
+`run` 启动独立的仓库目录扫描控制循环。项目绑定后，该主机可以扫描对应仓库，扫描无需设备槽位。只有该 Worker 的只读凭据映射可用时，才在 `repositoryCredentialHomes` 中加入引用，例如 `{ "gitlab-readonly": "/private/worker/git-home" }`。目录收集器使用临时最小环境、独立进程组、固定 SHA、无 hook 的 checkout、5 分钟超时和 4 MiB 输出上限；测试模块顶层代码仍属于可信仓库代码，会在此隔离进程内导入。扫描器不接收 Cloud bearer token 或设备地址。`discover` 是明确的仅设备发现模式，不扫描或执行任务。
 
 ### 使用当前本地构建扫描 workspace 项目
 
@@ -82,7 +82,7 @@ node scripts/pack-local-packages.mjs /NEW/local-build-bundle
 }
 ```
 
-Worker 主机需要 npm 和 npm registry 访问。每次安装先校验 tarball 摘要，再在 checkout 内建立独立的临时安装目录：本地包和传递引用统一指向这批 tarball，应用的其他生产和开发依赖从 registry 安装，生命周期脚本禁用。原始 `package.json` 和 `pnpm-workspace.yaml` 保留；安装文件均在 checkout 内，之后的只读保护不会修改主机缓存。第三方下载缓存在 bundle 旁的 `npm-cache/`，中断后可复用已完成下载；bundle 目录需允许 Worker 写缓存。该安装命令要求 checkout 尚无 `node_modules`，应代替普通的 Node 依赖安装步骤。扫描完成会一并清理依赖；包更新时生成新的 bundle 并更新 Cloud 安装命令，配置版本随之递增。
+Worker 主机需要 npm 和 npm registry 访问。扫描安装时先校验 tarball 摘要，再在 checkout 内建立独立的临时安装目录。本地包和传递引用统一指向这批 tarball，应用的其他生产和开发依赖从 registry 安装，生命周期脚本禁用。原始 `package.json` 和 `pnpm-workspace.yaml` 保留。第三方下载缓存在 bundle 旁的 `npm-cache/`，中断后可复用已完成下载。该安装命令要求 checkout 尚无 `node_modules`，应代替普通的 Node 依赖安装步骤。执行复用扫描时安装的依赖。包更新时生成新的 bundle，更新 Cloud 安装命令并重新扫描。
 
 ## 生命周期与常驻运行
 
@@ -125,8 +125,11 @@ pnpm cloud:worker logs /PRIVATE/PATH/cloud-worker/worker.json
 
 ### 执行工作区与磁盘保留
 
-每个槽位使用 `root/slots/<slotId>/spool/<attemptId>/` 隔离任务。确认进程已终止、
-设备重置成功且 Cloud 已确认任务完成后，立即删除 `checkout/`（含源码、依赖、构建产物）。
+扫描成功后，Worker 将项目及依赖保留在 `root/catalogs/projects/<catalogId>/`。用例和套件运行前校验本地 checkout 的提交，然后直接在该项目目录中执行。Cloud 会把任务分配给扫描该目录的 Worker，并依次分配使用同一目录的任务。升级前的扫描记录或已删除的本地目录需要重新扫描，再从新目录提交运行。扫描工作区独立于任务保留策略。
+
+Worker 默认采用独立 clone。在受信任的项目上，可在 Worker 配置中设置 `"catalogCheckout": "worktree"`。新扫描会按项目、仓库和凭据引用复用 `root/catalogs/repositories/` 下的 bare Git 缓存，每个 Catalog 各自检出固定提交，并在自己的目录里安装和构建。worktree 共享 Git 对象和配置，同一主机的设备与测试数据仍按槽位租约和重置配置管理。失败扫描会移除自己的 worktree。已就绪的目录沿用现有保留规则，供已扫描版本重跑。
+
+每个槽位使用 `root/slots/<slotId>/spool/<attemptId>/` 隔离日志、原始结果和报告。
 报告完整导出后删除重复的 `runs/`；上传成功后删除本地 `bundle/` 和上传凭据。
 上传失败保留报告包供 `retry-uploads` 使用；导出失败保留原始 `runs/`。
 补传成功也会释放报告包，后续不会重复上传该包。日志、结果和 Worker 时间线保留供本机诊断。
@@ -170,4 +173,4 @@ macOS 使用 `deploy/com.fliwright.cloud.worker.plist` 模板交给 launchd。�
 
 Cloud 的扫描记录保留阶段与可处理的失败原因：Git 认证、缺少依赖、未声明场景、只读 checkout 写入、超时和资源限制。任意仓库 stderr 不会直接发布，未知错误使用通用提示。
 
-扫描和测试执行会在各自的临时 checkout 中自动移除指向仓库外部、目标缺失或循环引用的符号链接，再继续处理测试和代码；仓库内有效的文件、目录及链式链接会保留。扫描安装依赖后会再次清理，再将源码设为只读。原始 Git 仓库和链接指向的本机内容不会被修改，无需为了本机技能目录等链接重新提交。如果测试或构建实际依赖被移除的内容，仍需将依赖放入仓库或通过安装命令提供。
+扫描会在 Worker 工作区移除指向仓库外部、目标缺失或循环引用的符号链接，并保留仓库内有效的文件、目录及链式链接。安装依赖后会再次清理，收集用例期间将 checkout 设为只读，收集结束后恢复原有权限供测试和构建使用。如果测试或构建依赖被移除的内容，需要将依赖放入仓库或通过安装命令提供。

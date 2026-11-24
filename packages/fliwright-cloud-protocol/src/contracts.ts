@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { WorkerTimelineSummary } from './worker-timeline.js';
+import type { WorkerServiceReport } from './worker-diagnostics.js';
 
 export const deviceInventorySchema = z
   .object({
@@ -272,15 +273,29 @@ export const catalogMockDirectorySchema = z.object({
     activeRule: z.string().min(1).max(100),
   }).strict()).max(1000),
 }).strict();
+export const unresolvedCatalogCommit = '0'.repeat(40);
+export const catalogCommitSchema = z.string().regex(/^[0-9a-f]{40}$/).refine(commit => commit !== unresolvedCatalogCommit, 'A nonzero commit SHA is required');
+const catalogBranchSchema = z.string().trim().min(1).max(200).refine(branch =>
+  branch !== 'HEAD' && branch !== '@' && !branch.startsWith('-') && !branch.endsWith('.') &&
+  !/[\u0000-\u0020\u007f~^:?*\[\\]|\.\.|@\{/.test(branch) &&
+  branch.split('/').every(part => part && !part.startsWith('.') && !part.endsWith('.lock')),
+  'Enter a valid Git branch name',
+);
+export const catalogScanInputSchema = z.object({
+  branch: catalogBranchSchema.optional(),
+  commit: catalogCommitSchema.optional(),
+}).strict().refine(input => !(input.branch && input.commit), 'Choose a branch or a commit');
+
 export const catalogSchema = z.object({
   catalogId: idSchema,
   projectId: idSchema,
-  commit: z.string().regex(/^[0-9a-f]{40}$/),
+  commit: catalogCommitSchema,
+  branch: z.string().max(200).optional(),
   configRevision: z.number().int().positive(),
   createdAt: z.number().int().nonnegative(),
   status: z.enum(['ready', 'failed']),
   errorSummary: z.string().max(4000).optional(),
-  scenarios: z.array(catalogScenarioSchema).max(100),
+  scenarios: z.array(catalogScenarioSchema).max(1_000),
   mocks: z.array(catalogMockDirectorySchema).max(20).optional(),
   suites: z.array(catalogSuiteSchema).max(100),
   scannerVersion: z.string().min(1).max(100),
@@ -342,6 +357,7 @@ export interface TestRequest {
   verdict: Outcome['verdict'];
   attempts: number;
   configRevision?: number;
+  secureFiles?: import('./secure-files.js').SecureFileReference[];
   catalogId?: string;
   selection?: { mode: 'suite' | 'case'; suite: string; scenario?: string; caseId?: string; file?: string; titlePath?: string[]; duplicateIndex?: number };
   source?: ProjectSubmission['source'];
@@ -384,7 +400,13 @@ export interface ExecutionWorker {
   /** Last host scan. Staleness uses server receipt time, independent of worker lease health. */
   inventory?: DeviceInventory & { receivedAt: number; stale: boolean };
   /** Independent service monitoring is separate from device/lease health. */
-  service?: { status: 'healthy' | 'degraded' | 'failed' | 'stopped' | 'unreachable'; receivedAt: number; sessionId: string; activeSessions: number };
+  service?: {
+    status: WorkerServiceReport['state'] | 'unreachable';
+    receivedAt: number;
+    sessionId: string;
+    activeSessions: number;
+    catalogWorkspace?: WorkerServiceReport['catalogWorkspace'];
+  };
 }
 export class CloudError extends Error {
   constructor(

@@ -5,7 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from '../src/web/app.js';
 import { testColumn, type BoardRequest } from '../src/web/TestBoard.js';
 import { boardColumns, boardBatch } from '../src/request-board.js';
-import { projectSchema, type Project } from '@fliwright/cloud-protocol';
+import { projectSchema, type ExecutionWorker, type Project } from '@fliwright/cloud-protocol';
+import type { WorkerStatusResponse } from '../src/catalog-scan-status.js';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -13,6 +14,9 @@ const streams: Array<{ url: string; close: ReturnType<typeof vi.fn> }> = [];
 let boardItems: BoardRequest[] = [];
 let role = 'member';
 let projects: Project[] = [];
+let workers: WorkerStatusResponse[] = [];
+let workerStatusError = false;
+let submissionError = '';
 const requestOverrides: Record<string, Record<string, unknown>> = {};
 const target = {
   id: 'app',
@@ -29,6 +33,9 @@ beforeEach(() => {
   boardItems = [];
   role = 'member';
   projects = [];
+  workers = [];
+  workerStatusError = false;
+  submissionError = '';
   for (const key of Object.keys(requestOverrides)) delete requestOverrides[key];
   vi.stubGlobal(
     'EventSource',
@@ -47,6 +54,10 @@ beforeEach(() => {
       let data: unknown;
       if (path === '/api/me') data = { name: 'Alice', role };
       else if (path === '/api/projects') data = projects;
+      else if (path === '/api/workers') {
+        if (workerStatusError) return { ok: false, json: async () => ({ error: 'Worker 状态加载失败' }) };
+        data = workers;
+      }
       else if (/^\/api\/projects\/[^/]+\/status$/.test(path)) data = { ready: false, blockers: [], latestScan: null };
       else if (path === '/api/targets') data = projects.length ? projects.map(p => ({ ...p, suites: Object.keys(p.suites) })) : [target];
       else if (path === '/api/reports') data = { items:[],hasMore:false };
@@ -60,9 +71,10 @@ beforeEach(() => {
       else if (path === '/api/share/exchange') {
         expect(window.location.hash).toBe('');
         data = { url: '/shared/reports/bundle' };
-      } else if (path === '/api/requests' && options?.method === 'POST')
+      } else if (path === '/api/requests' && options?.method === 'POST') {
+        if (submissionError) return { ok: false, json: async () => ({ error: submissionError }) };
         data = { id: 'created' };
-      else if (path.endsWith('/rerun') && options?.method === 'POST')
+      } else if (path.endsWith('/rerun') && options?.method === 'POST')
         data = { id: 'rerun' };
       else if (path === '/api/requests') {
         const matches = boardItems.filter((item) =>
@@ -136,6 +148,22 @@ async function mount(path = '/') {
   await act(async () => root.render(React.createElement(App)));
 }
 
+async function openSubmission() {
+  const trigger = document.querySelector<HTMLButtonElement>('header button[aria-label="提交测试"]')!;
+  await act(async () => trigger.click());
+  expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('新建测试任务');
+  return trigger;
+}
+
+async function enterSubmissionCommit(commit: string) {
+  const input = document.querySelector<HTMLInputElement>('[role="dialog"] input[pattern]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, commit);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  return input;
+}
+
 async function openConfiguration() {
   const trigger = document.body.querySelector<HTMLButtonElement>('nav button[aria-label="更多"]')!;
   expect(trigger).toBeDefined();
@@ -188,6 +216,114 @@ function boardHeaderFacts() {
   return Object.fromEntries(Array.from(labels, label => [label.textContent, label.nextElementSibling?.textContent]));
 }
 
+it('shows the startup alert and opens Worker pairing for administrators', async () => {
+  role = 'admin';
+  await mount();
+
+  const alert = '[data-ui="worker-connection-alert"][role="alert"]';
+  expect(document.querySelector(alert)?.textContent).toContain('暂无正常连接的 Worker');
+  expect(document.querySelector(`${alert} a`)?.textContent).toBe('设置 Worker');
+  expect(await click(`${alert} a`)).toBe(true);
+  expect(window.location.pathname).toBe('/workers');
+  expect(document.querySelector('main')?.textContent).toContain('添加 Worker 主机');
+  expect(document.querySelector(`${alert} a`)).toBeNull();
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === '/api/workers')).toHaveLength(1);
+});
+
+it.each(['member', 'operator'])('keeps host actions and diagnostics scoped to the %s role', async currentRole => {
+  role = currentRole;
+  workers = [{ id: 'mac', health: 'unseen', seenAt: 0, paused: false, slots: [] }];
+  await mount('/workers');
+  const list = document.querySelector('[aria-label="主机列表"]')!;
+  expect(list.querySelector('a')?.getAttribute('href')).toBe('/devices?worker=mac');
+  expect(list.textContent).toContain('尚未连接');
+  expect(list.textContent?.includes('暂停调度')).toBe(currentRole === 'operator');
+  expect(list.textContent).not.toContain('服务诊断与日志');
+  const details = list.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+  await act(async () => details.click());
+  expect(list.textContent).toContain('设备与槽位');
+  expect(list.textContent?.includes('服务诊断与日志')).toBe(currentRole === 'operator');
+  expect(document.querySelector('main')?.textContent).not.toContain('配对记录');
+});
+
+it('distinguishes a missing diagnostics heartbeat from an online host and omits server storage', async () => {
+  role = 'operator';
+  const receivedAt = Date.UTC(2026, 10, 23, 6, 57, 46);
+  workers = [{ id: 'leo-macbook', health: 'healthy', seenAt: receivedAt + 36000, paused: false, slots: [],
+    service: { status: 'unreachable', receivedAt, sessionId: 'session', activeSessions: 0,
+      process: { pid: 123, nodeVersion: 'v26.3.0', startedAt: new Date(receivedAt).toISOString(), uptimeMs: 5000, rssBytes: 128 * 1024 ** 2, eventLoopLagMs: 7, components: { catalog: 'running' } } } }];
+  await mount('/workers');
+  const list = document.querySelector('[aria-label="主机列表"]')!;
+  expect(list.textContent).toContain('在线');
+  expect(list.textContent).toContain('服务诊断心跳超时');
+  await act(async () => list.querySelector<HTMLButtonElement>('button[aria-expanded]')!.click());
+  expect(list.textContent).toContain('超过 35 秒未收到服务诊断心跳');
+  expect(list.textContent).toContain('PID 123 · v26.3.0');
+  expect(list.textContent).toContain('128.0 MiB · 7 ms');
+  expect(list.textContent).toContain('测试用例扫描 · 运行中');
+  expect(document.querySelector('main')?.textContent).not.toContain('报告存储');
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => url === '/api/operations')).toBe(false);
+});
+
+it('shows scan assignments, the current scan and occupied slots in expanded host details', async () => {
+  seedProjects();
+  workers = [{ id: 'mac', health: 'healthy', seenAt: 1000, paused: false, catalogScannerConnected: true,
+    projectIds: ['first'], slots: [{ id: 'ios', deviceId: 'phone', targets: ['first'], state: 'busy', generation: 2, attemptId: 'attempt-1' }],
+    activeCatalogScan: { scanId: 'scan-1', projectId: 'first', status: 'running', commit: 'a'.repeat(40), configRevision: 1, createdAt: 100, updatedAt: 1000 } }];
+  await mount('/workers');
+  const list = document.querySelector('[aria-label="主机列表"]')!;
+  await act(async () => list.querySelector<HTMLButtonElement>('button[aria-expanded]')!.click());
+  const scanner = list.querySelector('[aria-label="扫描服务"]')!;
+  expect(scanner.textContent).toContain('绑定项目first app');
+  expect(scanner.querySelector('a')?.getAttribute('href')).toBe('/projects/first?view=scans');
+  expect(scanner.textContent).toContain('最近扫描心跳');
+  expect(list.querySelector('[aria-label="设备与槽位"]')?.textContent).toContain('当前执行 attempt-1');
+});
+
+it('keeps host details usable when the API omits scanner and process status', async () => {
+  workers = [{ id: 'mac', health: 'healthy', seenAt: 1000, paused: false, slots: [],
+    service: { status: 'healthy', receivedAt: 1000, sessionId: 'session', activeSessions: 1 } }];
+  await mount('/workers');
+  const list = document.querySelector('[aria-label="主机列表"]')!;
+  await act(async () => list.querySelector<HTMLButtonElement>('button[aria-expanded]')!.click());
+  expect(list.querySelector('[aria-label="扫描服务"]')?.textContent).toContain('绑定项目暂无数据');
+  expect(list.querySelector('[aria-label="扫描服务"]')?.textContent).toContain('连接状态暂无数据');
+  expect(list.querySelector('[aria-label="扫描服务"]')?.textContent).toContain('当前扫描暂无数据');
+  expect(list.querySelector('[aria-label="服务运行状态"]')?.textContent).toContain('服务运行中');
+});
+
+it('updates the alert as Worker status changes without reloading the page', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  const worker: ExecutionWorker = { id: 'mac', health: 'healthy', paused: true, seenAt: 1, slots: [] };
+  workers = [worker];
+  await mount('/overview');
+
+  const alert = '[data-ui="worker-connection-alert"]';
+  expect(document.querySelector(alert)).toBeNull();
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === '/api/workers')).toHaveLength(1);
+
+  workers = [{ ...worker, health: 'offline' }];
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  expect(document.querySelector(`${alert} a`)?.textContent).toBe('查看 Worker 主机');
+
+  workers = [...workers, { ...worker, id: 'mac-replacement' }];
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  expect(document.querySelector(alert)).toBeNull();
+});
+
+it('waits for a successful worker status check before showing the alert', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  workerStatusError = true;
+  await mount();
+
+  const alert = '[data-ui="worker-connection-alert"]';
+  expect(document.querySelector(alert)).toBeNull();
+
+  workerStatusError = false;
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  expect(document.querySelector(alert)).not.toBeNull();
+});
+
 it('handles top navigation in the current document and preserves the shell', async () => {
   await mount();
   const shell = document.body.querySelector("header[data-ui~=app-header]");
@@ -205,15 +341,15 @@ it('handles top navigation in the current document and preserves the shell', asy
   expect(document.body.querySelector('h1')?.textContent).toBe('Worker 主机');
   expect(window.location.pathname).toBe('/workers');
   expect(document.body.querySelector("header[data-ui~=app-header]")).toBe(shell);
-  expect(document.body.querySelector("nav [data-ui~=configuration-active]")?.getAttribute('aria-label')).toBe('更多');
-  expect(document.body.querySelector('nav a[href="/workers"]')).toBeNull();
+  expect(document.body.querySelector('nav [data-ui~=configuration-active]')?.getAttribute('aria-label')).toBe('更多');
+  expect(document.body.querySelector('.workspace-nav a[href="/workers"]')).toBeNull();
   expect(
     vi.mocked(fetch).mock.calls.filter(([url]) => url === '/api/me'),
   ).toHaveLength(initialMeCalls);
   expect(await click('nav a[href="/queue"]')).toBe(true);
   expect(document.body.querySelector('main h1')?.textContent).toBe('执行看板');
-  expect(document.body.querySelectorAll('a[aria-label="提交测试"]')).toHaveLength(1);
-  expect(shell?.querySelector('a[href="/new"]')).not.toBeNull();
+  expect(document.body.querySelectorAll('button[aria-label="提交测试"]')).toHaveLength(1);
+  expect(shell?.querySelector('button[aria-label="提交测试"]')).not.toBeNull();
 });
 
 it('keeps board and cases in the single top navigation and opens configuration with keyboard dismissal', async () => {
@@ -405,24 +541,23 @@ it('loads more in a single column and searches the full collection', async () =>
   expect(boardHeaderFacts()).toMatchObject({ '匹配任务': '0', '通过率': '—' });
 });
 
-it('navigates to the new task after submission without replacing the shell', async () => {
-  await mount('/new');
+it('keeps the filtered board open after submission and links to the queued task', async () => {
+  await mount('/queue?search=smoke&targetId=app');
   const shell = document.body.querySelector("header[data-ui~=app-header]");
-  const input = document.body.querySelector<HTMLInputElement>('input[pattern]')!;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      'value',
-    )!.set!.call(input, 'a'.repeat(40));
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  });
+  const board = document.querySelector('.queue-lanes');
+  const scroll = board!.querySelector<HTMLElement>('[data-ui="test-board-scroll"]')!;
+  scroll.scrollLeft = 90;
+  await openSubmission();
+  const input = await enterSubmissionCommit('a'.repeat(40));
   await act(async () => {
     input.form!.dispatchEvent(
       new Event('submit', { bubbles: true, cancelable: true }),
     );
   });
-  expect(window.location.pathname).toBe('/requests/created');
-  expect(document.body.querySelector('h1')?.textContent).toContain('#created');
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(window.location.pathname + window.location.search).toBe('/queue?search=smoke&targetId=app');
+  expect(document.querySelector('.queue-lanes')).toBe(board);
+  expect(scroll.scrollLeft).toBe(90);
   expect(document.body.querySelector("header[data-ui~=app-header]")).toBe(shell);
   const submission = vi
     .mocked(fetch)
@@ -434,6 +569,40 @@ it('navigates to the new task after submission without replacing the shell', asy
     suite: 'smoke',
     commit: 'a'.repeat(40),
   });
+  const toast = document.querySelector('[data-sonner-toast]')!;
+  expect(toast.textContent).toContain('已加入队列');
+  expect(toast.querySelector('button')?.textContent).toBe('查看任务');
+  await act(async () => toast.querySelector('button')!.click());
+  expect(window.location.pathname).toBe('/requests/created');
+  expect(document.body.querySelector('h1')?.textContent).toContain('#created');
+});
+
+it('keeps a failed submission editable and restores focus when dismissed', async () => {
+  submissionError = '测试配置暂不可用';
+  await mount('/queue');
+  const trigger = await openSubmission();
+  const input = await enterSubmissionCommit('b'.repeat(40));
+  const scenario = input.form!.querySelectorAll('select')[2];
+  await act(async () => {
+    scenario.value = 'clean';
+    scenario.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await act(async () => input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toBe(submissionError);
+  expect(input.value).toBe('b'.repeat(40));
+  expect(scenario.value).toBe('clean');
+  expect(input.form!.querySelector<HTMLButtonElement>('[type="submit"]')?.disabled).toBe(false);
+  await act(async () => input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const attempts = vi.mocked(fetch).mock.calls.filter(([url, options]) => url === '/api/requests' && options?.method === 'POST');
+  expect(attempts).toHaveLength(2);
+  const keys = attempts.map(([, options]) => new Headers(options?.headers).get('idempotency-key'));
+  expect(keys[0]).toBeTruthy();
+  expect(keys[1]).toBe(keys[0]);
+  await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await vi.waitFor(() => expect(document.activeElement === trigger).toBe(true));
+  expect(window.location.pathname).toBe('/queue');
 });
 
 it('opens dynamic details, reruns in place, and closes the previous event stream', async () => {
@@ -472,6 +641,16 @@ const publishedReport = (id: string, state = 'published') => ({
   expiresAt: 1,
 });
 
+async function openReportRunPanel(value: string) {
+  const menu = document.querySelector<HTMLSelectElement>('[data-ui~=replay-header] select[aria-label="运行"]')!;
+  await act(async () => {
+    menu.focus();
+    menu.value = value;
+    menu.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  return document.querySelector('[role="dialog"]')!;
+}
+
 it.each(['passed', 'failed'])(
   'opens the report directly for a completed %s run and keeps rerun on the report page',
   async (verdict) => {
@@ -485,16 +664,15 @@ it.each(['passed', 'failed'])(
     expect(document.body.querySelectorAll('h1')).toHaveLength(1);
     expect(document.body.textContent).not.toContain('独立打开报告');
     expect(document.body.textContent).not.toContain('运行详情');
-    expect(document.body.querySelector('a[href="/reports/older"]')).not.toBeNull();
+    const dialog = await openReportRunPanel('run');
+    expect(dialog.querySelector('a[href="/reports/older"]')).not.toBeNull();
     const shell = document.body.querySelector("header[data-ui~=app-header]");
-    const stream = streams.at(-1)!;
-    const rerun = Array.from(document.body.querySelectorAll('button')).find((b) =>
+    const rerun = Array.from(dialog.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('重新运行'),
     )!;
     await act(async () => rerun.click());
     expect(window.location.pathname).toBe('/requests/rerun');
     expect(document.body.querySelector("header[data-ui~=app-header]")).toBe(shell);
-    expect(stream.close).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith(
       '/api/requests/original/rerun',
       expect.objectContaining({ method: 'POST' }),
@@ -525,6 +703,7 @@ it('keeps historical reports open instead of redirecting them to the latest repo
   };
   await mount('/reports/older');
   expect(window.location.pathname).toBe('/reports/older');
+  await openReportRunPanel('run');
   expect(
     document.body.querySelector('a[href="/reports/older"]')?.getAttribute('aria-current'),
   ).toBe('page');
@@ -536,19 +715,32 @@ it('keeps Replay mounted across Worker view switches and binds a historical repo
   requestOverrides.original = { attempts: [{ attemptId: 'latest', number: 2 }], reports: [publishedReport('older'), publishedReport('newer')] };
   await mount('/reports/older');
   const replay = document.body.querySelector("[data-ui~=replay-panel]");
-  const tabs = document.body.querySelector('[aria-label="报告视图"]')!;
-  const workerTab = Array.from(tabs.querySelectorAll('button')).find(button => button.textContent?.includes('Worker'))!;
-  await act(async () => workerTab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
-  expect(document.body.querySelector("[data-ui~=report-view-pane]")?.hasAttribute('hidden')).toBe(true);
-  expect(document.body.querySelector("[data-ui~=report-worker-pane]")?.hasAttribute('hidden')).toBe(false);
-  expect(document.body.querySelector("[data-ui~=replay-panel]")).toBe(replay);
-  const testTab = Array.from(tabs.querySelectorAll('button')).find(button => button.textContent?.includes('测试回放'))!;
-  await act(async () => testTab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
-  expect(document.body.querySelector("[data-ui~=report-view-pane]")?.hasAttribute('hidden')).toBe(false);
-  expect(document.body.querySelector("[data-ui~=replay-panel]")).toBe(replay);
+  const dialog = await openReportRunPanel('worker');
+  expect(dialog.textContent).toContain('Worker 执行');
+  expect(document.body.querySelector('[data-ui~=replay-panel]')).toBe(replay);
+  await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭对话框"]')!.click());
+  expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.body.querySelector('[data-ui~=replay-panel]')).toBe(replay);
   const calls = vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('/worker-timeline'));
   expect(calls).toContain('/api/requests/original/attempts/attempt-older/worker-timeline');
   expect(calls.some(url => url.includes('/latest/'))).toBe(false);
+});
+
+it('opens sharing and run activity from the single replay header', async () => {
+  await mount('/reports/bundle');
+  const header = document.querySelector('[data-ui~=replay-header]')!;
+  const share = Array.from(header.querySelectorAll('button')).find(button => button.textContent === '分享报告')!;
+  expect(document.querySelector('[data-ui~=report-header]')).toBeNull();
+  expect(document.querySelector('[aria-label="当前步骤证据"]')?.textContent).toBe('步骤详情步骤日志源码步骤产物');
+  await act(async () => share.click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('生成分享链接');
+  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="关闭对话框"]')!.click());
+  const dialog = await openReportRunPanel('events');
+  expect(dialog.querySelector('[aria-label="筛选运行动态"]')).not.toBeNull();
+  const stream = streams.at(-1)!;
+  expect(stream.url).toBe('/api/requests/original/events');
+  await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭对话框"]')!.click());
+  expect(stream.close).toHaveBeenCalledOnce();
 });
 
 it('keeps diagnostics available when a run has no published report', async () => {
@@ -620,7 +812,7 @@ it('opens project creation from the project switcher and directory', async () =>
   await mount('/queue');
   const shell = document.body.querySelector("header[data-ui~=app-header]");
   await openProjectMenu();
-  expect(document.body.querySelector('header a[aria-label="提交测试"]')).not.toBeNull();
+  expect(document.body.querySelector('header button[aria-label="提交测试"]')).not.toBeNull();
   const create = document.body.querySelector<HTMLAnchorElement>('[data-ui="project-switcher-menu"] a[href*="createProject"]')!;
   expect(create.textContent).toContain('创建项目');
   await act(async () => create.click());
@@ -650,8 +842,8 @@ it('keeps submission one click away and hides project creation for members', asy
   expect(document.body.querySelector('[data-ui="project-switcher-menu"] a[href*="createProject"]')).toBeNull();
   await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   expect(trigger.getAttribute('aria-expanded')).toBe('false');
-  expect(await click('header a[aria-label="提交测试"]')).toBe(true);
-  expect(window.location.pathname).toBe('/new');
+  await openSubmission();
+  expect(window.location.pathname).toBe('/projects');
   expect(document.body.querySelector('[data-ui="project-switcher"] button')?.getAttribute('aria-expanded')).toBe('false');
 });
 
@@ -685,13 +877,17 @@ it('scopes the board, totals, management and submission to the project picked in
   expect(boardHeaderFacts()).toEqual({ '默认分支': 'main', '测试套件': '1', '匹配任务': '1', '通过率': '100%' });
   expect(document.querySelector('footer[aria-label="看板状态"]')?.textContent).not.toMatch(/匹配任务|通过率/);
   expect(document.querySelector('.workspace-nav a[aria-label="项目管理"]')?.getAttribute('href')).toBe('/projects/second');
-  await click('header a[aria-label="提交测试"]');
-  expect(boardHeaderFacts()).toEqual({});
-  expect(document.querySelector<HTMLSelectElement>('main form select')?.value).toBe('second');
-  await openProjectMenu();
-  await click('[data-ui="project-list-item"][href*="first"]');
-  expect(window.location.pathname).toBe('/new');
-  expect(document.querySelector<HTMLSelectElement>('main form select')?.value).toBe('first');
+  await openSubmission();
+  const select = document.querySelector<HTMLSelectElement>('[role="dialog"] form select')!;
+  expect(select.value).toBe('second');
+  await act(async () => {
+    select.value = 'first';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(select.value).toBe('first');
+  expect(window.location.pathname).toBe('/queue');
+  expect(new URLSearchParams(window.location.search).get('targetId')).toBe('second');
+  expect(boardHeaderFacts()).toMatchObject({ '匹配任务': '1', '通过率': '100%' });
 });
 
 it('preserves the section when switching projects by keyboard and clears project-specific filters', async () => {

@@ -1,6 +1,7 @@
 import { Button } from './components/ui/button.js';
+import { Minus, Plus } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from './ui.js';
+import { Icon, ResultIcon } from './ui.js';
 import {
   buildTimeAxis,
   createTimeScale,
@@ -24,7 +25,7 @@ const elapsed = (value: number) =>
       ? `${Math.round(value)}ms`
       : `${Number((value / 1000).toFixed(2))}s`;
 const frameWidth = 112;
-const frameHeight = 160;
+const frameHeight = 56;
 
 /** Recorded-time playback uses animation frames for a linear playhead at the selected speed. */
 export function TimeTimeline({
@@ -57,6 +58,7 @@ export function TimeTimeline({
   const [hover, setHover] = useState<{ time: number }>();
   const [cursor, setCursor] = useState<{ id: string; time: number }>();
   const viewport = useRef<HTMLDivElement>(null);
+  const ruler = useRef<HTMLDivElement>(null);
   const selectedBar = useRef<HTMLButtonElement>(null);
   const selectedFrame = useRef<HTMLButtonElement>(null);
   const surface = useRef<HTMLDivElement>(null);
@@ -129,9 +131,10 @@ export function TimeTimeline({
     if (!bar || !container) return;
     const box = bar.getBoundingClientRect(),
       view = container.getBoundingClientRect();
+    const rulerBottom = ruler.current?.getBoundingClientRect().bottom ?? view.top;
     if (box.left < view.left || box.right > view.right)
       container.scrollLeft += box.left - view.left - container.clientWidth / 3;
-    if (box.top < view.top + 36 || box.bottom > view.bottom)
+    if (box.top < rulerBottom || box.bottom > view.bottom)
       container.scrollTop += box.top - view.top - container.clientHeight / 2;
   }, [selectedId, selectedScreenshotIndex, zoom, surfaceWidth, playing]);
   useEffect(() => {
@@ -151,7 +154,8 @@ export function TimeTimeline({
       onSelect(node.id);
     }
   };
-  const actionsHeight = Math.max(1, axis.lanes) * 12 + 8;
+  const laneHeight = 18;
+  const actionsHeight = Math.max(1, axis.lanes) * laneHeight + 8;
   // Keep each image anchored to its step's completion time. Pack nearby images
   // into separate rows without distorting the shared time scale.
   const { frames, frameLaneCount } = useMemo(() => {
@@ -173,65 +177,60 @@ export function TimeTimeline({
   const frameLaneHeight = frameHeight + 8;
   const height = actionsHeight + (frames.length ? frameLaneCount * frameLaneHeight + 8 : 0);
   return (
-    <section className="min-w-0 border-b border-border bg-card" aria-label="执行时间轴" data-ui="trace-timeline">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 max-sm:px-2.5" data-ui="trace-heading">
-        <div className="flex items-center gap-2 text-xs [&>svg]:size-3.5 [&>svg]:text-muted-foreground [&>span]:text-[11px] [&>span]:text-muted-foreground" data-ui="trace-title">
-          <Icon name="clock" />
-          <b>执行时间轴</b>
-          <span>
-            {durationLabel(axis.durationMs)}
-            <span className="mx-2 text-border" data-ui="trace-separator">/</span>
-            {axis.entries.length} 个操作
-          </span>
-        </div>
-        <div className="flex items-center gap-2 max-sm:ml-auto" data-ui="trace-tools">
-          <span className="mr-3 flex items-center gap-2 text-[10px] text-muted-foreground max-sm:hidden [&_i]:size-2 [&_i]:rounded-sm" data-ui="trace-legend">
-            <i className="bg-pass" />
-            通过
-            <i className="bg-destructive" data-ui="failed" />
-            失败
-          </span>
+    <section className="flex h-full min-h-0 min-w-0 flex-col bg-card" aria-label="执行时间轴" data-ui="trace-timeline">
+      <div className="flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-2.5 py-1.5" data-ui="trace-heading trace-controls">
+        <b className="shrink-0 text-xs" data-ui="trace-title">执行时间轴</b>
+        {controls}
+        <span className="ml-auto inline-flex items-center gap-2 font-mono text-[11px] whitespace-nowrap text-muted-foreground tabular-nums [&_b]:font-medium [&_b]:text-foreground" aria-label="当前时间 / 总时长" data-ui="trace-current-time">
+          <b>{elapsed(cursorTime ?? 0)}</b>
+          <span>/</span>
+          {elapsed(axis.durationMs)}
+        </span>
+        <div className="flex items-center gap-1 pointer-coarse:[&>button]:min-h-9" data-ui="trace-tools">
           <Button
             variant="secondary"
-            size="icon"
-            className="size-8"
+            size="icon-sm"
+            className="pointer-coarse:w-9"
             aria-label="缩小时间轴"
+            title="缩小时间轴"
             disabled={zoom === 1}
             onClick={() => setZoom((z) => z / 2)}
           >
-            −
+            <Minus />
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            className="w-8.5 font-mono text-[10px]"
+            className="w-8 px-0 font-mono text-[10px] pointer-coarse:w-9"
             aria-label="重置时间轴缩放"
+            title="重置时间轴缩放"
             onClick={() => setZoom(1)} data-ui="trace-zoom"
           >
             {zoom}×
           </Button>
           <Button
             variant="secondary"
-            size="icon"
-            className="size-8"
+            size="icon-sm"
+            className="pointer-coarse:w-9"
             aria-label="放大时间轴"
+            title="放大时间轴"
             disabled={zoom === 8}
             onClick={() => setZoom((z) => z * 2)}
           >
-            +
+            <Plus />
           </Button>
         </div>
       </div>
       {axis.entries.length ? (
         <>
-          <div className="max-h-60 overflow-auto overscroll-contain px-3 [scrollbar-width:thin] max-sm:px-2.5" ref={viewport} data-ui="trace-viewport">
+          <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-3 [scrollbar-width:thin] max-sm:px-2.5" ref={viewport} data-ui="trace-viewport">
             <div
               className="relative"
               ref={surface}
               style={{ width: `${zoom * 100}%`, minWidth: 600 }} data-ui="trace-surface"
             >
-              <div className="sticky top-0 z-10 h-9 border-b border-border bg-card" data-ui="trace-ruler">
-                <div className="pointer-events-none absolute inset-0 overflow-hidden [&>span]:absolute [&>span]:h-full [&>span]:border-l [&>span]:border-border [&>span]:px-1 [&>span]:pt-1 [&>span]:font-mono [&>span]:text-[10px] [&>span]:whitespace-nowrap [&>span]:text-muted-foreground" aria-hidden="true" data-ui="trace-ruler-ticks">
+              <div ref={ruler} className="sticky top-0 z-10 h-6 border-b border-muted-foreground/25 bg-border dark:bg-[color-mix(in_oklch,var(--background),black_20%)]" data-ui="trace-ruler">
+                <div className="pointer-events-none absolute inset-0 overflow-hidden [&>span]:absolute [&>span]:h-full [&>span]:border-l [&>span]:border-muted-foreground/25 [&>span]:px-1 [&>span]:pt-0.5 [&>span]:font-mono [&>span]:text-[10px]/3 [&>span]:whitespace-nowrap [&>span]:text-foreground/80" aria-hidden="true" data-ui="trace-ruler-ticks">
                   {axis.ticks.map((t) => (
                     <span key={t} style={{ left: percent(t) }}>
                       {elapsed(t)}
@@ -241,7 +240,7 @@ export function TimeTimeline({
                 <button
                   type="button"
                   role="slider"
-                  className={`absolute bottom-0 z-10 size-6 -translate-x-1/2 cursor-ew-resize touch-none border-0 bg-transparent p-0 select-none before:absolute before:inset-x-1 before:top-1 before:bottom-0 before:rounded-sm before:bg-primary before:[clip-path:polygon(0_0,100%_0,100%_60%,50%_100%,0_60%)] after:absolute after:top-2 after:left-2.5 after:h-2 after:w-1 after:border-x after:border-primary-foreground after:opacity-80 hover:before:brightness-110 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-1 disabled:cursor-default disabled:opacity-50 ${dragging ? "before:brightness-110" : ''}`}
+                  className={`absolute top-0 z-10 size-6 -translate-x-1/2 cursor-ew-resize touch-none border-0 bg-transparent p-0 select-none before:absolute before:inset-x-0.75 before:top-0.5 before:bottom-0 before:rounded-sm before:bg-primary before:[clip-path:polygon(0_0,100%_0,100%_70%,50%_100%,0_70%)] after:absolute after:top-1.5 after:left-1/2 after:h-2 after:w-1 after:-translate-x-1/2 after:border-x after:border-primary-foreground after:opacity-80 hover:before:brightness-110 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-1 disabled:cursor-default disabled:opacity-50 ${dragging ? "before:brightness-110" : ''}`}
                   style={{ left: percent(cursorTime ?? 0) }}
                   aria-label="定位执行时间"
                   aria-orientation="horizontal"
@@ -304,7 +303,7 @@ export function TimeTimeline({
                 />
               </div>
               <div
-                className="relative cursor-crosshair"
+                className="relative isolate cursor-crosshair"
                 style={{ height }}
                 onPointerMove={(e) => {
                   const time = pointerTime(e.clientX, e.currentTarget);
@@ -341,13 +340,12 @@ export function TimeTimeline({
                       variant="ghost"
                       key={n.id}
                       ref={active ? selectedBar : undefined}
-                      className={`absolute z-10 block h-3 min-h-0 min-w-0 rounded-none border-0 bg-transparent p-0 after:absolute after:inset-x-0 after:top-1 after:h-0.5 after:rounded-full after:bg-pass after:opacity-65 hover:z-20 hover:bg-accent hover:after:opacity-100 data-[selected=true]:z-20 data-[selected=true]:bg-accent data-[selected=true]:after:opacity-100 data-[status=failed]:after:bg-destructive data-[status=running]:after:bg-muted-foreground data-[status=interrupted]:after:bg-warn data-[status=skipped]:after:bg-muted-foreground ${point ? "-translate-x-1/2" : ''} ${active ? "bg-accent" : ''} ${entry.complete ? '' : "after:opacity-40"}`}
+                      className={`absolute z-10 flex h-3.5 min-h-0 min-w-0 justify-center overflow-hidden rounded-sm border-0 bg-muted px-0 hover:z-20 hover:brightness-95 focus-visible:z-20 data-[selected=true]:z-20 data-[selected=true]:brightness-95 data-[status=failed]:bg-fail-bg data-[status=passed]:bg-pass-bg data-[status=interrupted]:bg-warn-bg [&>[data-ui~=result-icon]]:size-2.5 ${point ? '-translate-x-1/2' : ''} ${entry.complete ? '' : 'opacity-60'}`}
                       style={{
                         left: percent(entry.startMs),
-                        width: point
-                          ? 8
-                          : intervalWidth(entry.startMs, entry.endMs),
-                        top: entry.lane * 12,
+                        width: point ? 8 : intervalWidth(entry.startMs, entry.endMs),
+                        minWidth: 4,
+                        top: entry.lane * laneHeight + 2,
                       }}
                       data-step-id={n.id}
                       data-status={n.status}
@@ -359,7 +357,9 @@ export function TimeTimeline({
                         setCursor(undefined);
                         onSelect(n.id);
                       }} data-ui={`trace-action ${point ? 'point' : ''} ${active ? 'selected' : ''} ${entry.complete ? '' : 'incomplete'}`}
-                    />
+                    >
+                      {n.status === 'failed' && <ResultIcon status="failed" />}
+                    </Button>
                   );
                 })}
                 {frames.map(({ entry, url, imageIndex, time, left, lane }) => (
@@ -372,7 +372,7 @@ export function TimeTimeline({
                     <Button
                       variant="ghost"
                       ref={entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? selectedFrame : undefined}
-                      className={`absolute z-10 grid h-40 min-h-0 w-28 overflow-hidden rounded-sm bg-muted p-0 shadow-sm hover:bg-accent [&_img]:block [&_img]:h-full [&_img]:min-h-0 [&_img]:w-full [&_img]:object-contain ${entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? "bg-accent" : ''}`}
+                      className={`absolute z-10 grid h-14 min-h-0 w-28 overflow-hidden rounded-sm bg-muted p-0 shadow-sm hover:bg-accent [&_img]:block [&_img]:h-full [&_img]:min-h-0 [&_img]:w-full [&_img]:object-contain ${entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? "bg-accent" : ''}`}
                       style={{ left, top: actionsHeight + lane * frameLaneHeight + 6 }}
                       data-step-id={entry.node.id}
                       data-time-ms={time}
@@ -407,14 +407,6 @@ export function TimeTimeline({
           此尝试未采集有效时间，可在步骤列表中查看已有证据。
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-3 border-t border-border px-3 py-2" data-ui="trace-controls">
-        {controls}
-        <span className="ml-auto inline-flex items-center gap-2 font-mono text-[11px] whitespace-nowrap text-muted-foreground tabular-nums [&_b]:font-medium [&_b]:text-foreground" aria-label="当前时间 / 总时长" data-ui="trace-current-time">
-          <b>{elapsed(cursorTime ?? 0)}</b>
-          <span>/</span>
-          {elapsed(axis.durationMs)}
-        </span>
-      </div>
     </section>
   );
 }

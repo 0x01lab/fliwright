@@ -1,0 +1,11 @@
+{
+  "dataRoot": "/var/lib/fliwright-cloud",
+  "host": "0.0.0.0",
+  "port": 4780,
+  "publicUrl": "https://cloud.example.internal",
+  "proxySecret": "env:FLIWRIGHT_CLOUD_PROXY_SECRET",
+  "publicationSecret": "env:FLIWRIGHT_CLOUD_PUBLICATION_SECRET",
+  "users": { "YOUR_GITLAB_USERNAME": "admin" },
+  "ciTokens": [],
+  "repositoryHosts": ["gitlab.example.internal"]
+}

@@ -5,6 +5,7 @@ import { resolveFliwrightCacheRoot, resolveFliwrightRuntimeRoot } from './runArt
 import { z } from 'zod';
 import type { ScenarioExecutionMode, TestScenario } from './Scenario.js';
 import { nativeConfigSchema, type NativeConfig } from './native/NativeConfig.js';
+import { supportSettingsRegistrySchema, type SupportSettingsDefinition } from './SupportSettings.js';
 
 export type RecordingMode = 'standard' | 'full' | 'off';
 
@@ -26,6 +27,7 @@ export interface FliwrightRecordingConfig {
 
 export interface FliwrightProjectConfig {
   native?: NativeConfig;
+  supportSettings?: readonly SupportSettingsDefinition[];
   recording: Partial<FliwrightRecordingConfig>;
   paths: Partial<FliwrightPathsConfig>;
   runsRoot?: string;
@@ -37,6 +39,7 @@ export interface FliwrightProjectConfig {
 
 export interface ResolvedFliwrightConfig {
   native?: NativeConfig;
+  supportSettings?: readonly SupportSettingsDefinition[];
   recording: FliwrightRecordingConfig;
   paths: FliwrightPathsConfig;
   runsRoot?: string;
@@ -125,6 +128,7 @@ const scenarioSchema = z.object({
 
 export const fliwrightConfigSchema = z.object({
   native: nativeConfigSchema.optional(),
+  supportSettings: supportSettingsRegistrySchema.optional(),
   recording: recordingSchema.partial().optional(),
   paths: pathsSchema.partial().optional(),
   runsRoot: z.string().min(1).optional(),
@@ -187,7 +191,9 @@ export function mergeFliwrightConfig(options: {
   explicit?: Partial<FliwrightProjectConfig> & { vmServiceUrl?: string };
 } = {}): ResolvedFliwrightConfig {
   const layers = [options.project, options.environment, options.explicit];
+  const supportSettings = options.explicit?.supportSettings ?? options.environment?.supportSettings ?? options.project?.supportSettings;
   const merged = {
+    ...(supportSettings === undefined ? {} : { supportSettings }),
     recording: Object.assign({}, DEFAULT_FLIWRIGHT_CONFIG.recording, ...layers.map((layer) => layer?.recording)),
     paths: Object.assign({
       recordings: join(resolveFliwrightRuntimeRoot({ projectRoot: options.projectRoot, env: options.environmentSource }), 'recordings'),

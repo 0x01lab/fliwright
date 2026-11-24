@@ -26,6 +26,7 @@ export class WorkerDiagnostics {
   private readonly started = performance.now();
   private state: WorkerServiceReport['state'] = 'healthy';
   private readonly components: WorkerServiceReport['components'] = {};
+  private catalogWorkspace?: WorkerServiceReport['catalogWorkspace'];
   private storageWarning = false;
   constructor(readonly root: string, private readonly options: { secrets?: string[]; maxBytes?: number } = {}) {
     this.path = join(root, 'logs', 'worker.jsonl');
@@ -64,11 +65,14 @@ export class WorkerDiagnostics {
     if (level === 'error' || level === 'fatal') process.stderr.write(`[${event}] ${entry.message}\nDiagnostics: ${this.path}\n`);
   }
   component(name: string, state: WorkerServiceReport['components'][string]) { this.components[name] = state; }
+  recordCatalogWorkspace(directoryCount: number | null) {
+    this.catalogWorkspace = { checkedAt: new Date().toISOString(), directoryCount };
+  }
   snapshot(eventLoopLagMs = 0): Omit<WorkerServiceReport, 'logs'> {
     return { sessionId: this.sessionId, startedAt: this.startedAt, pid: process.pid, nodeVersion: process.version,
       state: this.state === 'healthy' && Object.values(this.components).includes('failed') ? 'degraded' : this.state,
       uptimeMs: performance.now() - this.started, rssBytes: process.memoryUsage().rss, eventLoopLagMs,
-      components: { ...this.components } };
+      components: { ...this.components }, ...(this.catalogWorkspace && { catalogWorkspace: this.catalogWorkspace }) };
   }
 }
 

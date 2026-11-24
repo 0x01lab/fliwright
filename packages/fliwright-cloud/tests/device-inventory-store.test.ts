@@ -5,6 +5,31 @@ import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
 import { CloudStore } from '../src/CloudStore.js';
 
+it('migrates existing scanner and device grants to project bindings once', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-project-binding-'));
+  const path = join(root, 'db');
+  const seed = new CloudStore(path);
+  seed.configure(['device-app', 'scan-app'].map(id => ({ id, name: id, repository: '/fixture', suites: { smoke: '*.test.ts' } })),
+    [{ id: 'mac', slots: [{ id: 'ios', deviceId: 'phone', targets: ['device-app'] }] }]);
+  seed.db.exec(`
+    DROP TABLE project_workers;
+    ALTER TABLE workers ADD COLUMN catalog_projects TEXT NOT NULL DEFAULT '[]';
+    UPDATE workers SET catalog_projects='["scan-app","missing"]' WHERE id='mac';
+    PRAGMA user_version=8;
+  `);
+  seed.close();
+  const store = new CloudStore(path);
+  try {
+    expect(store.workerStatuses(new Set())[0].projectIds).toEqual(['device-app', 'scan-app']);
+    store.setProjectWorkers('scan-app', [], ['mac'], 'admin');
+    store.configure([], [{ id: 'mac', catalogProjects: ['scan-app'], slots: [] }]);
+    expect(store.workerStatuses(new Set())[0].projectIds).toEqual(['device-app']);
+  } finally {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it('upgrades version-one databases and persists inventory independently of worker lease health', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-devices-'));
   const path = join(root, 'db');
@@ -35,7 +60,7 @@ it('upgrades version-one databases and persists inventory independently of worke
       inventory: { ...inventory, receivedAt: 1000, stale: true },
     });
     expect(store.db.prepare('PRAGMA user_version').get()).toMatchObject({
-      user_version: 8,
+      user_version: 9,
     });
   } finally {
     store.close();

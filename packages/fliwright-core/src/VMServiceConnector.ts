@@ -54,10 +54,25 @@ export class VMServiceConnector {
     return this.sendProtocolRequest(method, resolvedParams);
   }
 
+  /** Returns the VM's successful reload report, or throws if the VM rejects the reload. */
   async reloadSources(): Promise<unknown> {
-    return this.sendProtocolRequest('reloadSources', {
+    const result = await this.sendProtocolRequest('reloadSources', {
       isolateId: await this.getMainIsolateId(),
     });
+    if (typeof result !== 'object' || result === null || !('type' in result) || result.type !== 'ReloadReport'
+      || !('success' in result) || typeof result.success !== 'boolean') {
+      throw new Error('Dart VM Service did not confirm hot reload with a ReloadReport.');
+    }
+    if (!result.success) {
+      const notices: unknown[] = 'notices' in result && Array.isArray(result.notices) ? result.notices : [];
+      const messages = notices.flatMap(notice =>
+        typeof notice === 'object' && notice !== null && 'message' in notice && typeof notice.message === 'string'
+          ? [notice.message]
+          : [],
+      );
+      throw new Error(messages.length ? `Dart VM rejected hot reload. ${messages.join(' ')}` : 'Dart VM rejected hot reload.');
+    }
+    return result;
   }
 
   async listenToStreams(streamIds: string[]): Promise<void> {

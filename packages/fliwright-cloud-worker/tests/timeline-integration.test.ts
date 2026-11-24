@@ -37,10 +37,11 @@ it.skipIf(process.platform === 'win32')('records a real executor failure and res
     expect(view).toMatchObject({ executionStatus: 'finished', testVerdict: 'unknown', quality: 'complete', outcome: { publication: 'unavailable', cleanup: 'clean' } });
     expect(view.spans).toEqual(expect.arrayContaining([
       expect.objectContaining({ phase: 'execution.prepare', status: 'succeeded' }),
-      expect.objectContaining({ phase: 'repository.checkout', operation: 'clone', status: 'failed', exitCode: 128 }),
+      expect.objectContaining({ phase: 'project.local', status: 'failed' }),
       expect.objectContaining({ phase: 'device.reset.after', operation: 'command', commandIndex: 0, status: 'succeeded' }),
     ]));
     expect(view.spans.some(span => span.phase === 'report.publish')).toBe(false);
+    expect(view.spans.some(span => span.operation === 'clone')).toBe(false);
     expect(view.report).toBeUndefined();
     const local = readFileSync(join(root, 'spool-root', 'spool', attempt.attemptId, 'worker-timeline.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
     expect(view.cursor).toBe(local.length);

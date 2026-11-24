@@ -62,3 +62,16 @@ is not automatically discovered by the Viewer.
 
 Existing artifacts remain in place. To view old runs, explicitly configure
 `runsRoot` to their directory; the runtime never silently selects an old root.
+
+## Support Settings
+
+Projects register serializable support declarations in `fliwright.config.ts`.
+VS Code saves explicit values to `<runtimeRoot>/support-settings/<project-key>/<support-id>.json`.
+The project key comes from the canonical project root and preserves isolation
+even with a shared `FLIWRIGHT_RUNTIME_ROOT`. The editor and the runner use the
+runtime directory of their execution host.
+
+`readSupportSettings` resolves each field from explicit overrides, the declared
+environment variable, the saved value, then the declared default. Keep actual
+saved values outside project config snapshots and keep credentials in the
+environment. See the [Support Settings decision](./ledger/2026-11-24-support-settings.md).

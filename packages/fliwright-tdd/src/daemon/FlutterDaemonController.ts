@@ -71,13 +71,25 @@ export class FlutterDaemonController {
 
   async reload(appId: string): Promise<void> {
     this.require(appId);
-    await this.transport.request('app.restart', { appId, fullRestart: false });
+    await this.syncApp(appId, false);
   }
 
   async restart(appId: string): Promise<void> {
     const handle = this.require(appId);
     if (!handle.supportsRestart) throw new Error(`Hot restart not supported for app ${appId}`);
-    await this.transport.request('app.restart', { appId, fullRestart: true });
+    await this.syncApp(appId, true);
+  }
+
+  private async syncApp(appId: string, fullRestart: boolean): Promise<void> {
+    const result = await this.transport.request('app.restart', { appId, fullRestart });
+    const operation = fullRestart ? 'hot restart' : 'hot reload';
+    if (typeof result !== 'object' || result === null || !('code' in result) || !Number.isInteger(result.code)) {
+      throw new Error(`Flutter did not confirm ${operation} with an operation code.`);
+    }
+    if (result.code !== 0) {
+      const message = 'message' in result && typeof result.message === 'string' ? result.message.trim() : '';
+      throw new Error(`Flutter ${operation} failed with code ${result.code}.${message ? ` ${message}` : ''}`);
+    }
   }
 
   async stop(appId: string): Promise<void> {

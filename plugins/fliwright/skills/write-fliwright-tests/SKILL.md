@@ -1,6 +1,6 @@
 ---
 name: write-fliwright-tests
-description: Create, update, review, or debug Fliwright TypeScript automation scripts and E2E tests for Flutter apps. Derive cases, named scenarios and contract-backed HTTP mock rules, then verify requests and visible outcomes. Use for @fliwright/vitest fixtures, Flutter/native locators, system permission dialogs, assertions, timeline artifacts, app state setup and CLI-recorded code cleanup. Project-specific routes, Keys and endpoints belong in the target project.
+description: Create, update, review, or debug Fliwright TypeScript automation scripts and E2E tests for Flutter apps. Use for project support modules and custom fields in VS Code Support Settings, @fliwright/vitest fixtures, named scenarios, contract-backed HTTP mock rules, Flutter/native locators, system permission dialogs, assertions, timeline artifacts and CLI-recorded code cleanup.
 ---
 
 # Write Fliwright Automation & Tests
@@ -64,6 +64,7 @@ Read only the reference needed for the current task:
 - Test-goal analysis, case derivation, scenario selection/creation and mock correctness: [references/scenario-design.md](references/scenario-design.md)
 - Vitest version, official API sources, `test.for` / `test.each`, hooks, cleanup and test collection: [references/vitest-authoring.md](references/vitest-authoring.md)
 - Reusable baselines, authenticated business tests, `TestScenario` and `test.scenario(...)`: [references/scenarios.md](references/scenarios.md)
+- Custom project parameters in **Fliwright > Support Settings**: [references/support-settings.md](references/support-settings.md) covers field definitions, project registration, runtime reads and verification.
 - Shared/Item Mock sources, explicit replacement, migration from inline helpers and rule provenance: [references/mock-rule-sets.md](references/mock-rule-sets.md)
 - `test`/`script`, fixtures, `flow`, timeline nodes, manual steps: [references/timeline-native.md](references/timeline-native.md), [references/test-harness.md](references/test-harness.md)
 - Logging and run artifacts: [references/logging.md](references/logging.md)

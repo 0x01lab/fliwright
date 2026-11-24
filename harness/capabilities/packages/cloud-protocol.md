@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cloud-protocol"
 path: "packages/fliwright-cloud-protocol"
-source_fingerprint: "41c54df7e778bb42730fac22b4702b1926aef3b86b1b9a1e0eee185ae4b0f234"
+source_fingerprint: "bd5c950d75cc0d0fa1caaa92291e714c0c40edb3fdbc8de84559c2e4332e6d73"
 generated: true
 ---
 

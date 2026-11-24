@@ -199,6 +199,10 @@ it('manages projects with admin writes, monotonic revisions, case catalog checks
   expect(update.json()).toMatchObject({ name: 'Web App', configRevision: 2, autoRun: { revision: 1 } });
   const scan = await server.inject({ method: 'POST', url: `/api/projects/${id}/scans`, headers: browser('ops'), payload: { commit: 'c'.repeat(40) } });
   expect(scan.json()).toMatchObject({ status: 'queued', configRevision: 2 });
+  const scanBranch = (payload: Record<string, string>) => server.inject({ method: 'POST', url: `/api/projects/${id}/scans`, headers: browser('ops'), payload });
+  expect((await scanBranch({ branch: 'releases/v1.6.0' })).json()).toMatchObject({ status: 'queued', branch: 'releases/v1.6.0' });
+  expect((await scanBranch({ branch: 'releases/*' })).statusCode).toBe(400);
+  expect((await scanBranch({ branch: 'main', commit: 'a'.repeat(40) })).statusCode).toBe(400);
   await server.inject({ method: 'PUT', url: `/api/projects/${id}/auto-run`, headers: browser('admin'), payload: { enabled: true, branch: 'main', selections: [{ suite: 'smoke', scenario: 'clean' }] } });
   const token = (await server.inject({ method: 'POST', url: `/api/projects/${id}/webhook-secret`, headers: browser('admin') })).json().token;
   const push = { object_kind: 'push', ref: 'refs/heads/main', checkout_sha: 'd'.repeat(40), before: 'e'.repeat(40), after: 'd'.repeat(40), project: { id: 1, web_url: 'https://git.example.com/team/web' } };

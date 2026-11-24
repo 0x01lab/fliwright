@@ -2,6 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { missingSupportSettingMessage } from '@fliwright/core';
 import { formatJunit, formatPretty, type CliRunResult } from './reporter.js';
 import { CommandRegistry, CliError, classifyError, requestId } from './CommandRegistry.js';
 import { registerSessions } from './registry/session.js';
@@ -95,10 +96,20 @@ export async function executeCli(argv: string[], registry = createRegistry()): P
     process.removeListener('SIGINT', interrupt);
     process.removeListener('SIGTERM', terminate);
   }
+  let failureMessage = failure?.message;
+  if (failure && ['run', 'script'].includes(command)) {
+    const run = failure.code === 'TEST_FAILED' || failure.code === 'RUNNER_FAILED' ? data as CliRunResult | undefined : undefined;
+    const missing = missingSupportSettingMessage(failure.message)
+      ?? run?.results?.map(test => missingSupportSettingMessage(test.error)).find(Boolean)
+      ?? run?.runnerErrors?.map(error => missingSupportSettingMessage(error.message)).find(Boolean);
+    if (missing) {
+      failureMessage = `${missing} Provide the setting through readSupportSettings() overrides or its declared environment variable, if configured.`;
+    }
+  }
   if (json) {
     stdout = JSON.stringify({ schemaVersion: 1, command, requestId: id, ...(sessionOperation ? { operationId: id } : {}), ok: !failure,
       ...(data !== undefined ? { data } : {}),
-      ...(failure ? { error: { code: failure.code, message: failure.message, retryable: false } } : {}),
+      ...(failure ? { error: { code: failure.code, message: failureMessage, retryable: false } } : {}),
     }) + '\n';
     // Commander usage errors belong to the envelope; progress stays on stderr.
     if (failure?.code === 'INVALID_INPUT') stderr = '';
@@ -107,7 +118,7 @@ export async function executeCli(argv: string[], registry = createRegistry()): P
       : ['run', 'script'].includes(command) && !selectedReporter ? formatPretty(data as CliRunResult)
       : JSON.stringify(data, null, 2)) + '\n';
   }
-  if (failure && !json) stderr += `${failure.code}: ${failure.message}\n`;
+  if (failure && !json) stderr += `${failure.code}: ${failureMessage}\n`;
   return { stdout, stderr, exitCode };
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(resolve(process.argv[1]))) {

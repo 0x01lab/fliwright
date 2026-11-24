@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cloud"
 path: "packages/fliwright-cloud"
-source_fingerprint: "f226474b136038afade2cdfc7c3a7c8c28a5e733cefbd3bd3ab218f45016dcb8"
+source_fingerprint: "3403f0712c5fd6a1f932bf3430905518b65311434a9117440e6716d41a146034"
 generated: true
 ---
 
@@ -58,22 +58,29 @@ Own centralized scheduling, device policy management, report storage and browser
 - `packages/fliwright-cloud/src/ReportStore.ts`
 - `packages/fliwright-cloud/src/WorkerDiagnosticsStore.ts`
 - `packages/fliwright-cloud/src/WorkerTimelineStore.ts`
+- `packages/fliwright-cloud/src/catalog-scan-status.ts`
 - `packages/fliwright-cloud/src/config.ts`
 - `packages/fliwright-cloud/src/deployment.ts`
 - `packages/fliwright-cloud/src/device-events.ts`
 - `packages/fliwright-cloud/src/index.ts`
 - `packages/fliwright-cloud/src/main.ts`
 - `packages/fliwright-cloud/src/project-setup.ts`
+- `packages/fliwright-cloud/src/request-board.ts`
 - `packages/fliwright-cloud/src/server.ts`
 - `packages/fliwright-cloud/src/web/Devices.tsx`
+- `packages/fliwright-cloud/src/web/ProjectNavigation.tsx`
+- `packages/fliwright-cloud/src/web/ProjectWorkers.tsx`
 - `packages/fliwright-cloud/src/web/Projects.tsx`
+- `packages/fliwright-cloud/src/web/QueueBoard.tsx`
 - `packages/fliwright-cloud/src/web/Replay.tsx`
 - `packages/fliwright-cloud/src/web/ScenarioBuilder.tsx`
 - `packages/fliwright-cloud/src/web/TestBoard.tsx`
 - `packages/fliwright-cloud/src/web/TimeTimeline.tsx`
 - `packages/fliwright-cloud/src/web/WorkerDiagnostics.tsx`
 - `packages/fliwright-cloud/src/web/WorkerExecutionTimeline.tsx`
+- `packages/fliwright-cloud/src/web/WorkerHostDetails.tsx`
 - `packages/fliwright-cloud/src/web/WorkerPairing.tsx`
+- `packages/fliwright-cloud/src/web/WorkspaceHeader.tsx`
 - `packages/fliwright-cloud/src/web/app.tsx`
 - `packages/fliwright-cloud/src/web/components/ui/alert.tsx`
 - `packages/fliwright-cloud/src/web/components/ui/badge.tsx`
@@ -88,12 +95,14 @@ Own centralized scheduling, device policy management, report storage and browser
 - `packages/fliwright-cloud/src/web/components/ui/navigation-menu.tsx`
 - `packages/fliwright-cloud/src/web/components/ui/resizable.tsx`
 - `packages/fliwright-cloud/src/web/components/ui/slider.tsx`
+- `packages/fliwright-cloud/src/web/components/ui/sonner.tsx`
 - `packages/fliwright-cloud/src/web/components/ui/table.tsx`
 - `packages/fliwright-cloud/src/web/components/ui/tabs.tsx`
 - `packages/fliwright-cloud/src/web/components/ui/textarea.tsx`
 - `packages/fliwright-cloud/src/web/data.ts`
 - `packages/fliwright-cloud/src/web/lib/utils.ts`
 - `packages/fliwright-cloud/src/web/main.tsx`
+- `packages/fliwright-cloud/src/web/project-identity.ts`
 - `packages/fliwright-cloud/src/web/replay-model.ts`
 - `packages/fliwright-cloud/src/web/scenario-builder.ts`
 - `packages/fliwright-cloud/src/web/ui.tsx`

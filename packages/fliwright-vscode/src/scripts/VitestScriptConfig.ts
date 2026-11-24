@@ -18,7 +18,7 @@ export function usesVitestScript(filePath: string, source: string): boolean {
 export async function createVitestScriptConfig(relativeScript: string, workspaceRoot: string): Promise<VitestScriptConfig> {
   const project = await resolveProjectConfig(workspaceRoot);
   const presetOptions = { projectRoot: workspaceRoot, cacheRoot: project.cacheRoot, recording: project.recording, paths: project.paths,
-    runsRoot: project.runsRoot, scenarios: project.scenarios, scenarioMode: project.scenarioMode };
+    runsRoot: project.runsRoot, scenarios: project.scenarios, scenarioMode: project.scenarioMode, supportSettings: project.supportSettings };
   const stateDir = path.join(resolveFliwrightRuntimeRoot({ projectRoot: workspaceRoot }), 'tmp');
   await fs.mkdir(stateDir, { recursive: true });
   // Resolve the project dependency explicitly because the temporary config lives outside its node_modules tree.

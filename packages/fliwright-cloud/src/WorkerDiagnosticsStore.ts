@@ -1,5 +1,6 @@
 import { CloudError, redactDiagnostic, workerServiceReportSchema, type WorkerDiagnosticsView } from '@fliwright/cloud-protocol';
 import type { CloudStore } from './CloudStore.js';
+import type { WorkerServiceSummary } from './catalog-scan-status.js';
 
 /** Service sessions and bounded diagnostic logs survive failures before a test has started. */
 export class WorkerDiagnosticsStore {
@@ -10,14 +11,21 @@ export class WorkerDiagnosticsStore {
       CREATE INDEX IF NOT EXISTS worker_service_log_lookup ON worker_service_logs(worker_id,id);
     `);
   }
-  summary(workerId: string) {
+  summary(workerId: string): WorkerServiceSummary | undefined {
     const rows = this.store.db.prepare('SELECT received_at,data FROM worker_service_sessions WHERE worker_id=? ORDER BY received_at DESC LIMIT 50').all(workerId);
     if (!rows.length) return undefined;
-    const sessions = rows.map(row => ({ ...JSON.parse(String(row.data)), receivedAt: Number(row.received_at) }));
+    const sessions = rows.map(row => ({
+      ...(JSON.parse(String(row.data)) as Omit<WorkerDiagnosticsView['sessions'][number], 'receivedAt' | 'status'>),
+      receivedAt: Number(row.received_at),
+    }));
     const active = sessions.filter(session => ['healthy', 'degraded'].includes(session.state) && this.store.now() - session.receivedAt <= 35000);
     const selected = active.find(session => session.state === 'degraded') ?? active[0] ?? sessions[0];
     const status = active.length > 1 ? 'degraded' : ['failed', 'stopped'].includes(selected.state) ? selected.state : this.store.now() - selected.receivedAt > 35000 ? 'unreachable' : selected.state;
-    return { status, receivedAt: selected.receivedAt, sessionId: selected.sessionId, activeSessions: active.length } as NonNullable<import('@fliwright/cloud-protocol').ExecutionWorker['service']>;
+    const catalogWorkspace = sessions.flatMap(session => session.catalogWorkspace ? [session.catalogWorkspace] : [])
+      .sort((a, b) => b.checkedAt.localeCompare(a.checkedAt))[0];
+    const { pid, nodeVersion, startedAt, uptimeMs, rssBytes, eventLoopLagMs, components } = selected;
+    return { status, receivedAt: selected.receivedAt, sessionId: selected.sessionId, activeSessions: active.length, catalogWorkspace,
+      process: { pid, nodeVersion, startedAt, uptimeMs, rssBytes, eventLoopLagMs, components } };
   }
   sweep() {
     this.store.db.prepare('DELETE FROM worker_service_logs WHERE received_at<?').run(this.store.now() - 7 * 86400000);

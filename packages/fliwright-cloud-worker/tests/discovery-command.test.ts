@@ -142,12 +142,12 @@ it.skipIf(process.platform === 'win32').each(['discover', 'run', 'host'])(
         const response = await server.inject({ method: 'POST', url: '/api/worker-pairings', headers: { 'x-cloud-proxy-secret': 'test-proxy', 'x-cloud-user': 'admin', origin: 'http://localhost' }, payload: { workerId: 'host' } });
         expect(response.statusCode).toBe(200);
         const pairDirectory = join(root, 'paired');
-        const pairing = spawn(process.execPath, ['--import', join(root, 'isolate.mjs'), join(root, 'main.js'), 'pair', serverUrl, pairDirectory], { stdio: ['pipe', 'pipe', 'pipe'] });
+        const pairing = spawn(process.execPath, ['--import', join(root, 'isolate.mjs'), join(root, 'main.js'), 'pair', serverUrl, pairDirectory, ...(command === 'host' ? ['--code', response.json().code] : [])], { stdio: ['pipe', 'pipe', 'pipe'] });
         let output = '';
         pairing.stdout.on('data', data => { output += data; });
         pairing.stderr.on('data', data => { output += data; });
         const exit = once(pairing, 'exit');
-        pairing.stdin.end(response.json().code + '\n');
+        pairing.stdin.end(command === 'host' ? undefined : response.json().code + '\n');
         expect(await exit).toEqual([0, null]);
         pairedConfig = JSON.parse(readFileSync(join(pairDirectory, 'worker.json'), 'utf8'));
         const saved = JSON.parse(readFileSync(join(pairDirectory, 'credentials.json'), 'utf8'));

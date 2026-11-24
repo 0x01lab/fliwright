@@ -34,6 +34,7 @@ export class ScriptRunner {
     }
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      FLIWRIGHT_PROJECT_ROOT: params.workspaceRoot.fsPath,
     };
     if (params.vmServiceUrl) {
       env.FLIWRIGHT_VM_SERVICE_URL = params.vmServiceUrl;

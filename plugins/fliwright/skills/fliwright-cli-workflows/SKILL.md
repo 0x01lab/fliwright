@@ -30,6 +30,8 @@ When exploring or operating a Flutter app where prior UI discoveries may be reus
 
 For durable tests use `write-fliwright-tests`. Prepare app-owned state through a named composed scenario, including `auth.seedLoggedIn` for authenticated tests. `run --scenario <name>` applies it before every test attempt, including retries. Do not use real login or generic provider overrides as business-test setup.
 
+For project support parameters that users edit in VS Code and reuse in CLI or script runs, use the [Support Settings authoring guide](../write-fliwright-tests/references/support-settings.md). Bind environment variables or pass typed `overrides` for a run that needs specific values.
+
 For shared plus GitLab Item-specific HTTP responses, use source-qualified rules
 in a named scenario; read the [rule-set guide](../write-fliwright-tests/references/mock-rule-sets.md)
 when authoring or migrating it. `scenario resolve` checks composition without

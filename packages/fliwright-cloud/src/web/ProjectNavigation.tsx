@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearch } from '@tanstack/react-router';
-import { Check, ChevronDown, ChevronRight, Clock3, FolderGit2, Folders, GitBranch, Layers, ListChecks, Plus, ScanLine, Search, Settings2 } from 'lucide-react';
+import { Check, ChevronDown, Clock3, FolderGit2, Folders, Layers, ListChecks, Plus, ScanLine, Search, Settings2 } from 'lucide-react';
 import type { Project } from '@fliwright/cloud-protocol';
 import { Input } from './components/ui/input.js';
 import { repoPath } from './project-identity.js';
@@ -19,18 +19,8 @@ export function matchesProject(project: Project, search: string) {
   return `${project.name} ${project.repository} ${project.defaultBranch}`.toLowerCase().includes(search.trim().toLowerCase());
 }
 
-export function ProjectRow({ project }: { project: Project }) {
-  return <Link to="/projects/$projectId" params={{ projectId: project.id }} search={{}} className="project-row">
-    <strong><FolderGit2 />{project.name}</strong>
-    <code>{repoPath(project.repository)}</code>
-    <span className="directory-branch"><GitBranch />{project.defaultBranch}</span>
-    <span className="directory-suites">{Object.keys(project.suites).length} 个套件</span>
-    <ChevronRight aria-hidden="true" />
-  </Link>;
-}
-
 export function ProjectSwitcher({ projects, error, retry, selectedId, mode, canCreate }: {
-  projects?: Project[]; error: string; retry: () => void; selectedId?: string; mode: 'board' | 'project' | 'submission'; canCreate: boolean;
+  projects?: Project[]; error: string; retry: () => void; selectedId?: string; mode: 'board' | 'project'; canCreate: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
@@ -91,7 +81,6 @@ export function ProjectSwitcher({ projects, error, retry, selectedId, mode, canC
           const isSelected = project.id === selectedId;
           const destination = board
             ? { to: '/queue' as const, search: { targetId: project.id, search: search.search } }
-            : mode === 'submission' ? { to: '/new' as const, search: { targetId: project.id } }
             : { to: '/projects/$projectId' as const, params: { projectId: project.id }, search: isSelected ? search : { view: search.view } };
           return <Link key={project.id} {...destination} id={`project-option-${option}`} role="option" data-ui="project-list-item"
             aria-selected={isSelected} aria-current={isSelected ? 'page' : undefined} data-active={active === option}

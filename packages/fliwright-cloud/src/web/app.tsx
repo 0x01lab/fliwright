@@ -1,6 +1,9 @@
 import { Alert } from './components/ui/alert.js';
+import { ArrowLeft, ArrowUpRight, ChevronDown, Monitor, Pause, Play, Share2, TriangleAlert } from 'lucide-react';
 import { WorkerPairing } from './WorkerPairing.js';
-import { WorkerDiagnosticsPanel } from './WorkerDiagnostics.js';
+import type { WorkerStatusResponse } from '../catalog-scan-status.js';
+import { serviceStatusLabels } from './WorkerDiagnostics.js';
+import { WorkerHostDetails } from './WorkerHostDetails.js';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -24,10 +27,11 @@ import { Checkbox } from './components/ui/checkbox.js';
 import { Textarea } from './components/ui/textarea.js';
 import React, {
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
   createContext,
   useContext,
-  type FormEvent,
   type ReactNode,
 } from 'react';
 import type { ReportView } from '../ReportStore.js';
@@ -46,15 +50,14 @@ import { TestBoard, type BoardRequest } from './TestBoard.js';
 import { QueueBoard } from './QueueBoard.js';
 import { BoardFactsContext, WorkspaceHeader, type CloudUser, type ProjectDirectory } from './WorkspaceHeader.js';
 import { WorkerExecutionTimeline } from './WorkerExecutionTimeline.js';
-import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs.js';
+import { CloudDialog } from './components/ui/dialog.js';
+import { Toaster } from './components/ui/sonner.js';
 
-type Target = {
-  id: string;
-  name: string;
-  suites: string[];
-  scenarios: string[];
-};
-const TeamContext = createContext<{ user?: CloudUser; directory: ProjectDirectory } | null>(null);
+const TeamContext = createContext<{
+  user?: CloudUser;
+  directory: ProjectDirectory;
+  workers: ReturnType<typeof useData<WorkerStatusResponse[]>>;
+} | null>(null);
 type Detail = Omit<TestRequest, 'target' | 'attempts'> & {
   attempts: ExecutionAttempt[];
   reports: Array<{
@@ -165,8 +168,6 @@ function PageTitle({
     'TEAM OVERVIEW': '统一查看测试运行、任务队列与设备状态。',
     'TEST REPORTS': '按测试结果浏览已完成的运行，点击卡片查看步骤回放与归档证据。',
     'EXECUTION QUEUE': '从待测试到测试结果，状态自动更新。点击卡片查看详情。',
-    'NEW EXECUTION': '选择应用、固定的 Git 提交、测试套件与场景。',
-    'EXECUTION WORKERS': '查看执行主机心跳、检测工具诊断与槽位容量。',
     'APPLICATION TARGETS': '管理已注册应用及其测试套件与场景。',
   };
   return (
@@ -194,8 +195,9 @@ function Layout({
     !shared,
   );
   const directory = useData<Project[]>('/api/projects', 10000, !shared);
+  const workers = useData<WorkerStatusResponse[]>('/api/workers', 3000, !shared);
   const [factsHost, setFactsHost] = useState<HTMLDListElement | null>(null);
-  const [theme, setTheme] = useState(() => {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       return localStorage.getItem('cloud-theme') === 'light' ? 'light' : 'dark';
     } catch {
@@ -205,6 +207,20 @@ function Layout({
   const path = useLocation({ select: (location) => location.pathname });
   const isBoardPage = ['/', '/runs', '/queue'].includes(path);
   const isProjectPage = path === '/projects' || path.startsWith('/projects/') || path === '/targets';
+  const isReportPage = path.startsWith('/reports/') || path.startsWith('/shared/reports/');
+  const showWorkerAlert = !shared && path !== '/workers' && !workers.error &&
+    workers.data?.some(worker => worker.health === 'healthy') === false;
+  const workerAlertRef = useRef<HTMLDivElement>(null);
+  const [workerAlertHeight, setWorkerAlertHeight] = useState(0);
+  useLayoutEffect(() => {
+    const alert = workerAlertRef.current;
+    if (!showWorkerAlert || !alert) return;
+    const measure = () => setWorkerAlertHeight(alert.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(alert);
+    return () => observer.disconnect();
+  }, [showWorkerAlert]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -218,7 +234,7 @@ function Layout({
         跳至内容
       </a>
       <WorkspaceHeader directory={directory} user={me} shared={shared} board={isBoardPage} factsRef={setFactsHost} projectPage={isProjectPage} theme={theme} toggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-      <main className="grid w-full min-w-0 content-start gap-3 p-4 pb-6 max-sm:p-3 max-sm:pb-4" id="content" tabIndex={-1} data-ui="cloud-content">
+      <main className={`grid w-full min-w-0 content-start px-4 pb-6 max-sm:px-3 max-sm:pb-4 ${isReportPage ? 'gap-2 pt-2' : 'gap-3 pt-4 max-sm:pt-3'}`} id="content" tabIndex={-1} data-ui="cloud-content">
         {path.startsWith('/requests/') && (
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground [&_b]:font-medium [&_code]:truncate" data-ui="crumb">
             <Link to="/queue">执行看板</Link>
@@ -228,18 +244,30 @@ function Layout({
             </code>
           </div>
         )}
-        <TeamContext.Provider value={{ user: me, directory }}>
+        <TeamContext.Provider value={{ user: me, directory, workers }}>
           <BoardFactsContext.Provider value={factsHost}>{children}</BoardFactsContext.Provider>
         </TeamContext.Provider>
       </main>
+      <Toaster theme={theme} bottomOffset={showWorkerAlert ? 24 + workerAlertHeight : 16} />
+      {showWorkerAlert && (
+        <Alert asChild className="fixed right-4 bottom-4 z-30 max-w-[calc(100%-2rem)] bg-warn-bg text-warn-ink shadow-md" data-ui="worker-connection-alert">
+          <div ref={workerAlertRef}>
+            <Icon name="alert" />
+            <span className="font-medium">暂无正常连接的 Worker</span>
+            <Button asChild size="sm" className="ml-auto pointer-coarse:min-h-9">
+              <Link to="/workers">{me?.role === 'admin' ? '设置 Worker' : '查看 Worker 主机'}</Link>
+            </Button>
+          </div>
+        </Alert>
+      )}
     </div>
   );
 }
 
 function Overview() {
   const {data,error}=useData<{items: BoardRequest[];total:number;queue:string[]}>('/api/requests?limit=8',3000);
-  const {data:targets}=useData<Target[]>('/api/targets');
-  const {data:workers}=useData<ExecutionWorker[]>('/api/workers',5000);
+  const {data:targets}=useData<Array<Pick<Project, 'id' | 'name'>>>('/api/targets');
+  const workers = useContext(TeamContext)!.workers.data;
   return <><PageTitle title="运行概览" eyebrow="TEAM OVERVIEW"/>
       <div className="grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-sm:gap-2.5 [&>div>span]:text-xs [&>div>span]:text-muted-foreground [&_strong]:text-2xl [&_strong]:font-semibold [&_strong]:tabular-nums" data-ui="stats">
           <Card className="grid gap-1 p-3">
@@ -272,15 +300,14 @@ function Overview() {
             <small>原始结果与证据留存</small>
           </Card>
         </div>
-      <OverviewActivity /><h2>最近运行</h2><ErrorBox error={error}/><TestBoard items={data?.items ?? []} queue={data?.queue ?? []} targets={targets ?? []} loading={!data && !error}/></>;
+      <OverviewActivity workers={workers} /><h2>最近运行</h2><ErrorBox error={error}/><TestBoard items={data?.items ?? []} queue={data?.queue ?? []} targets={targets ?? []} loading={!data && !error}/></>;
 }
 function Reports() {
   const [offset,setOffset] = useState(0);
   const {data,error,reload} = useData<{items: Array<{id:string; title:string; sha:string; projectName:string; createdAt:number}>;hasMore:boolean}>(`/api/reports?offset=${offset}`,5000);
   return <section className="project-directory"><h1>测试报告</h1>{error && <div role="alert">{error} <Button onClick={reload}>重试</Button></div>}{!data && !error && <p role="status">正在加载报告…</p>}{data && <>{!data.items.length && <Empty>暂无已发布的报告</Empty>}<div>{data.items.map(r=><Link className="report-entry" key={r.id} to="/reports/$id" params={{id:r.id}}><Icon name="doc"/><span><strong>{r.title}</strong><small>{r.projectName} · {r.sha.slice(0,8)}</small></span><time>{time(r.createdAt)}</time></Link>)}</div>{(offset>0 || data.hasMore) && <div className="flex gap-2"><Button variant="outline" disabled={!offset} onClick={()=>setOffset(offset-25)}>上一页</Button><Button variant="outline" disabled={!data.hasMore} onClick={()=>setOffset(offset+25)}>下一页</Button></div>}</>}</section>;
 }
-function OverviewActivity() {
-  const { data: workers } = useData<ExecutionWorker[]>('/api/workers', 5000);
+function OverviewActivity({ workers }: { workers?: ExecutionWorker[] }) {
   return (
     <>
       <Card asChild>
@@ -313,119 +340,6 @@ function OverviewActivity() {
             ))}
             {!workers?.length && <p className="text-xs leading-[1.45] text-muted-foreground">尚无设备信息。</p>}
           </div>
-        </section>
-      </Card>
-    </>
-  );
-}
-function NewRequest() {
-  const navigate = useNavigate();
-  const requestedTarget = useSearch({ strict: false }).targetId;
-  const { data: targets, error: loadError } = useData<Target[]>('/api/targets');
-  const [suite, setSuite] = useState(''),
-    [scenario, setScenario] = useState(''),
-    [commit, setCommit] = useState(''),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState('');
-  const target = requestedTarget ? targets?.find(t => t.id === requestedTarget) : targets?.[0];
-  const selectedSuite = target?.suites.includes(suite) ? suite : target?.suites[0];
-  const selectedScenario = target?.scenarios.includes(scenario) ? scenario : '';
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!target) return;
-    setBusy(true);
-    setError('');
-    try {
-      const r = await api<{ id: string }>(
-        '/api/requests',
-        'POST',
-        {
-          targetId: target.id,
-          commit,
-          suite: selectedSuite,
-          ...(selectedScenario ? { scenario: selectedScenario } : {}),
-        },
-        crypto.randomUUID(),
-      );
-      await navigate({ to: '/requests/$id', params: { id: r.id } });
-    } catch (e) {
-      setError((e as Error).message);
-      setBusy(false);
-    }
-  }
-  return (
-    <>
-      <PageTitle eyebrow="NEW EXECUTION" title="提交测试任务" />
-      <Card asChild>
-        <section className="max-w-[820px] p-4 [&>p]:mt-1 [&>p]:mb-3 [&>p]:text-xs [&_form]:grid [&_form]:gap-3 [&_label]:grid [&_label]:gap-1.5 [&_label]:text-xs [&_label]:font-medium overflow-hidden" data-ui="form-panel">
-          <h2>选择测试配置</h2>
-          <ErrorBox error={loadError || error} />
-          <form onSubmit={submit}>
-            <Label>
-              应用
-              <NativeSelect
-                value={target?.id ?? ''}
-                onChange={(e) => {
-                  void navigate({ to: '/new', search: { targetId: e.target.value }, replace: true });
-                  setSuite('');
-                  setScenario('');
-                }}
-              >
-                {!target && <option value="" disabled>请选择应用</option>}
-                {targets?.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Label>
-            <Label>
-              Git commit SHA
-              <Input
-                required
-                pattern="[0-9a-f]{40}"
-                placeholder="完整的 40 位提交 SHA"
-                value={commit}
-                onChange={(e) => setCommit(e.target.value.trim())}
-              />
-            </Label>
-            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1" data-ui="form-row">
-              <Label>
-                测试套件
-                <NativeSelect
-                  value={selectedSuite ?? ''}
-                  onChange={(e) => setSuite(e.target.value)}
-                >
-                  {target?.suites.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </NativeSelect>
-              </Label>
-              <Label>
-                测试场景
-                <NativeSelect
-                  value={selectedScenario}
-                  onChange={(e) => setScenario(e.target.value)}
-                >
-                  <option value="">直接运行（无场景）</option>
-                  {target?.scenarios.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </NativeSelect>
-              </Label>
-            </div>
-            <div className="flex items-center justify-between gap-3 border-t border-border pt-3" data-ui="form-actions">
-              <Link to="/queue" search={{ targetId: requestedTarget }}>返回执行看板</Link>
-              <Button
-                variant="default"
-                size="default"
-                type="submit"
-                disabled={busy || !target}
-              >
-                {busy ? '正在提交…' : '提交并加入队列'}
-              </Button>
-            </div>
-          </form>
         </section>
       </Card>
     </>
@@ -465,7 +379,7 @@ function RequestAction({
   return (
     <>
       <Button
-        variant={finished ? 'default' : 'destructive'}
+        variant={finished ? 'secondary' : 'destructive'}
         size="default"
         disabled={busy || request.state === 'cancel_requested'}
         onClick={action}
@@ -808,7 +722,7 @@ function ReportContent({
   id: string;
   shared?: boolean;
 }) {
-  const [reportView, setReportView] = useState('tests');
+  const [panel, setPanel] = useState<'run' | 'attempts' | 'events' | 'worker' | 'share'>();
   const prefix = shared ? '/api/shared/reports' : '/api/reports';
   const { data: r, error } = useData<ReportView>(`${prefix}/${id}`);
   const { data: request, error: requestError, reload } = useData<Detail>(
@@ -816,50 +730,28 @@ function ReportContent({
     2000,
     !shared && !!r,
   );
+  const executionAttemptId = shared ? undefined : r?.executionAttemptId;
+  const titles = {
+    run: '运行信息',
+    attempts: '执行尝试',
+    events: '运行动态',
+    worker: 'Worker 执行',
+    share: '分享报告',
+  };
+  const metadata = r && (
+    <dl className="flex flex-wrap gap-x-4 gap-y-2 text-xs [&>div]:flex [&>div]:gap-1.5 [&_dt]:text-muted-foreground [&_dd]:m-0" data-ui="report-metadata">
+      <div><dt>运行 ID</dt><dd className="font-mono break-all">{r.manifest.runId}</dd></div>
+      <div><dt>测试结果</dt><dd><Badge value={r.manifest.status} /></dd></div>
+      <div><dt>证据完整性</dt><dd>{labels[r.manifest.evidenceStatus]}</dd></div>
+      <div>
+        <dt>保留至</dt>
+        <dd><time dateTime={new Date(r.expiresAt).toISOString()}>{time(r.expiresAt)}</time></dd>
+      </div>
+    </dl>
+  );
   return (
     <>
-      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 [&>a]:shrink-0" data-ui="report-header">
-        <div className="grid min-w-0 flex-[1_1_360px] gap-1.5" data-ui="report-heading">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 [&_h1]:min-w-0 [&_h1]:break-words [&_h1]:font-mono [&_h1]:text-lg [&_h1]:font-semibold" data-ui="report-identity">
-            <h1 title={r?.manifest.runId}>{r?.manifest.runId ?? id}</h1>
-            {r && (
-              <span className="inline-flex items-center">
-                <span className="sr-only">测试结果：</span>
-                <Badge value={r.manifest.status} />
-              </span>
-            )}
-          </div>
-          {r && (
-            <dl className="m-0 flex flex-wrap gap-x-5 gap-y-1 text-xs [&>div]:flex [&>div]:flex-wrap [&>div]:items-baseline [&>div]:gap-x-2 [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:tabular-nums" data-ui="report-metadata">
-              <div>
-                <dt>证据完整性</dt>
-                <dd>{labels[r.manifest.evidenceStatus]}</dd>
-              </div>
-              <div>
-                <dt>保留至</dt>
-                <dd>
-                  <time dateTime={new Date(r.expiresAt).toISOString()}>
-                    {time(r.expiresAt)}
-                  </time>
-                </dd>
-              </div>
-            </dl>
-          )}
-        </div>
-        {!shared && (
-          <div className="flex min-w-0 items-center gap-2.5" data-ui="rowline">
-            <Button asChild variant="secondary">
-              <Link to="/queue">
-                <Icon name="list" />
-                返回测试任务
-              </Link>
-            </Button>
-            {request && (
-              <RequestAction request={request} onChange={reload} />
-            )}
-          </div>
-        )}
-      </header>
+      <h1 className="sr-only">{r?.manifest.runId ?? id}</h1>
       <ErrorBox error={error} />
       {!r && !error && <Empty>正在加载报告…</Empty>}
       {r && (
@@ -867,9 +759,7 @@ function ReportContent({
           {r.issues.length > 0 && (
             <details className="break-words rounded-lg bg-destructive/10 px-3 py-2.5 text-xs text-destructive" data-ui="evidence-issues">
               <summary>有 {r.issues.length} 项证据不可用</summary>
-              {r.issues.map((issue, i) => (
-                <p key={i}>{issue}</p>
-              ))}
+              {r.issues.map((issue, i) => <p key={i}>{issue}</p>)}
             </details>
           )}
           {r.manifest.runnerErrors?.map((e, i) => (
@@ -877,49 +767,69 @@ function ReportContent({
               {e.phase}: {e.message}
             </div>
           ))}
-          {!shared && r.executionAttemptId && <Tabs value={reportView} onValueChange={setReportView} className="mb-2 shrink-0" data-ui="report-view-tabs">
-            <TabsList aria-label="报告视图"><TabsTrigger value="tests"><Icon name="play" />测试回放</TabsTrigger><TabsTrigger value="worker"><Icon name="cpu" />Worker 执行</TabsTrigger></TabsList>
-          </Tabs>}
-          <div className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden" hidden={!shared && reportView === 'worker' && !!r.executionAttemptId} data-ui="report-view-pane">
           <Replay
             key={id}
             report={r}
             shared={shared}
-            active={shared || reportView === 'tests'}
-            reportTabs={shared ? [] : [
-              ...([
-                ['run', '运行信息', 'doc'],
-                ['attempts', '执行尝试', 'refresh'],
-                ['events', '运行动态', 'clock'],
-              ] as const).map(([panel, label, icon]) => ({
-                id: `report-${panel}`,
-                label,
-                icon,
-                content: (
-                  <>
-                    <ErrorBox error={requestError} />
-                    {request ? (
-                      <RequestDiagnostics
-                        request={request}
-                        currentReportId={id}
-                        panel={panel}
-                      />
-                    ) : !requestError && <Empty>正在加载运行信息…</Empty>}
-                  </>
-                ),
-              })),
-              {
-                id: 'report-share',
-                label: '报告分享',
-                icon: 'link',
-                content: <Shares id={id} />,
-              },
-            ]}
+            active={!panel}
+            reportActions={shared ? (
+              <Button variant="secondary" size="sm" aria-haspopup="dialog" onClick={() => setPanel('run')}>
+                报告信息
+              </Button>
+            ) : (
+              <>
+                <Button variant="secondary" size="sm" aria-haspopup="dialog" onClick={() => setPanel('share')}>
+                  <Share2 aria-hidden="true" />分享报告
+                </Button>
+                <NativeSelect
+                  aria-label="运行"
+                  value=""
+                  className="border-transparent bg-transparent dark:bg-transparent"
+                  onChange={(e) => {
+                    switch (e.target.value) {
+                      case 'run': case 'attempts': case 'events': case 'worker':
+                        setPanel(e.target.value);
+                    }
+                  }}
+                >
+                  <option value="" disabled>运行</option>
+                  <option value="run">运行信息</option>
+                  <option value="attempts">执行尝试</option>
+                  <option value="events">运行动态</option>
+                  {executionAttemptId && <option value="worker">Worker 执行</option>}
+                </NativeSelect>
+                <Button asChild variant="ghost" size="icon-sm">
+                  <Link to="/queue" aria-label="返回测试任务" title="返回测试任务">
+                    <ArrowLeft aria-hidden="true" />
+                  </Link>
+                </Button>
+              </>
+            )}
           />
-          </div>
-          {!shared && r.executionAttemptId && <div className="min-h-0 flex-1 overflow-y-auto [&[hidden]]:hidden" hidden={reportView !== 'worker'} data-ui="report-worker-pane">
-            <WorkerExecutionTimeline requestId={r.requestId} executionAttemptId={r.executionAttemptId} />
-          </div>}
+          {panel && (
+            <CloudDialog title={shared ? '报告信息' : titles[panel]} onClose={() => setPanel(undefined)} wide>
+              <div className="grid min-w-0 gap-3 p-3">
+                {panel === 'share' ? <Shares id={id} /> : panel === 'worker' && executionAttemptId ? (
+                  <WorkerExecutionTimeline requestId={r.requestId} executionAttemptId={executionAttemptId} />
+                ) : panel === 'run' || panel === 'attempts' || panel === 'events' ? (
+                  <>
+                    {panel === 'run' && metadata}
+                    {!shared && (
+                      <>
+                        <ErrorBox error={requestError} />
+                        {request ? (
+                          <>
+                            {panel === 'run' && <RequestAction request={request} onChange={reload} />}
+                            <RequestDiagnostics request={request} currentReportId={id} panel={panel} />
+                          </>
+                        ) : !requestError && <Empty>正在加载运行信息…</Empty>}
+                      </>
+                    )}
+                  </>
+                ) : null}
+              </div>
+            </CloudDialog>
+          )}
         </>
       )}
     </>
@@ -953,10 +863,7 @@ function Shares({ id }: { id: string }) {
   return (
     <Card asChild className="border-0 rounded-none bg-transparent">
       <section className=" overflow-hidden" data-ui="share-panel">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs [&>span]:text-xs [&>span]:text-muted-foreground" data-ui="panel-heading">
-          <h2>报告分享</h2>
-          <span>只读 · 可撤销 · 内网访问</span>
-        </div>
+        <p className="px-3 text-xs text-muted-foreground">只读 · 可撤销 · 内网访问</p>
         <ErrorBox error={error || loadError} />
         <div className="flex flex-wrap items-center gap-2 p-3 [&_label]:text-xs [&_label]:text-muted-foreground max-sm:items-stretch max-sm:[&_label]:w-full" data-ui="share-controls">
           <NativeSelect
@@ -1025,96 +932,63 @@ function Shares({ id }: { id: string }) {
     </Card>
   );
 }
-function Workers() {
-  const role = useContext(TeamContext)?.user?.role;
-  const { data, error, reload } = useData<ExecutionWorker[]>(
-    '/api/workers',
-    3000,
-  );
-  const [actionError, setError] = useState('');
-  const { data: ops } = useData<{
-    events?: unknown[];
-    storage: { freeBytes: number; reservedBytes: number };
-  }>('/api/operations', 10000);
-  return (
-    <>
-      <PageTitle eyebrow="EXECUTION WORKERS" title="Worker 主机" />
-      <WorkerPairing role={role} />
-      <ErrorBox error={error || actionError} />
-      {ops && (
-        <div className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground" data-ui="callout">
-          报告磁盘可用 {(ops.storage.freeBytes / 1024 ** 3).toFixed(1)} GB ·
-          已登记产物 {(ops.storage.reservedBytes / 1024 ** 3).toFixed(2)} GB
+function WorkerRow({ worker, canOperate, onSchedulingChange, projects }: {
+  worker: WorkerStatusResponse;
+  canOperate: boolean;
+  onSchedulingChange: (paused: boolean) => void;
+  projects?: Project[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const { id, health, paused, inventory, slots, service, catalogScannerConnected } = worker;
+  const needsAttention = service && (service.status !== 'healthy' || service.activeSessions > 1 || (service.catalogWorkspace && service.catalogWorkspace.directoryCount !== 0));
+  async function toggleScheduling() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const result = await api<{ paused: boolean }>(`/api/workers/${encodeURIComponent(id)}/pause`, 'POST', { paused: !paused });
+      onSchedulingChange(result.paused);
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  return <li className="min-w-0">
+    <div className="grid items-center gap-x-4 gap-y-3 px-4 py-4 sm:grid-cols-[minmax(11rem,1fr)_auto] lg:grid-cols-[minmax(12rem,1fr)_minmax(8rem,.5fr)_auto]">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><Monitor className="size-5" /></span>
+        <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="break-all text-sm font-semibold">{id}</h3><Badge value={health} /></div>
+          {worker.seenAt > 0 && <p className="mt-1 text-xs text-muted-foreground">最近联系 {time(worker.seenAt)}</p>}
         </div>
-      )}
-      {data?.map((w) => (
-        <Card asChild>
-          <section className="overflow-hidden" key={w.id}>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs [&>span]:text-xs [&>span]:text-muted-foreground" data-ui="panel-heading">
-              <div>
-                <h2>{w.id}</h2>
-                <Badge value={w.health} />
-                {w.service && <p className="text-xs text-muted-foreground">服务：{({ healthy: '运行中', degraded: '需检查', failed: '异常退出', stopped: '已停止', unreachable: '无法联系' })[w.service.status]}{w.service.activeSessions > 1 && ` · 检测到 ${w.service.activeSessions} 个服务实例，请检查重复启动`}</p>}
-                <small>
-                  {w.seenAt ? `上次联系 ${time(w.seenAt)}` : '尚未连接'} ·{' '}
-                  {w.paused ? '已暂停调度' : '允许领取任务'}
-                </small>
-              </div>
-              {ops && (
-                <Button
-                  variant="secondary"
-                  size="default"
-                  onClick={async () => {
-                    try {
-                      await api(`/api/workers/${w.id}/pause`, 'POST', {
-                        paused: !w.paused,
-                      });
-                      reload();
-                    } catch (e) {
-                      setError((e as Error).message);
-                    }
-                  }}
-                >
-                  {w.paused ? '恢复调度' : '暂停调度'}
-                </Button>
-              )}
-            </div>
-            <div className="p-3 grid content-start gap-3" data-ui="panel-body stack">
-              <Link to="/devices" search={{ worker: w.id }} className="font-medium text-primary hover:underline">
-                查看此主机的设备 →
-              </Link>
-              {(role === 'operator' || role === 'admin') && <WorkerDiagnosticsPanel workerId={w.id} />}
-              <small>
-                {w.inventory
-                  ? `最近检测 ${time(w.inventory.receivedAt)} · ${w.inventory.devices.length} 台设备${w.inventory.stale ? ' · 检测已过期' : ''}`
-                  : '尚未收到设备检测结果'}
-              </small>
-              {w.inventory?.diagnostics.map((d, i) => (
-                <p className="text-xs leading-[1.45] text-muted-foreground" key={i}>
-                  {d.source}：{d.message}
-                </p>
-              ))}
-            </div>
-            {w.slots.map((s) => (
-              <div className="grid grid-cols-[1.2fr_1fr_1fr_1fr] items-center gap-3 border-t border-border px-3 py-2.5 text-xs max-[900px]:grid-cols-2 [&>div]:grid [&>div]:min-w-0 [&>div]:justify-items-start [&>div]:gap-1 [&_code]:text-[10px] [&_code]:text-muted-foreground" key={s.id} data-ui="attempt-row">
-                <div>
-                  <b>{s.id}</b>
-                  <small>{s.deviceId}</small>
-                </div>
-                <Badge value={s.state} />
-                <span>应用：{s.targets.join(', ')}</span>
-                <span>generation {s.generation}</span>
-              </div>
-            ))}
-          </section>
-        </Card>
-      ))}
-      <div className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground" data-ui="callout">
-        暂停只阻止领取新任务。隔离设备需要运维在 Mac mini
-        上确认进程终止并重置设备后恢复。
       </div>
-    </>
-  );
+      <div className="text-xs"><p className="font-medium">{paused ? '已暂停调度' : '允许领取任务'}</p><p className="mt-1 text-muted-foreground">{inventory ? `${inventory.devices.length} 台设备${inventory.stale ? '（检测已过期）' : ''}` : '等待设备上报'} · {slots.length} 个槽位</p><p className="mt-1 text-muted-foreground">{catalogScannerConnected === undefined ? '扫描服务状态未知' : catalogScannerConnected ? '扫描服务已连接' : '扫描服务未连接'}</p></div>
+      <div className="flex flex-wrap items-center gap-1 sm:col-span-2 lg:col-span-1">
+        <Button asChild variant="secondary"><Link to="/devices" search={{ worker: id }}>查看设备<ArrowUpRight /></Link></Button>
+        {canOperate && <Button variant="ghost" disabled={busy} title="暂停后，正在执行的任务会继续运行" onClick={() => void toggleScheduling()}>{paused ? <Play /> : <Pause />}{paused ? '恢复调度' : '暂停调度'}</Button>}
+        <Button variant="ghost" aria-expanded={expanded} aria-controls={`worker-detail-${id}`} onClick={() => setExpanded(!expanded)}>{expanded ? '收起详情' : '主机详情'}<ChevronDown className={expanded ? 'rotate-180' : ''} /></Button>
+      </div>
+    </div>
+    {needsAttention && <p className="mx-4 mb-3 flex items-center gap-2 text-xs text-warn-ink"><TriangleAlert className="size-4" />{service.status !== 'healthy' ? serviceStatusLabels[service.status] : service.activeSessions > 1 ? '检测到多个服务实例' : '扫描目录需要检查'}</p>}
+    {error && <div className="mx-4 mb-3"><ErrorBox error={error} /></div>}
+    <div id={`worker-detail-${id}`} hidden={!expanded}>{expanded && <WorkerHostDetails worker={worker} canOperate={canOperate} projects={projects} />}</div>
+  </li>;
+}
+function Workers() {
+  const { user, directory, workers } = useContext(TeamContext)!;
+  const role = user?.role;
+  const canOperate = role === 'operator' || role === 'admin';
+  const { data, error, update } = workers;
+  return <div className="mx-auto grid w-full max-w-6xl min-w-0 gap-5 py-2 sm:px-3">
+    <PageTitle eyebrow="EXECUTION WORKERS" title="Worker 主机"><WorkerPairing role={role} workers={data} /></PageTitle>
+    <ErrorBox error={error} />
+    <Card asChild><section aria-label="主机列表" className="overflow-hidden">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3"><h2 className="text-sm font-semibold">主机列表</h2>
+        {data && <span className="text-xs text-muted-foreground">{data.filter(w => w.health === 'healthy').length} 台在线 / 共 {data.length} 台</span>}
+      </header>
+      {!data && !error && <p role="status" className="p-4 text-muted-foreground">正在读取主机…</p>}
+      {data?.length === 0 && <Empty><Monitor /><h3>尚无 Worker 主机</h3>{role !== 'admin' && <p>请联系管理员添加主机。</p>}</Empty>}
+      <ul className="divide-y">{data?.map(worker => <WorkerRow key={worker.id} worker={worker} canOperate={canOperate} projects={directory.data} onSchedulingChange={paused => update(rows => rows?.map(row => row.id === worker.id ? { ...row, paused } : row))} />)}</ul>
+    </section></Card>
+  </div>;
 }
 function ShareExchange() {
   const [error, setError] = useState('');
@@ -1235,11 +1109,6 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: '/reports',
     component: Reports,
-  }),
-  createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/new',
-    component: NewRequest,
   }),
   createRoute({
     getParentRoute: () => rootRoute,

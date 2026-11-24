@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Columns3, Cpu, Ellipsis, Files, Folders, Gauge, Moon, Plus, Search, Smartphone, Sun } from 'lucide-react';
+import { Columns3, Cpu, Ellipsis, Files, Folders, Gauge, Moon, Search, Smartphone, Sun } from 'lucide-react';
 import type { Project } from '@fliwright/cloud-protocol';
 import type { BoardDepth } from '../request-board.js';
 import { Button } from './components/ui/button.js';
 import { Input } from './components/ui/input.js';
 import { NavigationMenu, NavigationMenuContent, NavigationMenuItem, NavigationMenuLink, NavigationMenuList, NavigationMenuTrigger } from './components/ui/navigation-menu.js';
 import { activeProjectView, ProjectSwitcher } from './ProjectNavigation.js';
+import { RequestSubmission } from './RequestSubmission.js';
 import type { useData } from './data.js';
 
 const brandLogo = new URL('./assets/fliwright-logo.svg', import.meta.url).href;
@@ -84,7 +85,7 @@ export function WorkspaceHeader({ directory, user, shared, board, factsRef, proj
   const search = useSearch({ strict: false });
   const [menu, setMenu] = useState('');
   useEffect(() => { setMenu(''); }, [path]);
-  const selectedId = projectId ?? (path === '/new' ? search.targetId ?? directory.data?.[0]?.id : board ? search.targetId : undefined);
+  const selectedId = projectId ?? (board ? search.targetId : undefined);
   const project = directory.data?.find(item => item.id === selectedId);
   const scopeProjects = selectedId ? project && [project] : directory.data;
   const suiteCount = scopeProjects?.reduce((total, item) => total + Object.keys(item.suites).length, 0);
@@ -101,7 +102,7 @@ export function WorkspaceHeader({ directory, user, shared, board, factsRef, proj
     <div className="workspace-topbar" data-ui="topbar">
       <Link to="/" disabled={shared} data-ui="brand" className="workspace-brand" title="Fliwright Cloud" aria-label="Fliwright Cloud 首页"><img src={brandLogo} alt="" width="28" height="28" /></Link>
       {shared ? <><span className="share-label">只读报告分享</span><Button variant="ghost" size="icon" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}><ThemeIcon /></Button></> : <>
-        <ProjectSwitcher projects={directory.data} error={directory.error} retry={directory.reload} selectedId={selectedId} mode={board ? 'board' : path === '/new' ? 'submission' : 'project'} canCreate={user?.role === 'admin'} />
+        <ProjectSwitcher projects={directory.data} error={directory.error} retry={directory.reload} selectedId={selectedId} mode={board ? 'board' : 'project'} canCreate={user?.role === 'admin'} />
         <WorkspaceSearch key={`${path}:${scope}`} scope={scope} targetId={selectedId} />
         {board && <dl className="workspace-facts" aria-label="看板概况" ref={factsRef}>
           <WorkspaceFact label={selectedId ? '默认分支' : '项目'} value={selectedId ? project?.defaultBranch : directory.data?.length} title={project?.defaultBranch} />
@@ -121,7 +122,7 @@ export function WorkspaceHeader({ directory, user, shared, board, factsRef, proj
             </NavigationMenuContent>
           </NavigationMenuItem></NavigationMenuList>
         </NavigationMenu>
-        <Button asChild className="workspace-submit"><Link to="/new" search={{ targetId: selectedId }} aria-label="提交测试" title="提交测试"><Plus /><span>提交测试</span></Link></Button>
+        <RequestSubmission key={path} targetId={selectedId} />
       </>}
     </div>
   </header>;

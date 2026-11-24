@@ -44,7 +44,7 @@ const reasons: Record<DeviceBlocker, string> = {
   'not-online': '设备未在线',
   'worker-paused': '主机已暂停',
   'no-slot': '未配置执行槽位',
-  'no-targets': '未配置有效应用',
+  'no-targets': '没有可执行的绑定项目',
   'runtime-missing': '等待执行进程',
   'runtime-mismatch': '执行进程的设备不匹配',
   busy: '正在执行任务',
@@ -272,7 +272,7 @@ export function Devices() {
               <TableHead>主机</TableHead>
               <TableHead>连接</TableHead>
               <TableHead>调度 / 执行</TableHead>
-              <TableHead>允许应用</TableHead>
+              <TableHead>可执行项目</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -313,7 +313,7 @@ export function Devices() {
                 <TableCell>
                   <Readiness device={d} compact />
                 </TableCell>
-                <TableCell>{d.settings.targets.join(', ') || '—'}</TableCell>
+                <TableCell>{d.slot?.targets.join(', ') || '—'}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -428,7 +428,7 @@ export function DeviceDetail() {
           <Card className="p-3 grid content-start gap-3" data-ui="stack">
             <h2>执行环境</h2>
             <p>
-              在主机启动一次 fliwright-worker run 后，保存允许的应用即可自动同步执行环境。
+              在项目设置中绑定 Worker 后，已纳管且启用的设备会自动同步执行环境。
               槽位和独立运行目录自动创建，无需逐设备部署进程。
             </p>
             <dl className="grid grid-cols-2 gap-2 text-xs">
@@ -456,6 +456,8 @@ export function DeviceDetail() {
     </>
   );
 }
+const checkboxRowClassName = 'flex min-h-6 items-start gap-2 py-1 leading-4';
+
 function DeviceSettingsForm({
   device,
   editable,
@@ -544,73 +546,76 @@ function DeviceSettingsForm({
               setNotice('');
             }}
           />
-          <Label>
-            <Checkbox
-              id="device-managed"
-              checked={settings.managed}
-              onCheckedChange={(value) => {
-                setDirty(true);
-                setSettings(current => ({ ...current, managed: value === true,
-                  enabled: value === true && !current.managed ? true : current.enabled }));
-              }}
-            />
-            纳入平台管理
-          </Label>
-          <Label>
-            <Checkbox
-              id="device-enabled"
-              checked={settings.enabled}
-              onCheckedChange={(value) => set('enabled', value === true)}
-            />
-            允许分配新任务
-          </Label>
-          <details><summary>高级配置：执行槽位</summary>
-          <Label htmlFor="device-slot">执行槽位 ID（留空自动分配）</Label>
-          <Input
-            id="device-slot"
-            placeholder="留空自动分配"
-            pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}"
-            value={settings.slotId ?? ''}
-            onChange={(e) => set('slotId', e.target.value || null)}
-          />
+          <div className="grid gap-1">
+            <Label className={checkboxRowClassName}>
+              <Checkbox
+                id="device-managed"
+                checked={settings.managed}
+                onCheckedChange={(value) => {
+                  setDirty(true);
+                  setSettings(current => ({ ...current, managed: value === true,
+                    enabled: value === true && !current.managed ? true : current.enabled }));
+                }}
+              />
+              纳入平台管理
+            </Label>
+            <Label className={checkboxRowClassName}>
+              <Checkbox
+                id="device-enabled"
+                checked={settings.enabled}
+                onCheckedChange={(value) => set('enabled', value === true)}
+              />
+              允许分配新任务
+            </Label>
+          </div>
+          <details>
+            <summary>高级配置：执行槽位</summary>
+            <div className="grid gap-2">
+              <Label htmlFor="device-slot">执行槽位 ID（留空自动分配）</Label>
+              <Input
+                id="device-slot"
+                placeholder="留空自动分配"
+                pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}"
+                value={settings.slotId ?? ''}
+                onChange={(e) => set('slotId', e.target.value || null)}
+              />
+            </div>
           </details>
-          <div className="grid content-start gap-3" data-ui="stack">
-            <Label>允许的应用</Label>
-            {targets.map((target) => (
-              <Label key={target.id}>
-                <Checkbox
-                  aria-label={`允许应用 ${target.name}`}
-                  checked={settings.targets.includes(target.id)}
-                  onCheckedChange={(checked) => {
-                    setDirty(true);
-                    setNotice('');
-                    setSettings(current => ({ ...current,
-                      ...(checked === true ? { managed: true, enabled: true } : {}),
-                      targets: checked === true ? [...current.targets, target.id] : current.targets.filter(id => id !== target.id),
-                    }));
-                  }}
-                />
-                {target.name}
-              </Label>
-            ))}
-            {settings.targets
-              .filter((id) => !targets.some((t) => t.id === id))
-              .map((id) => (
-                <Label key={id}>
+          <fieldset className="min-w-0">
+            <legend className="font-medium">设备项目限制</legend>
+            <p className="mb-2 text-muted-foreground">留空使用 Worker 的全部绑定项目</p>
+            <div className="grid gap-1">
+              {targets.map((target) => (
+                <Label key={target.id} className={checkboxRowClassName}>
                   <Checkbox
-                    aria-label={`移除失效应用 ${id}`}
-                    checked
-                    onCheckedChange={() =>
-                      set(
-                        'targets',
-                        settings.targets.filter((t) => t !== id),
-                      )
-                    }
+                    aria-label={`允许应用 ${target.name}`}
+                    checked={settings.targets.includes(target.id)}
+                    onCheckedChange={(checked) => {
+                      set('targets', checked === true ? [...settings.targets, target.id] : settings.targets.filter(id => id !== target.id));
+                    }}
                   />
-                  {id}（应用已移除）
+                  <span className="min-w-0 wrap-anywhere">{target.name}</span>
                 </Label>
               ))}
-          </div>
+              {settings.targets
+                .filter((id) => !targets.some((t) => t.id === id))
+                .map((id) => (
+                  <Label key={id} className={checkboxRowClassName}>
+                    <Checkbox
+                      aria-label={`移除失效应用 ${id}`}
+                      checked
+                      onCheckedChange={() =>
+                        set(
+                          'targets',
+                          settings.targets.filter((t) => t !== id),
+                        )
+                      }
+                    />
+                    <span className="min-w-0 wrap-anywhere">{id}（应用已移除）</span>
+                  </Label>
+                ))}
+            </div>
+          </fieldset>
           <Button type="submit">{saving ? '正在保存…' : '保存配置'}</Button>
         </fieldset>
       </form>

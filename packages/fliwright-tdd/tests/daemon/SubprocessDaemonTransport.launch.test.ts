@@ -15,7 +15,8 @@ fs.writeFileSync('args.json', JSON.stringify(process.argv.slice(2)));
 process.stdout.write(JSON.stringify([{ event: 'app.start', params: { appId: 'app-1', deviceId: 'macos', supportsRestart: true } }, { event: 'app.debugPort', params: { appId: 'app-1', wsUri: 'ws://localhost:1234/token/ws' } }, { event: 'app.started', params: { appId: 'app-1' } }]) + '\\n');
 readline.createInterface({ input: process.stdin }).on('line', line => {
   const request = JSON.parse(line)[0];
-  process.stdout.write(JSON.stringify([{ id: request.id, result: {} }]) + '\\n');
+  const result = request.method === 'app.restart' ? { code: 0, message: '' } : {};
+  process.stdout.write(JSON.stringify([{ id: request.id, result }]) + '\\n');
 });
 `, { mode: 0o755 });
   const controller = new FlutterDaemonController(new SubprocessDaemonTransport({ flutterBin: script }));

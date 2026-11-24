@@ -1,4 +1,6 @@
 @import "tailwindcss" source(none);
+/* Bundle Sonner's stylesheet so it loads under Cloud's style-src policy. */
+@import "sonner/dist/styles.css";
 @import "./theme.css";
 @import "./workspace.css";
 @source "./**/*.{ts,tsx,html}";

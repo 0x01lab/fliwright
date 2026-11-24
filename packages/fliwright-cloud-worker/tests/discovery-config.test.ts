@@ -35,7 +35,7 @@ it('advertises the local executor device identity when claiming a server slot', 
     expect(await worker.runOnce()).toBe(false);
     expect(request).toHaveBeenCalledWith('/api/worker/claim', {
       method: 'POST',
-      body: { slotId: 'phone', deviceId: 'native-device' },
+      body: { slotId: 'phone', deviceId: 'native-device', supportsSecureFiles: true },
       signal: undefined,
     });
   } finally {

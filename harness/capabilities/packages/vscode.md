@@ -1,7 +1,7 @@
 ---
 package: "fliwright-vscode"
 path: "packages/fliwright-vscode"
-source_fingerprint: "67a1062cd0840dc7b7e0798f4498fda56bab3cdb260e403a446f2eb92ddb05e9"
+source_fingerprint: "4f274d1aa6cb350242fd5a11ccebdff028e79608fa2ba81e3377cdc6306bb8e2"
 generated: true
 ---
 
@@ -129,6 +129,7 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `fliwright.mockApis`
 - `fliwright.scripts`
 - `fliwright.state`
+- `fliwright.supportSettings`
 - `fliwright.tests`
 - `fliwright.websocketMocks`
 
@@ -170,6 +171,9 @@ Own VS Code commands, views, webviews, and project workflows that consume public
 - `packages/fliwright-vscode/src/state/StateInjectionService.ts`
 - `packages/fliwright-vscode/src/state/StateProviderDocumentProvider.ts`
 - `packages/fliwright-vscode/src/status/StatusBarService.ts`
+- `packages/fliwright-vscode/src/support/SupportSettingsView.ts`
+- `packages/fliwright-vscode/src/support/app.ts`
+- `packages/fliwright-vscode/src/support/messages.ts`
 - `packages/fliwright-vscode/src/tddloop/TddLoopController.ts`
 - `packages/fliwright-vscode/src/tddloop/TddLoopPanel.ts`
 - `packages/fliwright-vscode/src/tddloop/TddLoopStatusSource.ts`

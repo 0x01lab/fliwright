@@ -58,6 +58,7 @@
   },
   "activationEvents": [
     "onDebug",
+    "onView:fliwright.supportSettings",
     "onCommand:fliwright.reloadMocks",
     "onCommand:fliwright.searchMockApis",
     "onCommand:fliwright.clearMockApiSearch",
@@ -177,6 +178,12 @@
         {
           "id": "fliwright.scripts",
           "name": "Scripts"
+        },
+        {
+          "id": "fliwright.supportSettings",
+          "name": "Support Settings",
+          "type": "webview",
+          "visibility": "collapsed"
         },
         {
           "id": "fliwright.tests",

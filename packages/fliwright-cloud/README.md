@@ -206,7 +206,9 @@ recover 检查原 Worker 已退出，核对并终止原进程组，执行配置�
 
 ## 报告回放
 
-报告详情顶部提供按真实经过时间排列的执行时间轴，操作条展示耗时及状态，重叠操作分轨显示。点击时间条或拖动游标可联动步骤、截图和证据详情，支持 1×–8× 缩放。未采集时间的操作仍可从步骤列表查看；没有截图时明确提示。只读分享使用相同回放界面。
+报告详情使用单行工具栏。左侧可分享报告或打开「运行」，查看运行信息、执行尝试、运行动态和 Worker 执行。选定用例和尝试后，可从「尝试数据」查看完整日志、Trace 和全部归档文件。关闭这些面板后继续查看原步骤和截图。
+
+左侧步骤树支持筛选和折叠，中间显示原始截图，右侧提供当前步骤的详情、日志、源码和产物。底部时间轴按真实经过时间展示操作，重叠操作分轨显示。点击操作或截图缩略图、拖动游标可联动步骤和截图，支持 1×–8× 缩放。未采集时间的操作可从步骤树查看。只读分享使用相同布局，按分享范围展示归档证据。
 
 ## GitLab 接入
 
@@ -244,9 +246,11 @@ node packages/fliwright-cloud/dist/main.js backup /PRIVATE/PATH/server.json /NEW
 
 创建项目只需填写 GitLab 项目主页或 HTTPS / SSH 克隆地址。服务端自动生成项目 ID，名称从 URL 中的仓库名推导；默认配置为 `main` 分支、仓库根目录、`lib/main.dart` 入口、`smoke` 套件，不预设场景。展开可选配置可以调整名称、分支等设置；这些是预填默认值，不会通过 GitLab API 自动读取仓库元数据。
 
-配对后在主机运行一次 `fliwright-worker run worker.json`，然后在网页为设备选择允许的应用并保存：设备自动纳管、启用并生成稳定槽位，本机自动创建独立执行目录和执行器。已有纳管设备缺少槽位时会在同步时补齐，无需手填 slotId、deviceId 或重复部署进程。iOS 模拟器默认重启并保留数据；其他设备的重置命令在主机配置。设备应用范围也自动成为该主机的扫描范围；纯扫描主机可额外配置 `catalogProjects`。Cloud 的 `repositoryHosts` 必须列出允许访问的 Git 主机；Worker 的 `repositoryCredentialHomes` 将 Project 凭据引用映射到本机只读 Git/SSH credential helper。Cloud 只保存引用与 Webhook token 摘要，不接收仓库凭据明文。
+配对后在主机运行 `fliwright-worker run worker.json`。管理员在「项目管理 → 项目设置 → 绑定 Worker」为项目选择主机。保存后 Worker 可以领取该项目的扫描和测试任务，变更通过控制通道推送。扫描无需设备。测试执行使用已纳管且启用的设备，设备可进一步限制可执行项目。设备槽位自动分配，本机自动创建执行目录并同步执行器。解绑只影响新任务。iOS 模拟器默认重启并保留数据，其他设备使用主机配置的重置命令。Cloud 的 `repositoryHosts` 列出允许访问的 Git 主机。Worker 的 `repositoryCredentialHomes` 将项目凭据引用映射到本机只读 Git/SSH 配置。Cloud 保存凭据引用与 Webhook token 摘要。
 
-项目页扫描默认分支或完整 40 位 SHA，浏览固定 commit/config revision 的 Catalog；管理员检查后显式确认 ready。operator 可请求和取消扫描，member 可浏览目录及提交已扫描版本的 suite/case。case 使用 Catalog 中重复序号校验并映射到 Vitest task ID，不能通过浏览器提供文件路径或正则扩大运行范围。提交需要 Idempotency-Key，Worker 保存项目配置快照。
+项目页可输入分支名或完整 40 位 SHA。Worker 领取分支扫描后先解析远端 HEAD，通过扫描租约锁定 SHA，再检出和收集用例。用例目录、运行记录和重跑沿用该版本。管理员检查后显式确认 ready。operator 可请求和取消扫描，member 可浏览目录及提交已扫描版本的 suite/case。case 使用 Catalog 中重复序号校验并映射到 Vitest task ID，不能通过浏览器提供文件路径或正则扩大运行范围。提交需要 Idempotency-Key，Worker 保存项目配置快照。新增分支扫描需要 Cloud Server 与 Worker 同步升级。
+
+管理员可在「项目设置 → 安全文件」上传 Flutter 构建配置。项目内路径与 `--dart-define-from-file` 参数一致，例如 `.env/sentry.dev.json`。每个项目最多 25 个文件，每个文件最多 1 MiB。同一站点的 Cloud Server 和 Worker 需要一起升级。Cloud 在 SQLite 中加密保存文件，备份恢复时保留 `reports/.project-secure-files.key`。提交时锁定文件 ID，存在待处理任务时文件无法移除。Worker 使用执行租约下载、验证 SHA-256，并在确认进程停止后清理私有临时文件。Git checkout 与目录扫描沿用各自的仓库凭据。Flutter 会将 Dart defines 编入构建产物，请将需在运行时保密的凭据保留在服务端。
 
 运行场景不是就绪或提交的必需条件。手动运行默认「直接运行（无场景）」，自动运行也可仅选择套件。请求省略 `scenario` 时，Worker 不应用仓库或环境中的默认场景、不自动加载 Mock 规则；测试自身仍可声明场景或按需设置 Mock。显式选择命名场景时继续校验它存在于选定 Catalog，并按原有规则准备环境。
 

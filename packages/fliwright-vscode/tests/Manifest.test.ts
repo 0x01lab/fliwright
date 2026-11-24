@@ -173,4 +173,11 @@ describe('VS Code manifest', () => {
     const views = manifest.contributes.views.fliwright as Array<{ id: string }>;
     expect(views).toContainEqual(expect.objectContaining({ id: 'fliwright.websocketMocks' }));
   });
+
+  it('contributes the Support Settings webview', () => {
+    expect(manifest.contributes.views.fliwright).toContainEqual(expect.objectContaining({
+      id: 'fliwright.supportSettings', type: 'webview', name: 'Support Settings',
+    }));
+    expect(manifest.activationEvents).toContain('onView:fliwright.supportSettings');
+  });
 });

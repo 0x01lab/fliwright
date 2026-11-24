@@ -22,6 +22,7 @@
 | [logging.md](./logging.md) | `logger` fixture、结构化 JSONL 日志、pretty/compact/jsonl 格式、stderr/stdout/file 输出、日志环境变量 | 你需要脚本进度输出、agent 可读日志、CI 日志或调试细节 |
 | [test-harness.md](./test-harness.md) | `@fliwright/vitest` fixture：`test`、`script`、`flow`/`mock`/`agent` fixture、`expect`、`createFliwrightTest`、hooks、环境变量、失败上下文 | 你在决定如何接入 driver 生命周期 |
 | [scenarios.md](./scenarios.md) | `TestScenario`、组合 layers、`test.scenario`、`auth.seedLoggedIn`、retry 与首帧隔离 | 你要准备复用环境或已登录业务测试 |
+| [support-settings.md](./support-settings.md) | Support 参数的字段声明、VS Code 表单、本机存储与运行时读取 | 你要给项目 support 添加可视化配置，或扩展面板的控件类型 |
 | [selectors.md](./selectors.md) | 选择器格式、`getByX`、作用域（`descendant`/`ancestor`/`and`/`or`/`nth`/`first`/`last`/`filter`/`containing`）、`subtype`/`tooltip`/`state` | 你需要稳定地定位某个控件 |
 | [actions.md](./actions.md) | `click`/`longPress`/`drag`/`dragTo`/`slideTo`/`pinch`/`type`/`fill`/`clear`/`dismissKeyboard`/`pressKey`/`setCheckbox`/`selectOption`/`scrollIntoView` + 底层 `clickAt`/`dragFrom` | 你要做手势 / 输入，或移动端软键盘遮挡按钮 |
 | [assertions.md](./assertions.md) | `expect(locator, title?)` 匹配器、timeline assertion、自动等待、`.not`、自愈、失败上下文、请求检查写法 | 你在对可见结果或请求做断言 |

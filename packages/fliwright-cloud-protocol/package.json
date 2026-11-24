@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./secure-files": {
+      "types": "./dist/secure-files.d.ts",
+      "import": "./dist/secure-files.js"
     }
   },
   "engines": {

@@ -1,9 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import { mergeFliwrightConfig, readFliwrightEnvironment, resolveFliwrightProjectRoot, resolveFliwrightRunsRoot, resolveFliwrightCacheRoot, writeFliwrightConfigSnapshot } from '@fliwright/core';
-import type { FliwrightPathsConfig, FliwrightRecordingConfig, ScenarioExecutionMode, TestScenario, NativeConfig } from '@fliwright/core';
+import type { FliwrightPathsConfig, FliwrightRecordingConfig, ScenarioExecutionMode, TestScenario, NativeConfig, SupportSettingsDefinition } from '@fliwright/core';
 
 export interface FliwrightVitestPresetOptions {
   native?: NativeConfig;
+  supportSettings?: readonly SupportSettingsDefinition[];
   runner?: string;
   test?: Record<string, unknown>;
   recording?: Partial<FliwrightRecordingConfig>;

@@ -1,0 +1,24 @@
+name: fliwright-cloud
+
+services:
+  cloud:
+    build:
+      context: ../../..
+      dockerfile: packages/fliwright-cloud/deploy/Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 60s
+    env_file:
+      - ${FLIWRIGHT_CLOUD_ENV_FILE:?Set FLIWRIGHT_CLOUD_ENV_FILE to the private server.env path}
+    ports:
+      - "127.0.0.1:${FLIWRIGHT_CLOUD_HOST_PORT:-4780}:4780"
+    volumes:
+      - type: bind
+        source: ${FLIWRIGHT_CLOUD_CONFIG_FILE:?Set FLIWRIGHT_CLOUD_CONFIG_FILE to the private server.json path}
+        target: /etc/fliwright-cloud/server.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - cloud-data:/var/lib/fliwright-cloud
+
+volumes:
+  cloud-data:

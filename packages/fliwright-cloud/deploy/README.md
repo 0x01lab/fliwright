@@ -27,6 +27,32 @@ Linux 模板设置 `dataRoot` 为 `/var/lib/fliwright-cloud`，运行账户为 `
 不要保留本地试用配置里的 `localUser`。代理转发 Worker WebSocket Upgrade。
 `publicationSecret` 必须稳定保存，后续启动和上传重试继续使用同一值。
 
+## Docker Compose
+
+在仓库外准备团队部署配置，以 [`server.docker.example.json`](./server.docker.example.json)
+为模板填写 HTTPS 域名、用户和 Git 仓库主机。保留容器内的 `host`、`port` 和 `dataRoot`，
+由容器接收端口转发并将 SQLite 和报告写入 `cloud-data` 命名卷。
+在私有 `server.env` 中设置 `FLIWRIGHT_CLOUD_PROXY_SECRET` 和
+`FLIWRIGHT_CLOUD_PUBLICATION_SECRET`。容器以 `node` 用户（UID 1000）运行，
+挂载的 `server.json` 需授予该 UID 读取权限。Compose 以只读方式挂载配置。
+
+在仓库根目录运行：
+
+```sh
+export FLIWRIGHT_CLOUD_CONFIG_FILE=/PRIVATE/PATH/server.json
+export FLIWRIGHT_CLOUD_ENV_FILE=/PRIVATE/PATH/server.env
+docker compose -f packages/fliwright-cloud/deploy/compose.yaml up --build -d --wait
+curl --fail http://127.0.0.1:4780/healthz
+docker compose -f packages/fliwright-cloud/deploy/compose.yaml logs -f cloud
+```
+
+Compose 默认只在宿主机 `127.0.0.1:4780` 发布端口，由宿主机的
+[`nginx.conf.example`](./nginx.conf.example) 配置 HTTPS、浏览器身份和 Worker WebSocket 转发。
+若需换端口，设置 `FLIWRIGHT_CLOUD_HOST_PORT` 并同步更新 nginx 上游和健康检查地址。
+Worker 继续部署在设备主机，通过公开的 HTTPS 地址连接。重建容器时 Compose 会复用
+数据卷。升级前停止 Worker 和 Server，备份私有配置、密钥及 `cloud-data` 数据卷，再用
+同一 Compose 项目名运行 `up --build -d --wait`。
+
 ## macOS launchd
 
 复制 `com.fliwright.cloud.server.plist` 到运行账户的 `~/Library/LaunchAgents/`。
