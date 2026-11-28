@@ -184,7 +184,7 @@
     --workspace-running: oklch(0.73 0.13 252);
     --workspace-project: oklch(0.81 0.09 300);
   }
-  .dark:has(.cloud-workspace) {
+  .dark:has(.cloud-workspace, [data-ui='report-list']) {
     --background: oklch(0.178 0.002 144);
     --card: oklch(0.218 0.002 144);
     --popover: oklch(0.241 0.003 144);

@@ -451,11 +451,12 @@ it.each([
 
 it('keeps lifecycle columns on the board and published reports in their own directory', async () => {
   await mount('/queue');
-  for (const path of ['/reports', '/queue']) {
-    await click(`nav a[href="${path}"]`);
-    expect(Array.from(document.body.querySelectorAll("[data-ui~=test-column] h3")).map((heading) => heading.textContent))
-      .toEqual(path==='/reports'?[]:['待测试', '测试中', '已成功', '已失败']);
-  }
+  const boardHeadings = () => Array.from(document.body.querySelectorAll('[data-ui~=test-column] h3'), heading => heading.textContent);
+  await click('nav a[href="/reports"]');
+  expect(boardHeadings()).toEqual([]);
+  expect(document.querySelector('main [data-slot="card"] [data-slot="empty"]')?.textContent).toBe('暂无已发布的报告');
+  await click('nav a[href="/queue"]');
+  expect(boardHeadings()).toEqual(['待测试', '测试中', '已成功', '已失败']);
 });
 
 function boardRequest(id: string, state: BoardRequest['state'], verdict: BoardRequest['verdict'] = 'unknown'): BoardRequest {
@@ -996,6 +997,10 @@ it('keeps project summaries and scope across the three main destinations', async
     })),
   ];
   const nav = (label: string) => `.workspace-nav a[aria-label="${label}"]`;
+  const reportCard = 'main [data-slot="card"]';
+  const reportRows = `${reportCard} table tbody tr`;
+  const pagination = `${reportCard} nav[aria-label="测试报告分页"]`;
+  const nextReportPage = `${pagination} button:last-child`;
   const firstFacts = { '默认分支': 'main', '测试套件': '1', '任务总数': '1', '通过率': '100%' };
   const secondFacts = { '默认分支': 'dev', '测试套件': '1', '任务总数': '2', '通过率': '0%' };
   await mount('/projects/second/kanban?search=queued');
@@ -1016,21 +1021,30 @@ it('keeps project summaries and scope across the three main destinations', async
 
   await click(nav('测试报告'));
   expect(window.location.pathname + window.location.search).toBe('/projects/second/reports');
-  expect(document.querySelectorAll('.report-entry')).toHaveLength(25);
+  expect(Array.from(document.querySelectorAll(`${reportCard} table th`), cell => cell.textContent))
+    .toEqual(['报告名称', '项目', '提交', '发布时间', '查看报告']);
+  expect(document.querySelectorAll(reportRows)).toHaveLength(25);
+  expect(Array.from(document.querySelectorAll(`${reportRows}:first-child td`), cell => cell.textContent).slice(0, 3))
+    .toEqual(['Second project report 0', 'second', 'aaaaaaaa']);
+  expect(document.querySelector(`${reportRows}:first-child time`)?.getAttribute('datetime')).toBe('1970-01-01T00:00:00.001Z');
+  expect(document.querySelector<HTMLButtonElement>(`${pagination} button:first-child`)?.disabled).toBe(true);
   expect(boardHeaderFacts()).toEqual(secondFacts);
-  await act(async () => Array.from(document.querySelectorAll('main button')).find(button => button.textContent === '下一页')!.click());
-  expect(document.querySelector('.report-entry')?.textContent).toContain('Second project report 25');
-  await click('.report-entry');
+  await click(nextReportPage);
+  expect(document.querySelectorAll(reportRows)).toHaveLength(1);
+  expect(document.querySelector(`${reportRows} a`)?.textContent).toBe('Second project report 25');
+  expect(document.querySelector<HTMLButtonElement>(nextReportPage)?.disabled).toBe(true);
+  await click(`${reportRows} a`);
   expect(window.location.pathname + window.location.search).toBe('/reports/second-report-25?targetId=second');
   expect(document.querySelector('a[title="返回测试任务"]')?.getAttribute('href')).toBe('/projects/second/kanban');
   expect(boardHeaderFacts()).toEqual(secondFacts);
   await click(nav('测试报告'));
-  await act(async () => Array.from(document.querySelectorAll('main button')).find(button => button.textContent === '下一页')!.click());
+  await click(nextReportPage);
 
   await openProjectMenu();
   await click('[data-ui="project-list-item"][href="/projects/first/reports"]');
   expect(window.location.pathname + window.location.search).toBe('/projects/first/reports');
-  expect(document.querySelector('.report-entry')?.textContent).toContain('First project report');
+  expect(document.querySelector(`${reportRows} a`)?.textContent).toBe('First project report');
+  expect(document.querySelector(pagination)).toBeNull();
   expect(boardHeaderFacts()).toEqual(firstFacts);
 
   await click(nav('执行看板'));

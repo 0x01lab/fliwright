@@ -1,5 +1,5 @@
 import { Alert } from './components/ui/alert.js';
-import { ArrowLeft, ArrowUpRight, ChevronDown, Monitor, Pause, Play, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ChevronDown, ChevronRight, FileText, Monitor, Pause, Play, TriangleAlert } from 'lucide-react';
 import { WorkerPairing } from './WorkerPairing.js';
 import type { WorkerStatusResponse } from '../catalog-scan-status.js';
 import { serviceStatusLabels } from './WorkerDiagnostics.js';
@@ -30,6 +30,8 @@ import { Button } from './components/ui/button.js';
 import { NativeSelect } from './components/ui/native-select.js';
 import { Checkbox } from './components/ui/checkbox.js';
 import { Textarea } from './components/ui/textarea.js';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './components/ui/table.js';
+import { Empty as UiEmpty, EmptyHeader, EmptyMedia, EmptyTitle } from './components/ui/empty.js';
 import React, {
   useEffect,
   useId,
@@ -52,6 +54,7 @@ import { Replay } from './Replay.js';
 import { api, useData } from './data.js';
 import { Devices, DeviceDetail, deviceFilters } from './Devices.js';
 import { Projects } from './Projects.js';
+import { ListCard } from './ListCard.js';
 import { TestBoard, type BoardRequest } from './TestBoard.js';
 import { QueueBoard } from './QueueBoard.js';
 import { WorkspaceHeader, type CloudUser, type ProjectDirectory } from './WorkspaceHeader.js';
@@ -213,7 +216,9 @@ function Layout({
   });
   const path = useLocation({ select: (location) => location.pathname });
   const page = useMatches<AnyRouter, WorkspacePage>({ select: matches => matches.at(-1)?.staticData.workspacePage ?? 'other' });
-  const isReportPage = path.startsWith('/reports/') || path.startsWith('/shared/reports/');
+  const isReportPage = /^\/(shared\/)?reports\/[^/]/.test(path);
+  const contentSpacing = page === 'reports' && !isReportPage ? '' :
+    `px-4 max-sm:px-3 ${isReportPage ? 'gap-2 pt-2' : 'gap-3 pt-4 max-sm:pt-3'}`;
   const showWorkerAlert = !shared && path !== '/workers' && !workers.error &&
     workers.data?.some(worker => worker.health === 'healthy') === false;
   const workerAlertRef = useRef<HTMLDivElement>(null);
@@ -240,7 +245,7 @@ function Layout({
         跳至内容
       </a>
       <WorkspaceHeader directory={directory} user={me} shared={shared} page={page} theme={theme} toggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-      <main className={`grid w-full min-w-0 content-start px-4 pb-6 max-sm:px-3 max-sm:pb-4 ${isReportPage ? 'gap-2 pt-2' : 'gap-3 pt-4 max-sm:pt-3'}`} id="content" tabIndex={-1} data-ui="cloud-content">
+      <main className={`grid w-full min-w-0 content-start pb-6 max-sm:pb-4 ${contentSpacing}`} id="content" tabIndex={-1} data-ui="cloud-content">
         {path.startsWith('/requests/') && (
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground [&_b]:font-medium [&_code]:truncate" data-ui="crumb">
             <Link {...boardDestination(targetId)}>执行看板</Link>
@@ -320,22 +325,51 @@ function ReportList({ targetId }: { targetId?: string }) {
     items: Array<{ id: string; title: string; sha: string; projectName: string; createdAt: number }>;
     hasMore: boolean;
   }>(`/api/reports?${params}`, 5000);
-  return <section className="project-directory">
-    <h1>测试报告</h1>
-    {error && <div role="alert">{error} <Button onClick={reload}>重试</Button></div>}
-    {!data && !error && <p role="status">正在加载报告…</p>}
-    {data && <>
-      {!data.items.length && <Empty>暂无已发布的报告</Empty>}
-      <div>{data.items.map(report => <Link className="report-entry" key={report.id} to="/reports/$id" params={{ id: report.id }} search={{ targetId }}>
-        <Icon name="doc" />
-        <span><strong>{report.title}</strong><small>{report.projectName} · {report.sha.slice(0, 8)}</small></span>
-        <time>{time(report.createdAt)}</time>
-      </Link>)}</div>
-      {(offset > 0 || data.hasMore) && <div className="flex gap-2">
+  return <section className="project-directory min-w-0" aria-labelledby="report-list-heading" data-ui="report-list">
+    <ListCard
+      heading={<div className="flex items-center gap-2">
+        <h1 id="report-list-heading" className="text-sm">测试报告</h1>
+        {data && <span className="lane-count" title="本页报告数">{data.items.length}</span>}
+      </div>}
+      footer={data && (offset > 0 || data.hasMore) && <nav aria-label="测试报告分页" className="flex gap-2">
         <Button variant="outline" disabled={!offset} onClick={() => setOffset(offset - 25)}>上一页</Button>
         <Button variant="outline" disabled={!data.hasMore} onClick={() => setOffset(offset + 25)}>下一页</Button>
-      </div>}
-    </>}
+      </nav>}
+    >
+      {error && <Alert asChild variant="destructive"><div role="alert" className="m-3 flex flex-wrap items-center gap-2">
+        <span>{error}</span><Button variant="ghost" onClick={reload}>重试</Button>
+      </div></Alert>}
+      {!data && !error && <p role="status" className="p-6 text-muted-foreground">正在加载报告…</p>}
+      {data && (data.items.length ? (
+        <Table aria-labelledby="report-list-heading" className="min-w-[34rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-44">报告名称</TableHead>
+              <TableHead className="w-1/5">项目</TableHead>
+              <TableHead className="w-24">提交</TableHead>
+              <TableHead className="w-36">发布时间</TableHead>
+              <TableHead className="w-8"><span className="sr-only">查看报告</span></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.items.map(report => <TableRow key={report.id} className="relative">
+              <TableCell>
+                <Link to="/reports/$id" params={{ id: report.id }} search={{ targetId }} className="flex items-center gap-2 font-medium wrap-anywhere after:absolute after:inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
+                  <FileText aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+                  {report.title}
+                </Link>
+              </TableCell>
+              <TableCell className="wrap-anywhere text-muted-foreground">{report.projectName}</TableCell>
+              <TableCell className="text-muted-foreground"><code title={report.sha}>{report.sha.slice(0, 8)}</code></TableCell>
+              <TableCell className="whitespace-nowrap text-muted-foreground">
+                <time dateTime={new Date(report.createdAt).toISOString()}>{time(report.createdAt)}</time>
+              </TableCell>
+              <TableCell><ChevronRight aria-hidden="true" className="size-3.5 text-muted-foreground" /></TableCell>
+            </TableRow>)}
+          </TableBody>
+        </Table>
+      ) : <UiEmpty><EmptyHeader><EmptyMedia><FileText aria-hidden="true" /></EmptyMedia><EmptyTitle>暂无已发布的报告</EmptyTitle></EmptyHeader></UiEmpty>)}
+    </ListCard>
   </section>;
 }
 function OverviewActivity({ workers }: { workers?: ExecutionWorker[] }) {

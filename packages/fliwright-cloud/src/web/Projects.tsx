@@ -1,6 +1,7 @@
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './components/ui/empty.js';
 import { Alert } from './components/ui/alert.js';
-import { Card, CardFooter, CardHeader } from './components/ui/card.js';
+import { Card } from './components/ui/card.js';
+import { ListCard } from './ListCard.js';
 import React, { useEffect, useState, type ReactNode } from 'react';
 import { activeProjectView, matchesProject, ProjectNavigation, projectViewDestination, projectViews, type ProjectView } from './ProjectNavigation.js';
 import type { ProjectDirectory } from './WorkspaceHeader.js';
@@ -151,23 +152,6 @@ function Summary({ label, value, detail, icon }: { label: string; value: ReactNo
   return <section data-slot="project-summary" data-ui="project-summary" className="min-w-0 space-y-1"><div className="flex items-center justify-between gap-2 text-muted-foreground [&_svg]:size-3.5 [&_svg]:shrink-0"><span>{label}</span>{icon}</div><div className="flex min-h-6 items-center text-base font-semibold">{value}</div><div className="text-xs leading-[1.45] text-muted-foreground break-words">{detail}</div></section>;
 }
 
-function ProjectListCard({ heading, pageHeading, controls, footer, children }: {
-  heading: ReactNode;
-  pageHeading?: boolean;
-  controls?: ReactNode;
-  footer?: ReactNode;
-  children: ReactNode;
-}) {
-  return <Card className="min-w-0 overflow-hidden [&_tr>:first-child]:pl-3 [&_tr>:last-child]:pr-3">
-    <CardHeader data-ui={pageHeading ? 'project-page-heading' : undefined} className="min-h-12 flex-row flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5">
-      {heading}
-      {controls && <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">{controls}</div>}
-    </CardHeader>
-    {children}
-    {footer && <CardFooter className="justify-center border-t border-border p-2">{footer}</CardFooter>}
-  </Card>;
-}
-
 function ProjectRow({ project }: { project: Project }) {
   const repository = repoPath(project.repository);
   return <TableRow className="project-row relative">
@@ -208,7 +192,7 @@ export function Projects({ directory, role, view, createRequested = false, creat
     {error && <Alert asChild variant="destructive"><p role="alert">{error}<Button variant="ghost" onClick={reload}>重试</Button></p></Alert>}
     {!projects && !error && <p role="status" className="p-6 text-muted-foreground">正在加载项目…</p>}
     {projects && (selected ? <ProjectDetail key={selected.id} project={selected} role={role ?? 'member'} tab={view ?? activeProjectView(search.view)} changed={() => void refreshProjects()} /> : <section className="project-directory" aria-labelledby="project-directory-heading">
-      <ProjectListCard
+      <ListCard
         pageHeading
         heading={<h1 id="project-directory-heading" className="text-sm">{search.view === 'tests' && !projectId ? '测试用例' : '项目目录'} <span className="lane-count">{matching.length}</span></h1>}
         controls={role === 'admin' && <Button variant="outline" aria-label="创建项目" onClick={() => setCreating(true)}><Plus />创建项目</Button>}
@@ -227,7 +211,7 @@ export function Projects({ directory, role, view, createRequested = false, creat
             <TableBody>{matching.map(project => <ProjectRow key={project.id} project={project} />)}</TableBody>
           </Table>
         ) : <EmptyState title="没有匹配的项目" action={<Link to="/projects" search={{}}>清除筛选</Link>} />}
-      </ProjectListCard>
+      </ListCard>
     </section>)}
     {creating && <Dialog title="创建项目" wide busy={saving} onClose={() => setCreating(false)}><ProjectEditor project={emptyProject()} creating saved={() => { reload(); setCreating(false); }} cancel={() => setCreating(false)} busyChanged={setSaving} /></Dialog>}
   </div>;
@@ -360,7 +344,7 @@ function ProjectDetail({ project, role, tab, changed }: { project: Project; role
           </>}
       </>}
       {tab === 'scans' && <ScanHistory scans={scans} error={scansError} canCancel={canScan} projectId={project.id} changed={refresh} retry={reloadScans} createScan={canScan ? () => setDialog('scan') : undefined} />}
-      {tab === 'scenarios' && <ProjectListCard
+      {tab === 'scenarios' && <ListCard
         heading={<h2 className="text-sm">运行场景 {current && <span className="lane-count">{current.scenarios.length}</span>}</h2>}
         controls={<>
           {current && <NativeSelect aria-label="场景扫描版本" value={current.catalogId} onChange={event => setCatalogId(event.target.value)}>
@@ -379,7 +363,7 @@ function ProjectDetail({ project, role, tab, changed }: { project: Project; role
           </Table>
         ) : !catalogs && !catalogsError ? <p role="status" className="p-6 text-muted-foreground">正在加载扫描版本…</p>
           : (current || !catalogsError) && <EmptyState title={current ? '该版本暂无场景' : '暂无扫描版本'} />}
-      </ProjectListCard>}
+      </ListCard>}
       {tab === 'runs' && <RunHistory history={history} error={historyError} loading={!requests} retry={reloadRequests} />}
       {tab === 'settings' && <div className="settings-layout">
         <div className="grid min-w-0 gap-3">
@@ -468,7 +452,7 @@ function ScanHistory({ scans, error, canCancel, projectId, changed, retry, creat
       setBusyId('');
     }
   };
-  return <ProjectListCard
+  return <ListCard
     heading={<h2 className="text-sm">扫描记录 {scans && <span className="lane-count">{filtered.length}</span>}</h2>}
     controls={<>
       <div className="w-36 max-w-full">
@@ -516,7 +500,7 @@ function ScanHistory({ scans, error, canCancel, projectId, changed, retry, creat
         </TableBody>
       </Table>
     ) : (!error || scans) && <EmptyState title={filter === 'all' ? '暂无扫描记录' : '暂无匹配的扫描记录'} />}
-  </ProjectListCard>;
+  </ListCard>;
 }
 function RunDialog({ project, catalog, selection, ready, close, submitted }: { project: Project; catalog: TestCatalog; selection: RunSelection; ready: boolean; close: () => void; submitted: (id: string) => void }) {
   const [scenario, setScenario] = useState('');
@@ -552,7 +536,7 @@ function RunHistory({ history, error, loading, retry }: { history: TestRequest[]
   const setFilter = (state:string) => void navigate({to:'.',search:{...search,state:state==='all'?undefined:state},replace:true,resetScroll:false});
   const [limit, setLimit] = useState(15);
   const filtered = history.filter(request => filter === 'all' || (filter === 'active' ? ['queued', 'assigned', 'preparing', 'running', 'finalizing', 'cancel_requested'].includes(request.state) : filter === 'failed' ? request.state === 'infrastructure_failed' || (request.state === 'completed' && request.verdict === 'failed') : request.state === 'completed' && request.verdict === 'passed'));
-  return <ProjectListCard
+  return <ListCard
     heading={<h2 className="text-sm">运行记录 {!loading && <span className="lane-count" title="最近 100 条任务中的匹配数">{filtered.length}</span>}</h2>}
     controls={<div className="w-36 max-w-full">
       <NativeSelect aria-label="筛选运行状态" value={filter} onChange={event => { setFilter(event.target.value); setLimit(15); }}>
@@ -593,7 +577,7 @@ function RunHistory({ history, error, loading, retry }: { history: TestRequest[]
           </TableBody>
         </Table>
       )}
-  </ProjectListCard>;
+  </ListCard>;
 }
 function DeleteProjectDialog({ project, close, deleted }: { project: Project; close: () => void; deleted: () => void }) {
   const [name, setName] = useState('');
