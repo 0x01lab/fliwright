@@ -56,6 +56,30 @@ describe('MockRuntime', () => {
     })).resolves.toHaveLength(1);
   });
 
+  it('findFlutterCalls reads app history before any Flutter mock route is applied', async () => {
+    const calls = [{
+      method: 'POST',
+      path: '/api/orders',
+      headers: {},
+      status: 201,
+      response: { code: 0 },
+      completed: true,
+      timestamp: 'now',
+      backend: 'dio',
+    }];
+    const sendRequest = vi.fn().mockResolvedValue({ calls });
+    const manager = new MockManager(sendRequest);
+    const mock = new MockRuntime(manager);
+
+    await expect(mock.findFlutterCalls({
+      method: 'POST',
+      path: '/api/orders',
+    })).resolves.toEqual(calls);
+    expect(sendRequest).toHaveBeenCalledWith('ext.fliwright.mock.getCalls', {
+      path: '/api/orders',
+    });
+  });
+
   it('waitForCall resolves when a matching call appears', async () => {
     const manager = new MockManager(createMockSendRequest());
     const mock = new MockRuntime(manager);

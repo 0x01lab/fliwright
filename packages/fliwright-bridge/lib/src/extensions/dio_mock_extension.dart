@@ -209,7 +209,7 @@ class DioMockExtension {
     Map<String, String> params,
   ) async {
     final count = _allCalls().length;
-    _interceptor?.callLog.clear();
+    _interceptor?.clearCalls();
     _callLog.clear();
     _log('Cleared $count Dio recorded call(s)');
     return {'cleared': count};
@@ -249,7 +249,7 @@ class DioMockExtension {
   static void _neutralizeInterceptor(FliwrightDioMockInterceptor interceptor) {
     interceptor.ruleStore = MockRuleStore();
     interceptor.passthrough = true;
-    interceptor.callLog.clear();
+    interceptor.clearCalls();
   }
 
   static List<MockCallRecord> _allCalls() {

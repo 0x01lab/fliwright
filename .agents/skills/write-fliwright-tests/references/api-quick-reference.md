@@ -9,8 +9,8 @@ import { test, expect, createFliwrightTest, defineConfig,
          createFliwrightScript, extendFliwrightTest, script,
          beforeEach, afterEach, beforeAll, afterAll, describe } from '@fliwright/vitest';
 
-// fixture: test('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, logger }) => {})
-// fixture: script('name', async ({ page, driver, flow, mock, agent, aiRuntime, timeline, logger }) => {})
+// fixture: test('name', async ({ page, driver, flow, mock, assert, agent, aiRuntime, timeline, logger }) => {})
+// fixture: script('name', async ({ page, driver, flow, mock, assert, agent, aiRuntime, timeline, logger }) => {})
 // expect(locator, title?): Assertion    // auto-wait + healing + timeline assertion
 // createFliwrightTest(config, options?): test     // custom config; options.driverProvider? for tests
 // createFliwrightScript(config): script // mode='script', requireAssertions=false
@@ -56,6 +56,11 @@ mock.getCalls(path?)
 mock.listRoutes()
 mock.listRules()
 mock.findCalls({ method?, path?, url?, headers?, body? })
+mock.findFlutterCalls({ method?, path?, url?, headers?, body? })
+
+// assert — waits for an app response, then runs Vitest assertions in verify
+assert.response(title, { request, verify }, { timeout?, interval?, includeScreenshot?, includeSnapshot? })
+// verify: ({ status, body }) => void | Promise<void>
 
 // agent — explicit AI calls recorded as ai-call timeline nodes
 agent.ask(titleOrPrompt, request?)

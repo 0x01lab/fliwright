@@ -25,7 +25,7 @@
 | [support-settings.md](./support-settings.md) | Support 参数的字段声明、VS Code 表单、本机存储与运行时读取 | 你要给项目 support 添加可视化配置，或扩展面板的控件类型 |
 | [selectors.md](./selectors.md) | 选择器格式、`getByX`、作用域（`descendant`/`ancestor`/`and`/`or`/`nth`/`first`/`last`/`filter`/`containing`）、`subtype`/`tooltip`/`state` | 你需要稳定地定位某个控件 |
 | [actions.md](./actions.md) | `click`/`longPress`/`drag`/`dragTo`/`slideTo`/`pinch`/`type`/`fill`/`clear`/`dismissKeyboard`/`pressKey`/`setCheckbox`/`selectOption`/`scrollIntoView` + 底层 `clickAt`/`dragFrom` | 你要做手势 / 输入，或移动端软键盘遮挡按钮 |
-| [assertions.md](./assertions.md) | `expect(locator, title?)` 匹配器、timeline assertion、自动等待、`.not`、自愈、失败上下文、请求检查写法 | 你在对可见结果或请求做断言 |
+| [assertions.md](./assertions.md) | Locator 匹配器、请求检查、`assert.response` 与 Vitest 响应字段匹配 | 你在验证 UI 结果、请求或 HTTP 响应 |
 | [navigation.md](./navigation.md) | `navigate` / `currentRoute` / `goBack` / `waitFor` / `waitForNew` / `settle`、go_router 设置 | 你的测试跨越多个路由 / page |
 | [forms.md](./forms.md) | `page.formHelper.analyze()` / `fill()` / `fillFields()`、语义类型、作用域、表单规则 JSON | 你在填表单或冒烟测表单 |
 | [ai.md](./ai.md) | AI runtime（`aiRuntime` fixture / `ai` 命名空间：`ask`/`generate`/`classify`/`visible`/`inspect`）、自愈 self-healing、provider 配置、`FakerGenerator`/`SemanticInferrer`/`AssertionSuggester` | 你要用 AI 造数/视觉断言，或想知道选择器自愈怎么工作 |

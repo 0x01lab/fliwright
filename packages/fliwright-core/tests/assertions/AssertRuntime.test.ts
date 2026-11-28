@@ -113,6 +113,10 @@ describe('AssertRuntime', () => {
         { method: 'POST', path: '/api/register', body: { ok: true }, timestamp: 'now' },
         { method: 'POST', path: '/api/register', body: { ok: true }, timestamp: 'later' },
       ]),
+      getFlutterCalls: vi.fn().mockResolvedValue([
+        { method: 'POST', path: '/api/register', body: { ok: true }, timestamp: 'now' },
+        { method: 'POST', path: '/api/register', body: { ok: true }, timestamp: 'later' },
+      ]),
     } as unknown as MockManager;
     const mock = new MockRuntime(manager, timeline);
     const runtime = new AssertRuntime({ recorder: timeline, mock });
@@ -122,5 +126,137 @@ describe('AssertRuntime', () => {
     await runtime.noRequest('No logout call', { path: '/api/logout' });
 
     expect(timeline.toJSON().nodes.filter((node) => node.kind === 'assertion')).toHaveLength(3);
+  });
+
+  it('asserts the completed API response for a matching request', async () => {
+    const timeline = recorder();
+    const calls = [{
+      method: 'POST',
+      path: '/api/orders',
+      body: JSON.stringify({ productId: 'product-1' }),
+      status: 201,
+      response: { code: 0, data: { orderId: 'order-123', total: 28 } },
+      completed: true,
+      timestamp: 'now',
+    }];
+    const manager = {
+      getCalls: vi.fn().mockResolvedValue([]),
+      getFlutterCalls: vi.fn().mockResolvedValue(calls),
+    } as unknown as MockManager;
+    const mock = new MockRuntime(manager, timeline);
+    const runtime = new AssertRuntime({ recorder: timeline, mock });
+
+    await runtime.response('Order API succeeded', {
+      request: {
+        method: 'POST',
+        path: '/api/orders',
+        body: { productId: 'product-1' },
+      },
+      verify: (response) => {
+        expect(response.status).toBe(201);
+        expect(response.body).toMatchObject({
+          code: 0,
+          data: { orderId: 'order-123' },
+        });
+      },
+    });
+
+    expect(timeline.toJSON().nodes.find((node) => node.kind === 'assertion')).toMatchObject({
+      kind: 'assertion',
+      status: 'passed',
+      metadata: expect.objectContaining({ matcher: 'response' }),
+    });
+  });
+
+  it('waits for the matching Dio request to finish before asserting its response', async () => {
+    const timeline = recorder();
+    let completed = false;
+    const getCalls = vi.fn().mockImplementation(async () => {
+      if (!completed) setTimeout(() => { completed = true; }, 10);
+      return [{
+        method: 'POST',
+        path: '/api/orders',
+        status: completed ? 201 : undefined,
+        response: completed ? { code: 0 } : undefined,
+        completed,
+        timestamp: 'now',
+        backend: 'dio',
+      }];
+    });
+    const manager = {
+      getCalls,
+      getFlutterCalls: getCalls,
+    } as unknown as MockManager;
+    const mock = new MockRuntime(manager, timeline);
+    const runtime = new AssertRuntime({ recorder: timeline, mock });
+    await runtime.response('Order API succeeded', {
+      request: { method: 'POST', path: '/api/orders' },
+      verify: (response) => {
+        expect(response.status).toBe(201);
+        expect(response.body).toMatchObject({ code: 0 });
+      },
+    }, { timeout: 100, interval: 1 });
+
+    expect(getCalls.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('fails before running the verifier when the request has a transport error', async () => {
+    const timeline = recorder();
+    const mock = new MockRuntime({
+      getFlutterCalls: vi.fn().mockResolvedValue([{
+        method: 'POST',
+        path: '/api/orders',
+        completed: true,
+        error: 'connection refused',
+        timestamp: 'now',
+      }]),
+    } as unknown as MockManager, timeline);
+    const runtime = new AssertRuntime({ recorder: timeline, mock });
+    const verify = vi.fn();
+
+    await expect(runtime.response('Order API responded', {
+      request: { method: 'POST', path: '/api/orders' },
+      verify,
+    })).rejects.toThrow('connection refused');
+    expect(verify).not.toHaveBeenCalled();
+    expect(timeline.toJSON().nodes.find((node) => node.kind === 'assertion')).toMatchObject({
+      status: 'failed',
+      metadata: { actual: { error: 'connection refused' } },
+    });
+  });
+
+  it('reports the actual response when an API response assertion fails', async () => {
+    const timeline = recorder();
+    const calls = [{
+      method: 'POST',
+      path: '/api/orders',
+      status: 400,
+      response: { code: 'OUT_OF_STOCK' },
+      completed: true,
+      timestamp: 'now',
+    }];
+    const manager = {
+      getCalls: vi.fn().mockResolvedValue([]),
+      getFlutterCalls: vi.fn().mockResolvedValue(calls),
+    } as unknown as MockManager;
+    const mock = new MockRuntime(manager, timeline);
+    const runtime = new AssertRuntime({ recorder: timeline, mock });
+
+    await expect(runtime.response('Order API succeeded', {
+      request: { method: 'POST', path: '/api/orders' },
+      verify: (response) => {
+        expect(response.status).toBe(201);
+        expect(response.body).toMatchObject({ code: 0 });
+      },
+    })).rejects.toMatchObject({
+      failure: expect.objectContaining({ code: 'assertion_failed', title: 'Order API succeeded' }),
+    });
+    expect(timeline.toJSON().nodes.find((node) => node.kind === 'assertion')).toMatchObject({
+      status: 'failed',
+      metadata: expect.objectContaining({
+        matcher: 'response',
+        actual: { status: 400, body: { code: 'OUT_OF_STOCK' } },
+      }),
+    });
   });
 });

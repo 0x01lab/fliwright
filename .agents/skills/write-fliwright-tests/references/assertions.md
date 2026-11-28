@@ -89,10 +89,10 @@ viExpect(await page.currentRoute()).toContain('/register');
 
 ## 请求断言
 
-请求不是 locator，不走 Fliwright locator `expect`。用 `mock.findCalls(...)` / `mock.getCalls(...)` 读取请求，再用 Vitest `expect` 校验：
+用 `assert.request(title, request)` 检查 App 是否发出匹配请求。需要检查请求体或调用详情时，从 Flutter 调用记录读取请求，再用 Vitest `expect` 校验。
 
 ```typescript
-const calls = await mock.findCalls({ method: 'POST', path: '/api/register' });
+const calls = await mock.findFlutterCalls({ method: 'POST', path: '/api/register' });
 viExpect(calls.length).toBeGreaterThanOrEqual(1);
 
 const last = calls.at(-1)!;
@@ -106,9 +106,43 @@ viExpect(body.phone).toMatch(/^1[3-9]\d{9}$/);
 
 完成状态之后可补充有界的调用静默检查，再读取总数；这只覆盖已定义操作和观察窗口，不证明未来永远没有请求。存在排队任务、重试或后台调度时，等待它们的明确完成信号；缺少信号时报告验证边界，不增加任意固定 sleep。固定 ID 的 Mock 可能让 UI 去重掩盖重复提交，因此 UI 数量和请求次数需分别验证。
 
+## HTTP 响应断言
+
+触发 App 操作后调用 `assert.response(title, { request, verify }, options?)`。从 `vitest` 导入 `expect` 用于响应数据，从 `@fliwright/vitest` 导入 locator `expect` 用于界面。下面的订单端点和字段名是示例，实际断言以 App 的接口契约为准。
+
+```typescript
+import { expect, test } from '@fliwright/vitest';
+import { expect as viExpect } from 'vitest';
+
+test('creates an order', async ({ page, driver, assert }) => {
+  await driver.mock.clearFlutterCalls();
+  await page.getByText('提交订单').click();
+
+  await assert.response('订单接口返回创建成功', {
+    request: { method: 'POST', path: '/api/orders' },
+    verify: ({ status, body }) => {
+      viExpect(status).toBe(201);
+      viExpect(body).toHaveProperty('data.orderId');
+      viExpect(body).toMatchObject({
+        code: 0,
+        data: { orderId: viExpect.any(String) },
+      });
+    },
+  });
+
+  await expect(page.getByText('下单成功'), '页面显示下单成功').toBeVisible();
+});
+```
+
+`request` 用 method、path、URL、headers 或请求体定位调用。`verify` 检查响应状态码和响应体。用 `toHaveProperty` 检查字段是否存在，用 `toMatchObject` 检查指定字段的值或类型，用 `expect.arrayContaining` 检查数组包含的元素。检查非 2xx 响应时，在回调里写出预期状态码和业务字段。
+
+断言等待最新一条匹配调用完成，默认等待 5 秒，可通过 `options.timeout` 和 `options.interval` 调整。清理 Flutter 调用历史或使用业务字段限定请求，可以避免同一端点的旧记录影响结果。未观察到匹配调用、等待响应超时或传输错误会让断言失败。`verify` 抛出的 matcher 错误和实际响应会写入失败时间线。异步回调需要 `await` 断言，使用抛错型 matcher 才能将其失败归入该时间线节点。
+
+Dio 的 HTTP、HTTPS 和自定义 Adapter 请求由接入对应 Dio 实例的 Fliwright interceptor 观察，支持 Mock 和透传。普通 `HttpClient` 路径可检查命中 HTTP Mock 的响应。采集方式和排查入口见 [HTTP Mock](./mocks.md#app-侧网络接入)。
+
 ## 该断言什么
 
-通过 **UI** 来断言，也就是用户实际能看到的东西，而不是内部状态。
+根据验收目标选择断言。接口断言检查返回的业务数据，UI 断言检查用户看到的结果。同一个用例可以同时验证两项。
 
 ```typescript
 await page.getByKey('loginButton').click();

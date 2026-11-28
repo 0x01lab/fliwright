@@ -1,6 +1,6 @@
 ---
 name: write-fliwright-tests
-description: Create, update, review, or debug Fliwright TypeScript automation scripts and E2E tests for Flutter apps. Use for project support modules and custom fields in VS Code Support Settings, @fliwright/vitest fixtures, named scenarios, contract-backed HTTP mock rules, Flutter/native locators, system permission dialogs, assertions, timeline artifacts and CLI-recorded code cleanup.
+description: Create, update, review, or debug Fliwright TypeScript automation scripts and E2E tests for Flutter apps. Use for project support modules and custom fields in VS Code Support Settings, @fliwright/vitest fixtures, named scenarios, HTTP mocks and response assertions, Flutter/native locators, system permission dialogs, timeline artifacts and CLI-recorded code cleanup.
 ---
 
 # Write Fliwright Automation & Tests
@@ -69,7 +69,8 @@ Read only the reference needed for the current task:
 - `test`/`script`, fixtures, `flow`, timeline nodes, manual steps: [references/timeline-native.md](references/timeline-native.md), [references/test-harness.md](references/test-harness.md)
 - Logging and run artifacts: [references/logging.md](references/logging.md)
 - Native UIKit/Android UI, system permission dialogs, native input and mixed Flutter/native assertions: [references/native.md](references/native.md). Use `native` for platform UI and `page` for Flutter; verify device capabilities before selecting scenarios.
-- Selectors, gestures, assertions, navigation, screenshots: [references/selectors.md](references/selectors.md), [references/actions.md](references/actions.md), [references/assertions.md](references/assertions.md), [references/navigation.md](references/navigation.md), [references/screenshots-snapshots.md](references/screenshots-snapshots.md)
+- Selectors, gestures, navigation, screenshots: [references/selectors.md](references/selectors.md), [references/actions.md](references/actions.md), [references/navigation.md](references/navigation.md), [references/screenshots-snapshots.md](references/screenshots-snapshots.md)
+- UI, request, and HTTP response assertions with `assert.response` and Vitest matchers: [references/assertions.md](references/assertions.md)
 - Forms, AI, mocks, Riverpod state, app capabilities: [references/forms.md](references/forms.md), [references/ai.md](references/ai.md), [references/mocks.md](references/mocks.md), [references/state.md](references/state.md), [references/app-instance.md](references/app-instance.md)
 - CLI workflow and failure diagnosis: [references/cli.md](references/cli.md), [references/agent-workflow.md](references/agent-workflow.md), [references/troubleshooting.md](references/troubleshooting.md)
 - Human verification, captcha, slider, or WebView/PlatformView overlays: read [references/captcha.md](references/captcha.md) before designing the flow.
@@ -104,12 +105,12 @@ If unsure which reference applies, open [references/index.md](references/index.m
 
 Put reusable app actions and business queries in `.fliwright/support/` with `extendFliwrightTest`; see the [project fixture example](references/test-harness.md#项目级-fixtureextendfliwrighttest). Keep routes, provider names and endpoints in the target project. Keep reusable mock/auth/storage/navigation baselines in [named scenarios](references/scenarios.md), so setup runs before every attempt and retry.
 
-## GitLab 计划中的脚本交付
+## Delivering Scripts For GitLab Test Plans
 
-通过 `gitlab-test-plan` 编写脚本时，覆盖目标来自完整 checklist；没有 checklist 时来自需求推导用例。
-每条用例核对前置条件、操作及全部断言，优先补齐已有部分脚本，不能用 smoke 成功代替全量覆盖。
-收集 catalog 后把完整脚本、部分覆盖及实际阻塞交回计划流程记录，执行结果仍取自真实 run。
-可继续完成的缺口应继续完成；确实无法继续的列出缺失条件和原因，交付为部分完成。
+When writing scripts through `gitlab-test-plan`, cover every acceptance checklist entry. If the checklist is absent, cover the cases derived from requirements.
+Check each case's preconditions, actions, and assertions. Fill in existing partial coverage first, and verify full coverage beyond the smoke run.
+After collecting the runner catalog, return complete and partial bindings and actual blockers to the plan workflow. Use actual run artifacts for execution results.
+Close any gaps you can resolve. If a real blocker remains, report the missing prerequisite and its impact, and mark the script delivery as partially complete.
 
 ## Human Verification And Captcha
 

@@ -1,6 +1,6 @@
 ---
 name: fliwright-bridge-integration
-description: Integrate, configure, or debug the Fliwright Dart bridge inside a Flutter app. Use for `FliwrightBridge.init`, `fliwright_bridge`, app capabilities, VM-service extensions, Riverpod bridge setup, storage reset handlers, router wiring, mock interception, or bridge capability diagnostics.
+description: Integrate, configure, or debug the Fliwright Dart bridge inside a Flutter app. Use for `FliwrightBridge.init`, `fliwright_bridge`, app capabilities, VM-service extensions, Riverpod bridge setup, storage reset handlers, router wiring, Dio response capture, mock interception, or bridge capability diagnostics.
 ---
 
 # Fliwright Bridge Integration
@@ -49,6 +49,14 @@ data in the application.
   `write-fliwright-mock-rules` for their schema.
 - Prefer mock-backed deterministic tests to live-network tests. Explicitly
   decide whether unmatched traffic may pass through.
+
+## Dio Response Capture
+
+Use `FliwrightBridge.initForDioMock()` as the debug/test initialization entry point for Dio capture. Register one `FliwrightDioMockInterceptor` with `DioMockExtension.setInterceptor()` and install that same instance on every app-owned Dio client the test exercises. The extension tracks one registered interceptor. Reuse it if the app recreates an instrumented Dio client.
+
+Dio captures Mock and passthrough results through its interceptor chain. HTTP and HTTPS requests, including requests using a custom Adapter, must reach that chain. The `HttpOverrides` route from `FliwrightBridge.init()` provides plain HTTP Mock coverage for `HttpClient`.
+
+After restarting the debug app, trigger the target request and check `driver.mock.getFlutterCalls(path)` for its completion state and response. Use `assert.response` with Vitest matchers for the test contract. See [HTTP response assertion examples](../write-fliwright-tests/references/assertions.md#http-响应断言).
 
 ## Verification
 

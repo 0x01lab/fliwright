@@ -309,6 +309,8 @@ export interface MockCall {
   body?: string;
   status?: number;
   response?: unknown;
+  completed?: boolean;
+  error?: string;
   timestamp: string;
   backend?: 'flutter' | 'dio' | 'tool-server' | string;
 }

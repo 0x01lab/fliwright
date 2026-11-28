@@ -124,8 +124,8 @@ class FliwrightBridge {
   /// registered to expose mock route management via VM Service extensions.
   ///
   /// The host app must:
-  /// 1. Create a [FliwrightDioMockInterceptor] and insert it into its Dio
-  ///    instance's interceptor chain.
+  /// 1. Create a [FliwrightDioMockInterceptor] and insert it into every Dio
+  ///    instance's interceptor chain that the test should observe.
   /// 2. Call [DioMockExtension.setInterceptor] with that instance.
   ///
   /// No HTTP server is started and no `HttpOverrides` are installed.

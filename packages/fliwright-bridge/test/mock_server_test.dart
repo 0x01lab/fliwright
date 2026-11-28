@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -926,6 +927,145 @@ void main() {
       },
     );
 
+    test('a delayed Dio mock stays pending until its response is sent', () async {
+      await FliwrightBridge.registry.invoke('ext.fliwright.mock.addRoute', {
+        'route': jsonEncode({
+          'method': 'GET',
+          'path': '/api/delayed',
+          'response': {'status': 200, 'delay': 150, 'body': {'ready': true}},
+        }),
+      });
+      final handler = _TestRequestHandler();
+      interceptor.onRequest(
+        RequestOptions(path: 'https://api.example.com/api/delayed'),
+        handler,
+      );
+      final record = interceptor.callLog.single;
+      expect(record.completed, isFalse);
+      expect(record.status, isNull);
+      await handler.completion;
+      expect(record.response, {'ready': true});
+      expect(record.completed, isTrue);
+      expect(record.status, 200);
+    });
+
+    test('getCalls records a real Dio passthrough response', () async {
+      final dio = Dio()
+        ..httpClientAdapter = _StaticResponseAdapter(
+          ResponseBody.fromString(
+            '{"code":0,"orderId":"order-123"}',
+            201,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          ),
+        )
+        ..interceptors.add(interceptor);
+
+      final response = await dio.post<Map<String, dynamic>>(
+        'https://api.example.com/api/orders',
+        data: {'productId': 'product-1'},
+      );
+      expect(response.statusCode, 201);
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.getCalls',
+        {'path': '/api/orders'},
+      );
+      final calls = result['calls'] as List<dynamic>;
+      expect(calls, hasLength(1));
+      expect(calls.single, isA<Map<dynamic, dynamic>>());
+      expect(calls.single, containsPair('status', 201));
+      expect(calls.single, containsPair('body', '{"productId":"product-1"}'));
+      expect(
+          calls.single,
+          containsPair('response', {
+            'code': 0,
+            'orderId': 'order-123',
+          }));
+      expect(calls.single, containsPair('completed', true));
+      expect(calls.single, containsPair('backend', 'dio'));
+    });
+
+    test('getCalls records a Dio HTTP error response', () async {
+      final dio = Dio()
+        ..httpClientAdapter = _StaticResponseAdapter(
+          ResponseBody.fromString(
+            '{"code":"OUT_OF_STOCK"}',
+            400,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          ),
+        )
+        ..interceptors.add(interceptor);
+
+      await expectLater(
+        dio.post<void>('https://api.example.com/api/orders'),
+        throwsA(isA<DioException>()),
+      );
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.getCalls',
+        {'path': '/api/orders'},
+      );
+      final calls = result['calls'] as List<dynamic>;
+      expect(calls, hasLength(1));
+      expect(calls.single, containsPair('status', 400));
+      expect(calls.single, containsPair('response', {'code': 'OUT_OF_STOCK'}));
+      expect(calls.single, containsPair('completed', true));
+    });
+
+    test('one interceptor records responses from multiple Dio instances',
+        () async {
+      final firstDio = Dio()
+        ..httpClientAdapter = _StaticResponseAdapter(
+          ResponseBody.fromString(
+            '{"instance":"first"}',
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          ),
+        )
+        ..interceptors.add(interceptor);
+      final secondDio = Dio()
+        ..httpClientAdapter = _StaticResponseAdapter(
+          ResponseBody.fromString(
+            '{"instance":"second"}',
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          ),
+        )
+        ..interceptors.add(interceptor);
+
+      await Future.wait([
+        firstDio.get<void>('https://api.example.com/api/shared'),
+        secondDio.get<void>('https://api.example.com/api/shared'),
+      ]);
+
+      final result = await FliwrightBridge.registry.invoke(
+        'ext.fliwright.mock.getCalls',
+        {'path': '/api/shared'},
+      );
+      final calls = result['calls'] as List<dynamic>;
+      expect(calls, hasLength(2));
+      expect(
+        calls.map((call) => (call as Map<dynamic, dynamic>)['response']),
+        containsAll([
+          {'instance': 'first'},
+          {'instance': 'second'},
+        ]),
+      );
+      expect(
+        calls.every(
+            (call) => (call as Map<dynamic, dynamic>)['completed'] == true),
+        isTrue,
+      );
+    });
+
     test('setPassthrough applies only to the active Dio interceptor', () async {
       final secondInterceptor = FliwrightDioMockInterceptor();
       DioMockExtension.setInterceptor(secondInterceptor);
@@ -1066,7 +1206,9 @@ void main() {
           );
 
           expect(response.statusCode, 204);
-          expect(interceptor.callLog, isEmpty);
+          expect(interceptor.callLog, hasLength(1));
+          expect(interceptor.callLog.single.status, 204);
+          expect(interceptor.callLog.single.completed, isTrue);
         } finally {
           await upstream.close(force: true);
         }
@@ -1116,4 +1258,27 @@ void main() {
       }
     });
   });
+}
+
+class _TestRequestHandler extends RequestInterceptorHandler {
+  Future<void> get completion async {
+    await future;
+  }
+}
+
+class _StaticResponseAdapter implements HttpClientAdapter {
+  _StaticResponseAdapter(this.responseBody);
+
+  final ResponseBody responseBody;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async =>
+      responseBody;
+
+  @override
+  void close({bool force = false}) {}
 }

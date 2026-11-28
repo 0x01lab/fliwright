@@ -124,6 +124,18 @@ export class MockRuntime {
     return calls.filter((call) => matchesCall(call, matcher));
   }
 
+  async findFlutterCalls(matcher: NormalizedRequestMatcher): Promise<Awaited<ReturnType<MockManager['getCalls']>>> {
+    return this.record('getCalls', {
+      endpoint: typeof matcher.path === 'string' ? matcher.path : undefined,
+      backend: 'flutter',
+    }, async () => {
+      const calls = await this.manager.getFlutterCalls(
+        typeof matcher.path === 'string' ? matcher.path : undefined,
+      );
+      return calls.filter((call) => matchesCall(call, matcher));
+    });
+  }
+
   async waitForCall(
     matcher: NormalizedRequestMatcher | string,
     options: WaitForMockCallOptions = {},

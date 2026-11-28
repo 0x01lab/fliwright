@@ -35,6 +35,19 @@ export interface NormalizedRequestMatcher {
   body?: unknown;
 }
 
+export interface ApiResponse {
+  status?: number;
+  body?: unknown;
+  error?: string;
+}
+
+export type ApiResponseVerifier = (response: ApiResponse) => void | Promise<void>;
+
+export interface ApiResponseAssertion {
+  request: NormalizedRequestMatcher;
+  verify: ApiResponseVerifier;
+}
+
 export interface WaitForMockCallOptions {
   count?: number;
   timeout?: number;

@@ -570,6 +570,9 @@ export type {
 } from './mocks/MockRuleController.js';
 export type { FliwrightMockServiceOptions } from './mocks/MockService.js';
 export type {
+  ApiResponse,
+  ApiResponseAssertion,
+  ApiResponseVerifier,
   ActivateMockRule,
   ActivateMockRulesOptions,
   MockBackend,

@@ -73,8 +73,10 @@ class MockCallRecord {
   final Map<String, String> headers;
   final Map<String, dynamic> query;
   final String? body;
-  final int? status;
-  final Object? response;
+  int? status;
+  Object? response;
+  bool completed;
+  String? error;
   final DateTime timestamp;
   final String? backend;
 
@@ -87,6 +89,8 @@ class MockCallRecord {
     this.body,
     this.status,
     this.response,
+    this.completed = true,
+    this.error,
     required this.timestamp,
     this.backend,
   }) : query = query ?? const {};
@@ -100,12 +104,18 @@ class MockCallRecord {
     'body': body,
     if (status != null) 'status': status,
     if (response != null) 'response': _mockJsonSafe(response),
+    'completed': completed,
+    if (error != null) 'error': error,
     'timestamp': timestamp.toIso8601String(),
     if (backend != null) 'backend': backend,
   };
 }
 
 Object? _mockJsonSafe(Object? value) {
+  if (value == null || value is String || value is num || value is bool) {
+    return value;
+  }
+  if (value is DateTime) return value.toIso8601String();
   if (value is Map) {
     return {
       for (final entry in value.entries)
@@ -113,7 +123,7 @@ Object? _mockJsonSafe(Object? value) {
     };
   }
   if (value is List) return value.map(_mockJsonSafe).toList();
-  return value;
+  return value.toString();
 }
 
 /// Pluggable persistence backend for mock route rules.

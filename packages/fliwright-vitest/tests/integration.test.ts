@@ -43,7 +43,26 @@ vi.mock(import('@fliwright/core'), async () => {
       clear: vi.fn().mockResolvedValue(undefined),
       clearCalls: vi.fn().mockResolvedValue(undefined),
       setPassthrough: vi.fn().mockResolvedValue(undefined),
-      getCalls: vi.fn().mockResolvedValue([{ method: 'POST', path: '/api/register', headers: {}, body: '{}', timestamp: 'now' }]),
+      getCalls: vi.fn().mockResolvedValue([{
+        method: 'POST',
+        path: '/api/register',
+        headers: {},
+        body: '{}',
+        status: 201,
+        response: { code: 0 },
+        completed: true,
+        timestamp: 'now',
+      }]),
+      getFlutterCalls: vi.fn().mockResolvedValue([{
+        method: 'POST',
+        path: '/api/register',
+        headers: {},
+        body: '{}',
+        status: 201,
+        response: { code: 0 },
+        completed: true,
+        timestamp: 'now',
+      }]),
       listRoutes: vi.fn().mockResolvedValue([]),
       listRules: vi.fn().mockReturnValue([]),
       loadRules: vi.fn().mockResolvedValue(undefined),
@@ -401,6 +420,24 @@ testWithTimeline('provides the timeline-native assert fixture', async ({ page, a
     kind: 'assertion',
     title: 'Next is visible through assert',
     metadata: expect.objectContaining({ matcher: 'visible' }),
+  }));
+});
+
+testWithTimeline('asserts API responses through the timeline-native assert fixture', async ({ assert, timeline }) => {
+  await assert.response('Register API succeeded', {
+    request: { method: 'POST', path: '/api/register' },
+    verify: (response) => {
+      expect(response.status).toBe(201);
+      expect(response.body).toMatchObject({ code: 0 });
+      expect(response.body).toHaveProperty('code');
+    },
+  });
+
+  expect(timeline.recorder.toJSON().nodes).toContainEqual(expect.objectContaining({
+    kind: 'assertion',
+    title: 'Register API succeeded',
+    status: 'passed',
+    metadata: expect.objectContaining({ matcher: 'response' }),
   }));
 });
 

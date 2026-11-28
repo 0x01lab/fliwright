@@ -2,23 +2,22 @@
 
 为测试目标选择或新增响应时，先按 [场景与 Mock 设计](./scenario-design.md) 核对真实 API 契约、目标分支数据、关键请求和 UI 结果。这里的 API 与文件格式不替代业务正确性检查。
 
-新版脚本优先使用 `mock` fixture（timeline-aware `MockRuntime`）；底层能力或旧文件再用
-`driver.mock`（`MockManager`）。二者都通过运行中 app 内的 Dart `HttpOverrides` 拦截 app 的
-HTTP 流量，因此 **Dio/HttpClient 的真实请求会被你的 mock 规则捕获并应答**。你既能在
-UI 上断言，也能对 app 实际发出的请求做断言。
+脚本使用 `mock` fixture（`MockRuntime`）配置 Mock 并记录时间线，底层能力通过 `driver.mock`（`MockManager`）调用。App 内 Mock 通过运行中 App 的 `ext.fliwright.mock.*` 扩展生效。
 
 > App 内 HTTP Mock 需要桥接扩展（`ext.fliwright.mock.*`）。`route()` 等尽力同步
 > 方法在同步不可用时可保留工具侧镜像；镜像存在不能证明 App 已使用响应。
 > `routeFlutter()` 和共享/Item `applyRuleSet()` 要求 Flutter 内生效，失败会抛错。
 
-## 心智模型（The mental model）
+## App 侧网络接入
 
-```
-App code  ──►  HttpClient  ──►  HttpOverrides proxy  ──►  MockManager rules
-                   ▲                                          │
-                   └────────────  mocked response ◄──────────┘
- getCalls('/api/x')  ──►  records every intercepted request (method, path, body, …)
-```
+| 客户端 | 测试入口 | 可读取的响应 |
+| --- | --- | --- |
+| Dio | `FliwrightBridge.initForDioMock()`，通过 `DioMockExtension.setInterceptor()` 登记 `FliwrightDioMockInterceptor`，并把同一拦截器加入每个待观察的 Dio 实例 | Mock 响应及透传响应，包括 HTTP 错误响应 |
+| Dart `HttpClient` | `FliwrightBridge.init()` 安装 `HttpOverrides` 的 HTTP Mock 代理 | 命中代理 Mock 规则的普通 HTTP 响应 |
+
+Dio 的透传采集在 interceptor 链中完成，覆盖经过该链的 HTTP、HTTPS 和自定义 Adapter 请求。只检查透传响应时可以直接使用 `assert.response`。普通 `HttpClient` 的直连响应超出现有采集范围。
+
+排查时用 `driver.mock.getFlutterCalls(path)` 直接检查运行中 App 的记录。Dio 侧确认已登记的 interceptor 实际装在发请求的实例上，并确认透传策略适合测试场景。断言写法见 [HTTP 响应断言](./assertions.md#http-响应断言)。
 
 ## Timeline-aware `mock` fixture
 

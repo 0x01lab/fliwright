@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
@@ -5,7 +6,7 @@ import 'package:dio/dio.dart';
 import 'mock_rule_store.dart';
 
 /// A Dio [Interceptor] that matches outgoing requests against registered
-/// [MockRoute]s and returns synthetic responses, bypassing the network.
+/// [MockRoute]s and records responses from both mocks and passthrough traffic.
 ///
 /// This interceptor exists because fliwright's [MockServerExtension] uses
 /// `HttpOverrides` to proxy `http://` traffic — which cannot intercept `https://`
@@ -20,6 +21,7 @@ class FliwrightDioMockInterceptor extends Interceptor {
 
   MockRuleStore ruleStore;
   final List<MockCallRecord> callLog = [];
+  final Map<RequestOptions, MockCallRecord> _pendingCalls = {};
 
   /// When `true` (default), requests that don't match any route are forwarded
   /// to the real server. When `false`, unmatched requests are rejected with a
@@ -29,6 +31,11 @@ class FliwrightDioMockInterceptor extends Interceptor {
   List<MockRoute> get routes => ruleStore.getAllRoutes();
 
   int get ruleStoreDebugId => ruleStore.debugId;
+
+  void clearCalls() {
+    callLog.clear();
+    _pendingCalls.clear();
+  }
 
   void _log(String message) {
     developer.log(message, name: 'fliwright.mock.dio');
@@ -46,6 +53,19 @@ class FliwrightDioMockInterceptor extends Interceptor {
     final route = ruleStore.findRoute(options.method, requestPath);
     if (route == null) {
       if (passthrough) {
+        final call = MockCallRecord(
+          method: options.method,
+          path: requestPath,
+          url: options.uri.toString(),
+          headers: _extractHeaders(options.headers),
+          query: _extractQuery(options.uri),
+          body: _extractBody(options.data),
+          completed: false,
+          timestamp: DateTime.now(),
+          backend: 'dio',
+        );
+        callLog.add(call);
+        _pendingCalls[options] = call;
         _log(
           'No Dio route matched ${options.method} $requestPath; '
           'passthrough enabled store=#${ruleStore.debugId} routes=${routes.length}',
@@ -71,20 +91,18 @@ class FliwrightDioMockInterceptor extends Interceptor {
       return;
     }
 
-    callLog.add(
-      MockCallRecord(
-        method: options.method,
-        path: requestPath,
-        url: options.uri.toString(),
-        headers: _extractHeaders(options.headers),
-        query: _extractQuery(options.uri),
-        body: _extractBody(options.data),
-        status: route.status,
-        response: route.body,
-        timestamp: DateTime.now(),
-        backend: 'dio',
-      ),
+    final call = MockCallRecord(
+      method: options.method,
+      path: requestPath,
+      url: options.uri.toString(),
+      headers: _extractHeaders(options.headers),
+      query: _extractQuery(options.uri),
+      body: _extractBody(options.data),
+      completed: false,
+      timestamp: DateTime.now(),
+      backend: 'dio',
     );
+    callLog.add(call);
 
     final response = Response<dynamic>(
       requestOptions: options,
@@ -95,21 +113,54 @@ class FliwrightDioMockInterceptor extends Interceptor {
       data: route.body,
     );
 
+    void resolveMockResponse() {
+      call
+        ..status = response.statusCode
+        ..response = response.data
+        ..completed = true;
+      handler.resolve(response);
+    }
+
     if (route.delayMs > 0) {
       _log(
         'Matched Dio route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status}; '
         'delaying ${route.delayMs}ms store=#${ruleStore.debugId} routes=${routes.length}',
       );
-      Future.delayed(Duration(milliseconds: route.delayMs), () {
-        handler.resolve(response);
-      });
+      Future<void>.delayed(Duration(milliseconds: route.delayMs), resolveMockResponse);
     } else {
       _log(
         'Matched Dio route ${route.method ?? '*'} ${route.pathPattern} -> ${route.status} '
         'store=#${ruleStore.debugId} routes=${routes.length}',
       );
-      handler.resolve(response);
+      resolveMockResponse();
     }
+  }
+
+  @override
+  void onResponse(
+      Response<dynamic> response, ResponseInterceptorHandler handler) {
+    final call = _pendingCalls.remove(response.requestOptions);
+    if (call != null) {
+      call
+        ..status = response.statusCode
+        ..response = response.data
+        ..completed = true;
+    }
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException error, ErrorInterceptorHandler handler) {
+    final call = _pendingCalls.remove(error.requestOptions);
+    if (call != null) {
+      call
+        ..status = error.response?.statusCode
+        ..response = error.response?.data
+        ..error =
+            error.response == null ? error.message ?? error.type.name : null
+        ..completed = true;
+    }
+    handler.next(error);
   }
 
   Map<String, String> _extractHeaders(Map<String, dynamic>? headers) {
@@ -125,7 +176,11 @@ class FliwrightDioMockInterceptor extends Interceptor {
   String? _extractBody(Object? data) {
     if (data == null) return null;
     if (data is String) return data;
-    return data.toString();
+    try {
+      return jsonEncode(data);
+    } on JsonUnsupportedObjectError {
+      return data.toString();
+    }
   }
 
   Map<String, dynamic> _extractQuery(Uri uri) => {

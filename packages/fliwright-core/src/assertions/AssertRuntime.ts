@@ -1,7 +1,7 @@
 import { Assertion, type AssertionOptions } from '../Assertion.js';
 import type { Locator } from '../Locator.js';
 import { MockRuntime } from '../mocks/MockRuntime.js';
-import type { NormalizedRequestMatcher } from '../mocks/types.js';
+import type { ApiResponseAssertion, NormalizedRequestMatcher } from '../mocks/types.js';
 import { runTimelineAssertion } from './AssertionTimeline.js';
 import type {
   AssertRuntimeOptions,
@@ -49,7 +49,7 @@ export class AssertRuntime {
   request(title: string, matcher: NormalizedRequestMatcher, options?: RuntimeAssertionOptions): Promise<void> {
     return this.run(title, { matcher: 'request', target: describeMatcher(matcher), expected: matcher }, options, async () => {
       const actual = await pollValue(
-        () => this.requireMock().findCalls(matcher),
+        () => this.requireMock().findFlutterCalls(matcher),
         (calls) => calls.length > 0,
         options,
       );
@@ -57,9 +57,59 @@ export class AssertRuntime {
     });
   }
 
+  /** Waits for the latest matching app request, then runs the supplied response assertions. */
+  response(title: string, assertion: ApiResponseAssertion, options?: RuntimeAssertionOptions): Promise<void> {
+    const target = describeMatcher(assertion.request);
+    const metadata: AssertionMetadata = {
+      matcher: 'response',
+      target,
+      expected: { request: assertion.request, verify: 'callback' },
+    };
+    return this.run(title, metadata, options, async () => {
+      const calls = await pollValue(
+        () => this.requireMock().findFlutterCalls(assertion.request),
+        (matches) => {
+          const latest = matches.at(-1);
+          return latest !== undefined && isCallCompleted(latest);
+        },
+        options,
+      );
+      const actualCall = calls.at(-1);
+      if (!actualCall) {
+        throw new ResponseAssertionError(
+          `Expected ${target} to return a response, but no matching request was recorded.`,
+          undefined,
+        );
+      }
+      if (!isCallCompleted(actualCall)) {
+        throw new ResponseAssertionError(
+          `Timed out waiting for ${target} to complete.`,
+          describeActualResponse(actualCall),
+        );
+      }
+
+      const response = describeActualResponse(actualCall);
+      if (actualCall.error !== undefined) {
+        throw new ResponseAssertionError(
+          `${target} failed before receiving an HTTP response: ${actualCall.error}`,
+          response,
+        );
+      }
+      try {
+        await assertion.verify(response);
+      } catch (error) {
+        throw new ResponseAssertionError(
+          error instanceof Error ? error.message : String(error),
+          response,
+          { cause: error },
+        );
+      }
+    });
+  }
+
   noRequest(title: string, matcher: NormalizedRequestMatcher, options?: RuntimeAssertionOptions): Promise<void> {
     return this.run(title, { matcher: 'noRequest', target: describeMatcher(matcher), expected: matcher }, options, async () => {
-      const actual = await this.requireMock().findCalls(matcher);
+      const actual = await this.requireMock().findFlutterCalls(matcher);
       if (actual.length > 0) throw new Error(`Expected ${describeMatcher(matcher)} not to be requested, got ${actual.length} call(s).`);
     });
   }
@@ -67,7 +117,7 @@ export class AssertRuntime {
   requestCount(title: string, matcher: NormalizedRequestMatcher, expected: number, options?: RuntimeAssertionOptions): Promise<void> {
     return this.run(title, { matcher: 'requestCount', target: describeMatcher(matcher), expected }, options, async () => {
       const actual = await pollValue(
-        () => this.requireMock().findCalls(matcher),
+        () => this.requireMock().findFlutterCalls(matcher),
         (calls) => calls.length === expected,
         options,
       );
@@ -108,9 +158,28 @@ export class AssertRuntime {
   }
 
   private requireMock(): MockRuntime {
-    if (!this.options.mock) throw new Error('MockRuntime is required for request assertions.');
+    if (!this.options.mock) throw new Error('MockRuntime is required for network assertions.');
     return this.options.mock;
   }
+}
+
+class ResponseAssertionError extends Error {
+  constructor(message: string, readonly actual: unknown, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'ResponseAssertionError';
+  }
+}
+
+function isCallCompleted(call: { completed?: boolean; status?: number; response?: unknown; error?: string }): boolean {
+  return call.completed ?? (call.status !== undefined || call.response !== undefined || call.error !== undefined);
+}
+
+function describeActualResponse(call: { status?: number; response?: unknown; error?: string }): Record<string, unknown> {
+  return {
+    ...(call.status === undefined ? {} : { status: call.status }),
+    ...(call.response === undefined ? {} : { body: call.response }),
+    ...(call.error === undefined ? {} : { error: call.error }),
+  };
 }
 
 async function pollValue<T>(read: () => Promise<T>, matches: (value: T) => boolean, options?: RuntimeAssertionOptions): Promise<T> {
