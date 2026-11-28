@@ -5,6 +5,7 @@ import { CircleDashed, Clock3, GitBranch, GitCommitHorizontal, LoaderCircle, Use
 import { ResultIcon } from './ui.js';
 import type { BoardDepth, BoardItem, TestColumn } from '../request-board.js';
 import { repoPath } from './project-identity.js';
+import { useWorkspaceProjectId } from './ProjectNavigation.js';
 
 export type BoardRequest = BoardItem;
 export type { TestColumn } from '../request-board.js';
@@ -35,13 +36,13 @@ const statuses: Record<string, string> = {
 
 const cardDate = new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 
-function ExecutionCard({ request, projectName, position, lane }: { request: BoardRequest; projectName: string; position?: number; lane: TestColumn }) {
+function ExecutionCard({ request, projectName, position, lane, targetId }: { request: BoardRequest; projectName: string; position?: number; lane: TestColumn; targetId?: string }) {
   const title = request.selection?.titlePath?.join(' › ') || request.input.suite;
   const status = statuses[request.state === 'completed' ? request.verdict : request.state];
   const branch = request.input.source?.branch ?? request.source?.branch;
   const showStage = request.state !== 'completed' || lane === 'other';
   const StageIcon = lane === 'pending' ? Clock3 : lane === 'running' ? LoaderCircle : CircleDashed;
-  return <Link className="execution-card" data-ui="test-card" to="/requests/$id" params={{ id: request.id }} aria-label={`查看测试 ${title}，${request.id}，${status}`}>
+  return <Link className="execution-card" data-ui="test-card" to="/requests/$id" params={{ id: request.id }} search={{ targetId }} aria-label={`查看测试 ${title}，${request.id}，${status}`}>
     <div className="ticket-heading">
       <h4 title={title}>{title}</h4>
       {lane === 'passed' || lane === 'failed' ? <ResultIcon status={lane} className="size-4 [&_svg]:size-2.5" /> : <StageIcon className="ticket-stage-icon" aria-hidden="true" />}
@@ -76,6 +77,7 @@ export function TestBoard({ items, queue, targets, totals, loading = false, unav
   unavailable?: boolean;
   filtered?: boolean;
 }) {
+  const targetId = useWorkspaceProjectId();
   const grouped = new Map<TestColumn, BoardRequest[]>(columns.map((column) => [column.id, []]));
   for (const item of items) grouped.get(testColumn(item))!.push(item);
   // Queue cards follow scheduling order; history keeps the API's newest-first order.
@@ -98,7 +100,7 @@ export function TestBoard({ items, queue, targets, totals, loading = false, unav
                 <span className="lane-count" data-ui="test-column-count">{loading || unavailable ? '—' : count}</span>
               </div>
               <ul data-lane={column.id} className="lane-cards" tabIndex={0} aria-label={`${column.title}测试列表`} data-ui="test-column-cards">
-                {requests.map(request => <li key={request.id}><ExecutionCard request={request} lane={column.id} position={positions.get(request.id)} projectName={request.projectName ?? targets.find(target => target.id === request.input.targetId)?.name ?? request.input.targetId} /></li>)}
+                {requests.map(request => <li key={request.id}><ExecutionCard request={request} lane={column.id} targetId={targetId} position={positions.get(request.id)} projectName={request.projectName ?? targets.find(target => target.id === request.input.targetId)?.name ?? request.input.targetId} /></li>)}
                 {!requests.length && !unavailable && <li className="lane-empty" data-ui="test-column-empty">{loading ? '正在加载…' : filtered ? '无匹配任务' : '暂无任务'}</li>}
               </ul>
             </section>

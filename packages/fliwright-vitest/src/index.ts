@@ -580,7 +580,7 @@ function configureRunSessionEvidence(timeline: FliwrightTimelineContext, page: P
       const suffix = `${request.operationId ?? 'checkpoint'}-${request.reason}`;
       const sources = {
         screenshot: async () => {
-          const screenshot = await page.screenshot({ waitForAnimations: true });
+          const screenshot = await page.screenshot({ pixelRatio: 1, waitForAnimations: true });
           signal?.throwIfAborted();
           return timeline.artifactStore.writeScreenshot(suffix, screenshot);
         },
@@ -600,6 +600,7 @@ function configureRunSessionEvidence(timeline: FliwrightTimelineContext, page: P
       const channel = result.channels[request.kind];
       const artifact = channel.value as { path: string } | undefined;
       return { status: channel.status, ...(artifact ? { artifactPaths: [artifact.path] } : {}),
+        ...(artifact && request.kind === 'screenshot' ? { artifactMetadata: { pixelRatio: 1 } } : {}),
         ...(channel.error ? { error: channel.error } : {}) };
   });
 }

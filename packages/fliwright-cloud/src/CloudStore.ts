@@ -859,29 +859,40 @@ export class CloudStore {
   latestCaseRuns(projectId: string, catalogId: string) {
     const rows = this.db.prepare(`
       WITH ranked AS (
-        SELECT id, state, json_extract(data,'$.verdict') AS verdict,
+        SELECT id, state, created_at, json_extract(data,'$.verdict') AS verdict,
           json_extract(data,'$.selection.suite') AS suite, json_extract(data,'$.selection.caseId') AS caseId,
+          json_extract(data,'$.selection.scenario') AS scenario,
           row_number() OVER (PARTITION BY json_extract(data,'$.selection.suite'),json_extract(data,'$.selection.caseId')
             ORDER BY created_at DESC,rowid DESC) AS position
         FROM requests WHERE json_extract(data,'$.projectId')=? AND json_extract(data,'$.catalogId')=?
           AND json_extract(data,'$.selection.mode')='case'
-      ) SELECT id,state,verdict,suite,caseId FROM ranked WHERE position=1`).all(projectId, catalogId);
+      ) SELECT id,state,verdict,suite,caseId,created_at,scenario FROM ranked WHERE position=1`).all(projectId, catalogId);
     return {
       catalogId,
-      items: rows.map(row => ({ id: String(row.id), suite: String(row.suite), caseId: String(row.caseId),
-        status: String(row.state === 'completed' ? row.verdict : row.state) })),
+      items: rows.map(row => ({
+        id: String(row.id), suite: String(row.suite), caseId: String(row.caseId),
+        status: String(row.state === 'completed' ? row.verdict : row.state),
+        createdAt: Number(row.created_at),
+        ...(typeof row.scenario === 'string' ? { scenario: row.scenario } : {}),
+      })),
     };
+  }
+  requestBoardTotals(targetId?: string): BoardDepth {
+    const rows = this.db.prepare(`
+      SELECT ${requestLane} AS lane, count(*) AS total
+      FROM requests WHERE (? IS NULL OR json_extract(data,'$.input.targetId')=?)
+      GROUP BY lane
+    `).all(targetId ?? null, targetId ?? null);
+    const totals: BoardDepth = { pending: 0, running: 0, passed: 0, failed: 0, other: 0 };
+    for (const row of rows) totals[row.lane as TestColumn] = Number(row.total);
+    return totals;
   }
   requestBoard(depth: BoardDepth, search: string, targetId: string): BoardSnapshot {
     // Rank before limiting. Queue ranks are global even when a filter hides earlier requests.
     const rows = this.db.prepare(`
       WITH filters(target_id, term) AS (VALUES (?, lower(?))), classified AS (
         SELECT rowid AS rid, id, state, created_at, queued_at,
-          CASE WHEN state='queued' THEN 'pending'
-            WHEN state IN ('assigned','preparing','running','finalizing','cancel_requested') THEN 'running'
-            WHEN state='infrastructure_failed' OR (state='completed' AND json_extract(data,'$.verdict')='failed') THEN 'failed'
-            WHEN state='completed' AND json_extract(data,'$.verdict')='passed' THEN 'passed'
-            ELSE 'other' END AS lane,
+          ${requestLane} AS lane,
           json_extract(data,'$.input.targetId') AS target,
           json_extract(data,'$.input.suite') AS suite,
           json_extract(data,'$.selection.titlePath') AS title_path,

@@ -1,7 +1,7 @@
 import { Button } from './components/ui/button.js';
 import { Minus, Plus } from 'lucide-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon, ResultIcon } from './ui.js';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Icon } from './ui.js';
 import {
   buildTimeAxis,
   createTimeScale,
@@ -9,6 +9,7 @@ import {
   durationMs,
   stepAtTime,
   type ReplayNode,
+  type ReplayScreenshot,
 } from './replay-model.js';
 
 const statuses: Record<string, string> = {
@@ -24,8 +25,10 @@ const elapsed = (value: number) =>
     : value < 1000
       ? `${Math.round(value)}ms`
       : `${Number((value / 1000).toFixed(2))}s`;
-const frameWidth = 112;
+const frameWidth = 80;
 const frameHeight = 56;
+const frameGap = 8;
+const minimumTrackWidth = 600;
 
 /** Recorded-time playback uses animation frames for a linear playhead at the selected speed. */
 export function TimeTimeline({
@@ -34,17 +37,21 @@ export function TimeTimeline({
   selectedId,
   onSelect,
   screenshots,
+  selectedScreenshotNodeId = selectedId,
   selectedScreenshotIndex = 0,
   controls,
+  onContentHeightChange,
   playback,
 }: {
   nodes: ReplayNode[];
   bounds: { startedAt?: unknown; endedAt?: unknown };
   selectedId?: string;
   onSelect: (id: string, screenshotIndex?: number) => void;
-  screenshots?: (node: ReplayNode) => string[];
+  screenshots?: (node: ReplayNode) => Array<Pick<ReplayScreenshot, 'phase'> & { url: string }>;
+  selectedScreenshotNodeId?: string;
   selectedScreenshotIndex?: number;
   controls?: React.ReactNode;
+  onContentHeightChange?: (height: number) => void;
   playback?: {
     playing: boolean;
     speed: number;
@@ -57,6 +64,9 @@ export function TimeTimeline({
   const [zoom, setZoom] = useState(1);
   const [hover, setHover] = useState<{ time: number }>();
   const [cursor, setCursor] = useState<{ id: string; time: number }>();
+  const heading = useRef<HTMLDivElement>(null);
+  const footer = useRef<HTMLDivElement>(null);
+  const empty = useRef<HTMLDivElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const ruler = useRef<HTMLDivElement>(null);
   const selectedBar = useRef<HTMLButtonElement>(null);
@@ -64,16 +74,31 @@ export function TimeTimeline({
   const surface = useRef<HTMLDivElement>(null);
   const drag = useRef<{ pointerId: number; offset: number }>();
   const [dragging, setDragging] = useState(false);
-  const [surfaceWidth, setSurfaceWidth] = useState(600);
-  useEffect(() => {
-    const element = surface.current;
-    if (!element) return;
-    const update = () => setSurfaceWidth(element.getBoundingClientRect().width || 600);
+  const [surfaceWidth, setSurfaceWidth] = useState(minimumTrackWidth);
+  const hasEntries = axis.entries.length > 0;
+  useLayoutEffect(() => {
+    const body = surface.current ?? empty.current;
+    const header = heading.current;
+    const controls = footer.current;
+    const scroll = viewport.current;
+    if (!body || !header || !controls) return;
+    const update = () => {
+      const bounds = body.getBoundingClientRect();
+      if (scroll) setSurfaceWidth(bounds.width || minimumTrackWidth);
+      // The surface has its own height, independent of the resizable viewport.
+      const scrollbar = scroll ? scroll.offsetHeight - scroll.clientHeight : 0;
+      const height = header.getBoundingClientRect().height + bounds.height +
+        controls.getBoundingClientRect().height + scrollbar;
+      if (height > 0) onContentHeightChange?.(Math.ceil(height));
+    };
     update();
     const observer = new ResizeObserver(update);
-    observer.observe(element);
+    observer.observe(body);
+    observer.observe(header);
+    observer.observe(controls);
+    if (scroll) observer.observe(scroll);
     return () => observer.disconnect();
-  }, [axis.entries.length > 0]);
+  }, [hasEntries, onContentHeightChange]);
   const selected = axis.entries.find((entry) => entry.node.id === selectedId);
   const cursorTime =
     cursor?.id === selectedId ? cursor?.time : selected?.startMs;
@@ -136,7 +161,7 @@ export function TimeTimeline({
       container.scrollLeft += box.left - view.left - container.clientWidth / 3;
     if (box.top < rulerBottom || box.bottom > view.bottom)
       container.scrollTop += box.top - view.top - container.clientHeight / 2;
-  }, [selectedId, selectedScreenshotIndex, zoom, surfaceWidth, playing]);
+  }, [selectedId, selectedScreenshotNodeId, selectedScreenshotIndex, zoom, surfaceWidth, playing]);
   useEffect(() => {
     if (!playing || !surface.current || !viewport.current) return;
     const container = viewport.current;
@@ -154,39 +179,49 @@ export function TimeTimeline({
       onSelect(node.id);
     }
   };
-  const laneHeight = 18;
-  const actionsHeight = Math.max(1, axis.lanes) * laneHeight + 8;
-  // Keep each image anchored to its step's completion time. Pack nearby images
-  // into separate rows without distorting the shared time scale.
-  const { frames, frameLaneCount } = useMemo(() => {
-    const frameLaneEnds: number[] = [];
-    const frames = axis.entries.flatMap((entry) =>
-      (screenshots?.(entry.node) ?? []).map((url, imageIndex) => ({
-        entry, url, imageIndex, time: entry.endMs,
+  const actionsHeight = Math.max(1, axis.lanes) * 12 + 8;
+  const frames = useMemo(() =>
+    axis.entries.flatMap((entry) =>
+      (screenshots?.(entry.node) ?? []).map(({ url, phase }, imageIndex) => ({
+        entry, url, phase, imageIndex, time: phase === 'start' ? entry.startMs : entry.endMs,
       })),
-    ).sort((a, b) => a.time - b.time).map((frame) => {
-      const x = timeScale(frame.time) / 100 * surfaceWidth;
-      const left = Math.max(0, Math.min(x - frameWidth / 2, surfaceWidth - frameWidth));
-      let lane = frameLaneEnds.findIndex((end) => end + 8 <= left);
-      if (lane < 0) lane = frameLaneEnds.length;
-      frameLaneEnds[lane] = left + frameWidth;
-      return { ...frame, left, lane };
+    ).sort((a, b) => a.time - b.time), [axis, screenshots]);
+  const framePitch = frameWidth + frameGap;
+  const minWidth = Math.max(minimumTrackWidth, frames.length * framePitch - frameGap);
+  const trackWidth = Math.max(surfaceWidth, minWidth);
+  // Reserve space for later thumbnails near the right edge and keep the time markers exact.
+  const frameLefts = useMemo(() => {
+    const scale = createTimeScale(axis.durationMs);
+    let nextLeft = 0;
+    return frames.map(({ time }, index) => {
+      const idealLeft = scale(time) / 100 * trackWidth - frameWidth / 2;
+      const lastLeft = trackWidth - frameWidth - (frames.length - 1 - index) * framePitch;
+      const left = Math.max(nextLeft, Math.min(idealLeft, lastLeft));
+      nextLeft = left + framePitch;
+      return left;
     });
-    return { frames, frameLaneCount: frameLaneEnds.length };
-  }, [axis, screenshots, surfaceWidth]);
-  const frameLaneHeight = frameHeight + 8;
-  const height = actionsHeight + (frames.length ? frameLaneCount * frameLaneHeight + 8 : 0);
+  }, [frames, axis.durationMs, framePitch, trackWidth]);
+  const frameTop = actionsHeight + 6;
+  const height = frames.length ? frameTop + frameHeight + 8 : actionsHeight;
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col bg-card" aria-label="执行时间轴" data-ui="trace-timeline">
-      <div className="flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-2.5 py-1.5" data-ui="trace-heading trace-controls">
-        <b className="shrink-0 text-xs" data-ui="trace-title">执行时间轴</b>
-        {controls}
-        <span className="ml-auto inline-flex items-center gap-2 font-mono text-[11px] whitespace-nowrap text-muted-foreground tabular-nums [&_b]:font-medium [&_b]:text-foreground" aria-label="当前时间 / 总时长" data-ui="trace-current-time">
-          <b>{elapsed(cursorTime ?? 0)}</b>
-          <span>/</span>
-          {elapsed(axis.durationMs)}
-        </span>
-        <div className="flex items-center gap-1 pointer-coarse:[&>button]:min-h-9" data-ui="trace-tools">
+      <div ref={heading} className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-border px-3 py-2 max-sm:px-2.5" data-ui="trace-heading">
+        <div className="flex items-center gap-2 text-xs [&>svg]:size-3.5 [&>svg]:text-muted-foreground [&>span]:text-[11px] [&>span]:text-muted-foreground" data-ui="trace-title">
+          <Icon name="clock" />
+          <b>执行时间轴</b>
+          <span>
+            {durationLabel(axis.durationMs)}
+            <span className="mx-2 text-border" data-ui="trace-separator">/</span>
+            {axis.entries.length} 个操作
+          </span>
+        </div>
+        <div className="flex items-center gap-1 max-sm:ml-auto pointer-coarse:[&>button]:min-h-9" data-ui="trace-tools">
+          <span className="mr-2 flex items-center gap-1.5 text-[10px] text-muted-foreground max-sm:hidden [&_i]:size-2 [&_i]:rounded-sm" data-ui="trace-legend">
+            <i className="bg-pass" />
+            通过
+            <i className="bg-destructive" data-ui="failed" />
+            失败
+          </span>
           <Button
             variant="secondary"
             size="icon-sm"
@@ -221,13 +256,13 @@ export function TimeTimeline({
           </Button>
         </div>
       </div>
-      {axis.entries.length ? (
+      {hasEntries ? (
         <>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-3 [scrollbar-width:thin] max-sm:px-2.5" ref={viewport} data-ui="trace-viewport">
             <div
               className="relative"
               ref={surface}
-              style={{ width: `${zoom * 100}%`, minWidth: 600 }} data-ui="trace-surface"
+              style={{ width: `${zoom * 100}%`, minWidth: minWidth * zoom }} data-ui="trace-surface"
             >
               <div ref={ruler} className="sticky top-0 z-10 h-6 border-b border-muted-foreground/25 bg-border dark:bg-[color-mix(in_oklch,var(--background),black_20%)]" data-ui="trace-ruler">
                 <div className="pointer-events-none absolute inset-0 overflow-hidden [&>span]:absolute [&>span]:h-full [&>span]:border-l [&>span]:border-muted-foreground/25 [&>span]:px-1 [&>span]:pt-0.5 [&>span]:font-mono [&>span]:text-[10px]/3 [&>span]:whitespace-nowrap [&>span]:text-foreground/80" aria-hidden="true" data-ui="trace-ruler-ticks">
@@ -340,12 +375,13 @@ export function TimeTimeline({
                       variant="ghost"
                       key={n.id}
                       ref={active ? selectedBar : undefined}
-                      className={`absolute z-10 flex h-3.5 min-h-0 min-w-0 justify-center overflow-hidden rounded-sm border-0 bg-muted px-0 hover:z-20 hover:brightness-95 focus-visible:z-20 data-[selected=true]:z-20 data-[selected=true]:brightness-95 data-[status=failed]:bg-fail-bg data-[status=passed]:bg-pass-bg data-[status=interrupted]:bg-warn-bg [&>[data-ui~=result-icon]]:size-2.5 ${point ? '-translate-x-1/2' : ''} ${entry.complete ? '' : 'opacity-60'}`}
+                      className={`absolute z-10 block h-3 min-h-0 min-w-0 rounded-none border-0 bg-transparent p-0 after:absolute after:inset-x-0 after:top-1 after:h-0.5 after:rounded-full after:bg-pass after:opacity-65 hover:z-20 hover:bg-accent hover:after:opacity-100 data-[selected=true]:z-20 data-[selected=true]:bg-accent data-[selected=true]:after:opacity-100 data-[status=failed]:after:bg-destructive data-[status=running]:after:bg-muted-foreground data-[status=interrupted]:after:bg-warn data-[status=skipped]:after:bg-muted-foreground ${point ? "-translate-x-1/2" : ''} ${active ? "bg-accent" : ''} ${entry.complete ? '' : "after:opacity-40"}`}
                       style={{
                         left: percent(entry.startMs),
-                        width: point ? 8 : intervalWidth(entry.startMs, entry.endMs),
-                        minWidth: 4,
-                        top: entry.lane * laneHeight + 2,
+                        width: point
+                          ? 8
+                          : intervalWidth(entry.startMs, entry.endMs),
+                        top: entry.lane * 12,
                       }}
                       data-step-id={n.id}
                       data-status={n.status}
@@ -357,37 +393,38 @@ export function TimeTimeline({
                         setCursor(undefined);
                         onSelect(n.id);
                       }} data-ui={`trace-action ${point ? 'point' : ''} ${active ? 'selected' : ''} ${entry.complete ? '' : 'incomplete'}`}
-                    >
-                      {n.status === 'failed' && <ResultIcon status="failed" />}
-                    </Button>
+                    />
                   );
                 })}
-                {frames.map(({ entry, url, imageIndex, time, left, lane }) => (
-                  <React.Fragment key={`${entry.node.id}-${imageIndex}`}>
-                    <span
-                      className="pointer-events-none absolute w-px bg-border"
-                      style={{ left: percent(time), top: actionsHeight, height: lane * frameLaneHeight + 6 }}
-                      aria-hidden="true" data-ui="trace-frame-marker"
-                    />
-                    <Button
-                      variant="ghost"
-                      ref={entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? selectedFrame : undefined}
-                      className={`absolute z-10 grid h-14 min-h-0 w-28 overflow-hidden rounded-sm bg-muted p-0 shadow-sm hover:bg-accent [&_img]:block [&_img]:h-full [&_img]:min-h-0 [&_img]:w-full [&_img]:object-contain ${entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? "bg-accent" : ''}`}
-                      style={{ left, top: actionsHeight + lane * frameLaneHeight + 6 }}
-                      data-step-id={entry.node.id}
-                      data-time-ms={time}
-                      aria-label={`截图：${entry.node.title}，${elapsed(time)}，第 ${imageIndex + 1} 张`}
-                      aria-pressed={entry.node.id === selectedId && imageIndex === selectedScreenshotIndex}
-                      title={`${entry.node.title} · ${elapsed(time)}（${entry.complete ? '步骤结束' : '步骤开始'}）`}
-                      onClick={() => {
-                        setCursor({ id: entry.node.id, time });
-                        onSelect(entry.node.id, imageIndex);
-                      }} data-ui={`trace-frame ${entry.node.id === selectedId && imageIndex === selectedScreenshotIndex ? 'selected' : ''}`}
-                    >
-                      <TimelineScreenshot key={url} url={url} title={entry.node.title} />
-                    </Button>
-                  </React.Fragment>
-                ))}
+                {frames.map(({ entry, url, phase, imageIndex, time }, index) => {
+                  const active = entry.node.id === selectedScreenshotNodeId && imageIndex === selectedScreenshotIndex;
+                  return (
+                    <React.Fragment key={`${entry.node.id}-${imageIndex}`}>
+                      <span
+                        className="pointer-events-none absolute w-px bg-border"
+                        style={{ left: percent(time), top: actionsHeight, height: frameTop - actionsHeight }}
+                        aria-hidden="true" data-ui="trace-frame-marker"
+                      />
+                      <Button
+                        variant="ghost"
+                        ref={active ? selectedFrame : undefined}
+                        className={`absolute z-10 grid min-h-0 overflow-hidden rounded-sm bg-muted p-0 shadow-sm hover:bg-accent [&_img]:block [&_img]:h-full [&_img]:min-h-0 [&_img]:w-full [&_img]:object-contain ${active ? "bg-accent" : ''}`}
+                        style={{ left: frameLefts[index], top: frameTop, width: frameWidth, height: frameHeight }}
+                        data-step-id={entry.node.id}
+                        data-time-ms={time}
+                        aria-label={`截图：${entry.node.title}，${elapsed(time)}，第 ${imageIndex + 1} 张`}
+                        aria-pressed={active}
+                        title={`${entry.node.title} · ${elapsed(time)}（${phase === 'start' ? '操作前' : entry.complete ? '步骤结束' : '步骤开始'}）`}
+                        onClick={() => {
+                          setCursor({ id: entry.node.id, time });
+                          onSelect(entry.node.id, imageIndex);
+                        }} data-ui={`trace-frame ${active ? 'selected' : ''}`}
+                      >
+                        <TimelineScreenshot key={url} url={url} title={entry.node.title} />
+                      </Button>
+                    </React.Fragment>
+                  );
+                })}
                 <span
                   className="pointer-events-none absolute inset-y-0 z-20 w-px bg-primary"
                   style={{ left: percent(cursorTime ?? 0) }} data-ui="trace-cursor"
@@ -403,10 +440,18 @@ export function TimeTimeline({
           </div>
         </>
       ) : (
-        <div className="grid justify-items-center gap-2 px-4 py-7 text-center text-muted-foreground [&_svg]:size-6 [&_h3]:text-sm [&_p]:max-w-[44ch] [&_p]:text-xs px-2.5 py-4 text-xs" data-ui="empty compact">
+        <div ref={empty} className="grid shrink-0 justify-items-center gap-2 px-4 py-7 text-center text-muted-foreground [&_svg]:size-6 [&_h3]:text-sm [&_p]:max-w-[44ch] [&_p]:text-xs px-2.5 py-4 text-xs" data-ui="empty compact">
           此尝试未采集有效时间，可在步骤列表中查看已有证据。
         </div>
       )}
+      <div ref={footer} className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-border px-3 py-1 max-sm:px-2.5" data-ui="trace-controls">
+        {controls}
+        <span className="ml-auto inline-flex items-center gap-2 font-mono text-[11px] whitespace-nowrap text-muted-foreground tabular-nums [&_b]:font-medium [&_b]:text-foreground" aria-label="当前时间 / 总时长" data-ui="trace-current-time">
+          <b>{elapsed(cursorTime ?? 0)}</b>
+          <span>/</span>
+          {elapsed(axis.durationMs)}
+        </span>
+      </div>
     </section>
   );
 }

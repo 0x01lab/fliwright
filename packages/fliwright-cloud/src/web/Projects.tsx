@@ -2,12 +2,13 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import { Alert } from './components/ui/alert.js';
 import { Card, CardFooter, CardHeader } from './components/ui/card.js';
 import React, { useEffect, useState, type ReactNode } from 'react';
-import { activeProjectView, matchesProject, ProjectNavigation, projectViews, type ProjectView } from './ProjectNavigation.js';
+import { activeProjectView, matchesProject, ProjectNavigation, projectViewDestination, projectViews, type ProjectView } from './ProjectNavigation.js';
 import type { ProjectDirectory } from './WorkspaceHeader.js';
-import { repoPath } from './project-identity.js';
+import { gitLabCaseLinks, repoPath } from './project-identity.js';
 import { FolderGit2, GitBranch, GitCommitHorizontal, Plus, Play, ScanLine, ChevronRight, ArrowUpRight, Check, X, Clock3, LoaderCircle, CircleHelp, ListChecks, Trash2 } from 'lucide-react';
 import type { CatalogScan, Project, TestCatalog, TestRequest } from '@fliwright/cloud-protocol';
 import type { CatalogScanQueueReason, CatalogScanRecord } from '../catalog-scan-status.js';
+import type { CloudStore } from '../CloudStore.js';
 import { ProjectWorkers } from './ProjectWorkers.js';
 import { ProjectSecureFiles } from './ProjectSecureFiles.js';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
@@ -73,8 +74,10 @@ function ProjectEditor({ project, creating, saved, cancel, busyChanged }: { proj
     <Field label="超时（毫秒）" type="number" value={String(draft.timeoutMs)} change={value => setDraft({ ...draft, timeoutMs: Number(value) })} />
     <label className="grid gap-1 text-sm"><span>场景名称（每行一个）</span><Textarea aria-label="场景名称" value={draft.scenarios.join('\n')} onChange={event => setDraft({ ...draft, scenarios: event.target.value.split('\n') })} /><span className="text-xs leading-[1.45] text-muted-foreground">可选。默认直接运行，不应用场景或加载 Mock 规则；命名场景用于额外的测试准备。</span></label>
     <label className="grid gap-1 text-sm"><span>Flutter 参数（每行一个）</span><Textarea aria-label="Flutter 参数" placeholder={'--flavor\ndev\n--dart-define=EXIO_ENV=dev'} spellCheck={false} value={draft.flutterArgs.join('\n')} onChange={event => setDraft({ ...draft, flutterArgs: event.target.value.split('\n') })} /></label>
-    <Field label="需要的能力（逗号分隔）" value={draft.requiredCapabilities.join(',')} change={value => setDraft({ ...draft, requiredCapabilities: value.split(',').map(item => item.trim()).filter(Boolean) })} />
-    <div className="space-y-3 md:col-span-2"><h3>测试套件</h3>
+    <label className="grid gap-1 text-sm"><span>需要的能力（逗号分隔）</span><Input aria-label="需要的能力" value={draft.requiredCapabilities.join(',')} onChange={event => setDraft({ ...draft, requiredCapabilities: event.target.value.split(',').map(item => item.trim()).filter(Boolean) })} /></label>
+    <label className="grid gap-1 text-sm md:col-span-2"><span>套件分组</span><NativeSelect aria-label="套件分组" value={draft.suiteMode} onChange={event => setDraft({ ...draft, suiteMode: event.target.value as Project['suiteMode'] })}><option value="directories">按测试目录自动分组</option><option value="patterns">手动配置套件</option></NativeSelect><span className="text-xs leading-[1.45] text-muted-foreground">按目录分组时，测试目录下每个一级子目录自动成为一个套件，目录根部文件归入 default；显式套件仍可优先覆盖指定文件。</span></label>
+    <div className="space-y-3 md:col-span-2"><h3>{draft.suiteMode === 'directories' ? '显式套件（可选）' : '测试套件'}</h3>
+      {draft.suiteMode === 'directories' && <p className="text-xs leading-[1.45] text-muted-foreground">显式套件会先认领匹配的文件；如果保留覆盖整个测试目录的 glob，就不会再产生目录套件。</p>}
       {Object.entries(draft.suites).map(([id, pattern], index) => <div className="flex gap-2" key={index}>
         <Input aria-label={`Suite ID ${index + 1}`} value={id} onChange={event => { const entries = Object.entries(draft.suites); entries[index] = [event.target.value, pattern]; setDraft({ ...draft, suites: Object.fromEntries(entries) }); }} />
         <Input aria-label={`Suite glob ${index + 1}`} value={pattern} onChange={event => setDraft({ ...draft, suites: { ...draft.suites, [id]: event.target.value } })} />
@@ -95,7 +98,7 @@ function ProjectEditor({ project, creating, saved, cancel, busyChanged }: { proj
     <DialogFooter className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-border bg-card px-4 py-3"><Button variant="ghost" disabled={busy} onClick={cancel}>取消</Button><Button disabled={busy || (creating && !repositoryDetails)} type="submit">{busy ? '保存中…' : creating ? '创建项目' : '保存项目配置'}</Button></DialogFooter>
   </form>;
 }
-function AutoRunSettings({ project, changed, busyChanged }: { project: Project; changed: () => void; busyChanged: (busy: boolean) => void }) {
+function AutoRunSettings({ project, suites, changed, busyChanged }: { project: Project; suites: string[]; changed: () => void; busyChanged: (busy: boolean) => void }) {
   const [policy, setPolicy] = useState(project.autoRun);
   const [secret, setSecret] = useState('');
   const [busy, setBusy] = useState(false);
@@ -112,10 +115,10 @@ function AutoRunSettings({ project, changed, busyChanged }: { project: Project; 
     <fieldset disabled={busy} className="space-y-4">
       <label className="flex items-center gap-2"><Checkbox checked={policy.enabled} onCheckedChange={value => setPolicy({ ...policy, enabled: value === true })} />启用自动运行</label>
       <Field label="自动运行分支" value={policy.branch} change={branch => setPolicy({ ...policy, branch })} />
-      <div><h3 className="mb-2">运行组合</h3><div className="grid gap-2 rounded-md bg-muted/40 p-3">{Object.keys(project.suites).flatMap(suite => [undefined, ...project.scenarios].map(scenario => {
+      <div><h3 className="mb-2">运行组合</h3><div className="grid gap-2 rounded-md bg-muted/40 p-3">{suites.flatMap(suite => [undefined, ...project.scenarios].map(scenario => {
         const checked = policy.selections.some(item => item.suite === suite && item.scenario === scenario);
         return <label key={`${suite}:${scenario}`} className="flex items-center gap-2"><Checkbox checked={checked} onCheckedChange={value => setPolicy({ ...policy, selections: value === true ? [...policy.selections, { suite, ...(scenario ? { scenario } : {}) }] : policy.selections.filter(item => item.suite !== suite || item.scenario !== scenario) })} />{suite} / {scenario ?? '直接运行（无场景）'}</label>;
-      }))}{!Object.keys(project.suites).length && <p className="text-xs leading-[1.45] text-muted-foreground">请先在项目配置中添加测试套件。</p>}</div></div>
+      }))}{!suites.length && <p className="text-xs leading-[1.45] text-muted-foreground">{project.suiteMode === 'directories' ? '尚未扫描出测试套件，请先在测试用例页扫描仓库。' : '请先在项目配置中添加测试套件。'}</p>}</div></div>
       <Button onClick={() => void action(async () => { const { revision: _revision, ...body } = policy; await api(`/api/projects/${project.id}/auto-run`, 'PUT', body); }, '自动运行策略已保存。')}>保存策略</Button>
       <div className="space-y-3 border-t pt-4"><h3>Webhook 连接</h3><p className="text-xs leading-[1.45] text-muted-foreground">策略版本 {project.autoRun.revision} · {project.webhookStatus === 'configured' ? '已配置' : '未启用'}</p>
         <label className="grid gap-2"><span>Webhook URL</span><Input readOnly value={`${window.location.origin}/api/webhooks/gitlab/${project.id}`} aria-label="Webhook URL" /></label>
@@ -170,9 +173,7 @@ function ProjectRow({ project }: { project: Project }) {
   return <TableRow className="project-row relative">
     <TableCell>
       <Link
-        to="/projects/$projectId"
-        params={{ projectId: project.id }}
-        search={{}}
+        {...projectViewDestination(project.id, 'tests')}
         aria-label={`${project.name}，${repository}`}
         className="flex items-center gap-2 font-medium wrap-anywhere after:absolute after:inset-0"
       >
@@ -183,14 +184,15 @@ function ProjectRow({ project }: { project: Project }) {
     <TableCell className="text-muted-foreground">
       <span className="flex items-center gap-2 wrap-anywhere"><GitBranch aria-hidden="true" className="size-3.5 shrink-0" />{project.defaultBranch}</span>
     </TableCell>
-    <TableCell className="whitespace-nowrap text-muted-foreground">{Object.keys(project.suites).length} 个套件</TableCell>
+    <TableCell className="whitespace-nowrap text-muted-foreground">{project.suiteMode === 'directories' ? '按目录分组' : `${Object.keys(project.suites).length} 个套件`}</TableCell>
     <TableCell><ChevronRight aria-hidden="true" className="size-3.5 text-muted-foreground" /></TableCell>
   </TableRow>;
 }
 
-export function Projects({ directory, role, createRequested = false, creationHandled }: { directory: ProjectDirectory; role?: string; createRequested?: boolean; creationHandled?: () => void }) {
+export function Projects({ directory, role, view, createRequested = false, creationHandled }: { directory: ProjectDirectory; role?: string; view?: ProjectView; createRequested?: boolean; creationHandled?: () => void }) {
   const { projectId } = useParams({ strict: false });
-  const query = useSearch({strict: false}).q ?? '';
+  const search = useSearch({ strict: false });
+  const query = search.q ?? '';
   const { data: projects, error, reload, update } = directory;
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -205,10 +207,10 @@ export function Projects({ directory, role, createRequested = false, creationHan
   return <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
     {error && <Alert asChild variant="destructive"><p role="alert">{error}<Button variant="ghost" onClick={reload}>重试</Button></p></Alert>}
     {!projects && !error && <p role="status" className="p-6 text-muted-foreground">正在加载项目…</p>}
-    {projects && (selected ? <ProjectDetail key={selected.id} project={selected} role={role ?? 'member'} changed={() => void refreshProjects()} /> : <section className="project-directory" aria-labelledby="project-directory-heading">
+    {projects && (selected ? <ProjectDetail key={selected.id} project={selected} role={role ?? 'member'} tab={view ?? activeProjectView(search.view)} changed={() => void refreshProjects()} /> : <section className="project-directory" aria-labelledby="project-directory-heading">
       <ProjectListCard
         pageHeading
-        heading={<h1 id="project-directory-heading" className="text-sm">项目目录 <span className="lane-count">{matching.length}</span></h1>}
+        heading={<h1 id="project-directory-heading" className="text-sm">{search.view === 'tests' && !projectId ? '测试用例' : '项目目录'} <span className="lane-count">{matching.length}</span></h1>}
         controls={role === 'admin' && <Button variant="outline" aria-label="创建项目" onClick={() => setCreating(true)}><Plus />创建项目</Button>}
       >
         {projectId ? <EmptyState title="项目不存在" action={<Link to="/projects" search={{}}>所有项目</Link>} /> : !projects.length ? <EmptyState title="暂无项目">{role !== 'admin' && '请联系管理员创建项目。'}</EmptyState> : matching.length ? (
@@ -232,17 +234,75 @@ export function Projects({ directory, role, createRequested = false, creationHan
 }
 
 type RunSelection = { suite: string; caseId?: string; title: string };
-type CaseRunSummary = { id: string; suite: string; caseId: string; status: string };
+type CaseRuns = ReturnType<CloudStore['latestCaseRuns']>;
+type CatalogCase = TestCatalog['suites'][number]['cases'][number];
+type CaseDetail = { catalog: TestCatalog; suite: string; item: CatalogCase };
 type ProjectDialog = 'scan' | 'edit' | 'auto' | 'delete' | 'scenario' | null;
-function ProjectDetail({project, role, changed}: {project:Project; role:string; changed:()=>void}) {
+const caseDateTime = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' });
+
+function caseTitle(item: CatalogCase) {
+  const name = item.titlePath.join(' › ');
+  return item.duplicateIndex > 0 ? `${name}（同名 #${item.duplicateIndex + 1}）` : name;
+}
+
+function CaseTime({ value }: { value: number }) {
+  return <time dateTime={new Date(value).toISOString()}>{caseDateTime.format(value)}</time>;
+}
+
+function CaseDetailsDialog({ detail, project, recent, runsLoaded, runsError, retry, canRun, close, run }: {
+  detail: CaseDetail;
+  project: Project;
+  recent?: CaseRuns['items'][number];
+  runsLoaded: boolean;
+  runsError: string;
+  retry: () => void;
+  canRun: boolean;
+  close: () => void;
+  run: () => void;
+}) {
+  const { catalog, item, suite } = detail;
+  const links = gitLabCaseLinks(project.repository, catalog.commit, project.projectPath, item.file);
+  return <Dialog title={caseTitle(item)} description={`${project.name} · ${repoPath(project.repository)}`} className="[&_header]:wrap-anywhere" onClose={close}>
+    <dl className="case-facts">
+      <dt>套件</dt><dd>{suite}</dd>
+      <dt>测试文件</dt><dd>{links ? <a className="text-primary underline-offset-2 hover:underline" href={links.file} target="_blank" rel="noopener noreferrer" title="在 GitLab 中查看测试文件">
+        <code>{item.file}</code> <ArrowUpRight aria-hidden="true" className="inline size-3.5 align-text-bottom" />
+      </a> : <code>{item.file}</code>}</dd>
+      {catalog.branch && <><dt>扫描分支</dt><dd><code>{catalog.branch}</code></dd></>}
+      <dt>扫描时间</dt><dd><CaseTime value={catalog.createdAt} /></dd>
+      <dt>扫描提交</dt><dd>{links ? <a className="text-primary underline-offset-2 hover:underline" href={links.commit} target="_blank" rel="noopener noreferrer" title="在 GitLab 中查看提交">
+        <code>{catalog.commit}</code> <ArrowUpRight aria-hidden="true" className="inline size-3.5 align-text-bottom" />
+      </a> : <code>{catalog.commit}</code>}</dd>
+    </dl>
+    {item.description && <section className="mx-4 mb-4 space-y-2" aria-label="用例描述">
+      <h3 className="font-medium">用例描述</h3>
+      <p className="whitespace-pre-wrap wrap-anywhere text-sm">{item.description}</p>
+    </section>}
+    <section aria-label="最近一次单独运行" className="mx-4 mb-4 space-y-2 rounded-md bg-muted/50 p-3">
+      <h3 className="font-medium">最近一次单独运行</h3>
+      {recent ? <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <StatusBadge value={recent.status} />
+        <span className="text-muted-foreground">提交于 <CaseTime value={recent.createdAt} /></span>
+        {recent.scenario && <span className="wrap-anywhere text-muted-foreground">场景 <span className="text-foreground">{recent.scenario}</span></span>}
+      </div> : runsError ? <div className="flex flex-wrap items-center gap-2">
+        <p role="alert" className="text-muted-foreground">运行记录加载失败</p><Button variant="ghost" size="sm" onClick={retry}>重试</Button>
+      </div> : <p role="status" className="text-muted-foreground">{runsLoaded ? '该版本暂无单独运行记录' : '正在读取运行记录…'}</p>}
+    </section>
+    <DialogFooter className="sticky bottom-0 border-t border-border bg-card px-4 py-3">
+      {recent && <Button variant="outline" asChild><Link to="/requests/$id" params={{ id: recent.id }} search={{ targetId: project.id }}>查看运行详情</Link></Button>}
+      <Button disabled={!canRun} onClick={run}><Play />运行用例</Button>
+    </DialogFooter>
+  </Dialog>;
+}
+
+function ProjectDetail({ project, role, tab, changed }: { project: Project; role: string; tab: ProjectView; changed: () => void }) {
   const search = useSearch({strict:false});
   const navigate = useNavigate();
-  const tab = activeProjectView(search.view);
   const catalogId = search.v, filter = search.q ?? '';
-  const setTab = (view:ProjectView) => void navigate({to:'/projects/$projectId',params:{projectId:project.id},search:{view,v:catalogId}});
+  const setTab = (view: ProjectView) => void navigate(projectViewDestination(project.id, view, { v: catalogId }));
   const setCatalogId = (v:string) => void navigate({to:'.',search: { ...search,v},replace:true,resetScroll:false});
   const setFilter = (q:string) => void navigate({to:'.',search: { ...search,q:q || undefined},replace:true,resetScroll:false});
-  const [caseDetail, setCaseDetail] = useState<{ catalog:TestCatalog; suite:string; item:TestCatalog['suites'][number]['cases'][number] }>();
+  const [caseDetail, setCaseDetail] = useState<CaseDetail>();
   const [runCatalog, setRunCatalog] = useState<TestCatalog>();
   const [dialog, setDialog] = useState<ProjectDialog>(null);
   const [editing, setEditing] = useState(false);
@@ -255,11 +315,13 @@ function ProjectDetail({project, role, changed}: {project:Project; role:string; 
   const history = [...(requests?.items.filter(request => request.projectId === project.id) ?? [])].sort((a, b) => b.createdAt - a.createdAt);
   const readyCatalogs = [...(catalogs?.filter(item => item.configRevision === project.configRevision && item.status === 'ready') ?? [])].sort((a, b) => b.createdAt - a.createdAt);
   const current = readyCatalogs.find(item => item.catalogId === catalogId) ?? readyCatalogs[0];
-  const { data: caseRuns, error: caseRunError, reload: reloadCaseRuns } = useData<{ catalogId: string; items: CaseRunSummary[] }>(
-    `/api/projects/${project.id}/catalogs/${current?.catalogId}/case-runs`, 5000, tab === 'tests' && !!current,
+  const caseRunsCatalogId = caseDetail?.catalog.catalogId ?? current?.catalogId;
+  const { data: caseRuns, error: caseRunError, reload: reloadCaseRuns } = useData<CaseRuns>(
+    `/api/projects/${project.id}/catalogs/${caseRunsCatalogId}/case-runs`, 5000, Boolean(caseDetail || (tab === 'tests' && current)),
   );
   const recentCases = new Map((caseRuns?.items ?? []).map(run => [JSON.stringify([run.suite, run.caseId]), run]));
-  const detailRun = caseDetail && caseRuns?.catalogId === caseDetail.catalog.catalogId ? recentCases.get(JSON.stringify([caseDetail.suite, caseDetail.item.caseId])) : undefined;
+  const detailRunsLoaded = Boolean(caseDetail && caseRuns?.catalogId === caseDetail.catalog.catalogId);
+  const detailRun = caseDetail && detailRunsLoaded ? recentCases.get(JSON.stringify([caseDetail.suite, caseDetail.item.caseId])) : undefined;
   const latestScan = [...(scans ?? [])].sort((a, b) => b.createdAt - a.createdAt)[0] ?? status?.latestScan;
   const activeScans = scans?.filter(scan => ['queued', 'running'].includes(scan.status)).length ?? 0;
   const count = current?.suites.reduce((total, suite) => total + suite.cases.length, 0) ?? 0;
@@ -288,8 +350,7 @@ function ProjectDetail({project, role, changed}: {project:Project; role:string; 
             {visibleSuites.length>0 && <div className="case-deck" aria-label="测试用例套件" tabIndex={0} data-scroll-restoration-id={`suites-${project.id}-${current.catalogId}`}>{visibleSuites.map(suite=><section className="case-lane" key={suite.id}><header><FolderGit2/><h2>{suite.id}</h2><Badge variant="secondary">{suite.cases.length}</Badge><Button size="sm" variant="ghost" disabled={!canRun} title={runReason} aria-label={`运行套件 ${suite.id}`} onClick={()=>{setRunCatalog(current);setSelection({suite:suite.id,title:suite.id});}}><Play/>运行套件</Button></header><div className="case-list" tabIndex={0} aria-label={`${suite.id} 用例`} data-scroll-restoration-id={`cases-${current.catalogId}-${suite.id}`}>{suite.cases.map(item=>{
               const loaded = caseRuns?.catalogId === current.catalogId;
               const recent = loaded && recentCases.get(JSON.stringify([suite.id, item.caseId]));
-              const name = item.titlePath.join(' › ');
-              const title = item.duplicateIndex > 0 ? `${name}（同名 #${item.duplicateIndex + 1}）` : name;
+              const title = caseTitle(item);
               return <button type="button" className="case-ticket" key={item.caseId} onClick={() => setCaseDetail({ catalog: current, suite: suite.id, item })}>
                 <strong title={title}>{title}</strong>
                 <code title={item.file}>{item.file}</code>
@@ -322,7 +383,7 @@ function ProjectDetail({project, role, changed}: {project:Project; role:string; 
       {tab === 'runs' && <RunHistory history={history} error={historyError} loading={!requests} retry={reloadRequests} />}
       {tab === 'settings' && <div className="settings-layout">
         <div className="grid min-w-0 gap-3">
-          <Card asChild><section className="overflow-hidden p-4"><div className="mb-4 flex items-center justify-between gap-2"><h3>仓库与运行配置</h3>{role === 'admin' && <Button variant="outline" size="sm" onClick={() => setDialog('edit')}>编辑配置</Button>}</div><dl className="grid gap-x-3 gap-y-3 grid-cols-[88px_minmax(0,1fr)] [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:break-words"><dt>仓库</dt><dd><code>{repoPath(project.repository)}</code></dd><dt>默认分支</dt><dd>{project.defaultBranch}</dd><dt>配置版本</dt><dd>{project.configRevision}</dd><dt>Flutter 目录</dt><dd><code>{project.projectPath}</code></dd><dt>入口文件</dt><dd><code>{project.entry}</code></dd><dt>测试套件</dt><dd>{Object.keys(project.suites).join('、') || '未配置'}</dd><dt>运行超时</dt><dd>{project.timeoutMs / 60000} 分钟</dd></dl></section></Card>
+          <Card asChild><section className="overflow-hidden p-4"><div className="mb-4 flex items-center justify-between gap-2"><h3>仓库与运行配置</h3>{role === 'admin' && <Button variant="outline" size="sm" onClick={() => setDialog('edit')}>编辑配置</Button>}</div><dl className="grid gap-x-3 gap-y-3 grid-cols-[88px_minmax(0,1fr)] [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:break-words"><dt>仓库</dt><dd><code>{repoPath(project.repository)}</code></dd><dt>默认分支</dt><dd>{project.defaultBranch}</dd><dt>配置版本</dt><dd>{project.configRevision}</dd><dt>Flutter 目录</dt><dd><code>{project.projectPath}</code></dd><dt>入口文件</dt><dd><code>{project.entry}</code></dd><dt>测试套件</dt><dd>{project.suiteMode === 'directories' ? `按测试目录自动分组${Object.keys(project.suites).length ? `（显式：${Object.keys(project.suites).join('、')}）` : ''}` : Object.keys(project.suites).join('、') || '未配置'}</dd><dt>运行超时</dt><dd>{project.timeoutMs / 60000} 分钟</dd></dl></section></Card>
           <ProjectWorkers project={project} editable={role === 'admin'} />
           {role === 'admin' && <ProjectSecureFiles projectId={project.id} />}
           <Card asChild><section className="overflow-hidden p-4"><div className="mb-4 flex items-center justify-between gap-2"><h3>Push 自动运行</h3>{role === 'admin' && <Button variant="outline" size="sm" onClick={() => setDialog('auto')}>配置自动运行</Button>}</div><dl className="grid gap-x-3 gap-y-3 grid-cols-[88px_minmax(0,1fr)] [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:break-words"><dt>当前策略</dt><dd>{project.autoRun.enabled ? '已启用' : '未启用'}</dd><dt>触发分支</dt><dd>{project.autoRun.branch}</dd><dt>运行组合</dt><dd>{project.autoRun.selections.length} 个</dd><dt>Webhook</dt><dd>{project.webhookStatus === 'configured' ? '已配置' : project.webhookStatus === 'disabled' ? '未启用' : project.webhookStatus}</dd></dl></section></Card>
@@ -338,8 +399,13 @@ function ProjectDetail({project, role, changed}: {project:Project; role:string; 
       </div>}
     </div>
     {dialog === 'edit' && <Dialog title="编辑项目" description={`${project.name} · 保存后将更新配置版本，请重新扫描测试目录。`} wide busy={editing} onClose={() => setDialog(null)}><ProjectEditor project={project} creating={false} saved={() => { changed(); refresh(); setDialog(null); }} cancel={() => setDialog(null)} busyChanged={setEditing} /></Dialog>}
-    {dialog === 'auto' && <Dialog title="配置自动运行" busy={editing} onClose={() => setDialog(null)}><div className="p-4"><AutoRunSettings project={project} changed={changed} busyChanged={setEditing} /></div><DialogFooter className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-border bg-card px-4 py-3"><Button variant="outline" disabled={editing} onClick={() => setDialog(null)}>完成</Button></DialogFooter></Dialog>}
-    {caseDetail && <Dialog title={caseDetail.item.titlePath.join(' › ')} description={`${project.name} · ${repoPath(project.repository)}`} onClose={()=>setCaseDetail(undefined)}><dl className="case-facts"><dt>套件</dt><dd>{caseDetail.suite}</dd><dt>测试文件</dt><dd>{caseDetail.item.file}</dd><dt>扫描版本</dt><dd>{caseDetail.catalog.commit}</dd></dl><DialogFooter className="p-3">{detailRun && <Button variant="outline" asChild><Link to="/requests/$id" params={{id:detailRun.id}}>最近运行</Link></Button>}<Button disabled={!status?.ready} onClick={()=>{setRunCatalog(caseDetail.catalog);setSelection({suite:caseDetail.suite,caseId:caseDetail.item.caseId,title:caseDetail.item.titlePath.join(' › ')});setCaseDetail(undefined);}}><Play/>运行用例</Button></DialogFooter></Dialog>}
+    {dialog === 'auto' && <Dialog title="配置自动运行" busy={editing} onClose={() => setDialog(null)}><div className="p-4"><AutoRunSettings project={project} suites={readyCatalogs[0]?.suites.map(suite => suite.id) ?? Object.keys(project.suites)} changed={changed} busyChanged={setEditing} /></div><DialogFooter className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-border bg-card px-4 py-3"><Button variant="outline" disabled={editing} onClick={() => setDialog(null)}>完成</Button></DialogFooter></Dialog>}
+    {caseDetail && <CaseDetailsDialog detail={caseDetail} project={project} recent={detailRun} runsLoaded={detailRunsLoaded}
+      runsError={caseRunError} retry={reloadCaseRuns} canRun={Boolean(status?.ready)} close={() => setCaseDetail(undefined)} run={() => {
+        setRunCatalog(caseDetail.catalog);
+        setSelection({ suite: caseDetail.suite, caseId: caseDetail.item.caseId, title: caseTitle(caseDetail.item) });
+        setCaseDetail(undefined);
+      }} />}
     {dialog === 'scan' && <ScanDialog project={project} scans={scans} close={() => setDialog(null)} submitted={() => { refresh(); setDialog(null); setTab('scans'); toast.success('仓库扫描已排队。'); }} />}
     {dialog === 'delete' && <DeleteProjectDialog project={project} close={() => setDialog(null)} deleted={() => { setDialog(null); changed(); toast.success('项目已删除。'); }} />}
     {dialog === 'scenario' && <ScenarioBuilder catalog={scenarioCatalog} close={() => setDialog(null)} />}
@@ -511,16 +577,16 @@ function RunHistory({ history, error, loading, retry }: { history: TestRequest[]
           <TableBody>
             {filtered.slice(0, limit).map(request => <TableRow key={request.id}>
               <TableCell className="wrap-anywhere">
-                <Link className="font-medium" to="/requests/$id" params={{ id: request.id }}>{request.selection?.titlePath?.join(' › ') || request.input.suite}</Link>
+                <Link className="font-medium" to="/requests/$id" params={{ id: request.id }} search={{ targetId: request.input.targetId }}>{request.selection?.titlePath?.join(' › ') || request.input.suite}</Link>
                 <p className="text-xs leading-[1.45] text-muted-foreground">{request.input.scenario ?? '直接运行'} · {request.source?.kind === 'push' ? 'GitLab Push' : '手动运行'}</p>
-                {request.supersededBy && <Link to="/requests/$id" params={{ id: request.supersededBy }}>查看替代任务</Link>}
+                {request.supersededBy && <Link to="/requests/$id" params={{ id: request.supersededBy }} search={{ targetId: request.input.targetId }}>查看替代任务</Link>}
               </TableCell>
               <TableCell><code title={request.input.commit}>{request.input.commit.slice(0, 10)}</code></TableCell>
               <TableCell><StatusBadge value={request.state === 'completed' ? request.verdict : request.state} /></TableCell>
               <TableCell className="whitespace-nowrap text-muted-foreground">{dateTime(request.createdAt)}</TableCell>
               <TableCell className="text-right">
                 <Button asChild size="icon" variant="ghost">
-                  <Link to="/requests/$id" params={{ id: request.id }} aria-label={`查看任务 ${request.id}`}><ArrowUpRight className="size-4" /></Link>
+                  <Link to="/requests/$id" params={{ id: request.id }} search={{ targetId: request.input.targetId }} aria-label={`查看任务 ${request.id}`}><ArrowUpRight className="size-4" /></Link>
                 </Button>
               </TableCell>
             </TableRow>)}

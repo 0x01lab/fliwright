@@ -208,6 +208,7 @@ export type {
 export { FliwrightDriver } from './Driver.js';
 export type { DriverOptions } from './Driver.js';
 export { RunSession, getCurrentOperationId } from './RunSession.js';
+export { parseScreenshotInteraction, type ScreenshotInteraction } from './timeline/ScreenshotInteraction.js';
 export type {
   EvidenceRequest,
   EvidenceResult,

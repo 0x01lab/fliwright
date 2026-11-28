@@ -20,7 +20,7 @@ const clean: Array<() => Promise<unknown> | void> = [];
 afterEach(async () => {
   for (const f of clean.splice(0).reverse()) await f();
 });
-function setup() {
+function setup(project: Record<string, unknown> = {}) {
   const root = mkdtempSync(join(tmpdir(), 'server-'));
   clean.push(() => rmSync(root, { recursive: true, force: true }));
   const store = new CloudStore(join(root, 'db'));
@@ -33,6 +33,7 @@ function setup() {
         repository: '/private',
         suites: { smoke: '*.test.ts' },
         scenarios: ['clean'],
+        ...project,
       },
     ],
     [
@@ -99,9 +100,14 @@ it('serves independently sized board columns with full filtered counts and globa
   expect((await read(`search=${encodeURIComponent('checkout › 确认')}`)).items.map((r: { id: string }) => r.id)).toEqual([ids[5]]);
   expect((await read('search=checkout&targetId=other')).items).toEqual([]);
   expect((await server.inject({url:'/api/board',headers:{authorization:'Bearer ci-token'}})).statusCode).toBe(403);
+  const { json: totals } = await server.inject({ url: '/api/board/totals?targetId=app', headers: browser() });
+  expect(totals()).toEqual(page.totals);
+  expect((await server.inject({ url: '/api/board/totals?targetId=other', headers: browser() })).json())
+    .toEqual({ pending: 0, running: 0, passed: 0, failed: 0, other: 0 });
+  expect((await server.inject({ url: '/api/board/totals', headers: { authorization: 'Bearer ci-token' } })).statusCode).toBe(403);
 });
 
-it('lists each published, unexpired report for team members', async () => {
+it('lists published, unexpired reports and applies the project filter before pagination', async () => {
   const { server, store, browser } = setup();
   const sha = 'a'.repeat(40);
   const request = store.submit({ targetId: 'app', suite: 'smoke', commit: sha }, 'alice', 'report-list');
@@ -115,6 +121,16 @@ it('lists each published, unexpired report for team members', async () => {
   expect(result.json()).toEqual({ hasMore: false, items: [1, 0].map(i => ({
     id: `report-${i}`, title: 'smoke', sha, projectName: 'App', createdAt: now + i,
   })) });
+  const other = { ...request, id: 'other-request', input: { ...request.input, targetId: 'other' } };
+  store.db.prepare(`INSERT INTO requests (id, actor, idem, fingerprint, created_at, queued_at, state, data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(other.id, 'alice', 'other-report', '', now, now, other.state, JSON.stringify(other));
+  for (let index = 0; index < 26; index++) {
+    insert.run(`other-${index}`, `other-attempt-${index}`, other.id, 'published', now + 10 + index, now + 60000, '{}');
+  }
+  const project = await server.inject({ url: '/api/reports?targetId=app&offset=1', headers: browser() });
+  expect(project.json()).toEqual({ hasMore: false, items: [result.json().items[1]] });
+  const otherPage = await server.inject({ url: '/api/reports?targetId=other&offset=25', headers: browser() });
+  expect(otherPage.json()).toMatchObject({ hasMore: false, items: [{ id: 'other-0' }] });
   expect((await server.inject({ url: '/api/reports', headers: { authorization: 'Bearer ci-token' } })).statusCode).toBe(403);
   expect((await server.inject({ url: '/api/reports' })).statusCode).toBe(401);
 });
@@ -244,19 +260,45 @@ it('approves scenario-free catalogs and accepts direct case and suite runs', asy
     store.submitProject({ projectId: 'app', catalogId: catalog.catalogId, commit: catalog.commit, mode: 'suite', suite: 'smoke', source: { kind: 'manual' } }, 'alice', `suite-${i}`);
   }
   const caseRuns = (await server.inject({ url: `/api/projects/app/catalogs/${catalog.catalogId}/case-runs`, headers: browser() })).json();
-  expect(caseRuns.items).toEqual([{ id: caseRequestId, suite: 'smoke', caseId: catalog.suites[0]!.cases[0]!.caseId, status: 'queued' }]);
+  expect(caseRuns.items).toEqual([{ id: caseRequestId, suite: 'smoke', caseId: catalog.suites[0]!.cases[0]!.caseId, status: 'queued', createdAt: store.getRequest(caseRequestId).createdAt }]);
   publish('b'.repeat(40), [{ name: 'guest', fingerprint: digest('guest') }]);
   const newer = store.catalogs('app')[0]!;
   expect((await server.inject({ url: `/api/projects/app/catalogs/${newer.catalogId}/case-runs`, headers: browser() })).json().items).toEqual([]);
   expect((await server.inject({ method: 'POST', url: '/api/projects/app/ready', headers: browser('admin'), payload: {} })).statusCode).toBe(200);
   expect((await server.inject({ url: '/api/projects/app/status', headers: browser() })).json().ready).toBe(true);
+  const caseId = newer.suites[0]!.cases[0]!.caseId;
+  const run = store.submitProject({ projectId: 'app', catalogId: newer.catalogId, commit: newer.commit, mode: 'case', suite: 'smoke', caseId, scenario: 'guest', source: { kind: 'manual' } }, 'alice', 'with-scenario');
+  const newerCaseRuns = (await server.inject({ url: `/api/projects/app/catalogs/${newer.catalogId}/case-runs`, headers: browser() })).json();
+  expect(newerCaseRuns.items).toEqual([{ id: run.id, suite: 'smoke', caseId, status: 'queued', createdAt: run.createdAt, scenario: 'guest' }]);
+});
+it('accepts directory-derived suites without a configured suite map', async () => {
+  const { server, store, browser } = setup({ suites: {}, suiteMode: 'directories', scenarios: [] });
+  const commit = 'f'.repeat(40);
+  const pattern = '.fliwright/tests/app/**/*.test.ts';
+  const file = '.fliwright/tests/app/nav.test.ts', titlePath = ['nav'];
+  store.createCatalogScan('app', commit);
+  const lease = store.claimCatalogScan('mac')!;
+  store.finishCatalogScan('mac', lease.scan.scanId, lease.token, {
+    catalogId: lease.scan.scanId, projectId: 'app', commit, configRevision: 1,
+    status: 'ready', createdAt: Date.now(), scannerVersion: 'test', fliwrightVersion: 'test', scenarios: [], mocks: [],
+    suites: [{ id: 'app', pattern, files: [file], cases: [{ file, titlePath, duplicateIndex: 0, caseId: digest(JSON.stringify([file, titlePath, 0])) }] }],
+  });
+  expect((await server.inject({ url: '/api/projects/app/status', headers: browser() })).json().blockers).toEqual(['等待管理员确认项目就绪']);
+  expect((await server.inject({ url: '/api/targets', headers: browser() })).json()[0].suites).toEqual(['app']);
+  expect((await server.inject({ method: 'POST', url: '/api/projects/app/ready', headers: browser('admin'), payload: {} })).statusCode).toBe(200);
+  const catalog = store.catalogs('app')[0]!;
+  const request = await server.inject({ method: 'POST', url: '/api/projects/app/requests', headers: { ...browser(), 'idempotency-key': 'directory-suite' }, payload: { projectId: 'app', commit, catalogId: catalog.catalogId, mode: 'suite', suite: 'app' } });
+  expect(request.statusCode, JSON.stringify(request.json())).toBe(201);
+  expect(store.getRequest(request.json().id).selection).toEqual({ mode: 'suite', suite: 'app', pattern });
+  const unknown = await server.inject({ method: 'POST', url: '/api/projects/app/requests', headers: { ...browser(), 'idempotency-key': 'directory-unknown' }, payload: { projectId: 'app', commit, catalogId: catalog.catalogId, mode: 'suite', suite: 'unknown' } });
+  expect(unknown.statusCode).toBe(400);
 });
 it('creates a project from only its repository URL and keeps identifiers server generated', async () => {
   const { server, browser } = setup();
   const create = (payload: unknown) => server.inject({ method: 'POST', url: '/api/projects', headers: browser('admin'), payload });
   const first = await create({ repository: ' https://git.example.com/group/subgroup/my-app.git/ ' });
   expect(first.statusCode).toBe(201);
-  expect(first.json()).toMatchObject({ name: 'my-app', repository: 'https://git.example.com/group/subgroup/my-app.git', defaultBranch: 'main', projectPath: '.', entry: 'lib/main.dart', suites: { smoke: '.fliwright/tests/**/*.test.ts' }, scenarios: [], autoRun: { enabled: false, branch: 'main' } });
+  expect(first.json()).toMatchObject({ name: 'my-app', repository: 'https://git.example.com/group/subgroup/my-app.git', defaultBranch: 'main', projectPath: '.', entry: 'lib/main.dart', suites: {}, suiteMode: 'directories', scenarios: [], autoRun: { enabled: false, branch: 'main' } });
   const second = await create({ repository: 'git@git.example.com:other/my-app.git', name: 'Custom name', defaultBranch: 'develop' });
   expect(second.statusCode).toBe(201);
   expect(second.json()).toMatchObject({ name: 'Custom name', repository: 'ssh://git@git.example.com/other/my-app.git', defaultBranch: 'develop', autoRun: { branch: 'develop' } });

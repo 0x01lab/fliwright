@@ -7,7 +7,7 @@ import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { projectSchema } from '@fliwright/cloud-protocol';
 
 function RoutedProjects() {
-  const [router] = React.useState(() => createCloudRouter(createMemoryHistory({ initialEntries: ['/projects/app'] })));
+  const [router] = React.useState(() => createCloudRouter(createMemoryHistory({ initialEntries: ['/projects/app/testcases'] })));
   return React.createElement(RouterProvider, { router });
 }
 
@@ -56,7 +56,7 @@ it('creates a project from a URL with inferred name and collapsed optional defau
   expect(submitted).toMatchObject({
     name: 'my-app', repository: 'https://gitlab.example.com/team/subgroup/my-app.git',
     defaultBranch: 'main', projectPath: '.', entry: 'lib/main.dart',
-    suites: { smoke: '.fliwright/tests/**/*.test.ts' }, scenarios: [],
+    suites: {}, suiteMode: 'directories', scenarios: [],
   });
   for (const field of ['id', 'configRevision', 'webhookSecretDigest', 'webhookStatus', 'autoRun']) {
     expect(submitted).not.toHaveProperty(field);
@@ -109,7 +109,7 @@ it('runs cases directly by default and offers repository scenarios as optional p
     if (path === '/api/me') return { role: 'member' };
     if (String(path).endsWith('/status')) return { ready: true, blockers: [], latestScan: null };
     if (String(path).endsWith('/catalogs')) return [catalog];
-    if (String(path).endsWith('/case-runs')) return { catalogId: catalog.catalogId, items: [{ suite: 'smoke', caseId: 'case', id: 'previous-case-run', status: 'failed' }] };
+    if (String(path).endsWith('/case-runs')) return { catalogId: catalog.catalogId, items: [{ suite: 'smoke', caseId: 'case', id: 'previous-case-run', status: 'failed', createdAt: 2 }] };
     if (String(path).startsWith('/api/requests')) return { items: [] };
     return [];
   } }) as Response);
@@ -120,7 +120,7 @@ it('runs cases directly by default and offers repository scenarios as optional p
   expect(document.body.textContent).toContain('discovered case');
   expect(document.body.querySelector<HTMLButtonElement>('.case-ticket')?.disabled).toBe(false);
   await act(async () => document.body.querySelector<HTMLButtonElement>('.case-ticket')!.click());
-  expect(document.querySelector('[role=dialog] a[href="/requests/previous-case-run"]')).not.toBeNull();
+  expect(document.querySelector('[role=dialog] a[href="/requests/previous-case-run?targetId=app"]')).not.toBeNull();
   await clickText('运行用例');
   expect(document.body.querySelector<HTMLSelectElement>('select[aria-label="运行场景"]')?.value).toBe('');
   expect(document.body.querySelector<HTMLButtonElement>('[role=dialog] button[type="submit"]')?.disabled).toBe(false);
@@ -143,6 +143,54 @@ it('runs cases directly by default and offers repository scenarios as optional p
   const call = vi.mocked(fetch).mock.calls.find(([url, options]) => String(url).endsWith('/requests') && options?.method === 'POST')!;
   expect(JSON.parse(String(call[1]?.body))).toMatchObject({ projectId: 'app', commit: catalog.commit, catalogId: 'scan', scenario: 'guest', mode: 'case', suite: 'smoke', caseId: 'case' });
   expect(document.body.querySelector('[role=dialog]')).toBeNull();
+});
+
+it('shows the scanned source and latest execution for the selected case and version', async () => {
+  const project = projectSchema.parse({ id: 'app', name: 'App', repository: 'ssh://git@git.example.com:2222/team/mobile/app.git', projectPath: 'apps/My App', suites: { smoke: '*.test.ts' } });
+  const file = '.fliwright/tests/cooldown #1.test.ts';
+  const first = { caseId: 'case-1', file, titlePath: ['Cooldown', 'expired'], duplicateIndex: 0 };
+  const second = { ...first, caseId: 'case-2', duplicateIndex: 1 };
+  const createdAt = Date.UTC(2026, 10, 25, 5, 30);
+  const submittedAt = createdAt + 60_000;
+  const catalog = { catalogId: 'main-scan', branch: 'main', commit: 'a'.repeat(40), configRevision: 1, status: 'ready', createdAt, scenarios: [], suites: [{ id: 'smoke', cases: [first, second] }] };
+  const older = { ...catalog, catalogId: 'older-scan', branch: undefined, commit: 'b'.repeat(40), createdAt: createdAt - 60_000 };
+  vi.mocked(fetch).mockImplementation(async path => ({ ok: true, json: async () => {
+    if (String(path).startsWith('/api/requests')) return { items: [] };
+    switch (path) {
+      case '/api/projects': return [project];
+      case '/api/me': return { role: 'member' };
+      case '/api/projects/app/status': return { ready: true, blockers: [], latestScan: null };
+      case '/api/projects/app/catalogs': return [catalog, older];
+      case '/api/projects/app/catalogs/main-scan/case-runs': return { catalogId: catalog.catalogId, items: [
+        { suite: 'smoke', caseId: first.caseId, id: 'first-run', status: 'passed', createdAt: submittedAt },
+        { suite: 'smoke', caseId: second.caseId, id: 'second-run', status: 'failed', createdAt: submittedAt, scenario: 'guest' },
+      ] };
+      case '/api/projects/app/catalogs/older-scan/case-runs': return { catalogId: older.catalogId, items: [] };
+      default: return [];
+    }
+  } }) as Response);
+  await act(async () => root.render(React.createElement(RoutedProjects, { key: 'case-details' })));
+  const openCase = async () => {
+    await act(async () => document.body.querySelectorAll<HTMLButtonElement>('.case-ticket')[1]!.click());
+    return document.body.querySelector('[role=dialog]')!;
+  };
+  const dialog = await openCase();
+  expect(dialog.querySelector('h2')?.textContent).toBe('Cooldown › expired（同名 #2）');
+  expect(dialog.textContent).toContain(catalog.branch);
+  expect(dialog.querySelector(`time[datetime="${new Date(createdAt).toISOString()}"]`)).not.toBeNull();
+  expect(dialog.querySelector(`time[datetime="${new Date(submittedAt).toISOString()}"]`)).not.toBeNull();
+  expect(dialog.textContent).toContain('guest');
+  expect(dialog.textContent).toContain('失败');
+  expect(dialog.querySelector('a[href="/requests/second-run?targetId=app"]')).not.toBeNull();
+  expect(dialog.querySelector('a[href^="/requests/first-run"]')).toBeNull();
+  expect(dialog.querySelector(`a[href="https://git.example.com/team/mobile/app/-/blob/${catalog.commit}/apps/My%20App/.fliwright/tests/cooldown%20%231.test.ts"]`)?.getAttribute('target')).toBe('_blank');
+
+  await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭对话框"]')!.click());
+  await selectOption('已扫描版本', older.catalogId);
+  const olderDialog = await openCase();
+  expect(olderDialog.textContent).toContain('该版本暂无单独运行记录');
+  expect(olderDialog.querySelector('a[href^="/requests/second-run"]')).toBeNull();
+  expect(olderDialog.querySelector(`a[href="https://git.example.com/team/mobile/app/-/commit/${older.commit}"]`)).not.toBeNull();
 });
 
 async function clickText(text: string, scope: ParentNode = document.body) {

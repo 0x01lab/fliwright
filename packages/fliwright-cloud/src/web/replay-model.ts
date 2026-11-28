@@ -1,4 +1,4 @@
-import { buildTimelineTimeAxis } from '@fliwright/core/timeline';
+import { buildTimelineTimeAxis, parseScreenshotInteraction, type ScreenshotInteraction } from '@fliwright/core/timeline';
 export { timelineNodeAtTime as stepAtTime, timelineDurationMs as durationMs, orderedTimelineNodes as orderedSteps } from '@fliwright/core/timeline';
 import { timelineDurationMs as durationMs } from '@fliwright/core/timeline';
 export type { TimelineTimeEntry as TimeEntry } from '@fliwright/core/timeline';
@@ -51,15 +51,72 @@ export function artifactPath(
   return files.includes(resolved) ? resolved : undefined;
 }
 
-/** Resolve only archived images, preserving the preview's screenshot order. */
+export interface ReplayScreenshot {
+  path: string;
+  phase?: 'start' | 'finish' | 'failure';
+  overlay?: { interaction: ScreenshotInteraction; pixelRatio: number };
+}
+
+export interface ReplayListRow {
+  nodes: ReplayNode[];
+  depth: number;
+}
+
+/** Pair adjacent actions with their result assertion for the compact replay list. */
+export function groupReplaySteps(rows: Array<{ node: ReplayNode; depth: number }>): ReplayListRow[] {
+  const grouped: ReplayListRow[] = [];
+  for (let index = 0; index < rows.length; index += 1) {
+    const current = rows[index]!;
+    const next = rows[index + 1];
+    if (current.node.kind === 'action' && next?.node.kind === 'assertion' &&
+      current.node.parentId === next.node.parentId && current.depth === next.depth) {
+      grouped.push({ nodes: [current.node, next.node], depth: current.depth });
+      index += 1;
+    } else {
+      grouped.push({ nodes: [current.node], depth: current.depth });
+    }
+  }
+  return grouped;
+}
+
+/** Resolve archived images once, preserving the same order in the preview and filmstrip. */
+export function replayScreenshots(node: ReplayNode | undefined, base: string, files: string[]): ReplayScreenshot[] {
+  const images = new Map<string, ReplayScreenshot>();
+  const interaction = parseScreenshotInteraction(node?.metadata?.interaction);
+  const add = (path: unknown, metadata?: Record<string, unknown>) => {
+    const resolved = artifactPath(base, path, files);
+    if (!resolved || !/\.(png|jpe?g|webp)$/i.test(resolved) || images.has(resolved)) return;
+    const capturePhase = metadata?.capturePhase;
+    const phase = capturePhase === 'start' || capturePhase === 'finish' || capturePhase === 'failure' ? capturePhase : undefined;
+    const pixelRatio = metadata?.pixelRatio;
+    const overlay = phase === 'start' && interaction && typeof pixelRatio === 'number' && Number.isFinite(pixelRatio) && pixelRatio > 0
+      ? { interaction, pixelRatio }
+      : undefined;
+    images.set(resolved, { path: resolved, phase, overlay });
+  };
+  for (const artifact of node?.artifacts ?? []) add(artifact.path, artifact.metadata);
+  add(node?.error?.appState?.screenshotPath);
+  return [...images.values()];
+}
+
 export function screenshotPaths(node: ReplayNode | undefined, base: string, files: string[]): string[] {
-  const paths = [
-    ...(node?.artifacts ?? []).map((artifact) => artifact.path),
-    node?.error?.appState?.screenshotPath,
-  ];
-  return [...new Set(paths
-    .map((path) => artifactPath(base, path, files))
-    .filter((path): path is string => !!path && /\.(png|jpe?g|webp)$/i.test(path)))];
+  return replayScreenshots(node, base, files).map(({ path }) => path);
+}
+
+export function groupReplayEvidence(nodes: ReplayNode[], base: string, files: string[]) {
+  const steps: ReplayNode[] = [];
+  const caseScreenshots: Array<{ phase: 'start' | 'finish'; path: string }> = [];
+  for (const node of nodes) {
+    const phase = node.metadata?.lifecycle;
+    if (node.kind === 'step' && (phase === 'start' || phase === 'finish')) {
+      for (const path of screenshotPaths(node, base, files)) {
+        caseScreenshots.push({ phase, path });
+      }
+    } else {
+      steps.push(node);
+    }
+  }
+  return { steps, caseScreenshots };
 }
 
 export function durationLabel(value?: number): string {

@@ -15,7 +15,7 @@ import {
   closeSync,
 } from 'node:fs';
 import { dirname, extname, join, posix } from 'node:path';
-import { runManifestSchema, type RunManifest } from '@fliwright/core';
+import { parseScreenshotInteraction, runManifestSchema, type RunManifest } from '@fliwright/core';
 import { CloudStore, digest, identifier } from './CloudStore.js';
 import {
   CloudError,
@@ -95,6 +95,12 @@ function sanitizedTimeline(timeline: JsonObject): JsonObject {
     nodes: Array.isArray(timeline.nodes)
       ? timeline.nodes.map((v: unknown) => {
           const n = record(v);
+          const { interaction: rawInteraction, lifecycle } = record(n.metadata);
+          const interaction = parseScreenshotInteraction(rawInteraction);
+          const metadata = {
+            ...(interaction ? { interaction } : {}),
+            ...(lifecycle === 'start' || lifecycle === 'finish' ? { lifecycle } : {}),
+          };
           return {
             id: n.id,
             parentId: n.parentId,
@@ -104,6 +110,7 @@ function sanitizedTimeline(timeline: JsonObject): JsonObject {
             route: n.route,
             startedAt: n.startedAt,
             endedAt: n.endedAt,
+            ...(Object.keys(metadata).length ? { metadata } : {}),
             error: n.error
               ? { code: record(n.error).code, message: record(n.error).message }
               : undefined,
@@ -116,10 +123,20 @@ function sanitizedTimeline(timeline: JsonObject): JsonObject {
                         extname(record(a).path).toLowerCase(),
                       ),
                   )
-                  .map((a: unknown) => ({
-                    path: record(a).path,
-                    kind: record(a).kind,
-                  }))
+                  .map((a: unknown) => {
+                    const artifact = record(a);
+                    const { capturePhase, pixelRatio } = record(artifact.metadata);
+                    const phase = capturePhase === 'start' || capturePhase === 'finish' || capturePhase === 'failure'
+                      ? capturePhase : undefined;
+                    return {
+                      path: artifact.path,
+                      kind: artifact.kind,
+                      ...(phase ? { metadata: {
+                        capturePhase: phase,
+                        ...(typeof pixelRatio === 'number' && Number.isFinite(pixelRatio) && pixelRatio > 0 ? { pixelRatio } : {}),
+                      } } : {}),
+                    };
+                  })
               : [],
           };
         })
@@ -163,12 +180,14 @@ export class ReportStore {
       expiresAt: Number(row.expires_at),
     };
   }
-  listPublished(offset: number) {
+  listPublished(offset: number, targetId?: string) {
     const rows = this.store.db.prepare(`SELECT p.id,p.created_at AS createdAt,
       json_extract(r.data,'$.selection.titlePath') AS titlePath,
       json_extract(r.data,'$.input.suite') AS suite, json_extract(r.data,'$.input.commit') AS sha,
       json_extract(r.data,'$.target.name') AS projectName FROM publications p JOIN requests r ON r.id=p.request_id
-      WHERE p.state='published' AND p.expires_at>? ORDER BY p.created_at DESC,p.rowid DESC LIMIT 26 OFFSET ?`).all(this.store.now(), offset);
+      WHERE p.state='published' AND p.expires_at>?
+        AND (? IS NULL OR json_extract(r.data,'$.input.targetId')=?)
+      ORDER BY p.created_at DESC,p.rowid DESC LIMIT 26 OFFSET ?`).all(this.store.now(), targetId ?? null, targetId ?? null, offset);
     return {
       hasMore: rows.length > 25,
       items: rows.slice(0, 25).map(row => ({

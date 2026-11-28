@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useSearch } from '@tanstack/react-router';
+import { Link, useLocation, useParams, useSearch } from '@tanstack/react-router';
 import { Check, ChevronDown, Clock3, FolderGit2, Folders, Layers, ListChecks, Plus, ScanLine, Search, Settings2 } from 'lucide-react';
 import type { Project } from '@fliwright/cloud-protocol';
 import { Input } from './components/ui/input.js';
@@ -9,18 +9,44 @@ export const projectViews = {
   tests: '测试用例', scenarios: '运行场景', runs: '运行记录', scans: '扫描记录', settings: '项目设置',
 } as const;
 export type ProjectView = keyof typeof projectViews;
+export type WorkspacePage = 'board' | 'reports' | 'cases' | 'project' | 'directory' | 'other';
 const viewIcons = { tests: ListChecks, scenarios: Layers, runs: Clock3, scans: ScanLine, settings: Settings2 };
 
 export function activeProjectView(view?: string): ProjectView {
   return view && Object.hasOwn(projectViews, view) ? view as ProjectView : 'tests';
 }
 
+export function useWorkspaceProjectId() {
+  const { projectId } = useParams({ strict: false });
+  const { targetId } = useSearch({ strict: false });
+  return projectId ?? targetId;
+}
+
+export function boardDestination(projectId?: string, search?: string) {
+  return projectId
+    ? { to: '/projects/$projectId/kanban', params: { projectId }, search: { search } } as const
+    : { to: '/queue', search: { search, targetId: undefined } } as const;
+}
+
+export function reportsDestination(projectId?: string) {
+  return projectId
+    ? { to: '/projects/$projectId/reports', params: { projectId } } as const
+    : { to: '/reports', search: { targetId: undefined } } as const;
+}
+
+export function projectViewDestination(projectId: string, view: ProjectView, search: { v?: string; q?: string; state?: string } = {}) {
+  const params = { projectId };
+  return view === 'tests'
+    ? { to: '/projects/$projectId/testcases', params, search } as const
+    : { to: '/projects/$projectId', params, search: { ...search, view } } as const;
+}
+
 export function matchesProject(project: Project, search: string) {
   return `${project.name} ${project.repository} ${project.defaultBranch}`.toLowerCase().includes(search.trim().toLowerCase());
 }
 
-export function ProjectSwitcher({ projects, error, retry, selectedId, mode, canCreate }: {
-  projects?: Project[]; error: string; retry: () => void; selectedId?: string; mode: 'board' | 'project'; canCreate: boolean;
+export function ProjectSwitcher({ projects, error, retry, selectedId, page, canCreate }: {
+  projects?: Project[]; error: string; retry: () => void; selectedId?: string; page: WorkspacePage; canCreate: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
@@ -29,10 +55,16 @@ export function ProjectSwitcher({ projects, error, retry, selectedId, mode, canC
   const panel = useRef<HTMLDivElement>(null);
   const search = useSearch({ strict: false });
   const path = useLocation({ select: location => location.pathname });
-  const board = mode === 'board';
+  const includeAll = (page === 'board' || page === 'reports') && !filter.trim();
+  const destination = (projectId?: string) => {
+    if (page === 'reports') return reportsDestination(projectId);
+    if (page === 'board' || !projectId) return boardDestination(projectId, search.search);
+    const view = page === 'project' ? activeProjectView(search.view) : 'tests';
+    const currentView = projectId === selectedId && (page === 'cases' || page === 'project');
+    return projectViewDestination(projectId, view, currentView ? { v: search.v, q: search.q, state: search.state } : {});
+  };
   const selected = projects?.find(project => project.id === selectedId);
   const matches = projects?.filter(project => matchesProject(project, filter)) ?? [];
-  const includeAll = board && !filter.trim();
   const count = matches.length + Number(includeAll);
   const active = Math.min(index, count - 1);
   const close = () => { setOpen(false); trigger.current?.focus(); };
@@ -54,7 +86,7 @@ export function ProjectSwitcher({ projects, error, retry, selectedId, mode, canC
       onClick={() => {
         setOpen(!open); setFilter('');
         const selectedIndex = projects?.findIndex(project => project.id === selectedId) ?? -1;
-        setIndex(selectedIndex < 0 ? 0 : selectedIndex + Number(board));
+        setIndex(selectedIndex < 0 ? 0 : selectedIndex + Number(page === 'board' || page === 'reports'));
       }}>
       <strong>{selected?.name ?? selectedId ?? '全部项目'}</strong><ChevronDown />
     </button>
@@ -72,17 +104,14 @@ export function ProjectSwitcher({ projects, error, retry, selectedId, mode, canC
           }
         }} /></div>
       <div id="project-options" role="listbox" aria-label="项目列表" data-ui="project-list">
-        {includeAll && <Link to="/queue" search={{ search: search.search }} role="option" id="project-option-0" aria-selected={!selectedId}
+        {includeAll && <Link {...destination()} role="option" id="project-option-0" aria-selected={!selectedId}
           data-active={active === 0} onMouseEnter={() => setIndex(0)} onClick={close}>
           <Folders /><strong>全部项目</strong>{!selectedId && <Check />}
         </Link>}
         {matches.map((project, i) => {
           const option = i + Number(includeAll);
           const isSelected = project.id === selectedId;
-          const destination = board
-            ? { to: '/queue' as const, search: { targetId: project.id, search: search.search } }
-            : { to: '/projects/$projectId' as const, params: { projectId: project.id }, search: isSelected ? search : { view: search.view } };
-          return <Link key={project.id} {...destination} id={`project-option-${option}`} role="option" data-ui="project-list-item"
+          return <Link key={project.id} {...destination(project.id)} id={`project-option-${option}`} role="option" data-ui="project-list-item"
             aria-selected={isSelected} aria-current={isSelected ? 'page' : undefined} data-active={active === option}
             onMouseEnter={() => setIndex(option)} onClick={close}>
             <FolderGit2 /><span><strong>{project.name}</strong><code>{repoPath(project.repository)}</code></span>{isSelected && <Check />}
@@ -91,8 +120,8 @@ export function ProjectSwitcher({ projects, error, retry, selectedId, mode, canC
       </div>
       {error ? <p role="alert">{error} <button type="button" onClick={retry}>重试</button></p> : !matches.length && <p role="status">{!projects ? '正在加载项目…' : filter ? '没有匹配的项目' : '暂无项目'}</p>}
       <div className="project-menu-actions">
-        <Link to="/projects" search={{}} onClick={close}><Folders />项目目录</Link>
-        {canCreate && <Link to="/projects" search={{ createProject: true }} onClick={close}><Plus />创建项目</Link>}
+        <Link to="/projects" search={{ targetId: selectedId }} onClick={close}><Folders />项目目录</Link>
+        {canCreate && <Link to="/projects" search={{ targetId: selectedId, createProject: true }} onClick={close}><Plus />创建项目</Link>}
       </div>
     </div>}
   </div>;
@@ -102,8 +131,8 @@ export function ProjectNavigation({ selected, view, version }: { selected: Proje
   return <nav className="project-sections" aria-label="项目分区">
     {(Object.keys(projectViews) as ProjectView[]).map(key => {
       const Icon = viewIcons[key];
-      return <Link key={key} to="/projects/$projectId" params={{ projectId: selected.id }}
-        search={{ v: version, view: key === 'tests' ? undefined : key }} data-selected={key === view} aria-current={key === view ? 'page' : undefined}>
+      return <Link key={key} {...projectViewDestination(selected.id, key, { v: version })}
+        activeOptions={{ exact: true }} data-selected={key === view} aria-current={key === view ? 'page' : undefined}>
         <Icon />{projectViews[key]}
       </Link>;
     })}

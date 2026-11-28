@@ -1,3 +1,4 @@
+export { parseScreenshotInteraction, type ScreenshotInteraction } from './ScreenshotInteraction.js';
 import type { TimelineNode } from './types.js';
 
 export type TimedTimelineNode = TimelineNode & { durationMs?: number };

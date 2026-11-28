@@ -35,7 +35,10 @@ describe('recording modes through real Vitest fixtures', () => {
           return {
             sendRequest: async (method, params) => {
               await appendFile(${JSON.stringify(requestsPath)}, JSON.stringify({ method, state }) + '\\n');
-              if (method === 'ext.fliwright.action') { state++; return { success: true }; }
+              if (method === 'ext.fliwright.action') {
+                state++;
+                return { success: true, target: { kind: 'coordinate', x: 125, y: 420 } };
+              }
               if (method === 'ext.fliwright.resolve') return { matches: JSON.parse(params.selector).match.key === 'saved' && state === 2 ? [{ id: 'saved' }] : [] };
               if (method === 'ext.fliwright.screenshot') return { success: true, screenshot: Buffer.from(String(state)).toString('base64') };
               if (method === 'ext.fliwright.snap') return { snapshot: { state }, refs: [], raw: String(state) };
@@ -85,7 +88,7 @@ describe('recording modes through real Vitest fixtures', () => {
       const requests = (await readFile(requestsPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line) as { method: string; state: number });
       expect(requests.filter(({ method }) => method === 'ext.fliwright.action')).toHaveLength(2);
       expect(requests.filter(({ method }) => method === 'ext.fliwright.screenshot').map(({ state }) => state))
-        .toEqual(mode === 'standard' ? [0, 1, 2, 2, 2] : mode === 'full' ? [0, 0, 1, 1, 2, 2, 2] : [2]);
+        .toEqual(mode === 'off' ? [2] : [0, 0, 1, 1, 2, 2, 2]);
       expect(requests.filter(({ method }) => method === 'ext.fliwright.snap').map(({ state }) => state))
         .toEqual(mode === 'full' ? [0, 1, 2] : [2]);
       expect(requests.filter(({ method }) => method === 'ext.fliwright.captureFrame')).toHaveLength(1);
@@ -110,7 +113,15 @@ describe('recording modes through real Vitest fixtures', () => {
         expect(attempt.result.operations).toHaveLength(2);
         const timeline = JSON.parse(await readFile(join(attempt.dir, 'timeline.json'), 'utf8')) as TimelineData;
         const trace = JSON.parse(await readFile(join(attempt.dir, 'trace/trace.json'), 'utf8')) as TraceData;
-        expect(timeline.nodes.filter(({ kind }) => kind === 'action')).toHaveLength(2);
+        const actions = timeline.nodes.filter(({ kind }) => kind === 'action');
+        expect(actions).toHaveLength(2);
+        for (const action of actions) {
+          expect(action.metadata?.interaction).toEqual({ kind: 'click', x: 125, y: 420 });
+          expect(action.artifacts?.filter(({ kind }) => kind === 'screenshot')).toMatchObject([
+            { metadata: { capturePhase: 'start', pixelRatio: 1 } },
+            { metadata: { capturePhase: 'finish', pixelRatio: 1 } },
+          ]);
+        }
         expect(timeline.nodes.filter(({ kind }) => kind === 'assertion')).toHaveLength(1);
         expect(timeline.nodes.find(({ kind }) => kind === 'frame')?.metadata).toMatchObject({ requestedBy: 'user' });
         if (grouped) {
@@ -123,7 +134,7 @@ describe('recording modes through real Vitest fixtures', () => {
           const evidence = attempt.result.evidence.filter(({ operationId }) => operationId === operation.operationId);
           expect(evidence.map(({ kind, reason }) => [kind, reason])).toEqual(mode === 'full'
             ? [['screenshot', 'start'], ['snapshot', 'start'], ['screenshot', 'finish']]
-            : [['screenshot', 'finish']]);
+            : [['screenshot', 'start'], ['screenshot', 'finish']]);
           expect(await readFile(resolve(attempt.dir, 'trace', trace.steps[index].screenshotFile!), 'utf8')).toBe(String(index + 1));
         }
       }

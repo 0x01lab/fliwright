@@ -58,7 +58,7 @@ function NewRequestDialog({ initialTargetId, close }: { initialTargetId?: string
     toast.success('已加入队列', {
       action: {
         label: '查看任务',
-        onClick: () => void navigate({ to: '/requests/$id', params: { id: request.id } }),
+        onClick: () => void navigate({ to: '/requests/$id', params: { id: request.id }, search: { targetId: initialTargetId } }),
       },
     });
   }

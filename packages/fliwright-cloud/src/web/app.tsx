@@ -1,5 +1,5 @@
 import { Alert } from './components/ui/alert.js';
-import { ArrowLeft, ArrowUpRight, ChevronDown, Monitor, Pause, Play, Share2, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ChevronDown, Monitor, Pause, Play, TriangleAlert } from 'lucide-react';
 import { WorkerPairing } from './WorkerPairing.js';
 import type { WorkerStatusResponse } from '../catalog-scan-status.js';
 import { serviceStatusLabels } from './WorkerDiagnostics.js';
@@ -11,10 +11,15 @@ import {
   createRouter,
   Link,
   Outlet,
+  redirect,
+  retainSearchParams,
+  stripSearchParams,
   RouterProvider,
   useLocation,
+  useMatches,
   useNavigate,
   useSearch,
+  type AnyRouter,
   type RouterHistory,
 } from '@tanstack/react-router';
 import { Badge as UiBadge } from './components/ui/badge.js';
@@ -27,6 +32,7 @@ import { Checkbox } from './components/ui/checkbox.js';
 import { Textarea } from './components/ui/textarea.js';
 import React, {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -48,9 +54,10 @@ import { Devices, DeviceDetail, deviceFilters } from './Devices.js';
 import { Projects } from './Projects.js';
 import { TestBoard, type BoardRequest } from './TestBoard.js';
 import { QueueBoard } from './QueueBoard.js';
-import { BoardFactsContext, WorkspaceHeader, type CloudUser, type ProjectDirectory } from './WorkspaceHeader.js';
+import { WorkspaceHeader, type CloudUser, type ProjectDirectory } from './WorkspaceHeader.js';
+import { activeProjectView, boardDestination, reportsDestination, useWorkspaceProjectId, type ProjectView, type WorkspacePage } from './ProjectNavigation.js';
 import { WorkerExecutionTimeline } from './WorkerExecutionTimeline.js';
-import { CloudDialog } from './components/ui/dialog.js';
+import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs.js';
 import { Toaster } from './components/ui/sonner.js';
 
 const TeamContext = createContext<{
@@ -196,7 +203,7 @@ function Layout({
   );
   const directory = useData<Project[]>('/api/projects', 10000, !shared);
   const workers = useData<WorkerStatusResponse[]>('/api/workers', 3000, !shared);
-  const [factsHost, setFactsHost] = useState<HTMLDListElement | null>(null);
+  const targetId = useWorkspaceProjectId();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       return localStorage.getItem('cloud-theme') === 'light' ? 'light' : 'dark';
@@ -205,8 +212,7 @@ function Layout({
     }
   });
   const path = useLocation({ select: (location) => location.pathname });
-  const isBoardPage = ['/', '/runs', '/queue'].includes(path);
-  const isProjectPage = path === '/projects' || path.startsWith('/projects/') || path === '/targets';
+  const page = useMatches<AnyRouter, WorkspacePage>({ select: matches => matches.at(-1)?.staticData.workspacePage ?? 'other' });
   const isReportPage = path.startsWith('/reports/') || path.startsWith('/shared/reports/');
   const showWorkerAlert = !shared && path !== '/workers' && !workers.error &&
     workers.data?.some(worker => worker.health === 'healthy') === false;
@@ -229,15 +235,15 @@ function Layout({
     } catch {}
   }, [theme]);
   return (
-    <div className={isBoardPage || isProjectPage ? 'cloud-workspace' : 'min-h-screen min-w-0'} data-ui="cloud-shell">
+    <div className={page === 'board' || page === 'cases' || page === 'project' || page === 'directory' ? 'cloud-workspace' : 'min-h-screen min-w-0'} data-ui="cloud-shell">
       <a className="absolute -top-16 left-3 z-50 rounded-md bg-card px-4 py-2 shadow-lg transition-all focus:top-3" href="#content" data-ui="skip">
         跳至内容
       </a>
-      <WorkspaceHeader directory={directory} user={me} shared={shared} board={isBoardPage} factsRef={setFactsHost} projectPage={isProjectPage} theme={theme} toggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+      <WorkspaceHeader directory={directory} user={me} shared={shared} page={page} theme={theme} toggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
       <main className={`grid w-full min-w-0 content-start px-4 pb-6 max-sm:px-3 max-sm:pb-4 ${isReportPage ? 'gap-2 pt-2' : 'gap-3 pt-4 max-sm:pt-3'}`} id="content" tabIndex={-1} data-ui="cloud-content">
         {path.startsWith('/requests/') && (
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground [&_b]:font-medium [&_code]:truncate" data-ui="crumb">
-            <Link to="/queue">执行看板</Link>
+            <Link {...boardDestination(targetId)}>执行看板</Link>
             <span className="mx-1.5 font-normal text-muted-foreground" data-ui="sep">/</span>
             <code title={path.split('/').pop()}>
               {path.split('/').pop()?.slice(0, 12)}
@@ -245,7 +251,7 @@ function Layout({
           </div>
         )}
         <TeamContext.Provider value={{ user: me, directory, workers }}>
-          <BoardFactsContext.Provider value={factsHost}>{children}</BoardFactsContext.Provider>
+          {children}
         </TeamContext.Provider>
       </main>
       <Toaster theme={theme} bottomOffset={showWorkerAlert ? 24 + workerAlertHeight : 16} />
@@ -255,7 +261,7 @@ function Layout({
             <Icon name="alert" />
             <span className="font-medium">暂无正常连接的 Worker</span>
             <Button asChild size="sm" className="ml-auto pointer-coarse:min-h-9">
-              <Link to="/workers">{me?.role === 'admin' ? '设置 Worker' : '查看 Worker 主机'}</Link>
+              <Link to="/workers" search={{ targetId }}>{me?.role === 'admin' ? '设置 Worker' : '查看 Worker 主机'}</Link>
             </Button>
           </div>
         </Alert>
@@ -303,9 +309,34 @@ function Overview() {
       <OverviewActivity workers={workers} /><h2>最近运行</h2><ErrorBox error={error}/><TestBoard items={data?.items ?? []} queue={data?.queue ?? []} targets={targets ?? []} loading={!data && !error}/></>;
 }
 function Reports() {
-  const [offset,setOffset] = useState(0);
-  const {data,error,reload} = useData<{items: Array<{id:string; title:string; sha:string; projectName:string; createdAt:number}>;hasMore:boolean}>(`/api/reports?offset=${offset}`,5000);
-  return <section className="project-directory"><h1>测试报告</h1>{error && <div role="alert">{error} <Button onClick={reload}>重试</Button></div>}{!data && !error && <p role="status">正在加载报告…</p>}{data && <>{!data.items.length && <Empty>暂无已发布的报告</Empty>}<div>{data.items.map(r=><Link className="report-entry" key={r.id} to="/reports/$id" params={{id:r.id}}><Icon name="doc"/><span><strong>{r.title}</strong><small>{r.projectName} · {r.sha.slice(0,8)}</small></span><time>{time(r.createdAt)}</time></Link>)}</div>{(offset>0 || data.hasMore) && <div className="flex gap-2"><Button variant="outline" disabled={!offset} onClick={()=>setOffset(offset-25)}>上一页</Button><Button variant="outline" disabled={!data.hasMore} onClick={()=>setOffset(offset+25)}>下一页</Button></div>}</>}</section>;
+  const targetId = useWorkspaceProjectId();
+  return <ReportList key={targetId ?? ''} targetId={targetId} />;
+}
+
+function ReportList({ targetId }: { targetId?: string }) {
+  const [offset, setOffset] = useState(0);
+  const params = new URLSearchParams({ offset: String(offset), ...(targetId && { targetId }) });
+  const { data, error, reload } = useData<{
+    items: Array<{ id: string; title: string; sha: string; projectName: string; createdAt: number }>;
+    hasMore: boolean;
+  }>(`/api/reports?${params}`, 5000);
+  return <section className="project-directory">
+    <h1>测试报告</h1>
+    {error && <div role="alert">{error} <Button onClick={reload}>重试</Button></div>}
+    {!data && !error && <p role="status">正在加载报告…</p>}
+    {data && <>
+      {!data.items.length && <Empty>暂无已发布的报告</Empty>}
+      <div>{data.items.map(report => <Link className="report-entry" key={report.id} to="/reports/$id" params={{ id: report.id }} search={{ targetId }}>
+        <Icon name="doc" />
+        <span><strong>{report.title}</strong><small>{report.projectName} · {report.sha.slice(0, 8)}</small></span>
+        <time>{time(report.createdAt)}</time>
+      </Link>)}</div>
+      {(offset > 0 || data.hasMore) && <div className="flex gap-2">
+        <Button variant="outline" disabled={!offset} onClick={() => setOffset(offset - 25)}>上一页</Button>
+        <Button variant="outline" disabled={!data.hasMore} onClick={() => setOffset(offset + 25)}>下一页</Button>
+      </div>}
+    </>}
+  </section>;
 }
 function OverviewActivity({ workers }: { workers?: ExecutionWorker[] }) {
   return (
@@ -393,6 +424,7 @@ function RequestAction({
 }
 function RequestDetail({ id }: { id: string }) {
   const navigate = useNavigate();
+  const targetId = useWorkspaceProjectId();
   const { data: r, error, reload } = useData<Detail>(`/api/requests/${id}`, 2000);
   const latest = r?.attempts[r.attempts.length - 1];
   const report = r?.reports.filter((p) => p.state === 'published').at(-1);
@@ -433,7 +465,7 @@ function RequestDetail({ id }: { id: string }) {
                   <Badge value={r.state} />
                   <Badge value={r.verdict} />
                   <Button asChild variant="secondary">
-                    <Link to="/queue">
+                    <Link {...boardDestination(targetId)}>
                       <Icon name="list" />
                       返回测试任务
                     </Link>
@@ -549,12 +581,12 @@ function RequestDiagnostics({
     <>
       {(!panel || panel === 'run') && (
         <DiagnosticSection
-          className="rounded-lg bg-card px-3 py-2.5 shadow-sm [&>a]:mt-3 [&>a]:inline-block [&>a]:text-xs [&_[data-ui~=meta-grid]]:grid-cols-3 max-[900px]:[&_[data-ui~=meta-grid]]:grid-cols-2"
+          className={panel ? '' : 'rounded-lg bg-card px-3 py-2.5 shadow-sm'}
           title="运行信息"
           embedded={!!panel} data-ui="run-info"
         >
           {published.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground [&>[data-slot=native-select-wrapper]]:max-w-80" data-ui="report-switch">
+            <div className={`flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground [&>[data-slot=native-select-wrapper]]:max-w-80 ${panel ? 'mb-3' : ''}`} data-ui="report-switch">
               <span>执行报告</span>
               {published.map((report) => (
                 <Link
@@ -572,7 +604,7 @@ function RequestDiagnostics({
               ))}
             </div>
           )}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3" data-ui="meta-grid">
+          <div className={`grid gap-3 ${panel ? 'grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))]' : 'grid-cols-3 max-[900px]:grid-cols-2'}`} data-ui="meta-grid">
             {[
               ['来源', r.source?.kind ?? 'manual'],
               ['配置 / 目录版本', `${r.configRevision ?? '—'} / ${r.catalogId ?? '—'}`],
@@ -594,7 +626,7 @@ function RequestDiagnostics({
             ].map(([label, value]) => (
               <div className="grid min-w-0 gap-1" key={label} data-ui="meta-cell">
                 <span className="text-[11px] text-muted-foreground" data-ui="k">{label}</span>
-                <span className="truncate text-xs font-medium" title={value} data-ui="v">
+                <span className={`text-xs font-medium ${panel ? 'wrap-anywhere' : 'truncate'}`} title={value} data-ui="v">
                   {value}
                 </span>
               </div>
@@ -603,6 +635,7 @@ function RequestDiagnostics({
           {r.input.source?.pipelineUrl &&
             /^https?:/.test(r.input.source.pipelineUrl) && (
               <a
+                className="mt-3 inline-block text-xs"
                 href={r.input.source.pipelineUrl}
                 target="_blank"
                 rel="noreferrer"
@@ -614,14 +647,20 @@ function RequestDiagnostics({
       )}
       {(!panel || panel === 'attempts') && (
         <DiagnosticSection
-          className="[&>summary]:px-3 [&>summary]:py-2.5 open:[&>summary]:mb-0 overflow-hidden"
+          className={panel ? '' : 'overflow-hidden [&>summary]:px-3 [&>summary]:py-2.5 open:[&>summary]:mb-0'}
           title={`执行尝试 · ${r.attempts.length} 次`}
           embedded={!!panel}
           open={!published.length} data-ui="execution-attempts"
         >
           {r.attempts.length ? (
             r.attempts.map((a) => (
-              <div className="grid grid-cols-[1.2fr_1fr_1fr_1fr] items-center gap-3 border-t border-border px-3 py-2.5 text-xs max-[900px]:grid-cols-2 [&>div]:grid [&>div]:min-w-0 [&>div]:justify-items-start [&>div]:gap-1 [&_code]:text-[10px] [&_code]:text-muted-foreground" key={a.attemptId} data-ui="attempt-row">
+              <div
+                className={`grid gap-3 border-t border-border py-2.5 text-xs [&>div]:grid [&>div]:min-w-0 [&>div]:justify-items-start [&>div]:gap-1 [&_code]:text-[10px] [&_code]:text-muted-foreground ${panel
+                  ? 'grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] items-start wrap-anywhere'
+                  : 'grid-cols-[1.2fr_1fr_1fr_1fr] items-center px-3 max-[900px]:grid-cols-2'}`}
+                key={a.attemptId}
+                data-ui="attempt-row"
+              >
                 <div>
                   <b>执行 #{a.number}</b>
                   <small>
@@ -664,15 +703,15 @@ function RequestDiagnostics({
       )}
       {(!panel || panel === 'events') && (
         <DiagnosticSection
-          className="rounded-lg bg-card px-3 py-2.5 shadow-sm [&_[data-ui~=panel-head]]:px-0 [&_[data-ui~=panel-head]]:pt-0 [&_[data-ui~=event-list]]:px-0 overflow-hidden"
+          className={panel ? '' : 'overflow-hidden rounded-lg bg-card px-3 py-2.5 shadow-sm'}
           title={panel ? '运行动态' : `运行动态 · 最近 ${events.length} 条`}
           embedded={!!panel} data-ui="runtime-events"
         >
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 [&_h2]:text-xs max-[900px]:flex-wrap" data-ui="panel-head">
+          <div className={`flex items-center gap-2 border-b border-border pb-2.5 ${panel ? 'flex-wrap' : 'max-[900px]:flex-wrap'}`} data-ui="panel-head">
             <span className="text-xs text-muted-foreground" data-ui="sub">
               最近 {events.length} 条 · {streamState}
             </span>
-            <div className="ml-auto flex flex-wrap items-center gap-2" data-ui="right">
+            <div className="ml-auto min-w-0" data-ui="right">
               <Input
                 aria-label="筛选运行动态"
                 placeholder="筛选阶段 / 日志"
@@ -681,7 +720,7 @@ function RequestDiagnostics({
               />
             </div>
           </div>
-          <div className="max-h-[380px] overflow-auto" data-ui="event-list">
+          <div className={panel ? undefined : 'max-h-[380px] overflow-auto'} data-ui="event-list">
             {events.length ? (
               events
                 .filter((e) =>
@@ -690,7 +729,13 @@ function RequestDiagnostics({
                     .includes(eventSearch.toLowerCase()),
                 )
                 .map((e) => (
-                  <div className="grid grid-cols-[80px_120px_minmax(0,1fr)] gap-3 border-b border-border px-3 py-2 text-xs [&_time]:font-mono [&_time]:text-[11px] [&_time]:text-muted-foreground [&_pre]:text-[11px] [&_b]:break-words max-sm:grid-cols-[70px_minmax(0,1fr)] max-sm:[&_pre]:col-span-full" key={e.seq} data-ui="event">
+                  <div
+                    className={`grid gap-3 border-b border-border py-2 text-xs [&_time]:font-mono [&_time]:text-[11px] [&_time]:text-muted-foreground [&_pre]:text-[11px] [&_b]:wrap-anywhere ${panel
+                      ? 'grid-cols-[auto_minmax(0,1fr)] [&_pre]:col-span-full'
+                      : 'grid-cols-[80px_120px_minmax(0,1fr)] px-3 max-sm:grid-cols-[70px_minmax(0,1fr)] max-sm:[&_pre]:col-span-full'}`}
+                    key={e.seq}
+                    data-ui="event"
+                  >
                     <time>
                       {new Date(e.at).toLocaleTimeString('zh-CN')}
                     </time>
@@ -715,14 +760,127 @@ function RequestDiagnostics({
     </>
   );
 }
+function reportAttemptSearch(search: Record<string, unknown>): { testId?: string; attemptId?: string } {
+  return {
+    testId: typeof search.testId === 'string' ? search.testId : undefined,
+    attemptId: typeof search.attemptId === 'string' ? search.attemptId : undefined,
+  };
+}
+
+function ReportAttemptPicker({
+  id,
+  runId,
+  shared,
+  attempts,
+  selected,
+  onSelect,
+}: {
+  id: string;
+  runId: string;
+  shared: boolean;
+  attempts: ReportView['tests'];
+  selected: ReportView['tests'][number] | undefined;
+  onSelect: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const selectedRef = useRef<HTMLAnchorElement>(null);
+  const close = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+  useEffect(() => setOpen(false), [selected]);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, [open]);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const link = selectedRef.current;
+    if (!list || !link) return;
+    const bottom = link.offsetTop + link.offsetHeight;
+    if (link.offsetTop < list.scrollTop) list.scrollTop = link.offsetTop;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+  }, [open, selected]);
+
+  return (
+    <div ref={pickerRef} className="relative min-w-0" data-ui="report-attempt-picker"
+      onBlur={event => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+      onKeyDown={event => {
+        if (open && event.key === 'Escape') {
+          event.preventDefault();
+          close();
+        }
+      }}>
+      <h1 className="min-w-0 font-mono text-sm font-semibold">
+        <button type="button" ref={triggerRef} aria-expanded={open} aria-controls={open ? menuId : undefined}
+          aria-label={`${runId}，选择用例执行记录`} title={runId}
+          className="flex min-h-7 max-w-full items-center gap-1.5 rounded-md pr-1 text-left hover:bg-muted aria-expanded:bg-muted focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:min-h-9"
+          onClick={() => setOpen(value => !value)}>
+          <span className="min-w-0 truncate">{runId}</span>
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </button>
+      </h1>
+      {open && (
+        <nav id={menuId} aria-label="测试用例执行记录" data-ui="report-attempts"
+          className="absolute top-full left-0 z-30 mt-1.5 w-[min(26rem,calc(100vw-1.5rem))] rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg">
+          <ul ref={listRef} className="relative m-0 grid max-h-[min(55dvh,22rem)] list-none gap-0.5 overflow-y-auto overscroll-contain p-0">
+            {attempts.map((attempt) => {
+              const { testId, attemptId, result } = attempt;
+              const current = attempt === selected;
+              const name = text(result.testName ?? testId);
+              return (
+                <li key={JSON.stringify([testId, attemptId])} className="min-w-0">
+                  <Link
+                    to={shared ? '/shared/reports/$id' : '/reports/$id'}
+                    params={{ id }}
+                    search={{ testId, attemptId }}
+                    activeOptions={{ exact: true }}
+                    aria-current={current ? 'page' : undefined}
+                    ref={current ? selectedRef : undefined}
+                    className="flex min-h-7 items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-[current=page]:bg-accent pointer-coarse:min-h-9"
+                    onClick={(event) => {
+                      if (event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                        close();
+                        onSelect();
+                      }
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 font-medium wrap-anywhere">{name}</span>
+                    <code className="shrink-0 whitespace-nowrap text-muted-foreground">{attemptId}</code>
+                    <Badge value={text(result.status ?? 'unknown')} />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
+    </div>
+  );
+}
+
 function ReportContent({
   id,
+  selection: { testId, attemptId },
   shared = false,
 }: {
   id: string;
+  selection: ReturnType<typeof reportAttemptSearch>;
   shared?: boolean;
 }) {
-  const [panel, setPanel] = useState<'run' | 'attempts' | 'events' | 'worker' | 'share'>();
+  const targetId = useWorkspaceProjectId();
+  const [reportView, setReportView] = useState('tests');
+  useEffect(() => setReportView('tests'), [testId, attemptId]);
   const prefix = shared ? '/api/shared/reports' : '/api/reports';
   const { data: r, error } = useData<ReportView>(`${prefix}/${id}`);
   const { data: request, error: requestError, reload } = useData<Detail>(
@@ -731,27 +889,67 @@ function ReportContent({
     !shared && !!r,
   );
   const executionAttemptId = shared ? undefined : r?.executionAttemptId;
-  const titles = {
-    run: '运行信息',
-    attempts: '执行尝试',
-    events: '运行动态',
-    worker: 'Worker 执行',
-    share: '分享报告',
-  };
-  const metadata = r && (
-    <dl className="flex flex-wrap gap-x-4 gap-y-2 text-xs [&>div]:flex [&>div]:gap-1.5 [&_dt]:text-muted-foreground [&_dd]:m-0" data-ui="report-metadata">
-      <div><dt>运行 ID</dt><dd className="font-mono break-all">{r.manifest.runId}</dd></div>
-      <div><dt>测试结果</dt><dd><Badge value={r.manifest.status} /></dd></div>
-      <div><dt>证据完整性</dt><dd>{labels[r.manifest.evidenceStatus]}</dd></div>
-      <div>
-        <dt>保留至</dt>
-        <dd><time dateTime={new Date(r.expiresAt).toISOString()}>{time(r.expiresAt)}</time></dd>
-      </div>
-    </dl>
-  );
+  const hasSelection = testId !== undefined || attemptId !== undefined;
+  const attempt = hasSelection
+    ? r?.tests.find((item) => item.testId === testId && item.attemptId === attemptId)
+    : r?.tests[0];
+  const missingAttempt = hasSelection && !attempt;
   return (
     <>
-      <h1 className="sr-only">{r?.manifest.runId ?? id}</h1>
+      <header className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5" data-ui="report-header">
+        <div className="flex min-w-0 flex-auto flex-wrap items-center gap-x-3 gap-y-1" data-ui="report-heading">
+          <div className="flex min-w-0 items-center gap-2" data-ui="report-identity">
+            {r?.tests.length ? (
+              <ReportAttemptPicker id={id} runId={r.manifest.runId} shared={shared} attempts={r.tests} selected={attempt} onSelect={() => setReportView('tests')} />
+            ) : (
+              <h1 className="min-w-0 font-mono text-sm font-semibold wrap-anywhere" title={r?.manifest.runId}>{r?.manifest.runId ?? id}</h1>
+            )}
+            {r && (
+              <span className="inline-flex shrink-0 items-center">
+                <span className="sr-only">测试结果：</span>
+                <Badge value={r.manifest.status} />
+              </span>
+            )}
+          </div>
+          {r && (
+            <dl className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-xs [&>div]:flex [&>div]:items-baseline [&>div]:gap-1 [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:tabular-nums" data-ui="report-metadata">
+              <div>
+                <dt>证据完整性</dt>
+                <dd>{labels[r.manifest.evidenceStatus]}</dd>
+              </div>
+              <div>
+                <dt>保留至</dt>
+                <dd>
+                  <time dateTime={new Date(r.expiresAt).toISOString()}>
+                    {time(r.expiresAt)}
+                  </time>
+                </dd>
+              </div>
+            </dl>
+          )}
+        </div>
+        {!shared && (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+            {executionAttemptId && (
+              <Tabs value={reportView} onValueChange={setReportView} data-ui="report-view-tabs">
+                <TabsList className="h-7 max-[420px]:[&_svg]:hidden pointer-coarse:h-9" aria-label="报告视图">
+                  <TabsTrigger value="tests"><Icon name="play" />测试回放</TabsTrigger>
+                  <TabsTrigger value="worker"><Icon name="cpu" />Worker 执行</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5 [&>[role=alert]]:basis-full [&>[role=alert]]:wrap-anywhere pointer-coarse:[&_[data-slot=button]]:min-h-9" data-ui="rowline">
+              <Button asChild variant="secondary" className="max-[420px]:w-7 max-[420px]:px-0 pointer-coarse:min-w-9">
+                <Link {...boardDestination(targetId)} title="返回测试任务">
+                  <ArrowLeft aria-hidden="true" />
+                  <span className="max-[420px]:sr-only">返回测试任务</span>
+                </Link>
+              </Button>
+              {request && <RequestAction request={request} onChange={reload} />}
+            </div>
+          </div>
+        )}
+      </header>
       <ErrorBox error={error} />
       {!r && !error && <Empty>正在加载报告…</Empty>}
       {r && (
@@ -759,7 +957,9 @@ function ReportContent({
           {r.issues.length > 0 && (
             <details className="break-words rounded-lg bg-destructive/10 px-3 py-2.5 text-xs text-destructive" data-ui="evidence-issues">
               <summary>有 {r.issues.length} 项证据不可用</summary>
-              {r.issues.map((issue, i) => <p key={i}>{issue}</p>)}
+              {r.issues.map((issue, i) => (
+                <p key={i}>{issue}</p>
+              ))}
             </details>
           )}
           {r.manifest.runnerErrors?.map((e, i) => (
@@ -767,69 +967,51 @@ function ReportContent({
               {e.phase}: {e.message}
             </div>
           ))}
-          <Replay
-            key={id}
-            report={r}
-            shared={shared}
-            active={!panel}
-            reportActions={shared ? (
-              <Button variant="secondary" size="sm" aria-haspopup="dialog" onClick={() => setPanel('run')}>
-                报告信息
-              </Button>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col [&[hidden]]:hidden" hidden={!!executionAttemptId && reportView === 'worker'} data-ui="report-view-pane">
+            {missingAttempt ? (
+              <ErrorBox error="该报告中找不到链接指定的用例执行记录。" />
             ) : (
-              <>
-                <Button variant="secondary" size="sm" aria-haspopup="dialog" onClick={() => setPanel('share')}>
-                  <Share2 aria-hidden="true" />分享报告
-                </Button>
-                <NativeSelect
-                  aria-label="运行"
-                  value=""
-                  className="border-transparent bg-transparent dark:bg-transparent"
-                  onChange={(e) => {
-                    switch (e.target.value) {
-                      case 'run': case 'attempts': case 'events': case 'worker':
-                        setPanel(e.target.value);
-                    }
-                  }}
-                >
-                  <option value="" disabled>运行</option>
-                  <option value="run">运行信息</option>
-                  <option value="attempts">执行尝试</option>
-                  <option value="events">运行动态</option>
-                  {executionAttemptId && <option value="worker">Worker 执行</option>}
-                </NativeSelect>
-                <Button asChild variant="ghost" size="icon-sm">
-                  <Link to="/queue" aria-label="返回测试任务" title="返回测试任务">
-                    <ArrowLeft aria-hidden="true" />
-                  </Link>
-                </Button>
-              </>
-            )}
-          />
-          {panel && (
-            <CloudDialog title={shared ? '报告信息' : titles[panel]} onClose={() => setPanel(undefined)} wide>
-              <div className="grid min-w-0 gap-3 p-3">
-                {panel === 'share' ? <Shares id={id} /> : panel === 'worker' && executionAttemptId ? (
-                  <WorkerExecutionTimeline requestId={r.requestId} executionAttemptId={executionAttemptId} />
-                ) : panel === 'run' || panel === 'attempts' || panel === 'events' ? (
-                  <>
-                    {panel === 'run' && metadata}
-                    {!shared && (
+              <Replay
+                key={attempt && JSON.stringify([attempt.testId, attempt.attemptId])}
+                report={r}
+                attempt={attempt}
+                shared={shared}
+                active={shared || reportView === 'tests'}
+                reportTabs={shared ? [] : [
+                  ...([
+                    ['run', '运行信息', 'doc'],
+                    ['attempts', '执行尝试', 'refresh'],
+                    ['events', '运行动态', 'clock'],
+                  ] as const).map(([panel, label, icon]) => ({
+                    id: `report-${panel}`,
+                    label,
+                    icon,
+                    content: (
                       <>
                         <ErrorBox error={requestError} />
                         {request ? (
-                          <>
-                            {panel === 'run' && <RequestAction request={request} onChange={reload} />}
-                            <RequestDiagnostics request={request} currentReportId={id} panel={panel} />
-                          </>
+                          <RequestDiagnostics
+                            request={request}
+                            currentReportId={id}
+                            panel={panel}
+                          />
                         ) : !requestError && <Empty>正在加载运行信息…</Empty>}
                       </>
-                    )}
-                  </>
-                ) : null}
-              </div>
-            </CloudDialog>
-          )}
+                    ),
+                  })),
+                  {
+                    id: 'report-share',
+                    label: '报告分享',
+                    icon: 'link',
+                    content: <Shares id={id} />,
+                  },
+                ]}
+              />
+            )}
+          </div>
+          {executionAttemptId && <div className="min-h-0 flex-1 overflow-y-auto [&[hidden]]:hidden" hidden={reportView !== 'worker'} data-ui="report-worker-pane">
+            <WorkerExecutionTimeline requestId={r.requestId} executionAttemptId={executionAttemptId} />
+          </div>}
         </>
       )}
     </>
@@ -861,75 +1043,84 @@ function Shares({ id }: { id: string }) {
     }
   }
   return (
-    <Card asChild className="border-0 rounded-none bg-transparent">
-      <section className=" overflow-hidden" data-ui="share-panel">
-        <p className="px-3 text-xs text-muted-foreground">只读 · 可撤销 · 内网访问</p>
-        <ErrorBox error={error || loadError} />
-        <div className="flex flex-wrap items-center gap-2 p-3 [&_label]:text-xs [&_label]:text-muted-foreground max-sm:items-stretch max-sm:[&_label]:w-full" data-ui="share-controls">
-          <NativeSelect
-            aria-label="分享有效期"
-            value={days}
-            onChange={(e) => setDays(Number(e.target.value))}
-          >
-            <option value={1}>有效期 1 天</option>
-            <option value={3}>有效期 3 天</option>
-            <option value={7}>有效期 7 天</option>
-          </NativeSelect>
-          <Label>
-            <Checkbox
-              checked={sensitive}
-              onCheckedChange={(checked) => setSensitive(checked === true)}
-            />{' '}
-            包含日志、源码及 Trace（可能含敏感数据）
-          </Label>
-          <Button variant="default" size="default" onClick={create}>
-            生成分享链接
-          </Button>
+    <section className="grid min-w-0 gap-3" data-ui="share-panel">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-border pb-2.5" data-ui="panel-heading">
+        <h2>报告分享</h2>
+        <span className="text-muted-foreground">只读 · 可撤销 · 内网访问</span>
+      </div>
+      <ErrorBox error={error || loadError} />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2" data-ui="share-controls">
+        <NativeSelect
+          aria-label="分享有效期"
+          value={days}
+          onChange={(e) => setDays(Number(e.target.value))}
+        >
+          <option value={1}>有效期 1 天</option>
+          <option value={3}>有效期 3 天</option>
+          <option value={7}>有效期 7 天</option>
+        </NativeSelect>
+        <Label className="flex min-w-0 max-w-full items-start gap-2 text-muted-foreground">
+          <Checkbox
+            className="mt-0.5"
+            checked={sensitive}
+            onCheckedChange={(checked) => setSensitive(checked === true)}
+          />
+          <span className="min-w-0 wrap-anywhere">包含日志、源码及 Trace（可能含敏感数据）</span>
+        </Label>
+        <Button variant="default" size="default" onClick={create}>
+          生成分享链接
+        </Button>
+      </div>
+      {url && (
+        <Label className="grid min-w-0 gap-1.5" data-ui="share-url">
+          分享链接
+          <Input
+            className="font-mono"
+            aria-label="分享链接"
+            readOnly
+            value={url}
+            onFocus={(e) => e.currentTarget.select()}
+          />
+          <small>链接只显示一次；有效期不会超过报告保留时间。</small>
+        </Label>
+      )}
+      {!!shares?.length && (
+        <div>
+          {shares.map((s) => (
+            <div className="flex items-center gap-3 border-t border-border py-2" key={s.id} data-ui="share-row">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                <code>{s.id.slice(0, 8)}</code>
+                <span>{time(s.expiresAt)}</span>
+                <span>
+                  {s.revoked
+                    ? '已撤销'
+                    : s.expiresAt < Date.now()
+                      ? '已过期'
+                      : s.sensitive
+                        ? '完整范围'
+                        : '步骤与截图'}
+                </span>
+              </div>
+              <Button
+                variant="secondary"
+                size="default"
+                disabled={!!s.revoked}
+                onClick={async () => {
+                  try {
+                    await api(`/api/shares/${s.id}`, 'DELETE');
+                    reload();
+                  } catch (e) {
+                    setError((e as Error).message);
+                  }
+                }}
+              >
+                撤销
+              </Button>
+            </div>
+          ))}
         </div>
-        {url && (
-          <Label className="grid gap-1.5 px-3 pb-3 text-xs [&_input]:w-full [&_input]:font-mono" data-ui="share-url">
-            分享链接
-            <Input
-              aria-label="分享链接"
-              readOnly
-              value={url}
-              onFocus={(e) => e.currentTarget.select()}
-            />
-            <small>链接只显示一次；有效期不会超过报告保留时间。</small>
-          </Label>
-        )}
-        {shares?.map((s) => (
-          <div className="flex flex-wrap items-center gap-3 border-t border-border px-3 py-2 text-xs [&_button]:ml-auto [&_code]:text-[11px]" key={s.id} data-ui="share-row">
-            <code>{s.id.slice(0, 8)}</code>
-            <span>{time(s.expiresAt)}</span>
-            <span>
-              {s.revoked
-                ? '已撤销'
-                : s.expiresAt < Date.now()
-                  ? '已过期'
-                  : s.sensitive
-                    ? '完整范围'
-                    : '步骤与截图'}
-            </span>
-            <Button
-              variant="secondary"
-              size="default"
-              disabled={!!s.revoked}
-              onClick={async () => {
-                try {
-                  await api(`/api/shares/${s.id}`, 'DELETE');
-                  reload();
-                } catch (e) {
-                  setError((e as Error).message);
-                }
-              }}
-            >
-              撤销
-            </Button>
-          </div>
-        ))}
-      </section>
-    </Card>
+      )}
+    </section>
   );
 }
 function WorkerRow({ worker, canOperate, onSchedulingChange, projects }: {
@@ -1029,6 +1220,7 @@ function Shell() {
 
 const rootRoute = createRootRoute({
   component: Shell,
+  search: { middlewares: [retainSearchParams(['targetId'])] },
   validateSearch: (search: Record<string, unknown>): { search?: string; createProject?: boolean; view?: string; v?: string; q?: string; state?: string; targetId?: string } => ({
     view: typeof search.view === 'string' ? search.view : undefined,
     v: typeof search.v === 'string' ? search.v : undefined,
@@ -1058,36 +1250,50 @@ const requestRoute = createRoute({
 const reportRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/reports/$id',
+  staticData: { workspacePage: 'reports' },
+  validateSearch: reportAttemptSearch,
   component: function ReportPage() {
     const { id } = reportRoute.useParams();
-    return <ReportContent key={id} id={id} />;
+    const selection = reportRoute.useSearch();
+    return <ReportContent key={id} id={id} selection={selection} />;
   },
 });
 const sharedReportRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/shared/reports/$id',
+  validateSearch: reportAttemptSearch,
   component: function SharedReportPage() {
     const { id } = sharedReportRoute.useParams();
-    return <ReportContent key={id} id={id} shared />;
+    const selection = sharedReportRoute.useSearch();
+    return <ReportContent key={id} id={id} selection={selection} shared />;
   },
 });
-function ProjectsPage() {
+function ProjectsPage({ view }: { view?: ProjectView } = {}) {
     const team = useContext(TeamContext)!;
     const search = useSearch({ strict: false });
     const navigate = useNavigate();
-    return <Projects directory={team.directory} role={team.user?.role} createRequested={search.createProject === true} creationHandled={() => {
+    return <Projects directory={team.directory} role={team.user?.role} view={view} createRequested={search.createProject === true} creationHandled={() => {
       void navigate({ to: '.', search: (previous: { search?: string; createProject?: boolean }) => ({ ...previous, createProject: undefined }), replace: true });
     }} />;
 }
 const projectsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/projects',
-  component: ProjectsPage,
 });
+const projectRoute = createRoute({
+  getParentRoute: () => projectsRoute,
+  path: '$projectId',
+  search: { middlewares: [stripSearchParams<{ targetId?: string }>(['targetId'])] },
+});
+function redirectScopedBoard({ search }: { search: { targetId?: string; search?: string } }) {
+  if (search.targetId) throw redirect({ ...boardDestination(search.targetId, search.search), replace: true });
+}
 const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/',
+    staticData: { workspacePage: 'board' },
+    beforeLoad: redirectScopedBoard,
     component: QueueBoard,
   }),
   createRoute({
@@ -1098,16 +1304,24 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/runs',
+    staticData: { workspacePage: 'board' },
+    beforeLoad: redirectScopedBoard,
     component: QueueBoard,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/queue',
+    staticData: { workspacePage: 'board' },
+    beforeLoad: redirectScopedBoard,
     component: QueueBoard,
   }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/reports',
+    staticData: { workspacePage: 'reports' },
+    beforeLoad: ({ search }) => {
+      if (search.targetId) throw redirect({ ...reportsDestination(search.targetId), replace: true });
+    },
     component: Reports,
   }),
   createRoute({
@@ -1127,12 +1341,29 @@ const routeTree = rootRoute.addChildren([
     component: Workers,
   }),
   projectsRoute.addChildren([
-    createRoute({ getParentRoute: () => projectsRoute, path: '/' }),
-    createRoute({ getParentRoute: () => projectsRoute, path: '$projectId' }),
+    createRoute({ getParentRoute: () => projectsRoute, path: '/', staticData: { workspacePage: 'directory' }, component: ProjectsPage }),
+    projectRoute.addChildren([
+      createRoute({
+        getParentRoute: () => projectRoute,
+        path: '/',
+        staticData: { workspacePage: 'project' },
+        beforeLoad: ({ params, search }) => {
+          if (activeProjectView(search.view) === 'tests') {
+            const { v, q, createProject } = search;
+            throw redirect({ to: '/projects/$projectId/testcases', params, search: { v, q, createProject }, replace: true });
+          }
+        },
+        component: ProjectsPage,
+      }),
+      createRoute({ getParentRoute: () => projectRoute, path: 'kanban', staticData: { workspacePage: 'board' }, component: QueueBoard }),
+      createRoute({ getParentRoute: () => projectRoute, path: 'reports', staticData: { workspacePage: 'reports' }, component: Reports }),
+      createRoute({ getParentRoute: () => projectRoute, path: 'testcases', staticData: { workspacePage: 'cases' }, component: () => <ProjectsPage view="tests" /> }),
+    ]),
   ]),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/targets',
+    staticData: { workspacePage: 'directory' },
     component: ProjectsPage,
   }),
   createRoute({
@@ -1152,6 +1383,9 @@ export function createCloudRouter(
 }
 
 declare module '@tanstack/react-router' {
+  interface StaticDataRouteOption {
+    workspacePage?: WorkspacePage;
+  }
   interface Register {
     router: ReturnType<typeof createCloudRouter>;
   }

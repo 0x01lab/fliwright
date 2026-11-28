@@ -10,7 +10,7 @@ import {
   type TestColumn,
 } from '../request-board.js';
 import { TestBoard } from './TestBoard.js';
-import { BoardResultFacts } from './WorkspaceHeader.js';
+import { useWorkspaceProjectId } from './ProjectNavigation.js';
 import { useData } from './data.js';
 import { Button } from './components/ui/button.js';
 
@@ -111,7 +111,6 @@ function QueueLanes({
         positions.set(locationKey, position);
       }}
     >
-      <BoardResultFacts totals={snapshot?.totals} search={search} />
       {error && (
         <div role="alert" className="bg-card p-2">
           {error}{' '}
@@ -142,11 +141,11 @@ function QueueLanes({
 export function QueueBoard() {
   const search = useSearch({ strict: false });
   const path = useLocation({ select: (l) => l.pathname });
-  const query = search.search ?? '',
-    targetId = search.targetId ?? '';
+  const query = search.search ?? '';
+  const targetId = useWorkspaceProjectId() ?? '';
   const key = JSON.stringify([path, query, targetId]);
   return (
-    <section className="queue-scene" aria-label="团队执行看板">
+    <section className="queue-scene" aria-label={targetId ? '项目执行看板' : '团队执行看板'}>
       <h1 className="sr-only">执行看板</h1>
       <QueueLanes
         key={key}

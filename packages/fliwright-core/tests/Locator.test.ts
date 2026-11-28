@@ -46,6 +46,38 @@ describe('Locator', () => {
     });
   });
 
+  it.each([
+    { action: 'tap', target: { kind: 'coordinate', x: 125, y: 420 },
+      interaction: { kind: 'click', x: 125, y: 420 } },
+    { action: 'fill', target: { kind: 'selector', rect: { x: 20, y: 100, width: 360, height: 48 } },
+      interaction: { kind: 'input', x: 20, y: 100, width: 360, height: 48 } },
+  ])('records the dispatched $action target with a pre-action screenshot', async ({ action, target, interaction }) => {
+    const events: string[] = [];
+    const sendRequest = vi.fn(async () => {
+      events.push('dispatch');
+      return { success: true, target, currentText: 'unarchived text' };
+    });
+    const session = new RunSession({
+      runId: 'run-interactions', testId: 'test', testName: 'interactions', recordingMode: 'standard',
+      captureEvidence: async ({ reason }) => {
+        events.push(reason);
+        return { status: 'captured', artifactPaths: [`${reason}.png`], artifactMetadata: { pixelRatio: 1 } };
+      },
+    });
+    const locator = new Locator({ key: 'target' }, sendRequest, { runSession: session });
+    if (action === 'tap') await locator.click();
+    else await locator.fill('unarchived text', { sensitive: true });
+
+    expect(events).toEqual(['start', 'dispatch', 'finish']);
+    const node = session.recorder.toJSON().nodes[0];
+    expect(node.metadata?.interaction).toEqual(interaction);
+    expect(node.artifacts).toMatchObject([
+      { path: 'start.png', metadata: { capturePhase: 'start', pixelRatio: 1 } },
+      { path: 'finish.png', metadata: { capturePhase: 'finish' } },
+    ]);
+    expect(JSON.stringify(node)).not.toContain('unarchived text');
+  });
+
   it('click() sends a single strict hit-testable action', async () => {
     const sendRequest = createMockSendRequest({ action: { success: true } });
 

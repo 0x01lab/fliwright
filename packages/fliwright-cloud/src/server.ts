@@ -408,8 +408,16 @@ export function createCloudServer(options: CloudServerOptions) {
   });
   app.get('/api/reports', (req) => {
     if (team(req).kind === 'ci') throw new CloudError(403, 'Team access required');
-    const { offset } = z.object({ offset: z.coerce.number().int().min(0).default(0) }).parse(query(req));
-    return reports.listPublished(offset);
+    const { offset, targetId } = z.object({
+      offset: z.coerce.number().int().min(0).default(0),
+      targetId: idSchema.optional(),
+    }).parse(query(req));
+    return reports.listPublished(offset, targetId);
+  });
+  app.get('/api/board/totals', (req) => {
+    if (team(req).kind === 'ci') throw new CloudError(403, 'Use the submitted request URL');
+    const { targetId } = z.object({ targetId: idSchema.optional() }).parse(query(req));
+    return store.requestBoardTotals(targetId);
   });
   app.get('/api/board', (req) => {
     if (team(req).kind === 'ci') throw new CloudError(403, 'Use the submitted request URL');

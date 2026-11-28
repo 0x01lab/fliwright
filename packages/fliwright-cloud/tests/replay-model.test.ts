@@ -11,6 +11,7 @@ import {
   stepAtTime,
   type ReplayNode,
   evidenceLabel,
+  groupReplaySteps,
 } from '../src/web/replay-model.js';
 
 const step = (id: string, extra: Partial<ReplayNode> = {}): ReplayNode => ({
@@ -146,6 +147,25 @@ describe('report replay evidence', () => {
       'b',
     ]);
     expect(result.find(({ node }) => node.id === 'child')?.depth).toBe(1);
+  });
+
+  it('groups an action with its immediately following result assertion in the replay list', () => {
+    const action = step('tap markets', { kind: 'action', parentId: 'navigation' });
+    const assertion = step('markets visible', { kind: 'assertion', parentId: 'navigation' });
+    const nextAction = step('tap trading', { kind: 'action', parentId: 'navigation' });
+    const unrelatedAssertion = step('session valid', { kind: 'assertion', parentId: 'setup' });
+    const rows = groupReplaySteps([
+      { node: action, depth: 1 },
+      { node: assertion, depth: 1 },
+      { node: nextAction, depth: 1 },
+      { node: unrelatedAssertion, depth: 1 },
+    ]);
+
+    expect(rows).toEqual([
+      { nodes: [action, assertion], depth: 1 },
+      { nodes: [nextAction], depth: 1 },
+      { nodes: [unrelatedAssertion], depth: 1 },
+    ]);
   });
 
   it('distinguishes missing timings from zero and filters slow, failed and screenshot steps', () => {

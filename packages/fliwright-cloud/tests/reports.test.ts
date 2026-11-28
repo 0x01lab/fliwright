@@ -92,9 +92,12 @@ function setup() {
           kind: 'step',
           startedAt: '2026-10-19T01:00:00.000Z',
           endedAt: '2026-10-19T01:00:02.000Z',
-          metadata: { secret: 'hidden' },
+          metadata: { secret: 'hidden', interaction: { kind: 'click', x: 20, y: 30, secret: 'hidden' } },
           error: { message: 'expected success' },
-          artifacts: [],
+          artifacts: [{
+            kind: 'screenshot', path: 'before.png',
+            metadata: { capturePhase: 'start', pixelRatio: 1, secret: 'hidden' },
+          }],
         },
       ],
     }),
@@ -140,9 +143,11 @@ it('stages resumable files, rejects tampering, commits once and preserves histor
   expect(reports.view(p.id, true).manifest.status).toBe('failed');
   expect(reports.view(p.id, true, true).executionAttemptId).toBe(lease.attemptId);
   expect(reports.view(p.id, true).executionAttemptId).toBeUndefined();
-  expect(
-    reports.view(p.id, false).tests[0].timeline.nodes[0].metadata,
-  ).toBeUndefined();
+  const sharedNode = reports.view(p.id, false).tests[0].timeline.nodes[0];
+  expect(sharedNode.metadata).toEqual({ interaction: { kind: 'click', x: 20, y: 30 } });
+  expect(sharedNode.artifacts).toEqual([{
+    kind: 'screenshot', path: 'before.png', metadata: { capturePhase: 'start', pixelRatio: 1 },
+  }]);
   expect(reports.view(p.id, false).tests[0].timeline).toMatchObject({
     startedAt: '2026-10-19T01:00:00.000Z',
     endedAt: '2026-10-19T01:00:02.000Z',

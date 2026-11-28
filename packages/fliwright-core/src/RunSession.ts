@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { TimelineRecorder } from './timeline/TimelineRecorder.js';
+import { flutterInteractionKind, readFlutterInteraction } from './timeline/ScreenshotInteraction.js';
 import type { RecordingMode } from './RecordingConfig.js';
 import type { EndpointLeaseManager } from './EndpointLease.js';
 
@@ -183,6 +184,9 @@ export class RunSession {
       ...(operation.metadata ? { metadata: { ...operation.metadata } } : {}),
     };
     this.operations.push(record);
+    const interactionKind = operation.kind === 'action' && operation.metadata?.surface !== 'native'
+      ? flutterInteractionKind(operation.metadata?.action)
+      : undefined;
     const run = async (): Promise<T> => {
       const node = this.recorder.startNode(operation.kind === 'assertion' ? 'assertion' : 'action', operation.title, {
         parentId,
@@ -190,8 +194,10 @@ export class RunSession {
       });
       await this.flushProgress();
       try {
-        if (operation.kind === 'action' && this.recordingMode === 'full') {
+        if (operation.kind === 'action' && this.recordingEnabled && (interactionKind || this.recordingMode === 'full')) {
           await this.captureOperationEvidence({ kind: 'screenshot', reason: 'start', operationId }, node.id);
+        }
+        if (operation.kind === 'action' && this.recordingMode === 'full') {
           await this.captureOperationEvidence({ kind: 'snapshot', reason: 'start', operationId }, node.id);
         }
         const value = await operationContext.run(operationId, execute);
@@ -201,7 +207,10 @@ export class RunSession {
         record.outcome = 'passed';
         record.endedAt = new Date().toISOString();
         record.durationMs = elapsedMs(record.startedAt);
-        this.recorder.passNode(node.id);
+        const interaction = interactionKind && this.recordingEnabled
+          ? readFlutterInteraction(interactionKind, value)
+          : undefined;
+        this.recorder.passNode(node.id, interaction ? { interaction } : undefined);
         await this.flushProgress();
         return value;
       } catch (error) {
@@ -295,7 +304,11 @@ export class RunSession {
       this.recorder.addArtifacts(nodeId, result.artifactPaths.map((path) => ({
         kind,
         path,
-        metadata: { surface: request.surface ?? (this.operations.find(item => item.operationId === request.operationId)?.metadata?.surface === 'native' ? 'native' : 'flutter'), ...result.artifactMetadata },
+        metadata: {
+          surface: request.surface ?? (this.operations.find(item => item.operationId === request.operationId)?.metadata?.surface === 'native' ? 'native' : 'flutter'),
+          ...result.artifactMetadata,
+          ...(kind === 'screenshot' ? { capturePhase: request.reason } : {}),
+        },
         ...(kind === 'screenshot' ? { mimeType: 'image/png' } : { mimeType: 'application/json' }),
       })));
     }

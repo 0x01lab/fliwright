@@ -25,10 +25,22 @@ async function render(props: Partial<React.ComponentProps<typeof WorkerExecution
   await act(async () => { root.render(React.createElement(WorkerExecutionTimeline, { requestId: 'request', attempts, ...props })); });
 }
 it('separates execution, verdict and recording status and preserves a manually chosen attempt', async () => {
+  view = { ...view, deviceId: '0F7F988D-B1BE-4488-B196-81CA4B70D2DB' };
   await render();
   expect(container.textContent).toContain('测试失败');
   expect(container.textContent).toContain('Worker 执行中');
   expect(container.textContent).toContain('记录中');
+  const summary = container.querySelector('[data-ui="worker-timeline-summary"]')!;
+  expect(container.querySelector('[data-ui="worker-timeline-heading"]')?.contains(summary)).toBe(true);
+  expect(container.querySelectorAll('[data-ui="worker-timeline-meta"]')).toHaveLength(1);
+  expect(container.querySelector('[data-ui="worker-timeline-meta"]')?.textContent).toContain('设备 0F7F988D…');
+  expect(container.querySelector('[data-ui="worker-timeline-meta"] [title="0F7F988D-B1BE-4488-B196-81CA4B70D2DB"]')).not.toBeNull();
+  const row = container.querySelector('[data-ui="worker-span-row"]')!;
+  const label = row.querySelector('[data-ui="worker-span-label"]')!;
+  expect(label.querySelector('button > span')?.textContent).toBe('运行测试');
+  expect(label.querySelector('button > small')?.textContent).toContain('成功');
+  expect(label.querySelector('[data-ui="worker-span-duration"]')?.textContent).toBe('100 ms');
+  expect(row.querySelector('[data-ui="worker-span-track"] [data-ui="worker-span-duration"]')).toBeNull();
   const select = container.querySelector('select')!;
   await act(async () => { select.value = 'attempt-1'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   await render({ attempts: [...attempts, { attemptId: 'attempt-3', number: 3 } as ExecutionAttempt] });

@@ -7,6 +7,7 @@ import { testColumn, type BoardRequest } from '../src/web/TestBoard.js';
 import { boardColumns, boardBatch } from '../src/request-board.js';
 import { projectSchema, type ExecutionWorker, type Project } from '@fliwright/cloud-protocol';
 import type { WorkerStatusResponse } from '../src/catalog-scan-status.js';
+import type { ReportView } from '../src/ReportStore.js';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -17,6 +18,8 @@ let projects: Project[] = [];
 let workers: WorkerStatusResponse[] = [];
 let workerStatusError = false;
 let submissionError = '';
+let reportAttempts: ReportView['tests'] = [];
+let reports: Array<{ id: string; targetId: string; title: string }>;
 const requestOverrides: Record<string, Record<string, unknown>> = {};
 const target = {
   id: 'app',
@@ -36,6 +39,8 @@ beforeEach(() => {
   workers = [];
   workerStatusError = false;
   submissionError = '';
+  reportAttempts = [];
+  reports = [];
   for (const key of Object.keys(requestOverrides)) delete requestOverrides[key];
   vi.stubGlobal(
     'EventSource',
@@ -60,11 +65,22 @@ beforeEach(() => {
       }
       else if (/^\/api\/projects\/[^/]+\/status$/.test(path)) data = { ready: false, blockers: [], latestScan: null };
       else if (path === '/api/targets') data = projects.length ? projects.map(p => ({ ...p, suites: Object.keys(p.suites) })) : [target];
-      else if (path === '/api/reports') data = { items:[],hasMore:false };
-      else if (path === '/api/board') {
+      else if (path === '/api/reports') {
+        const targetId = url.searchParams.get('targetId');
+        const offset = Number(url.searchParams.get('offset'));
+        const matching = reports.filter(report => !targetId || report.targetId === targetId);
+        data = {
+          items: matching.slice(offset, offset + 25).map(report => ({
+            ...report, projectName: report.targetId, sha: 'a'.repeat(40), createdAt: 1,
+          })),
+          hasMore: matching.length > offset + 25,
+        };
+      }
+      else if (path === '/api/board' || path === '/api/board/totals') {
         const matching = boardItems.filter(r => (!url.searchParams.get('targetId') || r.input.targetId===url.searchParams.get('targetId')) && (!url.searchParams.get('search') || r.id.includes(url.searchParams.get('search')!)));
         const lanes = boardColumns.map(lane => matching.filter(r => testColumn(r)===lane));
-        data = {items: lanes.flatMap((items,i) => items.slice(0,Number(url.searchParams.get(boardColumns[i]) ?? boardBatch))),totals:Object.fromEntries(boardColumns.map((id,i) => [id,lanes[i].length])),queue:boardItems.filter(r=>r.state==='queued').map(r=>r.id).reverse()};
+        const totals = Object.fromEntries(boardColumns.map((id, i) => [id, lanes[i].length]));
+        data = path.endsWith('/totals') ? totals : {items: lanes.flatMap((items,i) => items.slice(0,Number(url.searchParams.get(boardColumns[i]) ?? boardBatch))),totals,queue:boardItems.filter(r=>r.state==='queued').map(r=>r.id).reverse()};
       }
       else if (path === '/api/operations')
         data = { storage: { freeBytes: 0, reservedBytes: 0 } };
@@ -122,7 +138,7 @@ beforeEach(() => {
             evidenceStatus: 'complete',
             tests: [],
           },
-          tests: [],
+          tests: reportAttempts,
           report: {},
           issues: [],
           files: [],
@@ -212,7 +228,7 @@ async function submitSearch(value: string) {
 }
 
 function boardHeaderFacts() {
-  const labels = document.querySelectorAll('header dl[aria-label="看板概况"] dt');
+  const labels = document.querySelectorAll('header dl[aria-label="项目概况"] dt');
   return Object.fromEntries(Array.from(labels, label => [label.textContent, label.nextElementSibling?.textContent]));
 }
 
@@ -358,17 +374,17 @@ it('keeps board and cases in the single top navigation and opens configuration w
   const nav = header.querySelector('nav')!;
   expect(header.querySelector("[data-ui~=topbar]")?.contains(nav)).toBe(true);
   expect(Array.from(nav.querySelectorAll('a')).map((link) => link.getAttribute('href')))
-    .toEqual(['/queue', '/projects', '/reports']);
+    .toEqual(['/queue', '/projects?view=tests', '/reports']);
   expect(nav.querySelector('a[href="/queue"]')?.getAttribute('aria-label')).toBe('执行看板');
-  expect(nav.querySelector('a[href="/projects"]')?.getAttribute('aria-label')).toBe('项目管理');
+  expect(nav.querySelector('a[href="/projects?view=tests"]')?.getAttribute('aria-label')).toBe('测试用例');
   expect(nav.querySelector('a[href="/queue"]')?.getAttribute('aria-current')).toBe('page');
   expect(nav.textContent).not.toMatch(/运行记录|测试队列/);
   expect(nav.textContent).not.toContain('概览');
   expect(header.querySelector("[data-ui~=brand]")?.getAttribute('href')).toBe('/');
   const trigger = await openConfiguration();
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
-  for (const url of ['/overview', '/devices', '/workers', '/projects', '/reports']) {
-    expect(header.querySelector(`a[href="${url}"]`)).not.toBeNull();
+  for (const url of ['/overview', '/devices', '/workers', '/projects']) {
+    expect(header.querySelector(`.workspace-more-menu a[href="${url}"]`)).not.toBeNull();
   }
   await act(async () => {
     trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -536,13 +552,14 @@ it('loads more in a single column and searches the full collection', async () =>
   expect(document.body.querySelectorAll("[data-ui~=test-card]")).toHaveLength(1);
   expect(document.body.querySelector("[data-ui~=test-card]")?.getAttribute('href')).toBe('/requests/run-39');
   expect(document.body.querySelector("[data-ui~=pagination]")).toBeNull();
-  expect(boardHeaderFacts()).toMatchObject({ '匹配任务': '1', '通过率': '0%' });
+  expect(boardHeaderFacts()).toMatchObject({ '任务总数': '40', '通过率': '50%' });
   await submitSearch('missing-task');
-  expect(boardHeaderFacts()).toMatchObject({ '匹配任务': '0', '通过率': '—' });
+  expect(document.body.querySelectorAll('[data-ui~=test-card]')).toHaveLength(0);
+  expect(boardHeaderFacts()).toMatchObject({ '任务总数': '40', '通过率': '50%' });
 });
 
 it('keeps the filtered board open after submission and links to the queued task', async () => {
-  await mount('/queue?search=smoke&targetId=app');
+  await mount('/projects/app/kanban?search=smoke');
   const shell = document.body.querySelector("header[data-ui~=app-header]");
   const board = document.querySelector('.queue-lanes');
   const scroll = board!.querySelector<HTMLElement>('[data-ui="test-board-scroll"]')!;
@@ -555,7 +572,7 @@ it('keeps the filtered board open after submission and links to the queued task'
     );
   });
   expect(document.querySelector('[role="dialog"]')).toBeNull();
-  expect(window.location.pathname + window.location.search).toBe('/queue?search=smoke&targetId=app');
+  expect(window.location.pathname + window.location.search).toBe('/projects/app/kanban?search=smoke');
   expect(document.querySelector('.queue-lanes')).toBe(board);
   expect(scroll.scrollLeft).toBe(90);
   expect(document.body.querySelector("header[data-ui~=app-header]")).toBe(shell);
@@ -575,6 +592,7 @@ it('keeps the filtered board open after submission and links to the queued task'
   await act(async () => toast.querySelector('button')!.click());
   expect(window.location.pathname).toBe('/requests/created');
   expect(document.body.querySelector('h1')?.textContent).toContain('#created');
+  expect(document.querySelector('[data-ui~="crumb"] a')?.getAttribute('href')).toBe('/projects/app/kanban');
 });
 
 it('keeps a failed submission editable and restores focus when dismissed', async () => {
@@ -634,22 +652,108 @@ it('opens report links in the same document', async () => {
   expect(document.body.querySelector("header[data-ui~=app-header]")).toBe(shell);
 });
 
+function seedReportAttempts() {
+  reportAttempts = [
+    { testId: '-123', attemptId: 'attempt-0', name: '付款', step: '首次付款', status: 'failed' },
+    { testId: '-123', attemptId: 'attempt-1', name: '付款', step: '重试付款', status: 'passed' },
+    { testId: '退款 / 查询?', attemptId: 'attempt-0', name: '退款', step: '查看退款', status: 'passed' },
+  ].map(({ testId, attemptId, name, step, status }) => ({
+    testId,
+    attemptId,
+    result: { testName: name, status },
+    timeline: { nodes: [{ id: 'step', title: step, kind: 'step', status }] },
+    trace: null,
+    issues: [],
+  }));
+}
+
+const reportAttemptLinks = '[data-ui~=report-header] [data-ui~=report-attempts] a';
+const reportAttemptTrigger = () => document.querySelector<HTMLButtonElement>('[data-ui~=report-identity] h1 button')!;
+const toggleReportAttempts = () => act(async () => reportAttemptTrigger().click());
+const currentReportAttempt = () => document.querySelector(`${reportAttemptLinks}[aria-current=page]`);
+const replaySteps = () => document.querySelector('[aria-label="步骤列表"]')?.textContent;
+
+it('links to each report attempt and restores the replay through browser history', async () => {
+  seedReportAttempts();
+  await mount('/reports/bundle');
+  const trigger = reportAttemptTrigger();
+  expect(trigger.textContent).toBe('run');
+  expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  expect(document.querySelector(reportAttemptLinks)).toBeNull();
+  const workerTab = [...document.querySelectorAll<HTMLButtonElement>('[data-ui~=report-view-tabs] [role=tab]')]
+    .find(tab => tab.textContent === 'Worker 执行')!;
+  expect(replaySteps()).toContain('首次付款');
+  expect(document.querySelector('#replay-attempt')).toBeNull();
+  await act(async () => workerTab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+  expect(document.querySelector('[data-ui~=report-view-pane]')?.hasAttribute('hidden')).toBe(true);
+  await toggleReportAttempts();
+  expect(trigger.getAttribute('aria-expanded')).toBe('true');
+  const links = [...document.querySelectorAll<HTMLAnchorElement>(reportAttemptLinks)];
+  expect(links).toHaveLength(3);
+  expect(new Set(links.map(link => link.href)).size).toBe(3);
+  expect(currentReportAttempt()).toBe(links[0]);
+
+  expect(await click(`${reportAttemptLinks}[aria-current=page]`, { ctrlKey: true })).toBe(false);
+  expect(window.location.search).toBe('');
+  const retry = `${reportAttemptLinks}[href="${links[1].getAttribute('href')}"]`;
+  const refund = `${reportAttemptLinks}[href="${links[2].getAttribute('href')}"]`;
+  expect(await click(retry)).toBe(true);
+  expect(window.location.href).toBe(links[1].href);
+  expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  expect(document.activeElement).toBe(trigger);
+  expect(replaySteps()).toContain('重试付款');
+  expect(document.querySelector('[data-ui~=report-view-pane]')?.hasAttribute('hidden')).toBe(false);
+
+  await toggleReportAttempts();
+  expect(currentReportAttempt()?.getAttribute('href')).toBe(links[1].getAttribute('href'));
+  await act(async () => {
+    const selected = document.querySelector<HTMLAnchorElement>(retry)!;
+    selected.focus();
+    selected.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+  expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  expect(document.activeElement).toBe(trigger);
+  await toggleReportAttempts();
+  expect(await click(refund)).toBe(true);
+  expect(window.location.href).toBe(links[2].href);
+  expect(replaySteps()).toContain('查看退款');
+  await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(window.location.href).toBe(links[1].href);
+  expect(replaySteps()).toContain('重试付款');
+  await act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(window.location.href).toBe(links[2].href);
+  expect(replaySteps()).toContain('查看退款');
+});
+
+it('opens the exact attempt in a shared report URL and allows recovery from an unknown attempt', async () => {
+  seedReportAttempts();
+  await mount('/shared/reports/bundle?testId=%22-123%22&attemptId=attempt-1');
+  expect(replaySteps()).toContain('重试付款');
+  await toggleReportAttempts();
+  expect(currentReportAttempt()?.textContent).toContain('付款');
+  const refund = [...document.querySelectorAll<HTMLAnchorElement>(reportAttemptLinks)].at(-1)!;
+  expect(new URL(refund.href).pathname).toBe('/shared/reports/bundle');
+  expect(await click(`${reportAttemptLinks}[href="${refund.getAttribute('href')}"]`)).toBe(true);
+  expect(replaySteps()).toContain('查看退款');
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith('/api/reports/'))).toBe(false);
+
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await mount('/shared/reports/bundle?testId=missing&attemptId=attempt-0');
+  expect(document.querySelector('[role=alert]')?.textContent).toContain('找不到链接指定的用例执行记录');
+  expect(replaySteps()).toBeUndefined();
+  await toggleReportAttempts();
+  expect(currentReportAttempt()).toBeNull();
+  expect(await click(`${reportAttemptLinks}[href="${refund.getAttribute('href')}"]`)).toBe(true);
+  expect(replaySteps()).toContain('查看退款');
+});
+
 const publishedReport = (id: string, state = 'published') => ({
   id,
   attemptId: `attempt-${id}`,
   state,
   expiresAt: 1,
 });
-
-async function openReportRunPanel(value: string) {
-  const menu = document.querySelector<HTMLSelectElement>('[data-ui~=replay-header] select[aria-label="运行"]')!;
-  await act(async () => {
-    menu.focus();
-    menu.value = value;
-    menu.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  return document.querySelector('[role="dialog"]')!;
-}
 
 it.each(['passed', 'failed'])(
   'opens the report directly for a completed %s run and keeps rerun on the report page',
@@ -664,15 +768,16 @@ it.each(['passed', 'failed'])(
     expect(document.body.querySelectorAll('h1')).toHaveLength(1);
     expect(document.body.textContent).not.toContain('独立打开报告');
     expect(document.body.textContent).not.toContain('运行详情');
-    const dialog = await openReportRunPanel('run');
-    expect(dialog.querySelector('a[href="/reports/older"]')).not.toBeNull();
+    expect(document.body.querySelector('a[href="/reports/older"]')).not.toBeNull();
     const shell = document.body.querySelector("header[data-ui~=app-header]");
-    const rerun = Array.from(dialog.querySelectorAll('button')).find((b) =>
+    const stream = streams.at(-1)!;
+    const rerun = Array.from(document.body.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('重新运行'),
     )!;
     await act(async () => rerun.click());
     expect(window.location.pathname).toBe('/requests/rerun');
     expect(document.body.querySelector("header[data-ui~=app-header]")).toBe(shell);
+    expect(stream.close).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith(
       '/api/requests/original/rerun',
       expect.objectContaining({ method: 'POST' }),
@@ -703,7 +808,6 @@ it('keeps historical reports open instead of redirecting them to the latest repo
   };
   await mount('/reports/older');
   expect(window.location.pathname).toBe('/reports/older');
-  await openReportRunPanel('run');
   expect(
     document.body.querySelector('a[href="/reports/older"]')?.getAttribute('aria-current'),
   ).toBe('page');
@@ -715,32 +819,19 @@ it('keeps Replay mounted across Worker view switches and binds a historical repo
   requestOverrides.original = { attempts: [{ attemptId: 'latest', number: 2 }], reports: [publishedReport('older'), publishedReport('newer')] };
   await mount('/reports/older');
   const replay = document.body.querySelector("[data-ui~=replay-panel]");
-  const dialog = await openReportRunPanel('worker');
-  expect(dialog.textContent).toContain('Worker 执行');
-  expect(document.body.querySelector('[data-ui~=replay-panel]')).toBe(replay);
-  await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭对话框"]')!.click());
-  expect(document.body.querySelector('[role="dialog"]')).toBeNull();
-  expect(document.body.querySelector('[data-ui~=replay-panel]')).toBe(replay);
+  const tabs = document.body.querySelector('[aria-label="报告视图"]')!;
+  const workerTab = Array.from(tabs.querySelectorAll('button')).find(button => button.textContent?.includes('Worker'))!;
+  await act(async () => workerTab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+  expect(document.body.querySelector("[data-ui~=report-view-pane]")?.hasAttribute('hidden')).toBe(true);
+  expect(document.body.querySelector("[data-ui~=report-worker-pane]")?.hasAttribute('hidden')).toBe(false);
+  expect(document.body.querySelector("[data-ui~=replay-panel]")).toBe(replay);
+  const testTab = Array.from(tabs.querySelectorAll('button')).find(button => button.textContent?.includes('测试回放'))!;
+  await act(async () => testTab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+  expect(document.body.querySelector("[data-ui~=report-view-pane]")?.hasAttribute('hidden')).toBe(false);
+  expect(document.body.querySelector("[data-ui~=replay-panel]")).toBe(replay);
   const calls = vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('/worker-timeline'));
   expect(calls).toContain('/api/requests/original/attempts/attempt-older/worker-timeline');
   expect(calls.some(url => url.includes('/latest/'))).toBe(false);
-});
-
-it('opens sharing and run activity from the single replay header', async () => {
-  await mount('/reports/bundle');
-  const header = document.querySelector('[data-ui~=replay-header]')!;
-  const share = Array.from(header.querySelectorAll('button')).find(button => button.textContent === '分享报告')!;
-  expect(document.querySelector('[data-ui~=report-header]')).toBeNull();
-  expect(document.querySelector('[aria-label="当前步骤证据"]')?.textContent).toBe('步骤详情步骤日志源码步骤产物');
-  await act(async () => share.click());
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('生成分享链接');
-  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="关闭对话框"]')!.click());
-  const dialog = await openReportRunPanel('events');
-  expect(dialog.querySelector('[aria-label="筛选运行动态"]')).not.toBeNull();
-  const stream = streams.at(-1)!;
-  expect(stream.url).toBe('/api/requests/original/events');
-  await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭对话框"]')!.click());
-  expect(stream.close).toHaveBeenCalledOnce();
 });
 
 it('keeps diagnostics available when a run has no published report', async () => {
@@ -868,15 +959,15 @@ it('scopes the board, totals, management and submission to the project picked in
   boardItems = [boardRequest('run-1', 'queued'), boardRequest('run-2', 'completed', 'passed')];
   boardItems.forEach((request, index) => { request.input.targetId = projects[index].id; });
   await mount('/queue?search=run');
-  expect(boardHeaderFacts()).toEqual({ '项目': '2', '测试套件': '2', '匹配任务': '2', '通过率': '100%' });
+  expect(boardHeaderFacts()).toEqual({ '默认分支': '—', '测试套件': '2', '任务总数': '2', '通过率': '100%' });
   await openProjectMenu();
-  await click('[data-ui="project-list-item"][href*="second"]');
-  expect(new URLSearchParams(window.location.search).get('search')).toBe('run');
-  expect(new URLSearchParams(window.location.search).get('targetId')).toBe('second');
-  expect(Array.from(document.querySelectorAll('.execution-card'), card => card.getAttribute('href'))).toEqual(['/requests/run-2']);
-  expect(boardHeaderFacts()).toEqual({ '默认分支': 'main', '测试套件': '1', '匹配任务': '1', '通过率': '100%' });
+  await click('[data-ui="project-list-item"][href="/projects/second/kanban?search=run"]');
+  expect(window.location.pathname + window.location.search).toBe('/projects/second/kanban?search=run');
+  expect(Array.from(document.querySelectorAll('.execution-card'), card => card.getAttribute('href'))).toEqual(['/requests/run-2?targetId=second']);
+  expect(boardHeaderFacts()).toEqual({ '默认分支': 'main', '测试套件': '1', '任务总数': '1', '通过率': '100%' });
   expect(document.querySelector('footer[aria-label="看板状态"]')?.textContent).not.toMatch(/匹配任务|通过率/);
-  expect(document.querySelector('.workspace-nav a[aria-label="项目管理"]')?.getAttribute('href')).toBe('/projects/second');
+  await openConfiguration();
+  expect(document.querySelector('.workspace-more-menu a[href="/projects/second?view=settings"]')?.textContent).toBe('项目管理');
   await openSubmission();
   const select = document.querySelector<HTMLSelectElement>('[role="dialog"] form select')!;
   expect(select.value).toBe('second');
@@ -885,9 +976,94 @@ it('scopes the board, totals, management and submission to the project picked in
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
   expect(select.value).toBe('first');
-  expect(window.location.pathname).toBe('/queue');
-  expect(new URLSearchParams(window.location.search).get('targetId')).toBe('second');
-  expect(boardHeaderFacts()).toMatchObject({ '匹配任务': '1', '通过率': '100%' });
+  expect(window.location.pathname + window.location.search).toBe('/projects/second/kanban?search=run');
+  expect(boardHeaderFacts()).toMatchObject({ '任务总数': '1', '通过率': '100%' });
+});
+
+it('keeps project summaries and scope across the three main destinations', async () => {
+  seedProjects();
+  projects[1].defaultBranch = 'dev';
+  boardItems = [
+    boardRequest('first-success', 'completed', 'passed'),
+    boardRequest('second-failure', 'completed', 'failed'),
+    boardRequest('second-queued', 'queued'),
+  ];
+  for (const request of boardItems) request.input.targetId = request.id.split('-')[0];
+  reports = [
+    { id: 'first-report', targetId: 'first', title: 'First project report' },
+    ...Array.from({ length: 26 }, (_, index) => ({
+      id: `second-report-${index}`, targetId: 'second', title: `Second project report ${index}`,
+    })),
+  ];
+  const nav = (label: string) => `.workspace-nav a[aria-label="${label}"]`;
+  const firstFacts = { '默认分支': 'main', '测试套件': '1', '任务总数': '1', '通过率': '100%' };
+  const secondFacts = { '默认分支': 'dev', '测试套件': '1', '任务总数': '2', '通过率': '0%' };
+  await mount('/projects/second/kanban?search=queued');
+  const facts = document.querySelector('.workspace-facts');
+  expect(boardHeaderFacts()).toEqual(secondFacts);
+
+  await click(nav('测试用例'));
+  expect(window.location.pathname + window.location.search).toBe('/projects/second/testcases');
+  expect(document.querySelector('main h1')?.textContent).toBe('second app · 测试用例');
+  expect(document.querySelector(nav('测试用例'))?.getAttribute('aria-current')).toBe('page');
+  expect(document.querySelector('.workspace-facts')).toBe(facts);
+  expect(boardHeaderFacts()).toEqual(secondFacts);
+
+  await openConfiguration();
+  await click('.workspace-more-menu a[href="/projects/second?view=settings"]');
+  expect(document.querySelector(nav('测试用例'))?.hasAttribute('aria-current')).toBe(false);
+  expect(boardHeaderFacts()).toEqual(secondFacts);
+
+  await click(nav('测试报告'));
+  expect(window.location.pathname + window.location.search).toBe('/projects/second/reports');
+  expect(document.querySelectorAll('.report-entry')).toHaveLength(25);
+  expect(boardHeaderFacts()).toEqual(secondFacts);
+  await act(async () => Array.from(document.querySelectorAll('main button')).find(button => button.textContent === '下一页')!.click());
+  expect(document.querySelector('.report-entry')?.textContent).toContain('Second project report 25');
+  await click('.report-entry');
+  expect(window.location.pathname + window.location.search).toBe('/reports/second-report-25?targetId=second');
+  expect(document.querySelector('a[title="返回测试任务"]')?.getAttribute('href')).toBe('/projects/second/kanban');
+  expect(boardHeaderFacts()).toEqual(secondFacts);
+  await click(nav('测试报告'));
+  await act(async () => Array.from(document.querySelectorAll('main button')).find(button => button.textContent === '下一页')!.click());
+
+  await openProjectMenu();
+  await click('[data-ui="project-list-item"][href="/projects/first/reports"]');
+  expect(window.location.pathname + window.location.search).toBe('/projects/first/reports');
+  expect(document.querySelector('.report-entry')?.textContent).toContain('First project report');
+  expect(boardHeaderFacts()).toEqual(firstFacts);
+
+  await click(nav('执行看板'));
+  expect(window.location.pathname + window.location.search).toBe('/projects/first/kanban');
+  expect(document.querySelector('.execution-card')?.getAttribute('href')).toBe('/requests/first-success?targetId=first');
+  expect(boardHeaderFacts()).toEqual(firstFacts);
+  await openProjectMenu();
+  await click('[role="option"][href="/queue"]');
+  expect(window.location.pathname + window.location.search).toBe('/queue');
+  expect(boardHeaderFacts()['任务总数']).toBe('3');
+  await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(window.location.pathname + window.location.search).toBe('/projects/first/kanban');
+  expect(boardHeaderFacts()).toEqual(firstFacts);
+});
+
+it.each([
+  ['/queue?targetId=second&search=queued', '/projects/second/kanban?search=queued'],
+  ['/reports?targetId=second', '/projects/second/reports'],
+  ['/projects/second?v=scan-2&q=case', '/projects/second/testcases?v=scan-2&q=case'],
+])('normalizes the project URL %s to %s', async (input, canonical) => {
+  seedProjects();
+  await mount(input);
+  expect(window.location.pathname + window.location.search).toBe(canonical);
+  expect(document.querySelector('.project-picker strong')?.textContent).toBe('second app');
+});
+
+it('opens a project reports URL with that project as its scope', async () => {
+  seedProjects();
+  await mount('/projects/second/reports');
+  expect(document.querySelector('.workspace-nav a[aria-current=page]')?.textContent).toBe('测试报告');
+  expect(fetch).toHaveBeenCalledWith('/api/reports?offset=0&targetId=second', expect.anything());
+  expect(fetch).toHaveBeenCalledWith('/api/board/totals?targetId=second', expect.anything());
+  expect(document.querySelector('.cloud-workspace')).toBeNull();
 });
 
 it('preserves the section when switching projects by keyboard and clears project-specific filters', async () => {
@@ -908,7 +1084,7 @@ it('preserves the section when switching projects by keyboard and clears project
 
 it('filters the header project switcher and closes it with Escape', async () => {
   seedProjects();
-  await mount('/projects/first');
+  await mount('/projects/first/testcases');
   const trigger = document.body.querySelector<HTMLButtonElement>('[data-ui~=project-switcher] button')!;
   await act(async () => trigger.click());
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
@@ -929,42 +1105,43 @@ it('filters the header project switcher and closes it with Escape', async () => 
 
 it('opens the project specified in a direct URL and keeps project navigation active', async () => {
   seedProjects();
-  await mount('/projects/second');
-  expect(window.location.pathname).toBe('/projects/second');
+  await mount('/projects/second/testcases');
+  expect(window.location.pathname).toBe('/projects/second/testcases');
   expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
   expect(document.body.querySelector('header[data-ui~=app-header] [data-ui~=project-switcher]')).not.toBeNull();
   await act(async () => document.body.querySelector<HTMLButtonElement>('[data-ui~=project-switcher] button')!.click());
-  expect(document.body.querySelector('[data-ui~=project-list-item][aria-current="page"]')?.getAttribute('href')).toBe('/projects/second');
-  expect(document.body.querySelector('nav[aria-label="主导航"] a[href="/projects/second"]')?.getAttribute('aria-current')).toBe('page');
+  expect(document.body.querySelector('[data-ui~=project-list-item][aria-current="page"]')?.getAttribute('href')).toBe('/projects/second/testcases');
+  expect(document.body.querySelector('nav[aria-label="主导航"] a[href="/projects/second/testcases"]')?.getAttribute('aria-current')).toBe('page');
   expect(document.body.querySelector('[data-ui~=project-page-heading] h1')?.textContent).toBe('second app · 测试用例');
   expect(document.body.querySelector('[role=tablist]')).toBeNull();
   expect(fetch).toHaveBeenCalledWith('/api/projects/second/status', expect.anything());
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith('/api/projects/first/'))).toBe(false);
-  expect(await click('[data-ui~=project-list] a[href="/projects/first"]', { ctrlKey: true })).toBe(false);
-  expect(window.location.pathname).toBe('/projects/second');
+  expect(await click('[data-ui~=project-list] a[href="/projects/first/testcases"]', { ctrlKey: true })).toBe(false);
+  expect(window.location.pathname).toBe('/projects/second/testcases');
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(React.createElement(App)));
-  expect(window.location.pathname).toBe('/projects/second');
+  expect(window.location.pathname).toBe('/projects/second/testcases');
   expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
 });
 
 it('opens the directory and restores project selections through browser history', async () => {
   seedProjects();
   await mount('/queue');
-  await click('nav a[href="/projects"]');
+  await openConfiguration();
+  await click('.workspace-more-menu a[href="/projects"]');
   expect(window.location.pathname).toBe('/projects');
-  await click('.project-listing a[href="/projects/first"]');
-  expect(window.location.pathname).toBe('/projects/first');
+  await click('.project-listing a[href="/projects/first/testcases"]');
+  expect(window.location.pathname).toBe('/projects/first/testcases');
   await act(async () => document.body.querySelector<HTMLButtonElement>('[data-ui~=project-switcher] button')!.click());
-  await click('[data-ui~=project-list] a[href="/projects/second"]');
-  expect(window.location.pathname).toBe('/projects/second');
+  await click('[data-ui~=project-list] a[href="/projects/second/testcases"]');
+  expect(window.location.pathname).toBe('/projects/second/testcases');
   expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
   await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
-  expect(window.location.pathname).toBe('/projects/first');
+  expect(window.location.pathname).toBe('/projects/first/testcases');
   expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('first app');
   await act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 20)); });
-  expect(window.location.pathname).toBe('/projects/second');
+  expect(window.location.pathname).toBe('/projects/second/testcases');
   expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
   await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
   await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
@@ -973,21 +1150,21 @@ it('opens the directory and restores project selections through browser history'
 
 it('shows a missing project without silently selecting another and allows recovery', async () => {
   seedProjects();
-  await mount('/projects/missing');
-  expect(window.location.pathname).toBe('/projects/missing');
+  await mount('/projects/missing/testcases');
+  expect(window.location.pathname).toBe('/projects/missing/testcases');
   expect(document.body.textContent).toContain('项目不存在');
   expect(document.body.querySelector('[data-ui~=project-detail]')).toBeNull();
   await click('main a[href="/projects"]');
-  await click('.project-listing a[href="/projects/second"]');
-  expect(window.location.pathname).toBe('/projects/second');
+  await click('.project-listing a[href="/projects/second/testcases"]');
+  expect(window.location.pathname).toBe('/projects/second/testcases');
   expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
 });
 
 it('consumes the creation flag on a selected project without losing its URL or draft', async () => {
   seedProjects();
   role = 'admin';
-  await mount('/projects/second?createProject=true');
-  expect(window.location.pathname).toBe('/projects/second');
+  await mount('/projects/second/testcases?createProject=true');
+  expect(window.location.pathname).toBe('/projects/second/testcases');
   expect(window.location.search).toBe('');
   expect(document.body.querySelector('[role=dialog][data-state=open] h2')?.textContent).toBe('创建项目');
   expect(document.body.querySelector('[data-ui~=project-switcher] button strong')?.textContent).toBe('second app');
