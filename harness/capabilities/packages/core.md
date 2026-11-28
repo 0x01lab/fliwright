@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/core"
 path: "packages/fliwright-core"
-source_fingerprint: "31c76c82896d4b0afeb61e574c98137241a5f4e7d820215ca7b27801422d0123"
+source_fingerprint: "4a88bd624c63f1acb3b7638a24e79ef122d231b4bd9d023f05bbe5757f6c7200"
 generated: true
 ---
 
@@ -80,6 +80,9 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `AiTimeoutError`
 - `AiVisibleOptions`
 - `AiVisionOptions`
+- `ApiResponse`
+- `ApiResponseAssertion`
+- `ApiResponseVerifier`
 - `AppCapabilityDescriptor`
 - `AppCapabilityProxy`
 - `AppEnvironment`
@@ -392,6 +395,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ParsedMockRuleRouteId`
 - `parseFigmaUrl`
 - `parseRecordingManifest`
+- `parseScreenshotInteraction`
 - `parseSelectorJson`
 - `parseTimelineData`
 - `PassiveAgent`
@@ -524,6 +528,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `ScenarioStartupIsolation`
 - `ScenarioStateLayer`
 - `ScenarioStorageLayer`
+- `ScreenshotInteraction`
 - `SeedLoggedInInput`
 - `SelectController`
 - `Selector`
@@ -770,6 +775,7 @@ Own the reusable TypeScript automation domain, VM-service client protocol, and s
 - `packages/fliwright-core/src/runArtifacts.ts`
 - `packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts`
 - `packages/fliwright-core/src/timeline/FlowRuntime.ts`
+- `packages/fliwright-core/src/timeline/ScreenshotInteraction.ts`
 - `packages/fliwright-core/src/timeline/TimelineArtifactStore.ts`
 - `packages/fliwright-core/src/timeline/TimelineNodeLifecycle.ts`
 - `packages/fliwright-core/src/timeline/TimelineReader.ts`

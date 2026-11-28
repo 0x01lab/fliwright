@@ -127,7 +127,7 @@
         "interaction",
         "session"
       ],
-      "sourceFingerprint": "f1a92a6312e9ccfc4c328de05a26e1db4e4f8ea73bd6daa602a5516f532f8142"
+      "sourceFingerprint": "e15c387b65bb274fff447225d677043280bda403050e0b449ef0460625920eab"
     },
     {
       "name": "@fliwright/cloud",
@@ -225,7 +225,7 @@
       "binaryEntrypoints": [
         "fliwright-cloud"
       ],
-      "sourceFingerprint": "8e48834b18f0c962c3f9158fd830a4a502973c571171bdb39162aa6ccbdf0811"
+      "sourceFingerprint": "dd8eb509e57d3be4631f6d4726a6a79bedfe99466998e1aacb9cbb32660be955"
     },
     {
       "name": "@fliwright/cloud-protocol",
@@ -267,7 +267,7 @@
         "./secure-files"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "a8d8aa444a9349ee84757205f5f93066da0987051d1aac7284c3f4ddccc9a6ee"
+      "sourceFingerprint": "8cc134d2ae46f4fdcfd535320102edf846891586d39003354678779b3c6044ee"
     },
     {
       "name": "@fliwright/cloud-worker",
@@ -355,7 +355,7 @@
       "binaryEntrypoints": [
         "fliwright-worker"
       ],
-      "sourceFingerprint": "44c029f5159aa83adfb4b14453e1a69c12bd9a6f7df0eacf01bc783b647aadef"
+      "sourceFingerprint": "0743132126edb84f3c837312f686827da4b9014bb0a2952f1dba61ffa9dd8aee"
     },
     {
       "name": "@fliwright/core",
@@ -496,6 +496,7 @@
         "packages/fliwright-core/src/runArtifacts.ts",
         "packages/fliwright-core/src/strategies/MultiDimensionalHealingStrategy.ts",
         "packages/fliwright-core/src/timeline/FlowRuntime.ts",
+        "packages/fliwright-core/src/timeline/ScreenshotInteraction.ts",
         "packages/fliwright-core/src/timeline/TimelineArtifactStore.ts",
         "packages/fliwright-core/src/timeline/TimelineNodeLifecycle.ts",
         "packages/fliwright-core/src/timeline/TimelineReader.ts",
@@ -550,6 +551,9 @@
         "AiTimeoutError",
         "AiVisibleOptions",
         "AiVisionOptions",
+        "ApiResponse",
+        "ApiResponseAssertion",
+        "ApiResponseVerifier",
         "AppCapabilityDescriptor",
         "AppCapabilityProxy",
         "AppEnvironment",
@@ -862,6 +866,7 @@
         "ParsedMockRuleRouteId",
         "parseFigmaUrl",
         "parseRecordingManifest",
+        "parseScreenshotInteraction",
         "parseSelectorJson",
         "parseTimelineData",
         "PassiveAgent",
@@ -994,6 +999,7 @@
         "ScenarioStartupIsolation",
         "ScenarioStateLayer",
         "ScenarioStorageLayer",
+        "ScreenshotInteraction",
         "SeedLoggedInInput",
         "SelectController",
         "Selector",
@@ -1122,7 +1128,7 @@
         "./timeline"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "31c76c82896d4b0afeb61e574c98137241a5f4e7d820215ca7b27801422d0123"
+      "sourceFingerprint": "4a88bd624c63f1acb3b7638a24e79ef122d231b4bd9d023f05bbe5757f6c7200"
     },
     {
       "name": "@fliwright/devices",
@@ -1571,7 +1577,7 @@
         "./runner"
       ],
       "binaryEntrypoints": [],
-      "sourceFingerprint": "1b682bd64035766c48261728b48c749332dd5d5681d80415a54c82a49f42a148"
+      "sourceFingerprint": "08488c11c9b5a78df5bca0834fe8ddbea84f20e3def5808aad1d115967df9123"
     },
     {
       "name": "fliwright_bridge",
@@ -1788,7 +1794,7 @@
         "ext.fliwright.websocket.push",
         "ext.fliwright.websocket.setRules"
       ],
-      "sourceFingerprint": "f84075b7f89c0c51f06daa4a5c38de15ca5c814a1c41ea59402ffaf42f04f7c2"
+      "sourceFingerprint": "8ddf1705df16cff980ee78e09035187b022dc9e4fdec79a8dd73d10f1a328a16"
     },
     {
       "name": "fliwright_bridge_riverpod",

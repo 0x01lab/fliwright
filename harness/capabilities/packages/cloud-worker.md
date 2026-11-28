@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cloud-worker"
 path: "packages/fliwright-cloud-worker"
-source_fingerprint: "44c029f5159aa83adfb4b14453e1a69c12bd9a6f7df0eacf01bc783b647aadef"
+source_fingerprint: "0743132126edb84f3c837312f686827da4b9014bb0a2952f1dba61ffa9dd8aee"
 generated: true
 ---
 

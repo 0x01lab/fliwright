@@ -1,7 +1,7 @@
 ---
 package: "@fliwright/cloud"
 path: "packages/fliwright-cloud"
-source_fingerprint: "8e48834b18f0c962c3f9158fd830a4a502973c571171bdb39162aa6ccbdf0811"
+source_fingerprint: "dd8eb509e57d3be4631f6d4726a6a79bedfe99466998e1aacb9cbb32660be955"
 generated: true
 ---
 
