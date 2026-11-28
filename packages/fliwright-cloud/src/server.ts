@@ -238,13 +238,19 @@ export function createCloudServer(options: CloudServerOptions) {
   });
   app.get('/healthz', () => ({ status: 'ok' }));
   app.get('/api/me', (req) => team(req));
+  const derivedSuiteIds = (target: ReturnType<CloudStore['targets']>[number]) => {
+    if (target.suiteMode !== 'directories') return Object.keys(target.suites);
+    const project = store.project(target.id);
+    const catalog = store.catalogs(target.id).find(item => item.status === 'ready' && item.configRevision === project.configRevision);
+    return catalog?.suites.map(suite => suite.id) ?? [];
+  };
   app.get('/api/targets', (req) => {
     team(req);
     return store.targets().map((t) => ({
       id: t.id,
       name: t.name,
       repositoryPath: displayRepositoryPath(t.repository),
-      suites: Object.keys(t.suites),
+      suites: derivedSuiteIds(t),
       scenarios: t.scenarios,
     }));
   });
@@ -259,6 +265,7 @@ export function createCloudServer(options: CloudServerOptions) {
       defaultBranch: z.string().trim().min(1).max(200).default('main'),
       repositoryCredentialRef: z.string().trim().min(1).max(200).nullable().default(null),
       suites: targetSchema.shape.suites.default(projectSetupDefaults.suites),
+      suiteMode: targetSchema.shape.suiteMode.default(projectSetupDefaults.suiteMode),
       scenarios: targetSchema.shape.scenarios.default(projectSetupDefaults.scenarios),
     }).strict().parse(req.body);
     const details = projectRepositoryDetails(input.repository);
@@ -626,7 +633,7 @@ export function createCloudServer(options: CloudServerOptions) {
     const id = param(req, 'id'), project = store.project(id), catalogs = store.catalogs(id);
     const current = catalogs.find(catalog => catalog.configRevision === project.configRevision && catalog.status === 'ready');
     const blockers = [];
-    if (!Object.keys(project.suites).length) blockers.push('尚未配置测试套件');
+    if (project.suiteMode === 'patterns' && !Object.keys(project.suites).length) blockers.push('尚未配置测试套件');
     if (!current) blockers.push('当前配置尚无成功扫描');
     else {
       if (!current.suites.some(suite => suite.cases.length)) blockers.push('未发现测试用例');
@@ -638,7 +645,7 @@ export function createCloudServer(options: CloudServerOptions) {
   app.post('/api/projects/:id/ready', (req) => {
     const who = team(req, 'admin'), id = param(req, 'id'), project = store.project(id);
     const catalog = store.catalogs(id).find(item => item.status === 'ready' && item.configRevision === project.configRevision);
-    if (!catalog || !Object.keys(project.suites).length || !catalog.suites.some(suite => suite.cases.length)) throw new CloudError(409, 'A successful catalog with suites and cases is required');
+    if (!catalog || (project.suiteMode === 'patterns' && !Object.keys(project.suites).length) || !catalog.suites.some(suite => suite.cases.length)) throw new CloudError(409, 'A successful catalog with suites and cases is required');
     store.db.prepare('INSERT INTO project_approvals VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET config_revision=excluded.config_revision').run(id, project.configRevision);
     store.event(null, 'project-ready', { projectId: id, revision: project.configRevision, actor: who.name });
     return { ready: true };

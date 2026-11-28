@@ -13,6 +13,7 @@ export const parameterDocs = {
   testName: 'Test-name selection or generated test name; see this command’s usage.',
   caseSelection: 'Internal exact Vitest case selection resolved from a trusted catalog. Includes stable case id, checkout-relative file, full title path and duplicate ordinal; does not accept a name regular expression.',
   suites: 'Catalog command suite id to repository-relative Vitest glob mapping.',
+  suiteMode: 'Catalog suite grouping: patterns (explicit id-to-glob suites) or directories (one suite per first-level test directory; root files use default). Explicit suites still claim their matching files. Defaults to fliwright.config suiteMode, else patterns.',
   reporter: 'Human/JSON/JUnit stdout rendering. With --json, only json is accepted.',
   timeout: 'Milliseconds for the test runner, target wait or extended action, depending on the command.',
   screenshot: 'Runner screenshot evidence policy: file, base64 or off.',

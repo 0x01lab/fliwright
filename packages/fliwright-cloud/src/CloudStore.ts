@@ -51,6 +51,16 @@ import {
 
 type Row = Record<string, unknown>;
 const catalogLeaseMs = 30_000;
+/** Directory-derived suites carry a single safe segment and a relative test glob. */
+const derivedCatalogSuite = (suite: { id: string; pattern: string }) =>
+  suite.id.length <= 100 && suite.id !== '.' && suite.id !== '..' && !suite.id.includes('/') && !suite.id.includes('\\') &&
+  !suite.pattern.startsWith('/') && !suite.pattern.includes('\\') && !suite.pattern.split('/').includes('..') &&
+  /\.test\.(?:[a-z]+|\{[a-z,]+\})$/.test(suite.pattern);
+const requestLane = `CASE WHEN state='queued' THEN 'pending'
+  WHEN state IN ('assigned','preparing','running','finalizing','cancel_requested') THEN 'running'
+  WHEN state='infrastructure_failed' OR (state='completed' AND json_extract(data,'$.verdict')='failed') THEN 'failed'
+  WHEN state='completed' AND json_extract(data,'$.verdict')='passed' THEN 'passed'
+  ELSE 'other' END`;
 export const digest = (value: string | Buffer) =>
   createHash('sha256').update(value).digest('hex');
 export const identifier = () => randomUUID();
@@ -536,7 +546,9 @@ export class CloudStore {
     if (Buffer.byteLength(JSON.stringify(catalog)) > 4 * 1024 * 1024 || catalog.suites.reduce((n, suite) => n + suite.cases.length, 0) > 10000) throw new CloudError(400, 'Catalog size limit exceeded');
     const suiteIds = new Set<string>();
     for (const suite of catalog.suites) {
-      if (suiteIds.has(suite.id) || !Object.hasOwn(project.suites, suite.id) || project.suites[suite.id] !== suite.pattern) throw new CloudError(400, 'Invalid catalog suite');
+      const configuredPattern = Object.hasOwn(project.suites, suite.id) ? project.suites[suite.id] : undefined;
+      const derived = configuredPattern === undefined && project.suiteMode === 'directories' && derivedCatalogSuite(suite);
+      if (suiteIds.has(suite.id) || (!derived && configuredPattern !== suite.pattern)) throw new CloudError(400, 'Invalid catalog suite');
       suiteIds.add(suite.id);
       const ids = new Set<string>();
       for (const item of suite.cases) {
@@ -599,15 +611,18 @@ export class CloudStore {
     }
     const project = this.project(input.projectId);
     const catalogId = input.catalogId ?? this.readyCatalogId(project.id, input.commit, project.configRevision);
-    if (!Object.hasOwn(project.suites, input.suite) || (!input.catalogId && input.scenario && !project.scenarios.includes(input.scenario))) throw new CloudError(400, 'Unknown project suite or scenario');
+    const directoryMode = project.suiteMode === 'directories';
+    if (!directoryMode && (!Object.hasOwn(project.suites, input.suite) || (!input.catalogId && input.scenario && !project.scenarios.includes(input.scenario)))) throw new CloudError(400, 'Unknown project suite or scenario');
+    let selectedSuite: TestCatalog['suites'][number] | undefined;
     let selectedCase: TestCatalog['suites'][number]['cases'][number] | undefined;
-    if (input.mode === 'case' || input.catalogId) {
-      if (!input.catalogId) throw new CloudError(400, 'Case selection requires catalogId');
-      const catalog = this.catalog(input.projectId, input.catalogId);
+    if (input.mode === 'case' || input.catalogId || directoryMode) {
+      if (!input.catalogId && input.mode === 'case') throw new CloudError(400, 'Case selection requires catalogId');
+      if (!catalogId) throw new CloudError(409, 'A ready catalog is required for directory suites');
+      const catalog = this.catalog(input.projectId, catalogId);
       if (catalog.commit !== input.commit || catalog.configRevision !== project.configRevision || catalog.status !== 'ready') throw new CloudError(409, 'Catalog does not match project commit or revision');
-      const suite = catalog.suites.find((candidate) => candidate.id === input.suite);
-      if (!suite || (input.scenario && !catalog.scenarios.some(scenario => scenario.name === input.scenario))) throw new CloudError(400, 'Unknown catalog suite or scenario');
-      selectedCase = input.mode === 'case' ? suite?.cases.find((candidate) => candidate.caseId === input.caseId) : undefined;
+      selectedSuite = catalog.suites.find((candidate) => candidate.id === input.suite);
+      if (!selectedSuite || (input.scenario && !catalog.scenarios.some(scenario => scenario.name === input.scenario))) throw new CloudError(400, 'Unknown catalog suite or scenario');
+      selectedCase = input.mode === 'case' ? selectedSuite?.cases.find((candidate) => candidate.caseId === input.caseId) : undefined;
       if (input.mode === 'case' && !selectedCase) throw new CloudError(400, 'Unknown catalog case');
     }
     const branch = catalogId ? this.catalogScan(project.id, catalogId).branch : input.source.branch;
@@ -619,7 +634,7 @@ export class CloudStore {
         if (old.fingerprint !== fingerprint) throw new CloudError(409, 'Idempotency conflict');
         return JSON.parse(String(old.data));
       }
-      const req: TestRequest = { id: identifier(), input: snapshot, target: targetFromProject(project), actor, createdAt: this.now(), queuedAt: this.now(), state: 'queued', verdict: 'unknown', attempts: 0, projectId: project.id, configRevision: project.configRevision, ...(catalogId ? { catalogId } : {}), selection: { mode: input.mode, suite: input.suite, ...(input.scenario ? { scenario: input.scenario } : {}), ...(selectedCase ? { caseId: selectedCase.caseId, file: selectedCase.file, titlePath: selectedCase.titlePath, duplicateIndex: selectedCase.duplicateIndex } : {}) }, source, ...(input.autoPolicyRevision ? { autoPolicyRevision: input.autoPolicyRevision } : {}) };
+      const req: TestRequest = { id: identifier(), input: snapshot, target: targetFromProject(project), actor, createdAt: this.now(), queuedAt: this.now(), state: 'queued', verdict: 'unknown', attempts: 0, projectId: project.id, configRevision: project.configRevision, ...(catalogId ? { catalogId } : {}), selection: { mode: input.mode, suite: input.suite, ...(input.mode === 'suite' && selectedSuite ? { pattern: selectedSuite.pattern } : {}), ...(input.scenario ? { scenario: input.scenario } : {}), ...(selectedCase ? { caseId: selectedCase.caseId, file: selectedCase.file, titlePath: selectedCase.titlePath, duplicateIndex: selectedCase.duplicateIndex } : {}) }, source, ...(input.autoPolicyRevision ? { autoPolicyRevision: input.autoPolicyRevision } : {}) };
       this.attachSecureFiles(req);
       this.db.prepare('INSERT INTO requests VALUES(?,?,?,?,?,?,?,?)').run(req.id, actor, key, fingerprint, req.createdAt, req.queuedAt, req.state, JSON.stringify(req));
       this.event(req.id, 'submitted', { actor, projectId: project.id, source: input.source.kind, selection: req.selection });
@@ -726,7 +741,6 @@ export class CloudStore {
       const target = this.targets().find((t) => t.id === input.targetId);
       if (
         !target ||
-        !Object.hasOwn(target.suites, input.suite) ||
         (input.scenario && !target.scenarios.includes(input.scenario))
       )
         throw new CloudError(
@@ -736,6 +750,14 @@ export class CloudStore {
       const revision = this.project(input.targetId).configRevision;
       const projectRevision = projectId ? this.project(projectId).configRevision : undefined;
       const catalogId = this.readyCatalogId(input.targetId, input.commit, revision);
+      let pattern: string | undefined;
+      if (target.suiteMode === 'directories') {
+        if (!catalogId) throw new CloudError(409, 'A ready catalog is required for directory suites');
+        pattern = this.catalog(target.id, catalogId).suites.find((suite) => suite.id === input.suite)?.pattern;
+        if (!pattern) throw new CloudError(400, 'Unknown registered target, suite or scenario');
+      } else if (!Object.hasOwn(target.suites, input.suite)) {
+        throw new CloudError(400, 'Unknown registered target, suite or scenario');
+      }
       const req: TestRequest = {
         id: identifier(),
         input,
@@ -747,7 +769,7 @@ export class CloudStore {
         state: 'queued',
         verdict: 'unknown',
         attempts: 0,
-        selection: { mode: 'suite', suite: input.suite, scenario: input.scenario },
+        selection: { mode: 'suite', suite: input.suite, ...(pattern ? { pattern } : {}), scenario: input.scenario },
         source: { kind: 'manual' },
         ...(catalogId ? { catalogId, configRevision: revision } : projectRevision ? { configRevision: projectRevision } : {}),
       };

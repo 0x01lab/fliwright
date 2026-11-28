@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { chmod, mkdir, mkdtemp, readdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { collectCatalog, catalogCaseId } from '../src/catalog.js';
 import { runCommand } from '../src/commands/run.js';
 
@@ -75,12 +75,17 @@ describe('catalog collection and exact selection', () => {
         const test = createFliwrightTest({ vmServiceUrl:'ws://unused', requireAssertions:false, recording:{mode:'off'}, log:{format:'silent'} });
         mark('module');
         for(const hook of [beforeAll,beforeEach,afterEach,afterAll]) hook(()=>mark('hook'));
-        describe('group',()=>{ for(const index of [0,1]) test('same',()=>mark('body'+index)); });
+        describe('group',()=>{
+          test('same',()=>mark('body0'));
+          test('same',{meta:{fliwrightDescription:${JSON.stringify('Open the home page.\nVerify the destination.')}}},()=>mark('body1'));
+        });
       `);
       const result = await collectCatalog({ cwd: root, suites: { smoke: '*.test.mjs' } });
       expect(await readFile(join(root, 'markers'), 'utf8')).toBe('module\n');
       expect(result.suites[0]?.cases.map(item => [item.titlePath, item.duplicateIndex])).toEqual([[['group', 'same'], 0], [['group', 'same'], 1]]);
       const selected = result.suites[0]!.cases[1]!;
+      expect(result.suites[0]!.cases[0]).not.toHaveProperty('description');
+      expect(selected).toHaveProperty('description', 'Open the home page.\nVerify the destination.');
       expect(selected.caseId).toBe(catalogCaseId('proof.test.mjs', ['group', 'same'], 1));
       const run = await runCommand({ cwd: root, testPattern: selected.file, caseSelection: selected, runsRoot: join(root, 'runs'), print: false }, { resolveVmUrl: async () => 'ws://unused' });
       expect(run.passed, JSON.stringify(run)).toBe(true);
@@ -90,6 +95,42 @@ describe('catalog collection and exact selection', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   }, 30000);
 });
+
+it('derives suites from first-level test directories while explicit suites keep their files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fliwright-catalog-directories-'));
+  try {
+    await symlink(resolve('../../node_modules'), join(root, 'node_modules'));
+    const write = async (file: string, name: string) => {
+      await mkdir(join(root, '.fliwright/tests', dirname(file)), { recursive: true });
+      await writeFile(join(root, '.fliwright/tests', file), `import { test } from 'vitest'; test('${name}', () => {});`);
+    };
+    await write('app/nav.test.mjs', 'nav');
+    await write('app/shell/deep.test.mjs', 'deep');
+    await write('checkout/pay.test.mjs', 'pay');
+    await write('root.test.mjs', 'root');
+    const result = await collectCatalog({ cwd: root, suites: { smoke: '.fliwright/tests/checkout/**/*.test.mjs' }, suiteMode: 'directories' });
+    expect(result.suites.map(suite => ({ id: suite.id, files: suite.files, cases: suite.cases.map(item => item.titlePath) }))).toEqual([
+      { id: 'smoke', files: ['.fliwright/tests/checkout/pay.test.mjs'], cases: [['pay']] },
+      { id: 'app', files: ['.fliwright/tests/app/nav.test.mjs', '.fliwright/tests/app/shell/deep.test.mjs'], cases: [['nav'], ['deep']] },
+      { id: 'default', files: ['.fliwright/tests/root.test.mjs'], cases: [['root']] },
+    ]);
+    expect(result.suites[1]!.pattern).toBe('.fliwright/tests/app/**/*.test.{ts,tsx,mts,cts,js,jsx,mjs,cjs}');
+    expect(result.suites[2]!.pattern).toBe('.fliwright/tests/*.test.{ts,tsx,mts,cts,js,jsx,mjs,cjs}');
+  } finally { await rm(root, { recursive: true, force: true }); }
+}, 20000);
+
+it('rejects a test directory whose first segment collides with an explicit suite id', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fliwright-catalog-conflict-'));
+  try {
+    await symlink(resolve('../../node_modules'), join(root, 'node_modules'));
+    await mkdir(join(root, '.fliwright/tests/app'), { recursive: true });
+    await mkdir(join(root, '.fliwright/tests/smoke'), { recursive: true });
+    await writeFile(join(root, '.fliwright/tests/app/nav.test.mjs'), `import { test } from 'vitest'; test('nav', () => {});`);
+    await writeFile(join(root, '.fliwright/tests/smoke/pay.test.mjs'), `import { test } from 'vitest'; test('pay', () => {});`);
+    await writeFile(join(root, '.fliwright/tests/app/extra.test.mjs'), `import { test } from 'vitest'; test('extra', () => {});`);
+    await expect(collectCatalog({ cwd: root, suites: { app: '.fliwright/tests/app/nav.test.mjs' }, suiteMode: 'directories' })).rejects.toThrow('Suite id conflict');
+  } finally { await rm(root, { recursive: true, force: true }); }
+}, 20000);
 
 it('collects multiple test files in one cases-only pass without scanning Mock responses', async () => {
   const { collectTestCases } = await import('../src/catalog.js');

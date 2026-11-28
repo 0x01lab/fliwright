@@ -63,8 +63,10 @@ it('retains catalogs without scenarios and runs only scenarios discovered in the
   store.createCatalogScan('app', sha('a'));
   const lease = store.claimCatalogScan('worker')!;
   const value = { ...catalog(lease), scenarios: [] };
+  value.suites[0]!.cases[0]!.description = '1. Open Home.\n2. Check the selected tab.';
   store.finishCatalogScan('worker', lease.scan.scanId, lease.token, value);
   expect(store.catalogs('app')[0]?.suites[0]?.cases).toHaveLength(2);
+  expect(store.catalogs('app')[0]?.suites[0]?.cases[0]?.description).toBe('1. Open Home.\n2. Check the selected tab.');
   const input = { projectId: 'app', commit: sha('a'), catalogId: value.catalogId, mode: 'suite', suite: 'smoke', scenario: 'clean' };
   expect(() => store.submitProject(input, 'member', 'empty')).toThrow(/Unknown catalog/);
 

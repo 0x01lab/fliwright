@@ -59,8 +59,9 @@ function file(path: string, content = '') {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content);
 }
-async function execute(projectPath: string, entry: string) {
-  const lease = { deviceId: 'phone', request: { catalogId, configRevision: workspaceIdentity.configRevision, input: { targetId: 'app', commit: workspaceIdentity.commit, suite: 'smoke' },
+async function execute(projectPath: string, entry: string, selection?: ExecutionLease['request']['selection']) {
+  const lease = { deviceId: 'phone', request: { catalogId, configRevision: workspaceIdentity.configRevision, input: { targetId: 'app', commit: workspaceIdentity.commit, suite: selection?.suite ?? 'smoke' },
+    ...(selection ? { selection } : {}),
     target: { repository: '/registered/repository', projectPath, entry, flutterArgs: [], install: [], requiredCapabilities: [], suites: { smoke: '.fliwright/tests/*.test.ts' } },
   } } as unknown as ExecutionLease;
   const path = join(directory, 'job.json');
@@ -86,6 +87,15 @@ it('launches an app whose configured project already is the Flutter package', as
   file(join(checkout, 'app/ios/Runner/Info.plist'));
   expect(await execute('app', 'lib/main.dart')).toMatchObject({ verdict: 'passed' });
   expect(mocks.spawn).toHaveBeenCalledWith('flutter', expect.arrayContaining(['-t', 'lib/main.dart']), expect.objectContaining({ cwd: join(checkout, 'app') }));
+});
+
+it('runs a directory-derived suite from the catalog pattern instead of the configured suite map', async () => {
+  file(join(checkout, 'pubspec.yaml'), 'name: app\n');
+  file(join(checkout, 'lib/main.dart'));
+  file(join(checkout, 'ios/Runner/Info.plist'));
+  const pattern = '.fliwright/tests/app/**/*.test.ts';
+  expect(await execute('.', 'lib/main.dart', { mode: 'suite', suite: 'app', pattern })).toMatchObject({ verdict: 'passed' });
+  expect(mocks.run).toHaveBeenCalledWith(expect.objectContaining({ testPattern: pattern }));
 });
 
 it.each(['missing.dart', '.', '../outside.dart', 'lib/main.dart'])('rejects an invalid entry before launching Flutter: %s', async entry => {

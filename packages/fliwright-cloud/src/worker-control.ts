@@ -53,7 +53,11 @@ export function attachWorkerControl(server: Server, options: {
         } catch (error) {
           if (!id) { ws.close(1008, 'Invalid control request'); return; }
           const status = error instanceof CloudError ? error.statusCode : error instanceof ZodError ? 400 : 500;
-          send(ws, { type: 'response', id, status, body: { error: 'Worker control operation rejected' } });
+          // Rejection details come from deployment-owned messages and schema paths; never from repository output.
+          const detail = error instanceof CloudError ? error.message
+            : error instanceof ZodError ? error.issues.slice(0, 5).map(issue => `${issue.path.join('.') || 'body'}: ${issue.message}`).join('; ')
+              : undefined;
+          send(ws, { type: 'response', id, status, body: { error: 'Worker control operation rejected', ...(detail ? { detail: detail.slice(0, 4000) } : {}) } });
         }
       });
       send(ws, { type: 'wake' });

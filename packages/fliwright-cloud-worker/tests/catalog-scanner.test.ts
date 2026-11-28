@@ -6,9 +6,22 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectCheckoutCatalog, executeCatalogScan, scanEnvironment, scanProcess, secureCatalogCheckout, scanFailureSummary, runCatalogScanner } from '../src/catalog-scanner.js';
 import { openCatalogWorkspace } from '../src/catalog-workspace.js';
-import { projectSchema, unresolvedCatalogCommit, type CatalogScanLease, type TestRequest } from '@fliwright/cloud-protocol';
-import { WorkerDiagnostics } from '../src/diagnostics.js';
+import { projectSchema, unresolvedCatalogCommit, CloudError, type CatalogScanLease, type TestRequest } from '@fliwright/cloud-protocol';
+import { WorkerDiagnostics, readWorkerLogs } from '../src/diagnostics.js';
 import { vi } from 'vitest';
+
+/** Runs the real git binary while allowing the local fixture transport for this test file only. */
+function fixtureGitWrapper(log: string) {
+  const gitPath = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+  return `#!${process.execPath}
+const { appendFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
+const result = spawnSync(${JSON.stringify(gitPath)}, args.map(arg => arg === 'protocol.file.allow=never' ? 'protocol.file.allow=always' : arg), { stdio: 'inherit' });
+process.exit(result.status ?? 1);
+`;
+}
 
 it('keeps nested dependency installs in their supervisor process group', async () => {
   const root = await mkdtemp(join(tmpdir(), 'catalog-process-group-'));
@@ -30,7 +43,7 @@ it('returns cases through the actual worker collector subprocess without scenari
     await writeFile(join(root, 'proof.test.mjs'), `import { test } from 'vitest'; test('discovered case', () => {});`);
     await mkdir(join(root, '.fliwright/mocks/api'), { recursive: true });
     await writeFile(join(root, '.fliwright/mocks/api/assets.json'), JSON.stringify({ endpoint: '/assets', method: 'GET', rules: [{ name: 'empty', status: 200, body: [] }] }));
-    const collected = await collectCheckoutCatalog(root, { smoke: '*.test.mjs' }, scanEnvironment(root), new AbortController().signal);
+    const collected = await collectCheckoutCatalog(root, { smoke: '*.test.mjs' }, 'patterns', scanEnvironment(root), new AbortController().signal);
     expect(collected.scenarios).toEqual([]);
     expect(collected.suites[0].cases[0].titlePath).toEqual(['discovered case']);
     expect(collected.mocks?.[0]).toEqual({ directory: '.fliwright/mocks', profiles: ['empty'], endpoints: [{ endpoint: '/assets', method: 'GET', rules: ['empty'], activeRule: 'empty' }] });
@@ -55,17 +68,8 @@ it('retains the scanned Git checkout and installed files at their original paths
     await writeFile(join(repository, 'proof.test.mjs'), `import { test } from ${JSON.stringify(import.meta.resolve('vitest'))}; test('updated case', () => {});`);
     git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-am', 'update']);
     const nextCommit = git(['rev-parse', 'HEAD']);
-    const gitPath = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
     await mkdir(tools);
-    await writeFile(join(tools, 'git'), `#!${process.execPath}
-const { appendFileSync } = require('node:fs');
-const { spawnSync } = require('node:child_process');
-const args = process.argv.slice(2);
-appendFileSync(${JSON.stringify(commands)}, JSON.stringify(args) + '\\n');
-// Allow the local fixture transport for this test only.
-const result = spawnSync(${JSON.stringify(gitPath)}, args.map(arg => arg === 'protocol.file.allow=never' ? 'protocol.file.allow=always' : arg), { stdio: 'inherit' });
-process.exit(result.status ?? 1);
-`, { mode: 0o700 });
+    await writeFile(join(tools, 'git'), fixtureGitWrapper(commands), { mode: 0o700 });
     vi.stubEnv('PATH', `${tools}:${process.env.PATH}`);
     const project = projectSchema.parse({ id: 'app', name: 'App', repository,
       suites: { smoke: '*.test.mjs' }, install: [{ program: process.execPath, args: ['-e',
@@ -180,6 +184,41 @@ it('reports a safe actionable cause to Cloud instead of discarding a known scan 
     expect(scanFailureSummary(new Error('password=private-secret'))).not.toContain('private-secret');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it('reports a rejected result upload with its phase and keeps the cause in local diagnostics', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'catalog-result-failure-'));
+  const repository = join(root, 'repository'), catalogs = join(root, 'catalogs'), tools = join(root, 'bin');
+  try {
+    await mkdir(repository);
+    const git = (args: string[]) => execFileSync('git', args, { cwd: repository, encoding: 'utf8' }).trim();
+    git(['init', '--quiet']);
+    await writeFile(join(repository, 'package.json'), '{"type":"module"}');
+    await writeFile(join(repository, 'proof.test.mjs'), `import { test } from ${JSON.stringify(import.meta.resolve('vitest'))}; test('rejected case', () => {});`);
+    git(['add', '.']);
+    git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'fixture']);
+    const commit = git(['rev-parse', 'HEAD']);
+    await mkdir(tools);
+    await writeFile(join(tools, 'git'), fixtureGitWrapper(join(root, 'git.log')), { mode: 0o700 });
+    vi.stubEnv('PATH', `${tools}:${process.env.PATH}`);
+    const project = projectSchema.parse({ id: 'app', name: 'App', repository, suites: { smoke: '*.test.mjs' } });
+    const lease: CatalogScanLease = { project, token: 'test', expiresAt: 0, scan: { scanId: 'rejected', projectId: project.id, commit, configRevision: project.configRevision, status: 'running', createdAt: 0, updatedAt: 0 } };
+    const detail = "catalog.suites.0.cases.0: Unrecognized key(s) in object: 'description'";
+    const stop = new AbortController();
+    const diagnostics = new WorkerDiagnostics(root);
+    const request = vi.fn(async (path: string) => {
+      if (path === '/api/worker/scans/claim') return lease;
+      if (path === '/api/worker/scans/result') throw new CloudError(400, detail);
+      if (path === '/api/worker/scans/failure') { stop.abort(); return {}; }
+      return {};
+    });
+    await runCatalogScanner({ revision: 0, request, watchScan: () => () => {} } as never, { root: catalogs, signal: stop.signal, diagnostics });
+    expect(request).toHaveBeenCalledWith('/api/worker/scans/failure', expect.objectContaining({ body: expect.objectContaining({ error: `[result] ${detail}` }) }));
+    expect(readWorkerLogs(root)).toContainEqual(expect.objectContaining({ level: 'error', event: 'catalog.scan_failed', message: `scan rejected: [result] ${detail}` }));
+  } finally {
+    vi.unstubAllEnvs();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 20000);
 
 it('counts existing scan directories before claiming work and refreshes after a scan', async () => {
   const root = await mkdtemp(join(tmpdir(), 'catalog-workspace-'));

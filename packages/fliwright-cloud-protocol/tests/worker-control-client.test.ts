@@ -30,6 +30,34 @@ it('keeps heartbeats and lease ownership alive after diagnostic delivery times o
   }
 });
 
+it('keeps the server-owned rejection detail on failed control operations', async () => {
+  const server = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+  await new Promise<void>(resolve => server.once('listening', resolve));
+  const address = server.address() as { port: number };
+  server.on('connection', socket => socket.on('message', bytes => {
+    const request = JSON.parse(String(bytes));
+    if (request.operation === '/api/worker/scans/result')
+      socket.send(JSON.stringify({ type: 'response', id: request.id, status: 400, body: {
+        error: 'Worker control operation rejected',
+        detail: "catalog.suites.0.cases.0: Unrecognized key(s) in object: 'description'",
+      } }));
+    else socket.send(JSON.stringify({ type: 'response', id: request.id, status: 409, body: { error: 'Worker control operation rejected' } }));
+  }));
+  const client = new WorkerControlClient(`http://127.0.0.1:${address.port}`, 'synthetic');
+  try {
+    await client.ready();
+    await expect(client.request('/api/worker/scans/result')).rejects.toMatchObject({
+      statusCode: 400,
+      message: "catalog.suites.0.cases.0: Unrecognized key(s) in object: 'description'",
+    });
+    await expect(client.request('/api/worker/scans/heartbeat')).rejects.toMatchObject({ statusCode: 409, message: 'Worker control operation rejected' });
+  } finally {
+    client.close();
+    for (const socket of server.clients) socket.terminate();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 it('notifies inventory observers when the control connection reopens without replaying requests', async () => {
   const server = new WebSocketServer({ port: 0, host: '127.0.0.1' });
   await new Promise<void>(resolve => server.once('listening', resolve));

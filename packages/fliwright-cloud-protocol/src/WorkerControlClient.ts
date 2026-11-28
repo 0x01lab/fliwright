@@ -4,6 +4,12 @@ import { EventEmitter } from 'node:events';
 import { CloudError, type ExecutionLease } from './contracts.js';
 import { workerControlMessageSchema, workerOperationSchema, type CloudRequestClient } from './worker-control.js';
 
+/** A rejected operation publishes the server-owned detail instead of discarding it. */
+function rejectionDetail(body: unknown): string {
+  const detail = body && typeof body === 'object' && 'detail' in body ? (body as { detail?: unknown }).detail : undefined;
+  return typeof detail === 'string' && detail.trim() ? detail.slice(0, 4000) : 'Worker control operation rejected';
+}
+
 /** Outbound-only Worker control channel. Reconnect never replays an RPC or resumes a lease. */
 export class WorkerControlClient implements CloudRequestClient {
   private socket?: WebSocket;
@@ -49,7 +55,7 @@ export class WorkerControlClient implements CloudRequestClient {
           const pending = this.pending.get(message.id);
           if (!pending) return;
           this.pending.delete(message.id);
-          if (message.status >= 400) pending.reject(new CloudError(message.status, 'Worker control operation rejected'));
+          if (message.status >= 400) pending.reject(new CloudError(message.status, rejectionDetail(message.body)));
           else pending.resolve(message.body);
         }
       } catch { socket.terminate(); }

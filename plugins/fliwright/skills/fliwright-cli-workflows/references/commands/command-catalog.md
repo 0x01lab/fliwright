@@ -26,6 +26,7 @@ Use on an isolated, trusted checkout to create a commit-scoped test catalog. Mod
 | JSON field | CLI syntax | Type / values | Required | Schema default | Meaning |
 | --- | --- | --- | --- | --- | --- |
 | `suites` | `--suites` | object | no | — | Catalog command suite id to repository-relative Vitest glob mapping. |
+| `suiteMode` | `--suite-mode` | "patterns" \| "directories" | no | — | Catalog suite grouping: patterns (explicit id-to-glob suites) or directories (one suite per first-level test directory; root files use default). Explicit suites still claim their matching files. Defaults to fliwright.config suiteMode, else patterns. |
 
 Requiredness/defaults above come from the input schema. Conditional requirements and effective implementation defaults are explained above; “—” means no Zod default. Every command also accepts [common options](./common.md#common-options). JSON keys use camelCase; flags use kebab-case. Positional fields are supplied positionally or in --input, not as flags.
 
@@ -67,6 +68,13 @@ Use [exit codes and recovery](./common.md#exit-codes-and-recovery). Retain data 
         "type": "string",
         "minLength": 1
       }
+    },
+    "suiteMode": {
+      "type": "string",
+      "enum": [
+        "patterns",
+        "directories"
+      ]
     }
   },
   "additionalProperties": false,

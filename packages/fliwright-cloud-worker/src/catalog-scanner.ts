@@ -95,9 +95,9 @@ export async function secureCatalogCheckout(root: string, readonly = false, mode
   if (readonly) { count = 0; await walk(root, true); }
 }
 /** Collect through the same isolated subprocess used by leased scans. */
-export async function collectCheckoutCatalog(project: string, suites: Record<string, string>, env: NodeJS.ProcessEnv, signal: AbortSignal) {
+export async function collectCheckoutCatalog(project: string, suites: Record<string, string>, suiteMode: 'patterns' | 'directories', env: NodeJS.ProcessEnv, signal: AbortSignal) {
   const marker = 'FLIWRIGHT_CATALOG_RESULT=';
-  const bootstrap = `const {collectCatalog}=await import(${JSON.stringify(import.meta.resolve('@fliwright/cli/run'))});const result=await collectCatalog(${JSON.stringify({ cwd: project, suites })});process.stdout.write(${JSON.stringify('\n' + marker)}+JSON.stringify(result)+${JSON.stringify('\n')});`;
+  const bootstrap = `const {collectCatalog}=await import(${JSON.stringify(import.meta.resolve('@fliwright/cli/run'))});const result=await collectCatalog(${JSON.stringify({ cwd: project, suites, suiteMode })});process.stdout.write(${JSON.stringify('\n' + marker)}+JSON.stringify(result)+${JSON.stringify('\n')});`;
   const output = await scanProcess(process.execPath, ['--input-type=module', '--eval', bootstrap], project, env, signal);
   const lines = output.split(/\r?\n/).filter(line => line.startsWith(marker));
   if (lines.length !== 1) throw new CatalogScanFailure('The collector did not return exactly one catalog result. Check the repository test configuration.');
@@ -192,7 +192,7 @@ export async function executeCatalogScan(lease: CatalogScanLease, root: string, 
     let collected;
     try {
       await secureCatalogCheckout(checkout, true, modes);
-      collected = await collectCheckoutCatalog(project, lease.project.suites, env, signal).catch(error => {
+      collected = await collectCheckoutCatalog(project, lease.project.suites, lease.project.suiteMode, env, signal).catch(error => {
         throw new CatalogScanFailure(`[collectCatalog] ${scanFailureSummary(error)}`);
       });
     } finally {
@@ -257,10 +257,18 @@ export async function runCatalogScanner(client: WorkerControlClient, options: {
               checkout: options.checkout,
               pinCommit: async commit => { await client.request('/api/worker/scans/pin', { method: 'POST', body: { ...key, commit }, signal }); },
             });
-            await client.request('/api/worker/scans/result', { method: 'POST', body: { ...key, ...result }, signal });
+            try {
+              await client.request('/api/worker/scans/result', { method: 'POST', body: { ...key, ...result }, signal });
+            } catch (error) {
+              // Control-plane rejections are deployment-owned messages, so the scanner may publish them.
+              throw new CatalogScanFailure(`[result] ${error instanceof Error ? error.message : 'Scan result upload failed'}`);
+            }
           } catch (error) {
-            if (!stop.signal.aborted && !workerSignal.aborted)
-              await client.request('/api/worker/scans/failure', { method: 'POST', body: { ...key, error: scanFailureSummary(error) }, signal: workerSignal }).catch(() => {});
+            if (!stop.signal.aborted && !workerSignal.aborted) {
+              const summary = scanFailureSummary(error);
+              diagnostics?.record('error', 'catalog.scan_failed', `scan ${lease.scan.scanId}: ${summary}`);
+              await client.request('/api/worker/scans/failure', { method: 'POST', body: { ...key, error: summary }, signal: workerSignal }).catch(() => {});
+            }
           } finally {
             clearInterval(heartbeat);
             unwatch();

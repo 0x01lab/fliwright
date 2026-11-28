@@ -141,6 +141,23 @@ it('publishes a scan with more than 100 discovered scenarios over Worker control
   } });
   expect(store.catalogs('app')[0]?.scenarios).toEqual(scenarios);
 });
+it('returns a safe actionable reason when a scan result is rejected', async () => {
+  const { store, client } = await setup();
+  const scan = store.createCatalogScan('app', 'b'.repeat(40));
+  const lease = await client.request<{ token: string }>('/api/worker/scans/claim');
+  const catalog = {
+    catalogId: scan.scanId, projectId: scan.projectId, commit: scan.commit, configRevision: scan.configRevision,
+    createdAt: scan.createdAt, status: 'ready', scenarios: [],
+    suites: [{ id: 'smoke', pattern: '*.test.ts', files: [], cases: [
+      { caseId: 'a', file: 'proof.test.ts', titlePath: ['case'], duplicateIndex: 0, unexpected: true },
+    ] }],
+    scannerVersion: 'fixture', fliwrightVersion: 'fixture',
+  };
+  const error = await client.request('/api/worker/scans/result', { body: { scanId: scan.scanId, token: lease.token, catalog } })
+    .catch((error: unknown) => error);
+  expect(error).toMatchObject({ statusCode: 400, message: expect.stringContaining("Unrecognized key(s) in object: 'unexpected'") });
+  expect(store.catalogScan('app', scan.scanId).status).toBe('running');
+});
 it('uses a project binding for both scan and test leases and allows an active run to finish after unbinding', async () => {
   const { store, server, client } = await setup();
   const headers = { 'x-cloud-user': 'admin', 'x-cloud-proxy-secret': 'proxy', origin: 'https://cloud.test' };

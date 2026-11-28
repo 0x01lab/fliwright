@@ -52,9 +52,10 @@ export function registerFinite(registry: CommandRegistry, deps: FiniteDeps = {})
     if (input.strict && data.checks.some((check) => check.required && check.status !== 'passed')) throw new CliError('ENVIRONMENT_INVALID', 'Required environment checks failed.', 3, data);
     return data;
   }, ['environment-probe']);
-  add('catalog', { suites: z.record(z.string().min(1)).optional() }, async (input, context) => {
+  add('catalog', { suites: z.record(z.string().min(1)).optional(), suiteMode: z.enum(['patterns', 'directories']).optional() }, async (input, context) => {
     const config = await loadConfig(context.cwd);
-    return collectCatalog({ cwd: context.cwd, suites: input.suites ?? config.suites ?? { tests: `${config.testDir}/**/*.test.ts` } });
+    const suiteMode = input.suiteMode ?? config.suiteMode ?? 'patterns';
+    return collectCatalog({ cwd: context.cwd, suites: input.suites ?? config.suites ?? (suiteMode === 'directories' ? {} : { tests: `${config.testDir}/**/*.test.ts` }), suiteMode });
   }, ['trusted-project-import'], { description: 'Collect test catalog without running test or hook bodies', needsApp: false });
   const runFields = { deviceId: str, target: str, flutterArgs: z.array(z.string()).optional(), keepAppAlive: bool, test: str, testName: str, caseSelection: z.object({ caseId: z.string().regex(/^[a-f0-9]{64}$/), file: z.string().min(1), titlePath: z.array(z.string()).min(1), duplicateIndex: z.number().int().nonnegative() }).strict().optional(), ...connection, reporter: z.enum(['pretty', 'json', 'junit']).optional(), timeout: positive,
     screenshot: z.enum(['file', 'base64', 'off']).optional(), recordingMode: z.enum(['standard', 'full', 'off']).optional(),

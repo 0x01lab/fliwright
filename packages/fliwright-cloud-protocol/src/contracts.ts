@@ -114,6 +114,8 @@ export const targetSchema = z
       .default('.'),
     entry: z.string().default('lib/main.dart'),
     suites: z.record(z.string().min(1)),
+    /** `directories` derives suites from first-level test directories; `patterns` uses the explicit map. */
+    suiteMode: z.enum(['patterns', 'directories']).default('patterns'),
     scenarios: z.array(z.string().min(1)).default([]),
     requiredCapabilities: z.array(z.string()).default([]),
     install: z.array(commandSchema).default([]),
@@ -147,7 +149,7 @@ export const projectSchema = targetSchema
   .superRefine((project, ctx) => {
     if (project.autoRun.enabled && !project.autoRun.selections.length)
       ctx.addIssue({ code: 'custom', path: ['autoRun', 'selections'], message: 'Select at least one suite/scenario' });
-    for (const selection of project.autoRun.selections) {
+    if (project.suiteMode === 'patterns') for (const selection of project.autoRun.selections) {
       if (!Object.hasOwn(project.suites, selection.suite))
         ctx.addIssue({ code: 'custom', path: ['autoRun', 'selections'], message: `Unknown suite ${selection.suite}` });
       if (selection.scenario && !project.scenarios.includes(selection.scenario))
@@ -251,6 +253,7 @@ export const catalogCaseSchema = z.object({
   file: z.string().min(1).max(500).refine((value) => !value.startsWith('/') && !value.split('/').includes('..') && !value.includes('\\'), 'Catalog paths must stay inside the checkout'),
   titlePath: z.array(z.string().min(1).max(300)).min(1).max(30),
   duplicateIndex: z.number().int().nonnegative().default(0),
+  description: z.string().min(1).max(4000).optional(),
 }).strict();
 export const catalogSuiteSchema = z.object({
   id: z.string().min(1).max(100),
@@ -359,7 +362,7 @@ export interface TestRequest {
   configRevision?: number;
   secureFiles?: import('./secure-files.js').SecureFileReference[];
   catalogId?: string;
-  selection?: { mode: 'suite' | 'case'; suite: string; scenario?: string; caseId?: string; file?: string; titlePath?: string[]; duplicateIndex?: number };
+  selection?: { mode: 'suite' | 'case'; suite: string; pattern?: string; scenario?: string; caseId?: string; file?: string; titlePath?: string[]; duplicateIndex?: number };
   source?: ProjectSubmission['source'];
   autoPolicyRevision?: number;
   supersededBy?: string;

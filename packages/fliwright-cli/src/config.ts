@@ -8,6 +8,8 @@ export interface FliwrightCliConfig {
   native?: NativeConfig;
   supportSettings?: readonly SupportSettingsDefinition[];
   suites?: Record<string, string>;
+  /** Group catalog suites by first-level test directories instead of requiring an explicit suite map. */
+  suiteMode?: 'patterns' | 'directories';
   vmServiceUrl?: string;
   timeout: number;
   screenshot: 'file' | 'base64' | 'off';
@@ -27,6 +29,7 @@ const DEFAULTS: FliwrightCliConfig = {
   screenshot: 'file',
   testDir: '.fliwright/tests',
   reporter: 'pretty',
+  suiteMode: 'patterns',
   recording: { mode: 'standard' },
 };
 

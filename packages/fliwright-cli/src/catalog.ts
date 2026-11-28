@@ -10,8 +10,9 @@ export interface CatalogCase {
   file: string;
   titlePath: string[];
   duplicateIndex: number;
+  description?: string;
 }
-export interface CatalogSelection extends CatalogCase {}
+export type CatalogSelection = Omit<CatalogCase, 'description'>;
 export function catalogCaseId(file: string, titlePath: string[], duplicateIndex: number): string {
   return createHash('sha256').update(JSON.stringify([file, titlePath, duplicateIndex])).digest('hex');
 }
@@ -30,7 +31,10 @@ export function collectedCases(modules: Iterable<any>, root: string): Array<Cata
       const key = JSON.stringify([file, titlePath]);
       const duplicateIndex = counts.get(key) ?? 0;
       counts.set(key, duplicateIndex + 1);
-      cases.push({ caseId: catalogCaseId(file, titlePath, duplicateIndex), file, titlePath, duplicateIndex, test });
+      const description = test.meta?.().fliwrightDescription;
+      cases.push({ caseId: catalogCaseId(file, titlePath, duplicateIndex), file, titlePath, duplicateIndex, test,
+        ...(typeof description === 'string' && description.trim() ? { description: description.trim().slice(0, 4000) } : {}),
+      });
     }
   }
   return cases;
@@ -75,7 +79,7 @@ export async function collectTestCases(options: { cwd: string; patterns: string[
 }
 
 /** Collection only: imports trusted project modules but never starts an app or runs hooks/tests. */
-export async function collectCatalog(options: { cwd: string; suites: Record<string, string> }) {
+export async function collectCatalog(options: { cwd: string; suites: Record<string, string>; suiteMode?: 'patterns' | 'directories' }) {
   const root = await realpath(options.cwd);
   const config = await loadConfig(root);
   const directories = new Set(['.fliwright/mocks', ...Object.values(config.scenarios ?? {}).flatMap(scenario =>
@@ -114,5 +118,40 @@ export async function collectCatalog(options: { cwd: string; suites: Record<stri
     const cases = files.flatMap(file => file.cases);
     suites.push({ id, pattern, files: [...new Set(cases.map(item => item.file))], cases });
   }
+  if (options.suiteMode === 'directories') suites.push(...await collectDirectorySuites(root, config.testDir, new Set(Object.keys(options.suites)), new Set(suites.flatMap(suite => suite.files))));
   return { suites, scenarios, mocks, scannerVersion: 'vitest-collection-v1', fliwrightVersion: '0.1.1' };
+}
+
+/** Root-level test files form a single suite; nested files group under their first directory. */
+const rootSuiteId = 'default';
+const testExtensions = '{ts,tsx,mts,cts,js,jsx,mjs,cjs}';
+
+/**
+ * Derive suites from the first-level directories under the configured test directory.
+ * Explicit suites keep their files, so a hand-written glob can claim a cross-directory set.
+ */
+async function collectDirectorySuites(root: string, testDir: string, explicitIds: Set<string>, claimed: Set<string>) {
+  const directory = testDir.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  if (!directory || directory === '.' || isAbsolute(directory) || directory.split('/').includes('..')) throw new Error('Test directory escapes project');
+  const files = await collectTestCases({ cwd: root, patterns: [`${directory}/**/*.test.${testExtensions}`] });
+  const failed = files.find(file => file.errors.length);
+  if (failed) throw new Error('Test module collection failed', { cause: new Error(failed.errors.join('\n')) });
+  const groups = new Map<string, { files: Set<string>; cases: CatalogCase[] }>();
+  for (const file of files) {
+    if (claimed.has(file.file) || !file.cases.length) continue;
+    if (!file.file.startsWith(`${directory}/`)) throw new Error('Collected test file is outside the test directory');
+    const segments = file.file.slice(directory.length + 1).split('/');
+    const id = segments.length > 1 ? segments[0]! : rootSuiteId;
+    if (segments.length > 1 && id === rootSuiteId) throw new Error(`Suite id "${rootSuiteId}" is reserved for root-level tests`);
+    const group = groups.get(id) ?? { files: new Set<string>(), cases: [] };
+    group.files.add(file.file);
+    group.cases.push(...file.cases);
+    groups.set(id, group);
+  }
+  const suites = [];
+  for (const [id, group] of [...groups].sort(([left], [right]) => left.localeCompare(right))) {
+    if (explicitIds.has(id)) throw new Error(`Suite id conflict: "${id}" is both configured and derived from a test directory`);
+    suites.push({ id, pattern: id === rootSuiteId ? `${directory}/*.test.${testExtensions}` : `${directory}/${id}/**/*.test.${testExtensions}`, files: [...group.files].sort(), cases: group.cases });
+  }
+  return suites;
 }

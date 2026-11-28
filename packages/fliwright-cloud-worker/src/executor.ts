@@ -348,13 +348,15 @@ export async function executeJob(
     });
     stage('running');
     const testsSpan = await timeline.startSpan('tests.run');
+    const testPattern = lease.request.selection?.mode === 'case'
+      ? lease.request.selection.file
+      : lease.request.selection?.pattern ?? target.suites[lease.request.input.suite];
+    if (!testPattern) throw new Error(`Suite pattern is not configured for ${lease.request.input.suite}`);
     try {
       result = await runCommand({
         cwd: project,
         vmUrl: endpoint?.url,
-        testPattern: lease.request.selection?.mode === 'case'
-          ? lease.request.selection.file!
-          : target.suites[lease.request.input.suite],
+        testPattern,
         ...(lease.request.selection?.mode === 'case'
           ? { caseSelection: { caseId: lease.request.selection.caseId!, file: lease.request.selection.file!, titlePath: lease.request.selection.titlePath!, duplicateIndex: lease.request.selection.duplicateIndex! } }
           : {}),

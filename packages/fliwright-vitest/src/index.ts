@@ -71,6 +71,13 @@ export interface FliwrightLogConfig {
   jsonlPath?: string;
 }
 
+declare module 'vitest' {
+  interface TaskMeta {
+    /** Plain-text description displayed in the Fliwright Cloud case catalog. */
+    fliwrightDescription?: string;
+  }
+}
+
 export interface FliwrightConfig {
   native?: NativeConfig;
   vmServiceUrl: string;
