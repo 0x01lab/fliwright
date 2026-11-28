@@ -1,107 +1,102 @@
 ---
 name: fliwright-tdd
 description: >
-  在 Fliwright 仓库中以测试优先方式开发时使用：TDD、red-green-refactor、
-  回归测试、需要先写失败测试的 bug 修复，或用户明确提到 "先写测试"、
-  "测试驱动"、"TDD"、"red green refactor"、"regression"、"回归测试" 的实现请求。
-  适用于 TypeScript 包、Dart bridge、CLI 命令、CLI 行为、选择器、协议行为、
-  代码生成以及生成式 feature docs 更新。涉及 Fliwright automation script、`.fliwright/tests`、
-  `@fliwright/vitest` fixture、locator、flow、mock、agent、timeline、真实 Flutter app
-  验证或 E2E 用例时，必须同时使用 `write-fliwright-tests` skill。
+  Use for test-first development in the Fliwright repository, including TDD,
+  red-green-refactor, regression tests, and bug fixes that call for a failing test first.
+  Applies to TypeScript packages, the Dart bridge, CLI commands and behavior, selectors,
+  protocol behavior, code generation, and generated feature docs. Also use
+  `write-fliwright-tests` for Fliwright automation scripts, `.fliwright/tests`,
+  `@fliwright/vitest` fixtures, locators, flows, mocks, agent verification, timelines,
+  live Flutter app validation, and E2E cases.
 ---
 
 # Fliwright TDD
 
-使用这个 Skill，让 Fliwright 的开发保持测试优先、范围清晰、结果可验证。Fliwright 是一个自动化运行时，所以优先写面向行为的测试，用来保护协议契约、选择器语义、生成代码以及用户可见的自动化行为。
+Use behavior-focused tests to protect Fliwright's protocol contracts, selector semantics, generated code, and user-visible automation behavior.
 
-本 Skill 面向 Fliwright 源码开发。若任务是对目标 Flutter app 启动或恢复持续 TDD，使用 `fliwright-cli-workflows` 的 session/TDD 命令指南；它负责 finite 与 persistent 生命周期、managed/attach 启动和操作恢复。
+For starting or resuming persistent TDD against a target Flutter app, use the `fliwright-cli-workflows` session and TDD command guides. They cover finite and persistent lifecycles, managed startup, attaching, and recovery.
 
-## 流程与执行的边界
+## Workflow And Execution
 
-Agent 负责选择行为切片、编写普通测试、确认预期红灯、修改业务代码和决定重构/回归范围。
-这些决策通过本 Skill 执行，不再为它们建立 InteractionSpec、readiness 状态机或自动 repair 循环。
-`@fliwright/tdd` 只提供执行机制：聚焦重跑、Flutter 同步、baseline reset、资源管理和失败证据。
-其 red/green 表示测试运行结果；红灯是否证明目标缺失，必须由 Agent 检查失败原因。
+Choose the behavior to test, write a standard test, confirm the expected failure, update production code, and decide the scope of refactoring and regression checks. Make those decisions directly and avoid introducing an InteractionSpec, readiness state machine, or automated repair loop.
 
-目标 Flutter app 的具体命令节奏见
-[持续 TDD](../fliwright-cli-workflows/references/tdd.md)。优先使用已有测试和命名组合场景；
-单次验证可直接 `fliwright run`，只有需要保留连接并反复同步/重跑时才启动 persistent runtime。
+`@fliwright/tdd` provides focused reruns, Flutter synchronization, baseline reset, resource management, and failure evidence. Its red and green statuses describe execution results. Inspect the failure to confirm that it demonstrates the missing behavior.
 
-## 组合 Skill
+Follow the [persistent TDD guide](../fliwright-cli-workflows/references/tdd.md) for commands against a target Flutter app. Prefer existing tests and named, composed scenarios. Use `fliwright run` for a single verification and start a persistent runtime only when the connection must survive repeated synchronization and reruns.
 
-当 TDD 任务涉及 Fliwright 自动化测试或脚本时，先继续遵守本 Skill 的红绿重构流程，再同时使用 `write-fliwright-tests` skill 获取具体写法。典型触发包括 `.fliwright/tests`、`.fliwright/scripts`、`@fliwright/vitest`、`test` / `script` fixture、locator、selector、flow step、mock rule、agent verify、timeline、真实 Flutter app 验证、CLI 录制脚本清理和 E2E 用例。
+## Use With The Automation Authoring Skill
 
-职责分工：
+Apply this red-green-refactor workflow alongside `write-fliwright-tests` when writing Fliwright automation. Common cases include `.fliwright/tests`, `.fliwright/scripts`, `@fliwright/vitest`, `test` and `script` fixtures, locators, selectors, flow steps, mock rules, agent verification, timelines, live Flutter app validation, CLI recording cleanup, and E2E cases.
 
-- 本 Skill 决定 TDD 节奏、验证范围和什么时候扩大测试。
-- `write-fliwright-tests` 决定 Fliwright 测试/脚本的文件位置、fixture 用法、locator 选择、mock/flow/timeline 写法和主动 app 验证方式。
+- Use this skill to set the TDD sequence, choose verification scope, and decide when to expand testing.
+- Use `write-fliwright-tests` for placement, fixtures, locators, mocks, flows, timelines, and live app validation.
 
-## 核心循环
+## Core Loop
 
-1. 用一句话定义最小行为切片。
-2. 用 `rg` / `rg --files` 找到所属 package、源码位置和附近测试。
-3. 只读取当前改动真正需要的文档；如果需要 API 细节，优先读取对应的 `docs/features/<package>/<Class>.md`。
-4. 先写或更新一个失败测试。
-5. 运行最窄范围的相关测试，确认它因为预期原因失败。
-6. 写最小实现，让这个测试通过。
-7. 重新运行聚焦测试，直到变绿。
-8. 只在测试变绿之后重构，然后重新运行同一个聚焦测试。
-9. 根据影响范围扩大验证。
+1. Define the smallest behavior change in one sentence.
+2. Use `rg` or `rg --files` to find the owning package, source, and nearby tests.
+3. Read the docs needed for the change. For API details, start with the relevant `docs/features/<package>/<Class>.md`.
+4. Write or update a failing test first.
+5. Run the narrowest relevant test and confirm that it fails for the expected reason.
+6. Implement the smallest change that makes the test pass.
+7. Rerun the focused test until it passes.
+8. Refactor only after the test passes, then rerun the same focused test.
+9. Expand verification based on the change's impact.
 
-如果现有 bug 报告已经包含失败测试或可复现用例，把它当作红灯步骤；只要可行，仍应在改代码前先运行一次。
+If the bug report already includes a failing test or a reproduction, use it for the red step and run it before changing code when possible.
 
-## 选择测试
+## Choosing Tests
 
-- TypeScript package 行为：在该 package 的 `tests` 目录下添加聚焦 Vitest 测试，文件名用 `*.test.ts`，并尽量镜像被测源码主题。
-- 选择器、协议、CLI 命令或代码生成变更：必须添加回归测试。
-- 公共 API 变更：同时测试新行为，以及调用方依赖的兼容行为或错误行为。
-- Dart bridge 变更：可行时，在 bridge 行为附近添加或更新 `dart test` 覆盖。
-- Timeline-native Flutter 自动化脚本和 `.fliwright/tests` 编写：使用 `write-fliwright-tests` skill 获取 fixture、locator、flow、mock 和真实 app 验证模式。
-- HTTP mock rule JSON 变更：使用 `write-fliwright-mock-rules` skill。
+- For TypeScript package behavior, add a focused Vitest test to the package's `tests` directory. Use `*.test.ts` and name the file after the source topic where practical.
+- Add a regression test for selector, protocol, CLI command, or code-generation changes.
+- For public API changes, cover the new behavior and any existing compatibility or error behavior that callers rely on.
+- For Dart bridge changes, add or update `dart test` coverage near the changed behavior when practical.
+- Use `write-fliwright-tests` for fixture, locator, flow, mock, and live app validation patterns in timeline-native Flutter automation and `.fliwright/tests`.
+- Use `write-fliwright-mock-rules` for HTTP mock rule JSON changes.
 
-第一个红绿循环优先使用单元测试或窄集成测试。E2E smoke test 适合在单元级行为已经受保护之后再跑；它们需要运行中的 Flutter VM service，不应该成为确定性逻辑的唯一覆盖。
+Prefer unit or narrow integration tests for the first red-green cycle. Once focused tests cover the behavior, use E2E smoke tests with a running Flutter VM Service. Keep deterministic logic covered at the unit level.
 
-## 命令选择
+## Verification Commands
 
-先运行能证明当前步骤的最小命令，再逐步扩大范围：
+Start with the smallest command that verifies the current step, then broaden the scope as needed.
 
 | Scope | Command |
 | --- | --- |
-| 单个 TypeScript package | `pnpm --filter <package> test` |
+| One TypeScript package | `pnpm --filter <package> test` |
 | Core package | `pnpm --filter @fliwright/core test` |
 | Vitest package | `pnpm --filter @fliwright/vitest test` |
-| 仓库 TypeScript build | `pnpm build` |
-| 仓库 TypeScript 类型检查 | `pnpm lint` |
-| 全部 TypeScript 测试 | `pnpm test` |
-| Dart 分析 | `melos run analyze` |
-| Dart 测试 | `melos run test` |
+| Workspace TypeScript build | `pnpm build` |
+| Workspace TypeScript type checks | `pnpm lint` |
+| All TypeScript tests | `pnpm test` |
+| Dart analysis | `melos run analyze` |
+| Dart tests | `melos run test` |
 | E2E smoke | `FLIWRIGHT_VM_SERVICE_URL=... pnpm --filter @fliwright/e2e-tests test:smoke` |
 
-如果依赖发生变化，TypeScript 验证前先运行 `pnpm install`。如果 Dart 依赖发生变化，运行 `melos bootstrap`。如果 pub.dev 不可达，可在当前 shell 会话中选择性 source `scripts/use-cn-pub-mirror.sh`。
+Run `pnpm install` before TypeScript verification when dependencies change. Run `melos bootstrap` when Dart dependencies change. If pub.dev is unreachable, optionally source `scripts/use-cn-pub-mirror.sh` in the current shell.
 
-## 红灯规则
+## Red
 
-- 失败测试应该描述可观察行为，而不是私有实现细节。
-- 确认失败原因是预期的缺失行为或回归。
-- 如果测试因为 setup、import、时序或错误假设失败，先修测试，再改生产代码。
-- 失败断言要足够具体，让下一个开发者能从测试名和断言信息理解契约。
+- Describe observable behavior in the failing test and keep assertions independent of private implementation details.
+- Confirm that the failure comes from the expected missing behavior or regression.
+- Fix setup, import, timing, or invalid test assumptions before changing production code.
+- Make the name and assertion specific enough to communicate the contract to the next developer.
 
-## 绿灯规则
+## Green
 
-- 只做满足失败行为所需的最小源码改动。
-- 新增公共 API 时，遵守通过 `src/index.ts` 导出的既有约定。
-- TypeScript ESM 相对导入保留显式 `.js` 后缀。
-- 不要在没有测试的情况下扩大选择器、协议 payload、生成输出或 CLI 契约。
-- 不要更新 `dist` 之类的生成构建产物。
-- UI 改动有 Figma 参考时，在功能变绿后完成[实际截图与设计稿复核](../fliwright-cli-workflows/references/visual-review.md)，修正视觉差异后重新截图。功能断言通过不能替代视觉验证。
+- Make the smallest source change that satisfies the failing test.
+- Export new public APIs through `src/index.ts`.
+- Keep explicit `.js` extensions on TypeScript ESM relative imports.
+- Add tests before expanding selector, protocol payload, generated output, or CLI contracts.
+- Leave generated build outputs such as `dist` out of the change.
+- For UI changes with a Figma reference, [compare a real app screenshot with the design](../fliwright-cli-workflows/references/visual-review.md) after functional tests pass. Capture a fresh screenshot after fixing any visual differences.
 
-## 重构与文档
+## Refactoring And Documentation
 
-- 只在测试为绿时重构。
-- 每次有意义的重构后，重新运行聚焦测试。
-- 触及共享 helper、公共 API 或跨 package 契约后，运行 package 级验证。
-- 重要源码行为或公共 API 变化后，使用 `document-features` skill 重新生成或更新 `docs/features/`。
+- Refactor only while tests are green.
+- Rerun the focused test after every meaningful refactor.
+- Run package-level verification after changing shared helpers, public APIs, or cross-package contracts.
+- Use `document-features` to regenerate or update `docs/features/` after significant source behavior or public API changes.
 
-## 验证受阻时
+## When Verification Is Blocked
 
-如果所需 VM service、设备、网络或外部依赖不可用，清楚说明阻塞点，运行不依赖它们的静态检查或单元级检查，并留下最终验证所需的精确命令。
+If a required VM Service, device, network, or external dependency is unavailable, identify the blocker, run independent static or unit checks, and provide the exact command needed to finish verification.

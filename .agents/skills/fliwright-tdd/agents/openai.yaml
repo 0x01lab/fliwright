@@ -1,4 +1,4 @@
 interface:
   display_name: "Fliwright TDD"
-  short_description: "以测试优先方式开发 Fliwright"
-  default_prompt: "使用 $fliwright-tdd 以测试优先方式实现这个 Fliwright 改动。"
+  short_description: "Use test-driven development for Fliwright changes"
+  default_prompt: "Use $fliwright-tdd to implement this Fliwright change by writing a failing test first."

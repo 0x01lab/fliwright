@@ -3,27 +3,20 @@ name: write-fliwright-mock-rules
 description: Create or edit contract-backed Fliwright HTTP Mock endpoint JSON in shared or Item-local mocks directories. Use for response body design, named rules, baseRule inheritance, removeBodyFields, and rule registration.
 ---
 
-# 编写 Fliwright Mock 规则文件
+# Write Fliwright Mock Rules
 
-## 职责与加载模式
+## Endpoint Files And Loading Modes
 
-本技能负责生成符合业务契约的 Mock JSON。一个文件描述一个 method/endpoint，含
-一条或多条具名响应 `rules[]`；不要自创 `scenarios`、`routes` 或 `mocks[]` 结构。
-共享文件放 `.fliwright/mocks/api/*.json`，Item 差异放
-`.fliwright/test-plans/<iid>/mocks/api/*.json`，两者 schema 相同。
+Create Mock JSON that follows the app's API contract. Each file describes one HTTP method and endpoint with one or more named responses in `rules[]`. Use the endpoint schema and avoid adding `scenarios`, `routes`, or `mocks[]` wrappers. Put shared files in `.fliwright/mocks/api/*.json` and Item-specific variants in `.fliwright/test-plans/<iid>/mocks/api/*.json`. Both locations use the same schema.
 
-按任务选择加载方式：
-
-| 模式 | 注册与选择 |
+| Mode | Registration and selection |
 | --- | --- |
-| 命名场景（Item 验收优先） | `sources` 声明 `{ name, directory, files }`，`rules` 显式选择 `{ source, method, endpoint, rule, replace? }`，只激活所选响应，不读 index。替换父场景相同 method/endpoint 时必须写 `replace: true`；跨来源替换完整响应，不合并 body。 |
-| 单目录工具 | `loadRules()` 加载目录默认响应，`switchRule()` 切换已加载规则；使用下述 index。 |
+| Named scenarios, preferred for Item acceptance | Declare `{ name, directory, files }` in `sources` and explicitly select `{ source, method, endpoint, rule, replace? }` in `rules`. This activates only selected responses and skips the index. Use `replace: true` when overriding the same method and endpoint from a parent scenario. Replacement across sources swaps the entire response, including its body. |
+| Single-directory tools | Use `loadRules()` to load default responses for the directory and `switchRule()` to select another loaded rule. This mode uses the index below. |
 
-不要混用两种模式模拟覆盖。场景组合细节见
-[共享与 Item 规则组合](../write-fliwright-tests/references/mock-rule-sets.md)；运行时 API 与清理约定见
-[HTTP Mock](../write-fliwright-tests/references/mocks.md)。
+Use one loading mode per composition. For named scenarios, see [composing shared and Item-specific rules](../write-fliwright-tests/references/mock-rule-sets.md). For runtime APIs and cleanup, see [HTTP Mock](../write-fliwright-tests/references/mocks.md).
 
-单目录的 `.fliwright/mocks/mock-index.json` 示例：
+Example `.fliwright/mocks/mock-index.json` for a single directory.
 
 ```json
 {
@@ -33,75 +26,66 @@ description: Create or edit contract-backed Fliwright HTTP Mock endpoint JSON in
 }
 ```
 
-`files` 相对 mocks 目录，按项目约定用 `api/` 前缀并匹配磁盘文件名。使用已有 index
-时，新增端点必须加入 `files`；sources 模式则加入对应 source 的文件列表。
-无 index 时自动扫描 `api/*.json`，默认规则名为 `"success"`。
-`defaultRule` 未匹配某个文件的规则名时会回退到该文件第一条规则，应核对实际选择。
+`files` entries are relative to the mocks directory. Use the project's `api/` prefix convention and match filenames on disk. Register new endpoints in the existing index's `files` or in the relevant named source's file list. Without an index, the loader scans `api/*.json` and defaults to `"success"`. If `defaultRule` fails to match a rule in a file, the loader uses that file's first rule. Check which response was selected.
 
-## 数据依据
+## Verify The Response Contract
 
-新增或修改业务响应前，先核对目标 App 契约与本次目标；单独调用本技能也须完成。
-规则 schema 不定义业务 body；`sources` 是加载文件的位置，不是业务数据的依据。
+Check the target app's API contract and the goal before creating or editing a response, including when using this skill on its own. The schema defines the rule structure and `sources` locates data files. Verify the business response body separately.
 
-- 沿 API client、响应 model/parser、repository、controller/provider 确认请求和解析契约，必要时结合适用版本的 API 文档或已确认响应样本。客户端默认值不代表后端一定返回该字段。
-- 优先复用符合契约及目标分支的共享响应；需求与验收条件决定业务状态，不能用来猜接口结构。本技能示例仅演示格式。
-- 在已确认结构内构造确定性数据，保留所需字段，只修改场景差异。真实样本脱敏后仍须保持类型、格式及跨端点 ID、权限和状态的关联。
-- 契约缺失或来源冲突时，列明依据与缺口，完成可确认部分，受影响响应保持待确认；不编造字段、枚举或业务 code，不修改业务代码迎合 Mock。仅从客户端推导时说明尚未核实的后端语义。
+- Trace the API client, response model or parser, repository, and controller or provider to confirm how the app sends requests and parses responses. Consult API docs for the applicable version or confirmed response samples when needed. A client default does not prove that the backend sends a field.
+- Reuse shared responses that match the contract and the target branch. Derive the business state from requirements and acceptance criteria. Derive the response shape from the contract. Use the examples here as format references.
+- Build deterministic data in the verified shape. Keep required fields and change only the fields that distinguish the scenario. Redact real samples while preserving types, formats, and relationships among IDs, permissions, and states across endpoints.
+- If the contract is missing or sources conflict, document the evidence and gaps, complete the portions you can verify, and leave the affected response pending confirmation. Use only supported fields, enums, and business codes. Keep production code independent of the fixture. When relying on client code alone, identify unverified backend semantics.
 
-需要推导测试分支时，读取
-[从业务分支构建正确 Mock](../write-fliwright-tests/references/scenario-design.md#从业务分支构建正确-mock)。
+For test branch derivation, see [building mocks for business scenarios](../write-fliwright-tests/references/scenario-design.md#从业务分支构建正确-mock).
 
 ## Schema
 
-端点文件：
+Endpoint file fields
 
-| 字段 | 必需 | 说明 |
+| Field | Required | Description |
 | --- | --- | --- |
-| `version` | 是 | 固定 `1` |
-| `name` | 是 | 端点的人类可读名 |
-| `method` | 是 | 大写 HTTP method，如 `"GET"`、`"POST"` |
-| `endpoint` | 是 | 路径，如 `/api/v1/user` |
-| `baseRule` | 否 | 共享响应字段 `{ status?, delay?, headers?, body? }` |
-| `rules` | 是 | 至少一条具名响应 |
-| `description` | 否 | 文件说明 |
+| `version` | Yes | Always `1` |
+| `name` | Yes | Human-readable endpoint name |
+| `method` | Yes | Uppercase HTTP method, such as `"GET"` or `"POST"` |
+| `endpoint` | Yes | Path such as `/api/v1/user` |
+| `baseRule` | No | Shared response fields `{ status?, delay?, headers?, body? }` |
+| `rules` | Yes | At least one named response |
+| `description` | No | File description |
 
-`rules[]` 每一条：
+Fields for each entry in `rules[]`
 
-| 字段 | 必需 | 说明 |
+| Field | Required | Description |
 | --- | --- | --- |
-| `name` | 是 | snake_case，如 `success`、`validation_error`；用于选择响应 |
-| `status` | 合并后必需 | HTTP 状态码，可继承 `baseRule.status` |
-| `delay` | 否 | 延迟毫秒数 |
-| `headers` | 否 | 响应头 |
-| `body` | 否 | object、array 或标量（含 null） |
-| `description` | 否 | 仅给人看，不进入最终响应 |
-| `removeBodyFields` | 否 | 合并后删除的顶层字段名数组，仅对 object body 生效 |
+| `name` | Yes | Response selector in snake_case, such as `success` or `validation_error` |
+| `status` | After merging | HTTP status code. Can inherit `baseRule.status`. |
+| `delay` | No | Delay in milliseconds |
+| `headers` | No | Response headers |
+| `body` | No | Object, array, scalar, or `null` |
+| `description` | No | Documentation for readers. Omitted from the final response. |
+| `removeBodyFields` | No | List of top-level fields to remove after merging. Applies only to object bodies. |
 
-## 合并语义
+## Merge Semantics
 
-`MockRuleStore` 加载时展开 `baseRule`，各入口使用展开后的响应：
+`MockRuleStore` expands `baseRule` when it loads the file. All entry points use the expanded response.
 
-| 字段 | 合并方式 |
+| Field | Merge behavior |
 | --- | --- |
-| `status` / `delay` | 规则值覆盖 base |
-| `headers` | 浅合并，规则同名 header 覆盖 base |
-| `body` | 两者均为 object 时浅合并一层；数组、标量或 null 整体替换；嵌套对象不递归合并 |
-| `removeBodyFields` | body 合并后删除指定顶层字段；本字段不进入最终响应 |
+| `status` / `delay` | Rule values override base values. |
+| `headers` | Shallow merge. Rule headers override base headers with the same name. |
+| `body` | Shallow merge when both bodies are objects. Arrays, scalars, and `null` replace the entire body. Nested objects are replaced whole. |
+| `removeBodyFields` | Removes the specified top-level fields after merging. The setting is omitted from the final response. |
 
-只把共享字段放入 `baseRule`。status 不同时优先逐条声明；放入 base 时必须覆盖
-所有例外。body 结构差异大时，各规则独立写 body，不设置 `baseRule.body`。
+Put only shared fields in `baseRule`. When status codes vary, prefer specifying them in each rule. If the base sets a status, override it in every exception. When body shapes differ substantially, put each body in its own rule and omit `baseRule.body`.
 
-独立 body 直接省略不应存在的字段；删除继承字段用 `removeBodyFields`。
-缺失、null、空字符串、0 和空数组不能互换，按真实契约表达。
-特别注意：base 为用户对象时，规则 body 写 `{ "error": "..." }` 仍会继承用户字段；
-须删除这些字段，或将不共享的 body 移出 base。完整例子见下文。
+Omit unwanted fields from standalone bodies. Use `removeBodyFields` for unwanted inherited fields. Represent absence, `null`, empty strings, `0`, and empty arrays according to the actual API contract. A rule body such as `{ "error": "..." }` inherits user fields when the base body is a user object. Remove those fields or move the unshared bodies into their individual rules.
 
-## 校验与交付
+## Validate And Deliver
 
-按加载模式做离线校验：
+Run the offline checks for the loading mode in use.
 
-- **sources 模式**：调用 `resolveMockRuleSet`，检查所有声明文件、规则名及覆盖冲突；目录相对执行工作目录。传入完整组合，不能单独校验带 `replace: true` 的子选择。`scenario resolve` 只检查场景声明，不读取端点 JSON。
-- **单目录模式**：用 `normalizeMockEndpointConfig` 检查文件及展开结果。`loadRules()` 遇坏文件会 warn 后跳过，不能以其返回作为校验通过。合并后缺 status 会使 normalizer 抛错，sources 准备失败。
+- For named sources, call `resolveMockRuleSet` to check declared files, rule names, and conflicting overrides. Resolve directories relative to the execution working directory. Pass the full composition so selections with `replace: true` can resolve against their parents. `scenario resolve` checks scenario declarations and leaves endpoint JSON unread.
+- For a single directory, use `normalizeMockEndpointConfig` to check each file and expanded response. `loadRules()` warns and skips invalid files, so use the normalizer for validation. The normalizer throws if a rule has no status after merging, which also causes named-source preparation to fail.
 
 ```typescript
 import { resolveMockRuleSet } from '@fliwright/core';
@@ -115,9 +99,9 @@ await resolveMockRuleSet({
 });
 ```
 
-将示例替换为实际来源与选择。解析结果包含 body，勿直接作为不含业务数据的审核元信息发布。
+Replace the example sources and selections with the actual ones. The resolved result includes response bodies. Omit them when publishing audit metadata intended to exclude business data.
 
-单文件校验可在 Fliwright 仓库根执行（先 `pnpm --filter @fliwright/core build`）：
+To validate one file from the Fliwright repository root, first run `pnpm --filter @fliwright/core build`, then use the following command.
 
 ```bash
 node --input-type=module -e '
@@ -128,27 +112,21 @@ console.log(JSON.stringify(normalizeMockEndpointConfig(cfg).rules, null, 2));
 ' .fliwright/mocks/api/user-profile.example.json
 ```
 
-下游项目从已安装的 `@fliwright/core` 导入。没有运行环境时，至少检查 JSON 合法及
-合并后各规则均有 status，并说明未完成的校验。
+In downstream projects, import from the installed `@fliwright/core`. If a runtime is unavailable, at least check JSON validity and confirm every expanded rule has a status. Report the checks still pending.
 
-检查最终响应是否符合已确认契约及目标分支：HTTP 状态、业务 code、信封、必需字段、
-类型、枚举、缺失/null、分页及跨端点关联。schema 合法或名为 `success` 不代表业务正确。
+Verify that the final response matches the confirmed contract and target branch. Check HTTP status, business code, envelope, required fields, types, enums, missing versus `null` fields, pagination, and relationships across endpoints. Separately verify business behavior after checking schema validity and rule selection.
 
-交付时说明文件/规则名、业务状态、依据的源码/文档/样本位置及关键字段差异，分别报告
-格式/组合校验、契约核对和真实 App 验证结果与缺口。回复或现有 `description` 中说明
-即可，不新增来源 schema 字段或专门文档。仅编写规则时不自动新增测试或运行 App；
-涉及实际测试时按 [验证与交付](../write-fliwright-tests/references/scenario-design.md#验证与交付)
-核对真实请求及 UI 结果。
+Report the file and rule names, business state, relevant source, documentation, or sample locations, and the fields that differ. Record the formatting and composition checks, contract checks, and live app results with any gaps. Put provenance in the reply or an existing `description` field. Rule-only requests end after rule authoring and applicable offline checks, without adding tests or running the app. For test requests, verify the actual HTTP requests and UI outcomes using the [verification and delivery guide](../write-fliwright-tests/references/scenario-design.md#验证与交付).
 
-## 完整示例
+## Complete Example
 
-一个端点、多条规则，覆盖 `baseRule` 继承、字段覆盖、字段删除、status 覆盖四种情况：
+This endpoint uses multiple rules to demonstrate `baseRule` inheritance, field overrides, field removal, and a status override.
 
 ```json
 {
   "version": 1,
   "name": "User Profile",
-  "description": "GET /api/v1/user/profile 的成功 / 隐私裁剪 / 404 场景",
+  "description": "GET /api/v1/user/profile full, limited, and not-found responses",
   "method": "GET",
   "endpoint": "/api/v1/user/profile",
   "baseRule": {
@@ -164,16 +142,16 @@ console.log(JSON.stringify(normalizeMockEndpointConfig(cfg).rules, null, 2));
     }
   },
   "rules": [
-    { "name": "success", "description": "完整资料，继承 baseRule 全部字段" },
+    { "name": "success", "description": "Full profile with every field inherited from baseRule" },
     {
       "name": "partial",
-      "description": "phone 字段不返回，role 降级为 guest",
+      "description": "Omit the phone field and set the role to guest",
       "removeBodyFields": ["phone"],
       "body": { "role": "guest" }
     },
     {
       "name": "not_found",
-      "description": "只返回错误信封，不泄露任何用户字段",
+      "description": "Return only the error envelope and omit all user fields",
       "status": 404,
       "removeBodyFields": ["id", "name", "email", "phone", "role"],
       "body": { "error": "not found" }
@@ -182,5 +160,4 @@ console.log(JSON.stringify(normalizeMockEndpointConfig(cfg).rules, null, 2));
 }
 ```
 
-展开后：`success` → 完整 body（200）；`partial` → 去掉 phone、role 变 guest（200）；
-`not_found` → `{ "error": "not found" }`（404）。
+After expansion, `success` returns the full body with HTTP 200. `partial` returns HTTP 200 with `role` set to `guest` and the phone omitted. `not_found` returns only `{ "error": "not found" }` with HTTP 404.
